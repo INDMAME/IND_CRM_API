@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProjectGuid>{9F1DCD6B-416D-4B4F-BEF6-16CD04D2C6FC}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>IND_CRM_APIs</RootNamespace>
-    <AssemblyName>IND_CRM_APIs</AssemblyName>
+    <RootNamespace>IND_CRM_API</RootNamespace>
+    <AssemblyName>IND_CRM_API</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -48,7 +48,10 @@
     <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
     <Prefer32Bit>true</Prefer32Bit>
-    <DocumentationFile>bin\IND_CRM_APIs.xml</DocumentationFile>
+    <DocumentationFile>bin\IND_CRM_API.xml</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>IND_CRM_API.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="CommonServiceLocator, Version=2.0.6.0, Culture=neutral, PublicKeyToken=489b6accfaf20ef0, processorArchitecture=MSIL">
@@ -151,18 +154,31 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App_Start\SwaggerConfig.cs" />
-    <Compile Include="Controllers\AuthController.cs" />
-    <Compile Include="Controllers\AxaptaController.cs" />
-    <Compile Include="Controllers\AxContainerHelper.cs" />
+    <Compile Include="Controllers\CRM\BaseCrmController.cs" />
+    <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
+    <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
+    <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
+    <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
+    <Compile Include="Controllers\System\AuthController.cs" />
+    <Compile Include="Helpers\AxContainerHelper.cs" />
+    <Compile Include="Controllers\System\EnvironmentController.cs" />
+    <Compile Include="Controllers\System\HealthController.cs" />
+    <Compile Include="Helpers\ContainerDebugHelper.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
+    <Compile Include="Services\AxSession.cs" />
+    <Compile Include="Services\FileAxLogger.cs" />
+    <Compile Include="Services\IAxLogger.cs" />
     <Compile Include="Services\JwtService.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="WebApiConfig.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Bats\desinstalar_api_axapta.bat" />
+    <None Include="Bats\instalar_api_axapta.bat" />
+    <None Include="Bats\reiniciar_api_axapta.bat" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -188,5 +204,6 @@
       <Install>false</Install>
     </BootstrapperPackage>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

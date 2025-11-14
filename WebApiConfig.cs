@@ -1,6 +1,6 @@
 ﻿using System.Web.Http;
 
-namespace IND_CRM_APIs
+namespace IND_CRM_API
 {
     /// <summary>
     /// Configuración general de rutas y formato de salida para los controladores WebAPI.

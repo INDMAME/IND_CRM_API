@@ -1,0 +1,30 @@
+1. Cierra todo lo que pueda tener el servicio abierto
+
+Cierra la ventana de Servicios (services.msc).
+
+Cierra también cualquier consola MMC que pueda estar abierta (Visor de eventos, etc.).
+
+Para asegurarte:
+
+taskkill /F /IM mmc.exe
+
+
+Esto cerrará todas las consolas MMC abiertas (incluida services.msc).
+
+2. Verifica el estado con sc
+
+Abre una ventana de CMD como administrador y ejecuta:
+
+sc queryex "IND CRM API"
+
+
+Si indica STATE : 1 STOPPED y sin PID o PID = 0, está parado.
+
+3. Vuelve a intentar eliminarlo
+
+En la misma consola de administrador:
+
+sc delete "IND CRM API"
+
+
+Si no da error, el servicio se elimina de la clave de registro, pero puede seguir “fantasma” hasta refrescar servicios.msc.

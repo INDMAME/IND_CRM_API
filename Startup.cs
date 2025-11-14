@@ -13,9 +13,9 @@ using System.Linq;
 using System.Text;
 using System.Web.Http;
 
-[assembly: OwinStartup(typeof(IND_CRM_APIs.Startup))]
+[assembly: OwinStartup(typeof(IND_CRM_API.Startup))]
 
-namespace IND_CRM_APIs
+namespace IND_CRM_API
 {
     /// <summary>
     /// Clase de inicio de la aplicación OWIN.
@@ -87,7 +87,7 @@ namespace IND_CRM_APIs
                      .In("header");
 
                     // Incluir comentarios XML para documentar los endpoints
-                    var xmlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_APIs.xml");
+                    var xmlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_API.xml");
                     if (System.IO.File.Exists(xmlPath))
                         c.IncludeXmlComments(xmlPath);
                 })
@@ -157,6 +157,10 @@ namespace IND_CRM_APIs
             //    Registrar WebAPI en el pipeline OWIN
             // ===========================================
             app.UseWebApi(config);
+
+            // Por seguridad, forzar inicializacion de rutas
+            config.EnsureInitialized();
+
         }
     }
 }

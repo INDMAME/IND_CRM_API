@@ -6,7 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
-namespace IND_CRM_APIs.Services
+namespace IND_CRM_API.Services
 {
     /// <summary>
     /// Servicio responsable de generar tokens JWT (JSON Web Token)
@@ -103,13 +103,13 @@ namespace IND_CRM_APIs.Services
 
         /// <summary>
         /// Obtiene el tiempo de expiración configurado en el archivo App.config.
-        /// Si el valor no existe o no es válido, usa un valor predeterminado de 15 minutos.
+        /// Si el valor no existe o no es válido, usa un valor predeterminado de 60 minutos.
         /// </summary>
         /// <returns>Duración del token en minutos.</returns>
         private int GetConfiguredExpirationMinutes()
         {
             string minutes = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
-            return int.TryParse(minutes, out int result) ? result : 15;
+            return int.TryParse(minutes, out int result) ? result : 60;
         }
     }
 }

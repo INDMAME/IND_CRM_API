@@ -3,7 +3,7 @@ using System.Configuration;
 using Topshelf;
 using Microsoft.Owin.Hosting;
 
-namespace IND_CRM_APIs
+namespace IND_CRM_API
 {
     /// <summary>
     /// Punto de entrada principal del servicio Windows SelfHost.
@@ -30,7 +30,7 @@ namespace IND_CRM_APIs
 
                 // Configuración general del servicio Windows
                 x.RunAsLocalSystem();
-                x.SetServiceName("IND_CRM_APIs");
+                x.SetServiceName("IND_CRM_API");
                 x.SetDisplayName("IND Test APIs (Axapta SelfHost)");
                 x.SetDescription("Servicio OWIN SelfHost para Axapta 3.0");
             });
@@ -47,12 +47,12 @@ namespace IND_CRM_APIs
 
         /// <summary>
         /// Inicia el servicio OWIN en la URL configurada.
-        /// Si no hay configuración en App.config, usa el puerto por defecto (7777).
+        /// Si no hay configuración en App.config, usa el puerto por defecto (7776).
         /// </summary>
         public void Start()
         {
             // Si está configurada la URL en App.config, úsala. Si no, usa el puerto por defecto.
-            string baseUrl = ConfigurationManager.AppSettings["BaseUrl"] ?? "http://+:7777/";
+            string baseUrl = ConfigurationManager.AppSettings["BaseUrl"] ?? "http://+:7776/";
 
             try
             {
@@ -72,8 +72,17 @@ namespace IND_CRM_APIs
         /// </summary>
         public void Stop()
         {
+            // 1. Detener el servidor Web (ya no entra tráfico)
             _webApp?.Dispose();
-            Console.WriteLine("API detenida correctamente.");
+
+            // 2. NUEVO: Matar las sesiones de Axapta y liberar memoria COM
+            // Accedemos a través de tu Singleton estático
+            if (IND_CRM_API.Services.AxSession.Manager != null)
+            {
+                IND_CRM_API.Services.AxSession.Manager.Dispose();
+            }
+
+            Console.WriteLine("API y Recursos COM liberados correctamente.");
         }
     }
 }

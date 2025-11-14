@@ -1,11 +1,11 @@
 using System.Web.Http;
 using WebActivatorEx;
-using IND_CRM_APIs;
+using IND_CRM_API;
 using Swashbuckle.Application;
 
 [assembly: PreApplicationStartMethod(typeof(SwaggerConfig), "Register")]
 
-namespace IND_CRM_APIs
+namespace IND_CRM_API
 {
     /// <summary>
     /// Configura la inicialización y los parámetros de Swagger
@@ -24,7 +24,7 @@ namespace IND_CRM_APIs
                 .EnableSwagger(c =>
                     {
                         // Define versión y metadatos del API
-                        c.SingleApiVersion("v1", "IND_CRM_APIs");
+                        c.SingleApiVersion("v1", "IND_CRM_API");
                       
                     })
                 .EnableSwaggerUi(c =>
