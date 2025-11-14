@@ -1,0 +1,30 @@
+# Build folders
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio generated files
+.vs/
+*.swp
+*.tmp
+*.bak
+*.ncb
+*.log
+*.vspscc
+*.vssscc
+
+# Packages
+packages/
+*.nupkg
+
+# Publish outputs
+PublishProfiles/
+*.pubxml
+*.pubxml.user
+
+# Local settings
+appsettings.Development.json
+*.dbmdl
