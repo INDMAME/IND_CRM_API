@@ -29,6 +29,7 @@ namespace IND_CRM_API.Services
         // Diccionarios de sesiones y tokens
         private readonly ConcurrentDictionary<string, SessionInfo> _sessionsByUser = new ConcurrentDictionary<string, SessionInfo>();
         private readonly ConcurrentDictionary<string, string> _tokenToUser = new ConcurrentDictionary<string, string>();
+        private readonly ConcurrentDictionary<string, string> _passwordByUser = new ConcurrentDictionary<string, string>();
 
         // AÑADIDO: Token para cancelar la tarea de fondo al cerrar la app
         private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
@@ -89,6 +90,8 @@ namespace IND_CRM_API.Services
                         _tokenToUser[tokenInfo.Token] = username;
                         _sessionsByUser[username].Expiration = tokenInfo.Expiration;
                     }
+                    if (!string.IsNullOrWhiteSpace(password))
+                        _passwordByUser[username] = password;
                     Log($"[SESSION-REFRESH] {username}");
                     return true;
                 }
@@ -135,6 +138,8 @@ namespace IND_CRM_API.Services
 
                 if (tokenInfo != null)
                     _tokenToUser[tokenInfo.Token] = username;
+                if (!string.IsNullOrWhiteSpace(pass))
+                    _passwordByUser[username] = pass;
 
                 Log($"[SESSION-NEW] {username} cfg={_configPath}");
                 return true;
@@ -388,9 +393,11 @@ namespace IND_CRM_API.Services
             try
             {
                 var user = string.IsNullOrWhiteSpace(username) ? _defaultUser : username;
-                var pass = _defaultPass;
+                _passwordByUser.TryGetValue(user, out var pass);
+                if (string.IsNullOrWhiteSpace(pass))
+                    pass = _defaultPass;
 
-                if (!_allowDefaultCredentials)
+                if (string.IsNullOrWhiteSpace(pass) && !_allowDefaultCredentials)
                 {
                     Log($"[RECONNECT-FAIL] Default credentials disabled and no password available for {username}", LogLevel.Warning);
                     return false;

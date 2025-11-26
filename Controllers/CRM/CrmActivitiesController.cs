@@ -2,6 +2,8 @@
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
+using AxaptaCOMConnector;
 using System;
 using System.Linq;
 using System.Web.Http;
@@ -17,6 +19,13 @@ namespace IND_CRM_API.Controllers.CRM
         public CrmActivitiesController(IAxaptaSessionManager sessionManager) : base(sessionManager)
         {
             _sessionManager = sessionManager;
+        }
+
+        public class GetActivitiesRequest
+        {
+            public string userId { get; set; }
+            public string fromDate { get; set; }
+            public string toDate { get; set; }
         }
 
         // CREATE ACTIVIDADES (Container)
@@ -85,6 +94,50 @@ namespace IND_CRM_API.Controllers.CRM
                 return InternalServerError(new Exception($"Error CreateActivity: {ex.Message}", ex));
             }
         }
+
+        // LIST ACTIVITIES (container)
+        [HttpPost, Route("list")]
+        public IHttpActionResult ListActivities([FromBody] GetActivitiesRequest body)
+        {
+            try
+            {
+                var username = GetAuthenticatedUsername();
+
+                if (body == null)
+                    return BadRequest("Body vacio o invalido.");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+
+                con.Append(body.userId ?? string.Empty);
+                con.Append(DateTime.Parse(body.fromDate).ToString("yyyyMMdd"));
+                con.Append(DateTime.Parse(body.toDate).ToString("yyyyMMdd"));
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMApiClass",
+                    "getActivityContainer",
+                    con
+                );
+
+                var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
+                if (root == null)
+                    return Ok(new { success = false, message = "Contenedor nulo." });
+
+                var data = Helpers.AxContainerHelper.ToArray(root);
+                return Ok(new { success = true, data });
+            }
+            catch (Exception ex)
+            {
+                AxaptaSessionManager.LogStatic($"[ERROR] ListActivities API: {ex.Message}");
+                return InternalServerError(new Exception($"Error ListActivities: {ex.Message}", ex));
+            }
+        }
+
+        // TEST endpoint (debug container)
+        [HttpPost, Route("test")]
+        public IHttpActionResult TestActivities([FromBody] GetActivitiesRequest body)
+        {
+            return ListActivities(body);
+        }
     }
 }
-

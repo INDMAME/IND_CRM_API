@@ -6,6 +6,7 @@ using AxaptaCOMConnector;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 
 namespace IND_CRM_API.Controllers.CRM
 {
@@ -14,7 +15,6 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmAccountsController : BaseCrmController
     {
         private readonly IAxaptaSessionManager _sessionManager;
-
         public CrmAccountsController(IAxaptaSessionManager sessionManager) : base(sessionManager)
         {
             _sessionManager = sessionManager;
@@ -59,7 +59,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
-                    "getContactos",
+                    "getContactoContainer",
                     con
                 );
 
@@ -82,7 +82,7 @@ namespace IND_CRM_API.Controllers.CRM
         // -----------------------------------------
         // LIST ACCOUNTS
         // -----------------------------------------
-        [HttpPost, Route("list")]
+        [HttpPost, Route("listAccounts")]
         public IHttpActionResult GetAccounts([FromBody] GetAccountsRequest body)
         {
             try
@@ -101,7 +101,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
-                    "getAccounts",
+                    "getAccountContainer",
                     con
                 );
 
