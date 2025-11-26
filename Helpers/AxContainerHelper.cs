@@ -2,48 +2,42 @@
 using System;
 using System.Collections.Generic;
 
-public static class AxContainerHelper
+namespace IND_CRM_API.Helpers
 {
     /// <summary>
-    /// Convierte un IAxaptaContainer en object[] (convirtiendo subcontainers también).
+    /// Utilidades para convertir contenedores de Axapta a estructuras .NET.
     /// </summary>
-    public static object[] ToArray(object obj)
+    public static class AxContainerHelper
     {
-        if (obj == null)
-            return Array.Empty<object>();
-
-        if (obj is IAxaptaContainer con)
+        public static object[] ToArray(object obj)
         {
-            int len = con.Length();
-            var list = new List<object>(len);
+            if (obj == null)
+                return Array.Empty<object>();
 
-            for (int i = 1; i <= len; i++)
+            if (obj is IAxaptaContainer con)
             {
-                object item = con.Peek(i);
+                int len = con.Length();
+                var list = new List<object>(len);
 
-                if (item is IAxaptaContainer inner)
+                for (int i = 1; i <= len; i++)
                 {
-                    list.Add(ToArray(inner));
+                    object item = con.Peek(i);
+
+                    if (item is IAxaptaContainer inner)
+                        list.Add(ToArray(inner));
+                    else
+                        list.Add(item);
                 }
-                else
-                {
-                    list.Add(item);
-                }
+
+                return list.ToArray();
             }
 
-            return list.ToArray();
+            return new[] { obj }; // no es container
         }
 
-        // No es container → devolver objeto envuelto en array
-        return new[] { obj };
-    }
-
-
-    /// <summary>
-    /// Intenta convertir un objeto a IAxaptaContainer.
-    /// </summary>
-    public static IAxaptaContainer AsContainer(object obj)
-    {
-        return obj as IAxaptaContainer;
+        public static IAxaptaContainer AsContainer(object obj)
+        {
+            return obj as IAxaptaContainer;
+        }
     }
 }
