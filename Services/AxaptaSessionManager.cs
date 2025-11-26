@@ -340,6 +340,46 @@ namespace IND_CRM_API.Services
             }
         }
 
+        /// <summary>
+        /// Ejecuta un método estático de Axapta que devuelve un contenedor.
+        /// </summary>
+        public IAxaptaContainer CallContainerMethodByUser(string username, string className, string methodName, object[] args = null)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+                throw new Exception("Usuario no valido.");
+
+            if (!_sessionsByUser.TryGetValue(username, out var session) || session == null)
+            {
+                if (!TryReconnect(username))
+                    throw new Exception("Sesion de Axapta no encontrada y no fue posible reconectarla.");
+
+                session = _sessionsByUser[username];
+            }
+
+            try
+            {
+                Log($"[CALL-START] {username}::{className}.{methodName} (CONTAINER)", LogLevel.Info);
+
+                object raw =
+                    args == null
+                    ? session.AxInstance.CallStaticClassMethod(className, methodName)
+                    : session.AxInstance.CallStaticClassMethod(className, methodName, args);
+
+                var container = raw as IAxaptaContainer;
+
+                if (container == null)
+                    throw new Exception("El metodo no devolvio un AxaptaContainer valido.");
+
+                Log($"[CALL-END] Container length={container.Length()}", LogLevel.Info);
+                return container;
+            }
+            catch (Exception ex)
+            {
+                Log($"[ERROR-CONTAINER-CALL] {username}::{className}.{methodName} -> {ex.Message}", LogLevel.Error);
+                throw;
+            }
+        }
+
         // ---------------------------------------------------------
         // RECONEXION
         // ---------------------------------------------------------
