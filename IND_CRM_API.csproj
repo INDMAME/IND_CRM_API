@@ -153,7 +153,11 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="App_Start\DependencyConfig.cs" />
     <Compile Include="App_Start\SwaggerConfig.cs" />
+    <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
+    <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
+    <Compile Include="Contracts\Requests\LoginRequest.cs" />
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
@@ -170,6 +174,8 @@
     <Compile Include="Services\AxSession.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
     <Compile Include="Services\IAxLogger.cs" />
+    <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
+    <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="WebApiConfig.cs" />

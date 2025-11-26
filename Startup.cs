@@ -5,6 +5,7 @@ using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Jwt;
 using Owin;
 using Swashbuckle.Application;
+using IND_CRM_API.App_Start;
 using System;
 using System.Configuration;
 using System.IO;
@@ -42,6 +43,7 @@ namespace IND_CRM_API
             // ===========================================
             var config = new HttpConfiguration();
             WebApiConfig.Register(config);
+            DependencyConfig.Register(config);
             app.UseCors(CorsOptions.AllowAll);
 
             // ===========================================
@@ -164,3 +166,4 @@ namespace IND_CRM_API
         }
     }
 }
+

@@ -1,4 +1,7 @@
-﻿using IND_CRM_API.Services;
+﻿using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Controllers;
+using IND_CRM_API.Services;
+using IND_CRM_API.Services.Interfaces;
 using System;
 using System.Web.Http;
 
@@ -8,21 +11,14 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/visits")]
     public class CrmVisitsController : BaseCrmController
     {
-        // Use global AxSession singleton
-        private readonly AxaptaSessionManager _sessionManager = AxSession.Manager;
+        private readonly IAxaptaSessionManager _sessionManager;
          
-
-        // ---------------------------------------------------------
-        // CREAR ASISTENTE (Container)
-        // ---------------------------------------------------------
-        public class CreateVisitaAsistenteRequest
+        public CrmVisitsController(IAxaptaSessionManager sessionManager) : base(sessionManager)
         {
-            public string refRecIdActividad { get; set; }
-            public string asistenteTipo { get; set; }
-            public string asistenteId { get; set; }
-            public string contactoRecId { get; set; }
+            _sessionManager = sessionManager;
         }
 
+        // CREAR ASISTENTE (Container)
         [HttpPost, Route("createVisitaAsistente")]
         public IHttpActionResult CreateVisitaAsistente([FromBody] CreateVisitaAsistenteRequest body)
         {
@@ -58,23 +54,19 @@ namespace IND_CRM_API.Controllers.CRM
                 );
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
-
                 if (root == null || root.Length() == 0)
                     return Ok(new { success = false, message = "Contenedor vacio." });
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
-
                 if (row == null || row.Length() < 2)
-                    return Ok(new { success = false, message = "Estructura invalida de AX." });
+                    return Ok(new { success = false, message = "Estructura inesperada en la respuesta." });
 
-                string rawSuccess = row.Peek(1)?.ToString()?.Trim().ToLower() ?? "false";
-                bool success =
-                       rawSuccess == "1"
-                    || rawSuccess == "true";
-
+                string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
 
-                return Ok(new { success, message });
+                AxaptaSessionManager.LogStatic($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
+
+                return Ok(new { success = result == "1", message });
             }
             catch (Exception ex)
             {
@@ -84,3 +76,4 @@ namespace IND_CRM_API.Controllers.CRM
         }
     }
 }
+

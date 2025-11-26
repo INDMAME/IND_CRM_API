@@ -1,4 +1,5 @@
 ﻿using AxaptaCOMConnector;
+using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
@@ -13,7 +14,7 @@ namespace IND_CRM_API.Services
 {
     // Servicio encargado de gestionar sesiones activas contra Axapta 3.0
     // AÑADIDO: IDisposable para limpieza al cerrar la APP
-    public class AxaptaSessionManager : IDisposable
+    public class AxaptaSessionManager : IDisposable, IAxaptaSessionManager
     {
         // Niveles de severidad para logging
         public enum LogLevel { Info, Warning, Error }
@@ -464,3 +465,4 @@ namespace IND_CRM_API.Services
         }
     }
 }
+

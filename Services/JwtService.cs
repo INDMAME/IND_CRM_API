@@ -6,6 +6,8 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
+using IND_CRM_API.Services.Interfaces;
+
 namespace IND_CRM_API.Services
 {
     /// <summary>
@@ -20,7 +22,7 @@ namespace IND_CRM_API.Services
     /// <item><description><b>JwtSettings:ExpirationMinutes</b> → Tiempo de validez en minutos.</description></item>
     /// </list>
     /// </summary>
-    public class JwtService
+    public class JwtService : IJwtService
     {
         /// <summary>
         /// Estructura contenedora de información sobre el token JWT generado.
@@ -113,3 +115,4 @@ namespace IND_CRM_API.Services
         }
     }
 }
+
