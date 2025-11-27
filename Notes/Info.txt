@@ -1,0 +1,27 @@
+﻿Resumen de la estructura (capas y archivos clave)
+•	Presentación / arranque: Startup.cs — configura OWIN, JWT Bearer, CORS y registra WebAPI.
+•	Configuración DI: App_Start/DependencyConfig.cs — registra singletons (IAxaptaSessionManager, IJwtService, IAxLogger) y añade TokenRefreshHandler.
+•	Seguridad JWT: Services/JwtService.cs + middleware OWIN en Startup.cs.
+•	Mensajería: App_Start/TokenRefreshHandler.cs — handler que renueva token cuando está próximo a expirar.
+•	Controladores: Controllers/* (p. ej. CrmActivitiesController, CrmAccountsController, CrmVisitsController, AuthController, HealthController) — heredan BaseCrmController o ApiController.
+•	Base común: Controllers/CRM/BaseCrmController.cs — expone GetAuthenticatedUsername() y dependencias inyectadas (IAxaptaSessionManager, IAxLogger).
+•	Servicios Axapta: Services/AxaptaSessionManager.cs — gestión de sesiones COM, mapping token→usuario, limpieza periódica y wrappers de llamada a AX.
+•	Logger: Services/FileAxLogger.cs implementa IAxLogger.
+•	Helpers y DTOs: Helpers/AxContainerHelper.cs, Contracts/Requests/*.cs.
+Cómo interactúan (flujo típico)
+1.	Cliente hace petición con Authorization: Bearer <token>.
+2.	OWIN JWT valida token (firma/issuer/audience/exp).
+3.	TokenRefreshHandler (message handler) lee el token; si está cerca de expirar genera uno nuevo con JwtService.GenerateToken, llama a IAxaptaSessionManager.RefreshSessionToken(...) y añade X-Refreshed-Token en la respuesta.
+4.	WebAPI enruta la petición al controlador; BaseCrmController.GetAuthenticatedUsername() obtiene User.Identity.Name (claim).
+5.	Controlador usa la dependencia IAxaptaSessionManager para obtener una instancia de Axapta (GetAxInstanceForUser) y ejecutar llamadas COM (CallStaticClassMethod o CallContainerMethodByUser).
+6.	Si la llamada devuelve un contenedor Axapta, AxContainerHelper.ToArray lo transforma a arrays/objetos .NET para la respuesta.
+7.	Todas las operaciones relevantes hacen logging vía IAxLogger (ej. FileAxLogger), y AxaptaSessionManager mantiene mapas token↔usuario y sesiones en memoria.
+Responsabilidades importantes
+•	AxaptaSessionManager: gestión de ciclo de vida COM, reintentos, timeout de llamadas, limpieza periódica (task cancelable), refresco de tokens en memoria.
+•	JwtService: generación de tokens firmados y control de expiración.
+•	TokenRefreshHandler: no evita la validación OWIN; sólo renueva tokens activos y actualiza la sesión.
+•	DependencyConfig.SimpleResolver: proveedor DI simple usado para inyectar singletons y crear controladores.
+Observaciones rápidas
+•	Controladores ahora dependen explícitamente de IAxLogger y IAxaptaSessionManager (mejora testabilidad).
+•	AxSession.Manager existe como fallback singleton; idealmente usar solo DI para consistencia.
+•	Cliente frontend debe leer X-Refreshed-Token en respuestas y reemplazar su token local para aprovechar la renovación automática.

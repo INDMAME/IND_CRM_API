@@ -213,7 +213,8 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="PROMPTS\FinishMigrationPrompt.txt" />
+    <Content Include="Notes\FinishMigrationPrompt.txt" />
+    <Content Include="Notes\Info.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
