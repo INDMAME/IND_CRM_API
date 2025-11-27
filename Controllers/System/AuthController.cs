@@ -29,8 +29,8 @@ namespace IND_CRM_API.Controllers.System
         [HttpPost, Route("login")]
         public IHttpActionResult Login([FromBody] LoginRequest dto)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Username) || string.IsNullOrWhiteSpace(dto.Password))
-                return BadRequest("Faltan credenciales.");
+            if (dto == null || !ModelState.IsValid)
+                return BadRequest(ModelState);
 
             try
             {

@@ -12,6 +12,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Web.Cors;
 using System.Web.Http;
 
 [assembly: OwinStartup(typeof(IND_CRM_API.Startup))]
@@ -44,7 +45,24 @@ namespace IND_CRM_API
             var config = new HttpConfiguration();
             WebApiConfig.Register(config);
             DependencyConfig.Register(config);
-            app.UseCors(CorsOptions.AllowAll);
+
+            // CORS restringido a orígenes permitidos
+            var corsPolicy = new CorsPolicy
+            {
+                AllowAnyHeader = true,
+                AllowAnyMethod = true,
+                SupportsCredentials = true
+            };
+            corsPolicy.Origins.Add("http://localhost:7776");
+            corsPolicy.Origins.Add("http://212.142.143.182:7776");
+
+            app.UseCors(new CorsOptions
+            {
+                PolicyProvider = new CorsPolicyProvider
+                {
+                    PolicyResolver = _ => Task.FromResult(corsPolicy)
+                }
+            });
 
             // ===========================================
             //    Autenticación JWT
@@ -113,9 +131,7 @@ namespace IND_CRM_API
                     context.Response.Redirect("/swagger/ui/index");
                     return;
                 }
-
-                if (context.Request.Headers.ContainsKey("Authorization"))
-                    Console.WriteLine($" → Auth Header: {context.Request.Headers["Authorization"]}");
+                // Authorization header deliberately not logged
 
                 await next.Invoke();
 
@@ -166,4 +182,5 @@ namespace IND_CRM_API
         }
     }
 }
+
 

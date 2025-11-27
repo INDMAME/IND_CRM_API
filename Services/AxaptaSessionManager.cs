@@ -448,6 +448,14 @@ namespace IND_CRM_API.Services
             if (!_sessionsByUser.TryGetValue(username, out var session) || session == null)
                 return false;
 
+            // Validar que el oldToken pertenece al mismo usuario si se proporciono
+            if (!string.IsNullOrEmpty(oldToken) &&
+                _tokenToUser.TryGetValue(oldToken, out var mappedUser) &&
+                !string.Equals(mappedUser, username, StringComparison.OrdinalIgnoreCase))
+            {
+                return false; // token no pertenece al usuario autenticado
+            }
+
             // Actualizar la fecha de expiracion de la sesion en memoria
             session.Expiration = tokenInfo.Expiration;
 

@@ -36,8 +36,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                if (body == null)
-                    return BadRequest("Datos vacios o invalidos.");
+                if (body == null || !ModelState.IsValid)
+                    return BadRequest(ModelState);
 
                 AxaptaSessionManager.LogStatic($"[API-IN] CreateActivity llamado por {username}");
                 AxaptaSessionManager.LogStatic($" -> accountNum: {body.accountNum}");
@@ -84,9 +84,13 @@ namespace IND_CRM_API.Controllers.CRM
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
 
+                bool successFlag =
+                    string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
+
                 AxaptaSessionManager.LogStatic($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
-                return Ok(new { success = result == "1", message });
+                return Ok(new { success = successFlag, message });
             }
             catch (Exception ex)
             {
@@ -103,8 +107,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                if (body == null)
-                    return BadRequest("Body vacio o invalido.");
+                if (body == null || !ModelState.IsValid)
+                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();

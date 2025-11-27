@@ -47,8 +47,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                if (body == null)
-                    return BadRequest("Body vacio o invalido.");
+                if (body == null || !ModelState.IsValid)
+                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -89,8 +89,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                if (body == null)
-                    return BadRequest("Body vacio o invalido.");
+                if (body == null || !ModelState.IsValid)
+                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
