@@ -15,7 +15,7 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmAccountsController : BaseCrmController
     {
         private readonly IAxaptaSessionManager _sessionManager;
-        public CrmAccountsController(IAxaptaSessionManager sessionManager) : base(sessionManager)
+        public CrmAccountsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
         }
@@ -74,7 +74,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] GetContactoContainer API: {ex.Message}");
+                Logger.Log($"[ERROR] GetContactoContainer API: {ex.Message}");
                 return InternalServerError(new Exception($"Error GetContactoContainer: {ex.Message}", ex));
             }
         }
@@ -116,7 +116,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] GetAccounts API: {ex.Message}");
+                Logger.Log($"[ERROR] GetAccounts API: {ex.Message}");
                 return InternalServerError(new Exception($"Error GetAccounts: {ex.Message}", ex));
             }
         }

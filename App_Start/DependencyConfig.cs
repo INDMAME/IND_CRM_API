@@ -15,11 +15,24 @@ namespace IND_CRM_API.App_Start
     {
         public static void Register(HttpConfiguration config)
         {
+            var axLogger = new FileAxLogger();
+            var jwtService = new JwtService();
+            var sessionManager = new AxaptaSessionManager(axLogger);
+
             var services = new Dictionary<Type, object>
             {
-                { typeof(IAxaptaSessionManager), new AxaptaSessionManager() },
-                { typeof(IJwtService), new JwtService() }
+                { typeof(IAxaptaSessionManager), sessionManager },
+                { typeof(IJwtService), jwtService },
+                { typeof(IAxLogger), axLogger }
             };
+
+            // Register message handler to refresh tokens automatically
+            var refreshThresholdMinutes = 5; // renovar cuando queden 5 minutos o menos
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["JwtSettings:RefreshThresholdMinutes"], out var cfg))
+                refreshThresholdMinutes = cfg;
+
+            var tokenHandler = new TokenRefreshHandler(jwtService, sessionManager, TimeSpan.FromMinutes(refreshThresholdMinutes));
+            config.MessageHandlers.Add(tokenHandler);
 
             config.DependencyResolver = new SimpleResolver(services);
         }

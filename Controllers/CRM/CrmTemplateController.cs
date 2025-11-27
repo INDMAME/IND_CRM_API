@@ -24,7 +24,7 @@ namespace IND_CRM_API.Controllers.CRM
     {
         private readonly IAxaptaSessionManager _sessionManager;
 
-        public CrmTemplateController(IAxaptaSessionManager sessionManager) : base(sessionManager)
+        public CrmTemplateController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
         }
@@ -53,7 +53,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] Sample API: {ex.Message}");
+                Logger.Log($"[ERROR] Sample API: {ex.Message}");
                 return InternalServerError(new Exception($"Error Sample: {ex.Message}", ex));
             }
         }

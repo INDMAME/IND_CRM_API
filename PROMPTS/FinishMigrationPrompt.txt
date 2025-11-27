@@ -1,0 +1,37 @@
+Objetivo: terminar la migración de logging y token-refresh en el proyecto web.
+
+Pasos a ejecutar en el otro proyecto (Web frontend / API deploy):
+
+1) Actualizar Dependency Injection
+- Asegúrate de que el servidor WebAPI registra `IAxLogger`, `IJwtService`, `IAxaptaSessionManager` en el contenedor DI.
+- En ausencia de un contenedor, copia `DependencyConfig.Register` tal como está en el repo de API.
+
+2) Añadir `TokenRefreshHandler`
+- Copia `App_Start/TokenRefreshHandler.cs` al proyecto API.
+- Asegúrate de que está añadido a `HttpConfiguration.MessageHandlers` antes de MapHttpAttributeRoutes.
+- Configura `JwtSettings:RefreshThresholdMinutes` en App.config si necesitas cambiar el umbral.
+
+3) Actualizar controladores
+- Reemplaza usos de `AxaptaSessionManager.LogStatic` por `IAxLogger` inyectado.
+- Cambia constructores de controladores de `BaseCrmController(IAxaptaSessionManager)` a `BaseCrmController(IAxaptaSessionManager, IAxLogger)`.
+
+4) Revisar singletons
+- Si existe `AxSession.Manager`, inicialízalo con `new AxaptaSessionManager(new FileAxLogger())` o elimínalo y usa DI.
+
+5) Frontend: manejar token renovado
+- En cada respuesta AJAX/fetch verifica cabecera `X-Refreshed-Token`. Si existe, reemplaza el token almacenado.
+- Ejemplo JS: comprobar response.headers.get('X-Refreshed-Token') y actualizar auth store.
+
+6) Tests y validación
+- Ejecuta la suite de tests.
+- Probar flujo: login -> esperar hasta umbral -> realizar petición -> comprobar cabecera `X-Refreshed-Token` y que la nueva fecha sea posterior.
+
+Notas:
+- No invalidamos por completo el token antiguo; si quieres revocación, añade una lista de tokens revocados y compruébala en el middleware.
+- Asegúrate de repetir la configuración de `JwtSettings` en App.config del servidor de despliegue.
+
+Comando rápido para pruebas manuales (curl):
+- Login y extraer token
+- Realizar llamada con: `curl -H "Authorization: Bearer <token>" -i http://localhost:NNNN/api/crm/activities/list` y inspeccionar cabeceras de respuesta.
+
+Cuando abras el otro proyecto y quieras que aplique los cambios automáticamente, pega este prompt en mi sesión y ejecutaré los cambios.

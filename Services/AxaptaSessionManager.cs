@@ -35,7 +35,7 @@ namespace IND_CRM_API.Services
         private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
 
         // Logger inyectado (por ahora FileAxLogger, pero facilmente sustituible)
-        private static readonly IAxLogger _logger = new FileAxLogger();
+        private static IAxLogger _logger = new FileAxLogger();
 
         // Configuracion de Axapta
         private readonly string _configPath = ConfigurationManager.AppSettings["AxConfigFile"];
@@ -48,8 +48,14 @@ namespace IND_CRM_API.Services
         private readonly bool _allowDefaultCredentials = true;
 
         // Constructor
-        public AxaptaSessionManager()
+        public AxaptaSessionManager() : this(null) { }
+
+        // Nuevo constructor inyectable
+        public AxaptaSessionManager(IAxLogger logger)
         {
+            if (logger != null)
+                _logger = logger;
+
             if (_verbose && !Directory.Exists(_verbosePath))
                 Directory.CreateDirectory(_verbosePath);
 

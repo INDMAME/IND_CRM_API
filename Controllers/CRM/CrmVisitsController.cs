@@ -13,7 +13,7 @@ namespace IND_CRM_API.Controllers.CRM
     {
         private readonly IAxaptaSessionManager _sessionManager;
          
-        public CrmVisitsController(IAxaptaSessionManager sessionManager) : base(sessionManager)
+        public CrmVisitsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
         }
@@ -29,11 +29,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body == null || !ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                AxaptaSessionManager.LogStatic($"[API-IN] CreateVisitaAsistente llamado por {username}");
-                AxaptaSessionManager.LogStatic($" -> refRecIdActividad: {body.refRecIdActividad}");
-                AxaptaSessionManager.LogStatic($" -> asistenteTipo: {body.asistenteTipo}");
-                AxaptaSessionManager.LogStatic($" -> asistenteId: {body.asistenteId}");
-                AxaptaSessionManager.LogStatic($" -> contactoRecId: {body.contactoRecId}");
+                Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username}");
+                Logger.Log($" -> refRecIdActividad: {body.refRecIdActividad}");
+                Logger.Log($" -> asistenteTipo: {body.asistenteTipo}");
+                Logger.Log($" -> asistenteId: {body.asistenteId}");
+                Logger.Log($" -> contactoRecId: {body.contactoRecId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -43,9 +43,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
 
-                AxaptaSessionManager.LogStatic("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
+                Logger.Log("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
                 for (int i = 1; i <= con.Length(); i++)
-                    AxaptaSessionManager.LogStatic($" - Item {i}: {con.Peek(i)}");
+                    Logger.Log($" - Item {i}: {con.Peek(i)}");
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -68,13 +68,13 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
-                AxaptaSessionManager.LogStatic($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
+                Logger.Log($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
 
                 return Ok(new { success = successFlag, message });
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] CreateVisitaAsistente API: {ex.Message}");
+                Logger.Log($"[ERROR] CreateVisitaAsistente API: {ex.Message}");
                 return InternalServerError(new Exception($"Error CreateVisitaAsistente: {ex.Message}", ex));
             }
         }

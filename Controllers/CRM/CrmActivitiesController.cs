@@ -16,7 +16,7 @@ namespace IND_CRM_API.Controllers.CRM
     {
         private readonly IAxaptaSessionManager _sessionManager;
  
-        public CrmActivitiesController(IAxaptaSessionManager sessionManager) : base(sessionManager)
+        public CrmActivitiesController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
         }
@@ -39,11 +39,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body == null || !ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                AxaptaSessionManager.LogStatic($"[API-IN] CreateActivity llamado por {username}");
-                AxaptaSessionManager.LogStatic($" -> accountNum: {body.accountNum}");
-                AxaptaSessionManager.LogStatic($" -> visitType: {body.visitType}");
-                AxaptaSessionManager.LogStatic($" -> userId: {body.userId}");
-                AxaptaSessionManager.LogStatic($" -> transDate: {body.transDate}");
+                Logger.Log($"[API-IN] CreateActivity llamado por {username}");
+                Logger.Log($" -> accountNum: {body.accountNum}");
+                Logger.Log($" -> visitType: {body.visitType}");
+                Logger.Log($" -> userId: {body.userId}");
+                Logger.Log($" -> transDate: {body.transDate}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -61,9 +61,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
 
-                AxaptaSessionManager.LogStatic("Container enviado a AX (CreateActivity):");
+                Logger.Log("Container enviado a AX (CreateActivity):");
                 for (int i = 1; i <= con.Length(); i++)
-                    AxaptaSessionManager.LogStatic($" - Item {i}: {con.Peek(i)}");
+                    Logger.Log($" - Item {i}: {con.Peek(i)}");
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -88,13 +88,13 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
-                AxaptaSessionManager.LogStatic($"[API-OUT] Resultado CreateActivity: {result} - {message}");
+                Logger.Log($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
                 return Ok(new { success = successFlag, message });
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] CreateActivity API: {ex.Message}");
+                Logger.Log($"[ERROR] CreateActivity API: {ex.Message}");
                 return InternalServerError(new Exception($"Error CreateActivity: {ex.Message}", ex));
             }
         }
@@ -132,7 +132,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[ERROR] ListActivities API: {ex.Message}");
+                Logger.Log($"[ERROR] ListActivities API: {ex.Message}");
                 return InternalServerError(new Exception($"Error ListActivities: {ex.Message}", ex));
             }
         }

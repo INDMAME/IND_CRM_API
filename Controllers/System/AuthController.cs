@@ -17,11 +17,13 @@ namespace IND_CRM_API.Controllers.System
     {
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IJwtService _jwt;
+        private readonly IAxLogger _logger;
 
-        public AuthController(IAxaptaSessionManager sessionManager, IJwtService jwt)
+        public AuthController(IAxaptaSessionManager sessionManager, IJwtService jwt, IAxLogger logger)
         {
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _jwt = jwt ?? throw new ArgumentNullException(nameof(jwt));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         // LOGIN PRINCIPAL
@@ -34,18 +36,18 @@ namespace IND_CRM_API.Controllers.System
 
             try
             {
-                AxaptaSessionManager.LogStatic($"[AUTH] Login attempt for user {dto.Username}");
+                _logger.Log($"[AUTH] Login attempt for user {dto.Username}");
 
                 var tokenInfo = _jwt.GenerateToken(dto.Username, 60);
                 var sessionCreated = _sessionManager.CreateOrGetSession(dto.Username, dto.Password, tokenInfo);
 
                 if (!sessionCreated)
                 {
-                    AxaptaSessionManager.LogStatic($"[AUTH-FAIL] Could not create Axapta session for {dto.Username}");
+                    _logger.Log($"[AUTH-FAIL] Could not create Axapta session for {dto.Username}");
                     return InternalServerError(new Exception("No se pudo iniciar sesión en Axapta (ver log)."));
                 }
 
-                AxaptaSessionManager.LogStatic($"[AUTH-SUCCESS] Token issued for {dto.Username}");
+                _logger.Log($"[AUTH-SUCCESS] Token issued for {dto.Username}");
 
                 return Ok(new
                 {
@@ -55,7 +57,7 @@ namespace IND_CRM_API.Controllers.System
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic($"[AUTH-ERROR] {dto?.Username} -> {ex.Message}");
+                _logger.Log($"[AUTH-ERROR] {dto?.Username} -> {ex.Message}");
                 return InternalServerError(ex);
             }
         }
@@ -80,7 +82,7 @@ namespace IND_CRM_API.Controllers.System
                 var tokenInfo = _jwt.GenerateToken(username, expirationMinutes);
                 _sessionManager.RefreshSessionToken(username, tokenInfo, oldToken);
 
-                AxaptaSessionManager.LogStatic("[AUTH-REFRESH] Token refreshed for " + username);
+                _logger.Log("[AUTH-REFRESH] Token refreshed for " + username);
 
                 return Ok(new
                 {
@@ -90,7 +92,7 @@ namespace IND_CRM_API.Controllers.System
             }
             catch (Exception ex)
             {
-                AxaptaSessionManager.LogStatic("[AUTH-ERROR] Refresh -> " + ex.Message);
+                _logger.Log("[AUTH-ERROR] Refresh -> " + ex.Message);
                 return InternalServerError(ex);
             }
         }
