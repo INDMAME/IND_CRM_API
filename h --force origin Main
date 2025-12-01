@@ -1,0 +1,58 @@
+[33mcommit d0c90a7ff3e7ad00947120d40729e9c5740fe90d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mVisualCode_DEV[m[33m, [m[1;31morigin/VisualCode_DEV[m[33m)[m
+Author: Marco Meza Sanchez <marco.meza@insertec.biz>
+Date:   Wed Nov 26 16:18:40 2025 +0100
+
+    Factorización desde VCode.
+
+[33mcommit 9656aa19771538321686356bba6585ec1c6a7f7f[m
+Author: Marco Meza Sanchez <marco.meza@insertec.biz>
+Date:   Wed Nov 26 15:56:01 2025 +0100
+
+    chore: add test marker in BaseCrmController
+
+[33mcommit 10706c03a979559be48b2142b105d6e589585b14[m[33m ([m[1;31morigin/VisualStudio_DEV[m[33m, [m[1;31morigin/Main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mVisualStudio_DEV[m[33m, [m[1;32mMain[m[33m)[m
+Author: Marco Meza Sanchez <marco.meza@insertec.biz>
+Date:   Fri Nov 14 11:40:25 2025 +0100
+
+    V2.3 - Correción para que compile en x86
+    
+    V2.2 - Update
+    
+    Se implementó IDisposable para permitir la limpieza al apagar el servicio.
+    
+    Se añadió CancellationTokenSource para detener limpiamente la tarea de fondo.
+    
+    Se añadieron los métodos SafeReleaseCom (con el bucle while) y SafeLogoffAndRelease para garantizar que la memoria COM se libere al 100%.
+    
+    Se actualizaron CreateOrGetSession y LogoutByUser para usar estos métodos seguros en lugar de las llamadas manuales.
+    
+    V2.1 - Se añade refresco de TOKEN
+    
+    V2.0 - Nueva versión estandarizada
+    
+    V6 - Estable
+    
+    V5 - Se actualizan los Create para que retornen un JSON
+    
+    V4 - Se corrige el que los contenedores se leían con valores INT32
+    
+    Se agrean 2 nuevos endpoints:
+    GetContactoContainer
+    GetAccountContainer
+    
+    V3 - Se agregan los bats y se agregan ajustes.
+    
+    V3 - Se estandariza para recibir un contenedor, pasa de tipo GET  a POST ya que necesita un json con los parámetros.
+    
+    GetActivitiesContainer
+    TestActivitiesRequest
+    
+    V2 - Método GetActivitiesContainer
+    
+    V1 - Base
+
+[33mcommit 83f7d2b46956626031cd34d77a4de89ee24d06d5[m
+Author: Marco Meza Sanchez <marco.meza@insertec.biz>
+Date:   Fri Nov 14 11:27:39 2025 +0100
+
+    Agregar archivos de proyecto.
