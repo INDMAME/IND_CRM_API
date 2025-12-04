@@ -1,10 +1,9 @@
-Ôªøusing Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.Owin;
 using Microsoft.Owin.Cors;
 using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Jwt;
 using Owin;
-using Swashbuckle.Application;
 using IND_CRM_API.App_Start;
 using System;
 using System.Configuration;
@@ -21,33 +20,34 @@ using System.Threading.Tasks;
 namespace IND_CRM_API
 {
     /// <summary>
-    /// Clase de inicio de la aplicaci√≥n OWIN.
+    /// Clase de inicio de la aplicaciÛn OWIN.
     /// Configura el pipeline principal de la API:
     /// <list type="number">
     /// <item>Inicializa WebAPI y Swagger.</item>
     /// <item>Habilita CORS global.</item>
-    /// <item>Configura autenticaci√≥n JWT (Bearer Token).</item>
-    /// <item>Agrega logging b√°sico de solicitudes y compresi√≥n GZIP.</item>
+    /// <item>Configura autenticaciÛn JWT (Bearer Token).</item>
+    /// <item>Agrega logging b·sico de solicitudes y compresiÛn GZIP.</item>
     /// </list>
     /// </summary>
     public class Startup
     {
         /// <summary>
         /// Configura los middlewares y servicios del pipeline OWIN.
-        /// Se ejecuta autom√°ticamente al iniciar el servicio SelfHost.
+        /// Se ejecuta autom·ticamente al iniciar el servicio SelfHost.
         /// </summary>
         /// <param name="app">Instancia del constructor OWIN (<see cref="IAppBuilder"/>).</param>
 
         public void Configuration(IAppBuilder app)
         {
             // ===========================================
-            //    Inicializaci√≥n de WebAPI y CORS
+            //    InicializaciÛn de WebAPI y CORS
             // ===========================================
             var config = new HttpConfiguration();
             WebApiConfig.Register(config);
             DependencyConfig.Register(config);
+            INDSwaggerConfig.Configure(config);
 
-            // CORS restringido a or√≠genes permitidos
+            // CORS restringido a orÌgenes permitidos
             var corsPolicy = new CorsPolicy
             {
                 AllowAnyHeader = true,
@@ -66,7 +66,7 @@ namespace IND_CRM_API
             });
 
             // ===========================================
-            //    Autenticaci√≥n JWT
+            //    AutenticaciÛn JWT
             // ===========================================
             var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
             var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
@@ -94,39 +94,13 @@ namespace IND_CRM_API
             });
 
             // ===========================================
-            //     Documentaci√≥n Swagger / SwaggerUI
-            // ===========================================
-            config
-                .EnableSwagger(c =>
-                {
-                    c.SingleApiVersion("v1", "INDTestAPIs SelfHost (Axapta Integration)");
-
-                    // Define esquema JWT para autenticaci√≥n en Swagger
-                    c.ApiKey("Bearer")
-                     .Description("Autenticaci√≥n JWT. Formato requerido: Bearer {token}")
-                     .Name("Authorization")
-                     .In("header");
-
-                    // Incluir comentarios XML para documentar los endpoints
-                    var xmlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_API.xml");
-                    if (System.IO.File.Exists(xmlPath))
-                        c.IncludeXmlComments(xmlPath);
-                })
-
-                .EnableSwaggerUi(c =>
-                {
-                    c.EnableApiKeySupport("Authorization", "header");
-
-                });
-
-            // ===========================================
             //     Logging de solicitudes entrantes/salientes
             // ===========================================
             app.Use(async (context, next) =>
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {context.Request.Method} {context.Request.Uri}");
 
-                // Redirigir ra√≠z a Swagger UI
+                // Redirigir raÌz a Swagger UI
                 if (context.Request.Path.Value == "/" || context.Request.Path.Value == "")
                 {
                     context.Response.Redirect("/swagger/ui/index");
@@ -136,11 +110,11 @@ namespace IND_CRM_API
 
                 await next.Invoke();
 
-                Console.WriteLine($" ‚Üê {context.Response.StatusCode} {context.Response.ReasonPhrase}");
+                Console.WriteLine($" ? {context.Response.StatusCode} {context.Response.ReasonPhrase}");
             });
 
             // =========================================================
-            //     COMPRESI√ìN GZIP MANUAL
+            //     COMPRESI”N GZIP MANUAL
             // =========================================================
             app.Use(async (context, next) =>
             {

@@ -1,36 +1,20 @@
-using System.Web.Http;
 using WebActivatorEx;
-using IND_CRM_API;
-using Swashbuckle.Application;
 
-[assembly: PreApplicationStartMethod(typeof(SwaggerConfig), "Register")]
+[assembly: PreApplicationStartMethod(typeof(IND_CRM_API.SwaggerConfig), "Register")]
 
 namespace IND_CRM_API
 {
     /// <summary>
-    /// Configura la inicialización y los parámetros de Swagger
-    /// para exponer la documentación interactiva de la API REST.
+    /// Legacy entry point kept for WebActivatorEx. Swagger is configured in Startup via INDSwaggerConfig.
     /// </summary>
     public class SwaggerConfig
-    {        
+    {
         /// <summary>
-        /// Registra Swagger y SwaggerUI dentro de la configuración global de WebAPI.
+        /// No-op to avoid duplicate Swagger setup. Startup.cs calls INDSwaggerConfig.Configure instead.
         /// </summary>
         public static void Register()
         {
-            var thisAssembly = typeof(SwaggerConfig).Assembly;
-
-            GlobalConfiguration.Configuration
-                .EnableSwagger(c =>
-                    {
-                        // Define versión y metadatos del API
-                        c.SingleApiVersion("v1", "IND_CRM_API");
-                      
-                    })
-                .EnableSwaggerUi(c =>
-                    {
-                        // Configuración visual de la UI (vacía, usa por defecto) 
-                    });
+            // Swagger is configured in Startup.cs using INDSwaggerConfig.Configure(HttpConfiguration).
         }
     }
 }
