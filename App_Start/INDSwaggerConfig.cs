@@ -3,7 +3,7 @@ using System.IO;
 using System.Web.Http;
 using Swashbuckle.Application;
 
-namespace IND_CRM_API.App_Start
+namespace IND_CRM_API.App_Start 
 {
     /// <summary>
     /// Provides a single entry point to configure Swagger on the given HttpConfiguration.
