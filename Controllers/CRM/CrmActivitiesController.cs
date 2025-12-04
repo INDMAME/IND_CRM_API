@@ -1,14 +1,19 @@
 ﻿using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
 using AxaptaCOMConnector;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
+using System.Web.Http.Description;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
+using System.Net;
+using System.Net.Http;
 
 namespace IND_CRM_API.Controllers.CRM
 {
@@ -32,6 +37,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // CREATE ACTIVIDADES (Container)
         [HttpPost, Route("create")]
+        [ResponseType(typeof(INDActionResponse))]
         public IHttpActionResult CreateActivity([FromBody] CreateActivityRequest body)
         {
             try
@@ -76,12 +82,12 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
 
                 if (root == null || root.Length() == 0)
-                    return Ok(new { success = false, message = "Contenedor vacio." });
+                    return Ok(new INDActionResponse { Success = false, Message = "Empty container." });
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
 
                 if (row == null || row.Length() < 2)
-                    return Ok(new { success = false, message = "Estructura inesperada en la respuesta." });
+                    return Ok(new INDActionResponse { Success = false, Message = "Unexpected response structure." });
 
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
@@ -92,17 +98,28 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
-                return Ok(new { success = successFlag, message });
+                return Ok(new INDActionResponse
+                {
+                    Success = successFlag,
+                    Message = message
+                });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] CreateActivity API: {ex}");
-                return InternalServerError(new Exception($"Error CreateActivity: {ex.GetType().FullName} {ex.Message}", ex));
+                var response = new INDActionResponse
+                {
+                    Success = false,
+                    Message = $"Error CreateActivity: {ex.GetType().FullName} {ex.Message}",
+                    ErrorCode = ex.HResult.ToString()
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
             }
         }
 
         // LIST ACTIVITIES (container)
         [HttpPost, Route("list")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult ListActivities([FromBody] GetActivitiesRequest body)
         {
             object resultObj = null;
@@ -128,12 +145,18 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null)
-                    return Ok(new { success = false, message = "Contenedor nulo." });
+                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null container.", Total = 0, Items = new List<object>() });
 
                 try
                 {
-                    var data = Helpers.AxContainerHelper.ToArray(root);
-                    return Ok(new { success = true, data });
+                    var data = Helpers.AxContainerHelper.ToArray(root) ?? Array.Empty<object>();
+                    return Ok(new INDPagedResponse<object>
+                    {
+                        Success = true,
+                        Message = "OK",
+                        Total = data.Length,
+                        Items = data.ToList()
+                    });
                 }
                 catch (COMException comEx)
                 {
@@ -141,7 +164,14 @@ namespace IND_CRM_API.Controllers.CRM
                     string serialized = SafeSerializeResultObject(resultObj);
                     Logger.Log($"[ERROR] ListActivities COMException: HResult={comEx.ErrorCode} Message={comEx.Message} {comEx}");
                     Logger.Log($"[ERROR] Serialized resultObj: {serialized}");
-                    return InternalServerError(new Exception($"Error ListActivities: COMException HResult={comEx.ErrorCode} Message={comEx.Message}", comEx));
+                    var response = new INDPagedResponse<object>
+                    {
+                        Success = false,
+                        Message = $"Error ListActivities: COMException HResult={comEx.ErrorCode} Message={comEx.Message}",
+                        Total = 0,
+                        Items = new List<object>()
+                    };
+                    return Content(HttpStatusCode.InternalServerError, response);
                 }
             }
             catch (Exception ex)
@@ -159,7 +189,14 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[ERROR] ListActivities API: {ex}");
                 int h = ex is COMException cex ? cex.ErrorCode : 0;
-                return InternalServerError(new Exception($"Error ListActivities: {ex.GetType().FullName} {ex.Message} HResult={h}", ex));
+                var response = new INDPagedResponse<object>
+                {
+                    Success = false,
+                    Message = $"Error ListActivities: {ex.GetType().FullName} {ex.Message} HResult={h}",
+                    Total = 0,
+                    Items = new List<object>()
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
             }
         }
 
@@ -201,6 +238,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // TEST endpoint (debug container)
         [HttpPost, Route("test")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult TestActivities([FromBody] GetActivitiesRequest body)
         {
             return ListActivities(body);

@@ -1,8 +1,11 @@
-﻿using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using System;
+using System.Net;
+using System.Web.Http.Description;
 using System.Web.Http;
 
 namespace IND_CRM_API.Controllers.CRM
@@ -20,6 +23,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // CREAR ASISTENTE (Container)
         [HttpPost, Route("createVisitaAsistente")]
+        [ResponseType(typeof(INDActionResponse))]
         public IHttpActionResult CreateVisitaAsistente([FromBody] CreateVisitaAsistenteRequest body)
         {
             try
@@ -55,11 +59,11 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null || root.Length() == 0)
-                    return Ok(new { success = false, message = "Contenedor vacio." });
+                    return Ok(new INDActionResponse { Success = false, Message = "Empty container." });
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
                 if (row == null || row.Length() < 2)
-                    return Ok(new { success = false, message = "Estructura inesperada en la respuesta." });
+                    return Ok(new INDActionResponse { Success = false, Message = "Unexpected response structure." });
 
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
@@ -70,14 +74,26 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
 
-                return Ok(new { success = successFlag, message });
+                return Ok(new INDActionResponse
+                {
+                    Success = successFlag,
+                    Message = message
+                });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] CreateVisitaAsistente API: {ex.Message}");
-                return InternalServerError(new Exception($"Error CreateVisitaAsistente: {ex.Message}", ex));
+                var response = new INDActionResponse
+                {
+                    Success = false,
+                    Message = $"Error CreateVisitaAsistente: {ex.Message}",
+                    ErrorCode = ex.HResult.ToString()
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
             }
         }
     }
 }
+
+
 

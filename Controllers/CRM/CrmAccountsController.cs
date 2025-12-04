@@ -1,12 +1,15 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
+using System.Web.Http.Description;
 using AxaptaCOMConnector;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Contracts.Responses;
+using System.Net;
 
 namespace IND_CRM_API.Controllers.CRM
 {
@@ -41,6 +44,7 @@ namespace IND_CRM_API.Controllers.CRM
         // LIST CONTACTS
         // -----------------------------------------
         [HttpPost, Route("listContacts")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult GetContactoContainer([FromBody] GetContactosRequest body)
         {
             try
@@ -66,16 +70,29 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new { success = false, message = "Respuesta nula de AX." });
+                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
 
-                return Ok(new { success = true, data });
+                return Ok(new INDPagedResponse<object>
+                {
+                    Success = true,
+                    Message = "OK",
+                    Total = data?.Length ?? 0,
+                    Items = data?.ToList() ?? new List<object>()
+                });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] GetContactoContainer API: {ex.Message}");
-                return InternalServerError(new Exception($"Error GetContactoContainer: {ex.Message}", ex));
+                var response = new INDPagedResponse<object>
+                {
+                    Success = false,
+                    Message = $"Error GetContactoContainer: {ex.Message}",
+                    Total = 0,
+                    Items = new List<object>()
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
             }
         }
 
@@ -83,6 +100,7 @@ namespace IND_CRM_API.Controllers.CRM
         // LIST ACCOUNTS
         // -----------------------------------------
         [HttpPost, Route("listAccounts")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult GetAccounts([FromBody] GetAccountsRequest body)
         {
             try
@@ -108,17 +126,31 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new { success = false, message = "Respuesta nula de AX." });
+                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
 
-                return Ok(new { success = true, data });
+                return Ok(new INDPagedResponse<object>
+                {
+                    Success = true,
+                    Message = "OK",
+                    Total = data?.Length ?? 0,
+                    Items = data?.ToList() ?? new List<object>()
+                });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] GetAccounts API: {ex.Message}");
-                return InternalServerError(new Exception($"Error GetAccounts: {ex.Message}", ex));
+                var response = new INDPagedResponse<object>
+                {
+                    Success = false,
+                    Message = $"Error GetAccounts: {ex.Message}",
+                    Total = 0,
+                    Items = new List<object>()
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
             }
         }
     }
 }
+

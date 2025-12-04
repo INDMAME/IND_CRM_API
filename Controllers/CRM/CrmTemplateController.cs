@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
+using System.Web.Http.Description;
 using AxaptaCOMConnector;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Contracts.Responses;
 
 /*
     Prompt:
@@ -31,6 +33,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Ejemplo: Llamada genérica a un método AX que devuelve contenedor
         [HttpGet, Route("sample")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult Sample()
         {
             try
@@ -46,15 +49,28 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new { success = false, message = "Respuesta nula de AX." });
+                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
 
                 var data = Helpers.AxContainerHelper.ToArray(root);
-                return Ok(new { success = true, data });
+                return Ok(new INDPagedResponse<object>
+                {
+                    Success = true,
+                    Message = "OK",
+                    Total = data?.Length ?? 0,
+                    Items = data?.ToList() ?? new List<object>()
+                });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] Sample API: {ex.Message}");
-                return InternalServerError(new Exception($"Error Sample: {ex.Message}", ex));
+                var response = new INDPagedResponse<object>
+                {
+                    Success = false,
+                    Message = $"Error Sample: {ex.Message}",
+                    Total = 0,
+                    Items = new List<object>()
+                };
+                return Content(System.Net.HttpStatusCode.InternalServerError, response);
             }
         }
     }
