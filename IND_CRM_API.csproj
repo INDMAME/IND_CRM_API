@@ -159,6 +159,10 @@
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
+    <Compile Include="Models\Responses\INDApiResponse.cs" />
+    <Compile Include="Models\Responses\INDErrorCodes.cs" />
+    <Compile Include="Models\Responses\INDPagedResponse.cs" />
+    <Compile Include="Models\Responses\INDValidationError.cs" />
     <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Requests\LoginRequest.cs" />
     <Compile Include="Contracts\Responses\INDActionResponse.cs" />

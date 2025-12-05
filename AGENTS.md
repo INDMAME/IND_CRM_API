@@ -1,43 +1,200 @@
-# IND_CRM_API agent profile
+Eres un asistente que trabaja sobre el proyecto IND_CRM_API.
 
-## Tech constraints
+CONTEXTO GENERAL
+- Proyecto: IND_CRM_API.
+- Tecnología: .NET Framework 4.8, Web API 2, OWIN self-host.
+- Plataforma: x86 obligatoria por AxaptaCOMConnector.
+- ERP backend: Navision Axapta 3.0 (Axapta 3.0 SP2) a través de Business Connector COM (AxaptaCOMConnector).
+- No debes migrar este proyecto a .NET Core ni cambiar la versión de framework.
 
-- Project target: .NET Framework 4.8, Web API 2, OWIN self host.
-- Platform MUST stay x86 because of AxaptaCOMConnector.
-- Backend ERP is Navision Axapta 3.0 via Business Connector COM.
-- Do NOT migrate this project to .NET Core or change framework version.
+RESTRICCIONES TÉCNICAS
+- Mantener siempre el target en .NET Framework 4.8, x86.
+- No romper la integración con Axapta COM ni la lógica de AxaptaSessionManager.
+- No introducir multihilo que pueda romper el cliente COM.
+- No cambiar configuración crítica de AxaptaCOMConnector ni de x86 salvo que se pida explícitamente.
+- No añadir dependencias pesadas ni nuevas librerías salvo que sea estrictamente necesario y lo expliques con un comentario claro en el código.
 
-## Design goals
+OBJETIVOS DE DISEÑO
+- Mantener la API estable mientras mejoras estructura, legibilidad y seguridad.
+- Aplicar principios de código limpio: métodos pequeños y enfocados, nombres claros, evitar duplicación.
+- Mantener el comportamiento actual de los endpoints REST salvo que detectes un bug claro.
+- Tratar la integración con Axapta como dependencia crítica: nunca romper las llamadas COM.
 
-- Keep the API stable while improving structure, readability, and safety.
-- Apply clean code principles: small focused methods, clear names, no duplication.
-- Keep the current REST endpoints behavior unless there is a clear bug.
-- Treat Axapta integration as a critical dependency: never break COM calls.
+SWAGGER / OPENAPI
+- Debes añadir y configurar Swagger / OpenAPI usando Swashbuckle para Web API 2 (.NET 4.8).
+- No usar Swashbuckle.AspNetCore ni paquetes de ASP.NET Core.
+- Exponer un documento OpenAPI estable para los endpoints CRM, para que otros proyectos puedan generar clientes tipados.
+- No renombrar rutas salvo que sea estrictamente necesario; prioriza documentar y anotar las rutas existentes.
 
-## Swagger / OpenAPI
+INTEGRACIÓN AXAPTA COM
+- AxaptaSessionManager debe seguir siendo seguro para x86 y Business Connector COM.
+- Encapsular las llamadas COM en código defensivo (try/catch, logging) sin cambiar la lógica de negocio.
+- No introducir patrones de concurrencia o multi threading que puedan romper el cliente COM.
+- Si refactorizas wrappers COM, mantén la interfaz pública compatible o explica claramente cualquier cambio.
 
-- Add and configure Swagger / OpenAPI using Swashbuckle for Web API 2 (.NET 4.8).
-- Do NOT use Swashbuckle.AspNetCore or ASP.NET Core packages.
-- Expose a stable OpenAPI document for all CRM endpoints so other projects can generate typed clients.
-- Do not rename routes unless strictly necessary; prefer documenting and annotating them.
+DOCUMENTACIÓN Y ESTILO
+- Todos los comentarios y documentación XML deben estar en español sencillo.
+- Evitar jerga innecesaria; explicar el propósito, entradas, salidas y casos de error en una o dos frases cortas en español.
+- Añadir documentación XML en controladores públicos, servicios y clases clave de integración con Axapta.
+- Añadir comentarios breves en métodos nuevos o lógica no evidente para que otro desarrollador entienda el flujo.
 
-## Axapta COM integration
+ESTÁNDAR DE RESPUESTAS REST
 
-- Axapta session manager must remain safe for x86 and Business Connector COM.
-- Wrap COM interactions in defensive code (try/catch, logging) without changing business logic.
-- Never introduce multi threading that may break the COM client.
-- If you refactor COM wrappers, keep the public surface compatible or clearly explain changes.
+Objetivo: implementar un patrón estándar de respuesta REST en IND_CRM_API con:
+1) Un envoltorio de respuesta unificado (success, message, data, errorCode, etc.).
+2) Un envoltorio específico para listas/paginación.
+3) Una clase centralizada de códigos de error de negocio.
+4) Uso consistente de códigos HTTP en todos los controladores.
+5) Código documentado de forma clara.
 
-## Documentation and style
+MODELO DE RESPUESTA ESTÁNDAR
+Crea o actualiza las siguientes clases en un espacio de nombres común, por ejemplo: IND_CRM_API.Models.Responses
 
-- All comments and docstrings must be in simple English without accents or special characters.
-- Avoid any non ASCII characters in code or comments.
-- Add XML documentation on public controllers, services, and key Axapta integration classes.
-- Explain purpose, inputs, outputs, and error cases in one or two short English sentences.
+1) IndApiResponse<T>
+- Propiedades:
+  - bool Success
+  - string Message
+  - string ErrorCode
+  - T Data
+  - List<IndValidationError> Errors
+  - string TraceId
+- Comportamiento:
+  - Success = true y ErrorCode = null para operaciones correctas.
+  - Success = false para respuestas de error.
+  - TraceId se usa para almacenar un identificador de correlación si está disponible.
+- Añade comentarios XML a la clase y propiedades en español explicando:
+  - Qué representa la clase.
+  - Para qué sirve cada campo.
+- Añade comentarios en línea solo donde la lógica no sea obvia.
 
-## Working style
+2) IndPagedResponse<T>
+- Propiedades:
+  - bool Success
+  - string Message
+  - int Total
+  - int Page
+  - int PageSize
+  - List<T> Items
+  - string TraceId
+- Uso:
+  - Para endpoints de listas (paginadas o grandes volúmenes).
+  - Total: número total de registros en el origen de datos.
+  - Page y PageSize: información de la página actual.
+- Añade documentación XML y comentarios breves en español.
 
-- Before large edits, summarize your understanding of the current structure and propose a short plan.
-- Prefer incremental refactors that compile at each step.
-- Never add new heavy dependencies without an explicit comment explaining why they are needed.
-- Keep configuration for .NET 4.8 x86 and AxaptaCOMConnector untouched unless explicitly asked to change it.
+3) IndValidationError
+- Propiedades:
+  - string Field
+  - string Message
+- Uso:
+  - Describir errores de validación y problemas a nivel de campo.
+- Añade documentación XML y comentarios breves.
+
+4) IndErrorCodes
+- Crea una clase estática sin instancias.
+- Define constantes string para códigos de error de negocio, agrupados por módulo. Por ejemplo:
+  - public const string ValidationError = "VALIDATION_ERROR";
+  - public const string AuthRequired = "AUTH_REQUIRED";
+  - public const string AuthTokenExpired = "AUTH_TOKEN_EXPIRED";
+  - public const string CrmActivityMissingFields = "CRM_ACTIVITY_MISSING_FIELDS";
+  - public const string CrmActivityNotFound = "CRM_ACTIVITY_NOT_FOUND";
+  - public const string AxSessionError = "AX_SESSION_ERROR";
+  - public const string AxComError = "AX_COM_ERROR";
+- Usa nombres significativos alineados con los endpoints reales de IND_CRM_API.
+- Añade documentación XML a la clase y a cada constante explicando el escenario de uso.
+
+ESTÁNDAR DE CÓDIGOS HTTP
+Aplica estas reglas en todos los controladores y endpoints:
+
+- GET (recurso único)
+  - 200 OK cuando el recurso existe y se devuelve.
+  - 404 Not Found cuando el recurso no existe (Success = false y ErrorCode de tipo NOT_FOUND).
+
+- GET (lista / búsqueda)
+  - 200 OK con IndPagedResponse<T> o al menos con Items y Total.
+
+- POST (crear)
+  - 201 Created cuando el recurso se crea correctamente.
+  - Devolver IndApiResponse<T> con Success = true y Data con el recurso creado o su identificador.
+  - 400 Bad Request para errores de formato o datos inválidos a nivel sintáctico.
+  - 422 Unprocessable Entity para errores de negocio/validación (usar IndValidationError y códigos de IndErrorCodes específicos de módulo).
+
+- PUT / PATCH (actualizar)
+  - 200 OK cuando se devuelve el recurso actualizado.
+  - 204 No Content si se actualiza correctamente y no se devuelve body.
+  - 400, 404, 422 cuando corresponda, manteniendo el envelope estándar.
+
+- DELETE
+  - 204 No Content cuando la eliminación tiene éxito sin body.
+  - 404 Not Found cuando el recurso no existe.
+
+FORMATO DE RESPUESTA DE ERROR
+Para cualquier error (4xx o 5xx) la estructura JSON debe ser:
+
+{
+  "success": false,
+  "message": "Descripcion corta del error",
+  "errorCode": "CODIGO_DE_ERROR",
+  "errors": [ ... ],
+  "traceId": "id-correlaction-opcional"
+}
+
+TAREAS DE IMPLEMENTACION
+1) Analizar la solución IND_CRM_API:
+   - Localizar modelos de respuesta existentes y usos de respuestas anónimas.
+   - Identificar endpoints que devuelven formas distintas de respuesta.
+
+2) Introducir las clases estándar:
+   - Añadir IndApiResponse<T>, IndPagedResponse<T>, IndValidationError, IndErrorCodes en una carpeta común (por ejemplo Models/Responses).
+   - Asegurar compilación en .NET Framework 4.8 x86.
+   - Documentar en español con XML doc.
+
+3) Refactorizar controladores:
+   - Para cada controlador y endpoint:
+     - Sustituir respuestas ad-hoc por IndApiResponse<T> o IndPagedResponse<T>.
+     - Ajustar tipos de retorno (IHttpActionResult u otros) para usar los modelos estándar.
+     - Aplicar los códigos HTTP definidos antes.
+   - En endpoints de lista, usar siempre Total, Page, PageSize, Items, TraceId cuando tenga sentido.
+   - En acciones de crear/actualizar/borrar, usar IndApiResponse<T>.
+
+4) Manejo de errores global:
+   - Si existe filtro global de excepciones o middleware OWIN, actualizarlo para:
+     - Capturar excepciones no controladas.
+     - Registrar o trazar la excepción respetando el logging existente.
+     - Devolver IndApiResponse<object> con:
+       - Success = false
+       - Message = "Error interno del servidor"
+       - ErrorCode = un código de IndErrorCodes (por ejemplo "INTERNAL_ERROR")
+       - TraceId = id de correlación si existe
+     - Usar HTTP 500 Internal Server Error.
+   - No cambiar tipos de excepciones específicas de Axapta ni lógica COM; solo la construcción de la respuesta HTTP.
+
+5) Códigos de error de negocio:
+   - Para cada endpoint, identificar:
+     - Campos obligatorios/invalidos.
+     - Recurso no encontrado.
+     - Problemas de autenticación/autorización.
+     - Errores de sesión Axapta o COM.
+   - Asignar constantes apropiadas de IndErrorCodes.
+   - Añadir nuevas constantes cuando aparezcan escenarios no cubiertos, documentándolos.
+
+6) Swagger / OpenAPI:
+   - Configurar Swashbuckle para Web API 2 con .NET 4.8.
+   - Exponer esquemas IndApiResponse<T> e IndPagedResponse<T> como modelos de respuesta.
+   - Documentar respuestas típicas de error (400, 401, 404, 422, 500) con el envelope estándar.
+   - No migrar a ASP.NET Core ni cambios de framework.
+
+ESTILO DE TRABAJO
+- Antes de cambios grandes, resume brevemente:
+  - Estructura actual que has encontrado.
+  - Plan corto (lista) de archivos a modificar y patrones a aplicar.
+- Prefiere refactors incrementales que compilen en cada paso.
+- No añadir dependencias nuevas pesadas sin comentario explícito justificando el motivo.
+- Mantener configuración de .NET 4.8 x86 y AxaptaCOMConnector intacta salvo petición explícita.
+
+OBJETIVO FINAL
+Tras tus cambios, todos los controladores de IND_CRM_API deben:
+- Usar IndApiResponse<T> o IndPagedResponse<T> de forma consistente.
+- Devolver códigos HTTP acordes a buenas prácticas REST.
+- Utilizar IndErrorCodes para errores de negocio y Axapta.
+- Estar documentados en español de forma clara para que cualquier desarrollador entienda el propósito y manejo de errores.

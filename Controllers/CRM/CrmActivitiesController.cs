@@ -1,9 +1,9 @@
-﻿using IND_CRM_API.Contracts.Requests;
-using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using AxaptaCOMConnector;
 using System;
 using System.Collections.Generic;
@@ -37,15 +37,45 @@ namespace IND_CRM_API.Controllers.CRM
 
         // CREATE ACTIVIDADES (Container)
         [HttpPost, Route("create")]
-        [ResponseType(typeof(INDActionResponse))]
+        [ResponseType(typeof(INDApiResponse<object>))]
         public IHttpActionResult CreateActivity([FromBody] CreateActivityRequest body)
         {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<INDValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new INDValidationError { Field = "body", Message = "Request body is required." });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.accountNum))
+                    validationErrors.Add(new INDValidationError { Field = "accountNum", Message = "accountNum is required." });
+                if (string.IsNullOrWhiteSpace(body.visitType))
+                    validationErrors.Add(new INDValidationError { Field = "visitType", Message = "visitType is required." });
+                if (string.IsNullOrWhiteSpace(body.userId))
+                    validationErrors.Add(new INDValidationError { Field = "userId", Message = "userId is required." });
+                if (string.IsNullOrWhiteSpace(body.transDate) || !DateTime.TryParse(body.transDate, out _))
+                    validationErrors.Add(new INDValidationError { Field = "transDate", Message = "transDate is required and must be a valid date." });
+            }
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new INDApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Validation error.",
+                    ErrorCode = INDErrorCodes.CrmActivityMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
-
-                if (body == null || !ModelState.IsValid)
-                    return BadRequest(ModelState);
 
                 Logger.Log($"[API-IN] CreateActivity llamado por {username}");
                 Logger.Log($" -> accountNum: {body.accountNum}");
@@ -82,12 +112,32 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
 
                 if (root == null || root.Length() == 0)
-                    return Ok(new INDActionResponse { Success = false, Message = "Empty container." });
+                {
+                    var errorResponse = new INDApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Empty container from AX.",
+                        ErrorCode = INDErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
 
                 if (row == null || row.Length() < 2)
-                    return Ok(new INDActionResponse { Success = false, Message = "Unexpected response structure." });
+                {
+                    var errorResponse = new INDApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Unexpected response structure.",
+                        ErrorCode = INDErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
@@ -98,37 +148,99 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
-                return Ok(new INDActionResponse
+                var okResponse = new INDApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message
-                });
+                    Message = message,
+                    ErrorCode = null,
+                    Data = new { Result = result, Message = message },
+                    TraceId = traceId
+                };
+
+                if (successFlag)
+                    return Content(HttpStatusCode.Created, okResponse);
+
+                okResponse.Success = false;
+                okResponse.ErrorCode = INDErrorCodes.AxComError;
+                return Content(HttpStatusCode.BadRequest, okResponse);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] CreateActivity API: {ex}");
-                var response = new INDActionResponse
+                var response = new INDApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error CreateActivity: {ex.GetType().FullName} {ex.Message}",
-                    ErrorCode = ex.HResult.ToString()
+                    ErrorCode = ex is COMException ? INDErrorCodes.AxComError : INDErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
         }
 
-        // LIST ACTIVITIES (container)
+        // LIST ACTIVITIES (container) - GET
+        [HttpGet, Route("list")]
+        [ResponseType(typeof(INDPagedResponse<object>))]
+        public IHttpActionResult ListActivitiesGet([FromUri] string userId, [FromUri] string fromDate, [FromUri] string toDate)
+        {
+            var request = new GetActivitiesRequest
+            {
+                userId = userId,
+                fromDate = fromDate,
+                toDate = toDate
+            };
+            return BuildActivitiesListResponse(request, 1, 0);
+        }
+
+        // LIST ACTIVITIES (container) - POST (compatibility)
         [HttpPost, Route("list")]
         [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult ListActivities([FromBody] GetActivitiesRequest body)
         {
+            return BuildActivitiesListResponse(body, 1, 0);
+        }
+
+        private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)
+        {
             object resultObj = null;
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<INDValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new INDValidationError { Field = "body", Message = "Request body is required." });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.userId))
+                    validationErrors.Add(new INDValidationError { Field = "userId", Message = "userId is required." });
+                if (string.IsNullOrWhiteSpace(body.fromDate) || !DateTime.TryParse(body.fromDate, out _))
+                    validationErrors.Add(new INDValidationError { Field = "fromDate", Message = "fromDate is required and must be a valid date." });
+                if (string.IsNullOrWhiteSpace(body.toDate) || !DateTime.TryParse(body.toDate, out _))
+                    validationErrors.Add(new INDValidationError { Field = "toDate", Message = "toDate is required and must be a valid date." });
+            }
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new INDPagedResponse<object>
+                {
+                    Success = false,
+                    Message = "Validation error.",
+                    ErrorCode = INDErrorCodes.CrmActivityMissingFields,
+                    Errors = validationErrors,
+                    Total = 0,
+                    Page = page,
+                    PageSize = pageSize,
+                    Items = new List<object>(),
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
-
-                if (body == null || !ModelState.IsValid)
-                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -145,17 +257,35 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null)
-                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null container.", Total = 0, Items = new List<object>() });
+                {
+                    var nullResponse = new INDPagedResponse<object>
+                    {
+                        Success = false,
+                        Message = "Null container from AX.",
+                        ErrorCode = INDErrorCodes.AxComError,
+                        Errors = null,
+                        Total = 0,
+                        Page = page,
+                        PageSize = pageSize,
+                        Items = new List<object>(),
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, nullResponse);
+                }
 
                 try
                 {
                     var data = Helpers.AxContainerHelper.ToArray(root) ?? Array.Empty<object>();
+                    var size = pageSize > 0 ? pageSize : data.Length;
                     return Ok(new INDPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
                         Total = data.Length,
-                        Items = data.ToList()
+                        Page = page,
+                        PageSize = size,
+                        Items = data.ToList(),
+                        TraceId = traceId
                     });
                 }
                 catch (COMException comEx)
@@ -168,8 +298,13 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         Success = false,
                         Message = $"Error ListActivities: COMException HResult={comEx.ErrorCode} Message={comEx.Message}",
+                        ErrorCode = INDErrorCodes.AxComError,
+                        Errors = null,
                         Total = 0,
-                        Items = new List<object>()
+                        Page = page,
+                        PageSize = pageSize,
+                        Items = new List<object>(),
+                        TraceId = traceId
                     };
                     return Content(HttpStatusCode.InternalServerError, response);
                 }
@@ -193,8 +328,13 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Success = false,
                     Message = $"Error ListActivities: {ex.GetType().FullName} {ex.Message} HResult={h}",
+                    ErrorCode = ex is COMException ? INDErrorCodes.AxComError : INDErrorCodes.AxSessionError,
+                    Errors = null,
                     Total = 0,
-                    Items = new List<object>()
+                    Page = page,
+                    PageSize = pageSize,
+                    Items = new List<object>(),
+                    TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
@@ -241,7 +381,8 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(INDPagedResponse<object>))]
         public IHttpActionResult TestActivities([FromBody] GetActivitiesRequest body)
         {
-            return ListActivities(body);
+            return BuildActivitiesListResponse(body, 1, 0);
         }
     }
 }
+
