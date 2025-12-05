@@ -161,6 +161,8 @@
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Requests\LoginRequest.cs" />
+    <Compile Include="Contracts\Responses\INDActionResponse.cs" />
+    <Compile Include="Contracts\Responses\INDPagedResponse.cs" />
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />

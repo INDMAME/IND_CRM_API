@@ -70,7 +70,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Total = 0,
                     Items = new List<object>()
                 };
-                return Content(System.Net.HttpStatusCode.InternalServerError, response);
+                return Content(global::System.Net.HttpStatusCode.InternalServerError, response);
             }
         }
     }
