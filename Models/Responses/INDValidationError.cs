@@ -1,14 +1,14 @@
 namespace IND_CRM_API.Models.Responses
 {
     /// <summary>
-    /// Describes a validation problem for a specific field.
+    /// Describe un problema de validacion en un campo especifico.
     /// </summary>
-    public class INDValidationError
+    public class IndValidationError
     {
-        /// <summary>Field name that failed validation.</summary>
+        /// <summary>Nombre del campo que fallo la validacion.</summary>
         public string Field { get; set; }
 
-        /// <summary>Reason of the validation error.</summary>
+        /// <summary>Motivo del error de validacion.</summary>
         public string Message { get; set; }
     }
 }

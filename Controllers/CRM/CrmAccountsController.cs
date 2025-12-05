@@ -8,7 +8,7 @@ using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
-using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Models.Responses;
 using System.Net;
 
 namespace IND_CRM_API.Controllers.CRM
@@ -44,15 +44,40 @@ namespace IND_CRM_API.Controllers.CRM
         // LIST CONTACTS
         // -----------------------------------------
         [HttpPost, Route("listContacts")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Cuentas CRM" })]
         public IHttpActionResult GetContactoContainer([FromBody] GetContactosRequest body)
         {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (body.page <= 0) validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+                if (body.pageSize <= 0) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+            }
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
-
-                if (body == null || !ModelState.IsValid)
-                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -70,27 +95,43 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Respuesta nula de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
 
-                return Ok(new INDPagedResponse<object>
+                return Ok(new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
                     Total = data?.Length ?? 0,
-                    Items = data?.ToList() ?? new List<object>()
+                    Page = body.page,
+                    PageSize = body.pageSize,
+                    Items = data?.ToList() ?? new List<object>(),
+                    TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] GetContactoContainer API: {ex.Message}");
-                var response = new INDPagedResponse<object>
+                var response = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error GetContactoContainer: {ex.Message}",
-                    Total = 0,
-                    Items = new List<object>()
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
@@ -100,15 +141,40 @@ namespace IND_CRM_API.Controllers.CRM
         // LIST ACCOUNTS
         // -----------------------------------------
         [HttpPost, Route("listAccounts")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Cuentas CRM" })]
         public IHttpActionResult GetAccounts([FromBody] GetAccountsRequest body)
         {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (body.page <= 0) validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+                if (body.pageSize <= 0) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+            }
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
-
-                if (body == null || !ModelState.IsValid)
-                    return BadRequest(ModelState);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -126,31 +192,49 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Respuesta nula de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
 
-                return Ok(new INDPagedResponse<object>
+                return Ok(new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
                     Total = data?.Length ?? 0,
-                    Items = data?.ToList() ?? new List<object>()
+                    Page = body.page,
+                    PageSize = body.pageSize,
+                    Items = data?.ToList() ?? new List<object>(),
+                    TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] GetAccounts API: {ex.Message}");
-                var response = new INDPagedResponse<object>
+                var response = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error GetAccounts: {ex.Message}",
-                    Total = 0,
-                    Items = new List<object>()
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
         }
     }
 }
+
+
 

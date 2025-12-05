@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
@@ -7,7 +7,7 @@ using AxaptaCOMConnector;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
-using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Models.Responses;
 
 /*
     Prompt:
@@ -31,11 +31,13 @@ namespace IND_CRM_API.Controllers.CRM
             _sessionManager = sessionManager;
         }
 
-        // Ejemplo: Llamada genérica a un método AX que devuelve contenedor
+        // Ejemplo: Llamada gen?rica a un m?todo AX que devuelve contenedor
         [HttpGet, Route("sample")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Template" })]
         public IHttpActionResult Sample()
         {
+            var traceId = Guid.NewGuid().ToString("N");
             try
             {
                 var username = GetAuthenticatedUsername();
@@ -49,29 +51,46 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as IAxaptaContainer;
 
                 if (root == null)
-                    return Ok(new INDPagedResponse<object> { Success = false, Message = "Null AX response.", Total = 0, Items = new List<object>() });
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Respuesta nula de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 var data = Helpers.AxContainerHelper.ToArray(root);
-                return Ok(new INDPagedResponse<object>
+                return Ok(new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
                     Total = data?.Length ?? 0,
-                    Items = data?.ToList() ?? new List<object>()
+                    Page = 1,
+                    PageSize = data?.Length ?? 0,
+                    Items = data?.ToList() ?? new List<object>(),
+                    TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] Sample API: {ex.Message}");
-                var response = new INDPagedResponse<object>
+                var response = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error Sample: {ex.Message}",
-                    Total = 0,
-                    Items = new List<object>()
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
                 };
                 return Content(global::System.Net.HttpStatusCode.InternalServerError, response);
             }
         }
     }
 }
+

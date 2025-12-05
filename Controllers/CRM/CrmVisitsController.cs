@@ -1,5 +1,5 @@
 using IND_CRM_API.Contracts.Requests;
-using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
@@ -23,15 +23,44 @@ namespace IND_CRM_API.Controllers.CRM
 
         // CREAR ASISTENTE (Container)
         [HttpPost, Route("createVisitaAsistente")]
-        [ResponseType(typeof(INDActionResponse))]
+        [ResponseType(typeof(IndApiResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
         public IHttpActionResult CreateVisitaAsistente([FromBody] CreateVisitaAsistenteRequest body)
         {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new System.Collections.Generic.List<IndValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.refRecIdActividad))
+                    validationErrors.Add(new IndValidationError { Field = "refRecIdActividad", Message = "refRecIdActividad es obligatorio." });
+                if (string.IsNullOrWhiteSpace(body.asistenteTipo))
+                    validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
+                if (string.IsNullOrWhiteSpace(body.asistenteId))
+                    validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
+            }
+
+            if (validationErrors.Count > 0)
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
-
-                if (body == null || !ModelState.IsValid)
-                    return BadRequest(ModelState);
 
                 Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username}");
                 Logger.Log($" -> refRecIdActividad: {body.refRecIdActividad}");
@@ -59,11 +88,33 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null || root.Length() == 0)
-                    return Ok(new INDActionResponse { Success = false, Message = "Empty container." });
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Contenedor vacio.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
                 if (row == null || row.Length() < 2)
-                    return Ok(new INDActionResponse { Success = false, Message = "Unexpected response structure." });
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Estructura inesperada en la respuesta.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
 
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
                 string message = row.Peek(2)?.ToString() ?? string.Empty;
@@ -74,26 +125,40 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
 
-                return Ok(new INDActionResponse
+                var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message
-                });
+                    Message = message,
+                    ErrorCode = successFlag ? null : IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = new { Result = result, Message = message },
+                    TraceId = traceId
+                };
+
+                if (successFlag)
+                    return Content(HttpStatusCode.Created, okResponse);
+
+                return Content(HttpStatusCode.BadRequest, okResponse);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] CreateVisitaAsistente API: {ex.Message}");
-                var response = new INDActionResponse
-                {
+                var response = new IndApiResponse<object> {
                     Success = false,
                     Message = $"Error CreateVisitaAsistente: {ex.Message}",
-                    ErrorCode = ex.HResult.ToString()
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
         }
     }
 }
+
+
+
 
 
 

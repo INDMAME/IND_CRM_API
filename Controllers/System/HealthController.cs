@@ -1,8 +1,9 @@
-﻿using IND_CRM_API.Services;
-using System;
-using System.Web.Http;
+using IND_CRM_API.Models.Responses;
+using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
-using System.Configuration;
+using System;
+using System.Net;
+using System.Web.Http;
 
 namespace IND_CRM_API.Controllers.System
 {
@@ -11,7 +12,6 @@ namespace IND_CRM_API.Controllers.System
     {
         private static readonly DateTime _startTimeUtc = DateTime.UtcNow;
 
-        // Use global AxSession singleton
         private readonly AxaptaSessionManager _sessionManager = AxSession.Manager;
         private readonly IAxLogger _logger;
 
@@ -20,34 +20,66 @@ namespace IND_CRM_API.Controllers.System
             _logger = logger ?? new FileAxLogger();
         }
 
+        /// <summary>
+        /// Devuelve estado basico del servicio.
+        /// </summary>
         [AllowAnonymous]
         [HttpGet, Route("ping")]
+        [SwaggerOperation(Tags = new[] { "Salud" })]
         public IHttpActionResult Ping()
         {
-            return Ok(new
+            var traceId = Guid.NewGuid().ToString("N");
+            var response = new IndApiResponse<object>
             {
-                status = "Online",
-                startedUtc = _startTimeUtc
-            });
+                Success = true,
+                Message = "Servicio en linea.",
+                ErrorCode = null,
+                Errors = null,
+                Data = new { status = "Online", startedUtc = _startTimeUtc },
+                TraceId = traceId
+            };
+            return Ok(response);
         }
 
+        /// <summary>
+        /// Comprueba la salud de la sesion de Axapta.
+        /// </summary>
         [Authorize]
         [HttpGet, Route("health")]
+        [SwaggerOperation(Tags = new[] { "Salud" })]
         public IHttpActionResult AxaptaHealth()
         {
+            var traceId = Guid.NewGuid().ToString("N");
             try
             {
                 var username = User?.Identity?.Name ?? "health-check";
 
-                // Simple: solo intentar crear o recuperar la sesion
                 _sessionManager.CreateOrGetSession(username, null, null);
 
-                return Ok(new { status = "Ok" });
+                var okResponse = new IndApiResponse<object>
+                {
+                    Success = true,
+                    Message = "AX operativo.",
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = new { status = "Ok" },
+                    TraceId = traceId
+                };
+                return Ok(okResponse);
             }
             catch (Exception ex)
             {
                 _logger.Log("[HEALTH-ERROR] " + ex.Message);
-                return InternalServerError(ex);
+                var errorResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error al validar AX.",
+                    ErrorCode = IndErrorCodes.AxSessionError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content(HttpStatusCode.InternalServerError, errorResponse);
             }
         }
     }

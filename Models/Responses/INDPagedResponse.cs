@@ -3,36 +3,30 @@ using System.Collections.Generic;
 namespace IND_CRM_API.Models.Responses
 {
     /// <summary>
-    /// Standard envelope for list or paged endpoints.
+    /// Respuesta estandar para endpoints de listado o paginados.
     /// </summary>
-    /// <typeparam name="T">Type of each item returned.</typeparam>
-    public class INDPagedResponse<T>
+    /// <typeparam name="T">Tipo de cada elemento devuelto.</typeparam>
+    public class IndPagedResponse<T>
     {
-        /// <summary>True when the operation succeeds.</summary>
+        /// <summary>Indica si la operacion termino correctamente.</summary>
         public bool Success { get; set; }
 
-        /// <summary>Short human readable message.</summary>
+        /// <summary>Mensaje corto y legible con el resultado.</summary>
         public string Message { get; set; }
 
-        /// <summary>Total items available for the query.</summary>
+        /// <summary>Total de elementos disponibles para la consulta.</summary>
         public int Total { get; set; }
 
-        /// <summary>Current page number (1-based).</summary>
+        /// <summary>Numero de pagina actual (1-based).</summary>
         public int Page { get; set; }
 
-        /// <summary>Size of the page requested.</summary>
+        /// <summary>Tamano de pagina solicitado.</summary>
         public int PageSize { get; set; }
 
-        /// <summary>Items returned for the current page.</summary>
+        /// <summary>Elementos devueltos en la pagina actual.</summary>
         public List<T> Items { get; set; }
 
-        /// <summary>Optional business or technical error code.</summary>
-        public string ErrorCode { get; set; }
-
-        /// <summary>Validation errors when applicable.</summary>
-        public List<INDValidationError> Errors { get; set; }
-
-        /// <summary>Optional trace identifier for correlation.</summary>
+        /// <summary>Identificador opcional de traza o correlacion.</summary>
         public string TraceId { get; set; }
     }
 }

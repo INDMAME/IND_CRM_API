@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
 using System.Web.Http.Description;
+using Swashbuckle.Swagger.Annotations;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 using System.Net;
@@ -35,37 +36,52 @@ namespace IND_CRM_API.Controllers.CRM
             public string toDate { get; set; }
         }
 
-        // CREATE ACTIVIDADES (Container)
+        /// <summary>
+        /// Crea una actividad CRM en Axapta.
+        /// </summary>
+        /// <remarks>
+        /// Devuelve 201 con IndApiResponse si la actividad se crea.  
+        /// ErrorCode posibles:  
+        /// - CrmActivityMissingFields cuando faltan campos obligatorios.  
+        /// - AxComError cuando hay errores de contenedor o llamada COM.  
+        /// - InternalError en fallos inesperados.
+        /// </remarks>
+        /// <param name="body">DTO con datos de la actividad a crear.</param>
         [HttpPost, Route("create")]
-        [ResponseType(typeof(INDApiResponse<object>))]
+        [ResponseType(typeof(IndApiResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Actividades" })]
+        [SwaggerResponse(HttpStatusCode.Created, "Actividad creada correctamente", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, "Error en llamada a AX", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult CreateActivity([FromBody] CreateActivityRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var validationErrors = new List<INDValidationError>();
+            var validationErrors = new List<IndValidationError>();
 
             if (body == null)
             {
-                validationErrors.Add(new INDValidationError { Field = "body", Message = "Request body is required." });
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Request body is required." });
             }
             else
             {
                 if (string.IsNullOrWhiteSpace(body.accountNum))
-                    validationErrors.Add(new INDValidationError { Field = "accountNum", Message = "accountNum is required." });
+                    validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum is required." });
                 if (string.IsNullOrWhiteSpace(body.visitType))
-                    validationErrors.Add(new INDValidationError { Field = "visitType", Message = "visitType is required." });
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
                 if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new INDValidationError { Field = "userId", Message = "userId is required." });
+                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !DateTime.TryParse(body.transDate, out _))
-                    validationErrors.Add(new INDValidationError { Field = "transDate", Message = "transDate is required and must be a valid date." });
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate is required and must be a valid date." });
             }
 
             if (validationErrors.Any())
             {
-                var validationResponse = new INDApiResponse<object>
+                var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = "Validation error.",
-                    ErrorCode = INDErrorCodes.CrmActivityMissingFields,
+                    ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = validationErrors,
                     Data = null,
                     TraceId = traceId
@@ -113,11 +129,11 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (root == null || root.Length() == 0)
                 {
-                    var errorResponse = new INDApiResponse<object>
+                    var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
                         Message = "Empty container from AX.",
-                        ErrorCode = INDErrorCodes.AxComError,
+                        ErrorCode = IndErrorCodes.AxComError,
                         Data = null,
                         TraceId = traceId
                     };
@@ -128,11 +144,11 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (row == null || row.Length() < 2)
                 {
-                    var errorResponse = new INDApiResponse<object>
+                    var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
                         Message = "Unexpected response structure.",
-                        ErrorCode = INDErrorCodes.AxComError,
+                        ErrorCode = IndErrorCodes.AxComError,
                         Data = null,
                         TraceId = traceId
                     };
@@ -148,7 +164,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
-                var okResponse = new INDApiResponse<object>
+                var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
                     Message = message,
@@ -161,17 +177,17 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.Created, okResponse);
 
                 okResponse.Success = false;
-                okResponse.ErrorCode = INDErrorCodes.AxComError;
+                okResponse.ErrorCode = IndErrorCodes.AxComError;
                 return Content(HttpStatusCode.BadRequest, okResponse);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] CreateActivity API: {ex}");
-                var response = new INDApiResponse<object>
+                var response = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error CreateActivity: {ex.GetType().FullName} {ex.Message}",
-                    ErrorCode = ex is COMException ? INDErrorCodes.AxComError : INDErrorCodes.InternalError,
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
                     Data = null,
                     TraceId = traceId
                 };
@@ -179,9 +195,22 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // LIST ACTIVITIES (container) - GET
+        /// <summary>
+        /// Obtiene la lista paginada de actividades CRM filtrada por usuario y rango de fechas (GET).
+        /// </summary>
+        /// <remarks>
+        /// Devuelve 200 con IndPagedResponse.  
+        /// ErrorCode posibles: CrmActivityMissingFields en validacion, AxComError/AxSessionError en fallos de AX.
+        /// </remarks>
+        /// <param name="userId">Identificador de usuario de AX.</param>
+        /// <param name="fromDate">Fecha inicio (yyyy-MM-dd).</param>
+        /// <param name="toDate">Fecha fin (yyyy-MM-dd).</param>
         [HttpGet, Route("list")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Actividades" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Listado de actividades", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error en AX/COM", typeof(IndApiResponse<object>))]
         public IHttpActionResult ListActivitiesGet([FromUri] string userId, [FromUri] string fromDate, [FromUri] string toDate)
         {
             var request = new GetActivitiesRequest
@@ -193,9 +222,19 @@ namespace IND_CRM_API.Controllers.CRM
             return BuildActivitiesListResponse(request, 1, 0);
         }
 
-        // LIST ACTIVITIES (container) - POST (compatibility)
+        /// <summary>
+        /// Obtiene la lista paginada de actividades CRM (POST, compatibilidad clientes actuales).
+        /// </summary>
+        /// <remarks>
+        /// Igual que GET /list pero recibe el filtro en el cuerpo. ErrorCode y respuestas iguales.
+        /// </remarks>
+        /// <param name="body">Filtros de usuario y rango de fechas.</param>
         [HttpPost, Route("list")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Actividades" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Listado de actividades", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error en AX/COM", typeof(IndApiResponse<object>))]
         public IHttpActionResult ListActivities([FromBody] GetActivitiesRequest body)
         {
             return BuildActivitiesListResponse(body, 1, 0);
@@ -205,34 +244,31 @@ namespace IND_CRM_API.Controllers.CRM
         {
             object resultObj = null;
             var traceId = Guid.NewGuid().ToString("N");
-            var validationErrors = new List<INDValidationError>();
+            var validationErrors = new List<IndValidationError>();
 
             if (body == null)
             {
-                validationErrors.Add(new INDValidationError { Field = "body", Message = "Request body is required." });
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Request body is required." });
             }
             else
             {
                 if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new INDValidationError { Field = "userId", Message = "userId is required." });
+                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
                 if (string.IsNullOrWhiteSpace(body.fromDate) || !DateTime.TryParse(body.fromDate, out _))
-                    validationErrors.Add(new INDValidationError { Field = "fromDate", Message = "fromDate is required and must be a valid date." });
+                    validationErrors.Add(new IndValidationError { Field = "fromDate", Message = "fromDate is required and must be a valid date." });
                 if (string.IsNullOrWhiteSpace(body.toDate) || !DateTime.TryParse(body.toDate, out _))
-                    validationErrors.Add(new INDValidationError { Field = "toDate", Message = "toDate is required and must be a valid date." });
+                    validationErrors.Add(new IndValidationError { Field = "toDate", Message = "toDate is required and must be a valid date." });
             }
 
             if (validationErrors.Any())
             {
-                var validationResponse = new INDPagedResponse<object>
+                var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = "Validation error.",
-                    ErrorCode = INDErrorCodes.CrmActivityMissingFields,
+                    ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = validationErrors,
-                    Total = 0,
-                    Page = page,
-                    PageSize = pageSize,
-                    Items = new List<object>(),
+                    Data = null,
                     TraceId = traceId
                 };
                 return Content((HttpStatusCode)422, validationResponse);
@@ -258,16 +294,13 @@ namespace IND_CRM_API.Controllers.CRM
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null)
                 {
-                    var nullResponse = new INDPagedResponse<object>
+                    var nullResponse = new IndApiResponse<object>
                     {
                         Success = false,
                         Message = "Null container from AX.",
-                        ErrorCode = INDErrorCodes.AxComError,
+                        ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
-                        Total = 0,
-                        Page = page,
-                        PageSize = pageSize,
-                        Items = new List<object>(),
+                        Data = null,
                         TraceId = traceId
                     };
                     return Content(HttpStatusCode.InternalServerError, nullResponse);
@@ -277,7 +310,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     var data = Helpers.AxContainerHelper.ToArray(root) ?? Array.Empty<object>();
                     var size = pageSize > 0 ? pageSize : data.Length;
-                    return Ok(new INDPagedResponse<object>
+                    return Ok(new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
@@ -294,16 +327,13 @@ namespace IND_CRM_API.Controllers.CRM
                     string serialized = SafeSerializeResultObject(resultObj);
                     Logger.Log($"[ERROR] ListActivities COMException: HResult={comEx.ErrorCode} Message={comEx.Message} {comEx}");
                     Logger.Log($"[ERROR] Serialized resultObj: {serialized}");
-                    var response = new INDPagedResponse<object>
+                    var response = new IndApiResponse<object>
                     {
                         Success = false,
                         Message = $"Error ListActivities: COMException HResult={comEx.ErrorCode} Message={comEx.Message}",
-                        ErrorCode = INDErrorCodes.AxComError,
+                        ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
-                        Total = 0,
-                        Page = page,
-                        PageSize = pageSize,
-                        Items = new List<object>(),
+                        Data = null,
                         TraceId = traceId
                     };
                     return Content(HttpStatusCode.InternalServerError, response);
@@ -324,16 +354,13 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[ERROR] ListActivities API: {ex}");
                 int h = ex is COMException cex ? cex.ErrorCode : 0;
-                var response = new INDPagedResponse<object>
+                var response = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = $"Error ListActivities: {ex.GetType().FullName} {ex.Message} HResult={h}",
-                    ErrorCode = ex is COMException ? INDErrorCodes.AxComError : INDErrorCodes.AxSessionError,
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
                     Errors = null,
-                    Total = 0,
-                    Page = page,
-                    PageSize = pageSize,
-                    Items = new List<object>(),
+                    Data = null,
                     TraceId = traceId
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
@@ -376,13 +403,18 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // TEST endpoint (debug container)
+        /// <summary>
+        /// Endpoint de prueba que reusa la logica de listado de actividades.
+        /// </summary>
+        /// <param name="body">Filtros de usuario y fechas.</param>
         [HttpPost, Route("test")]
-        [ResponseType(typeof(INDPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Actividades" })]
         public IHttpActionResult TestActivities([FromBody] GetActivitiesRequest body)
         {
             return BuildActivitiesListResponse(body, 1, 0);
         }
     }
 }
+
 

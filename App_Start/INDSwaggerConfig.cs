@@ -23,12 +23,15 @@ namespace IND_CRM_API.App_Start
                 .EnableSwagger(c =>
                 {
                     c.SingleApiVersion("v1", "INDTestAPIs SelfHost (Axapta Integration)");
+                    // Usa el nombre completo del tipo para evitar colisiones de schemaId.
+                    c.UseFullTypeNameInSchemaIds();
 
                     c.ApiKey("Bearer")
                         .Description("JWT authentication. Format: Bearer {token}")
                         .Name("Authorization")
                         .In("header");
 
+                    // Swagger usa los XML comments generados en la compilacion para enriquecer el OpenAPI.
                     var xmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_API.xml");
                     if (File.Exists(xmlPath))
                         c.IncludeXmlComments(xmlPath);
