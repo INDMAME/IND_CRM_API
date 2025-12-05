@@ -198,3 +198,61 @@ Tras tus cambios, todos los controladores de IND_CRM_API deben:
 - Devolver códigos HTTP acordes a buenas prácticas REST.
 - Utilizar IndErrorCodes para errores de negocio y Axapta.
 - Estar documentados en español de forma clara para que cualquier desarrollador entienda el propósito y manejo de errores.
+
+
+
+
+REGLAS PARA NUEVOS ENDPOINTS IND_CRM_API
+
+OBJETIVO
+- Solo crear y modificar NUEVOS endpoints siguiendo el estandar ya definido en el proyecto.
+- Usar SIEMPRE la estructura y patrones de CrmTemplateController.cs como referencia base.
+- Aplicar de forma consistente el modelo de respuesta (IndApiResponse, IndPagedResponse, IndValidationError, IndErrorCodes).
+- Actualizar siempre la documentacion OpenAPI/Swagger para cada nuevo endpoint.
+- Preparar o solicitar el contrato del metodo de Axapta necesario para cada nuevo endpoint.
+- Registrar logs basicos de seguimiento con el codigo HTTP de salida.
+- Aplicar estas reglas a TODOS los futuros endpoints.
+
+REGLAS GENERALES
+- No cambiar endpoints existentes salvo que se pida de forma explicita.
+- Nuevos endpoints: ubicarlos en el controlador adecuado heredando o imitando la estructura de CrmTemplateController.cs.
+- Mantener la integracion con Axapta 3.0 via AxaptaSessionManager y Business Connector COM sin romper la logica existente.
+- Usar siempre los modelos de respuesta estandar:
+  - IndApiResponse<T> para operaciones de detalle / accion.
+  - IndPagedResponse<T> para listas/paginacion.
+- Usar codigos HTTP coherentes (200, 201, 204, 400, 401, 404, 422, 500) segun el comportamiento del endpoint.
+- Mapear errores funcionales a IndErrorCodes apropiados.
+
+FLUJO PARA CADA NUEVO ENDPOINT
+1) Disenar el contrato REST:
+   - Definir ruta, verbo HTTP, parametros (ruta, query, body) y DTOs de entrada/salida.
+   - Elegir si la respuesta sera IndApiResponse<T> o IndPagedResponse<T>.
+   - Definir codigos HTTP esperados y posibles ErrorCode de IndErrorCodes.
+
+2) Solicitar / definir el metodo Axapta:
+   - Proponer nombre de clase y metodo X++ (por ejemplo IND_CRM_<Entidad>Service.get<Entidad>List).
+   - Definir firma y tipos basicos del metodo X++ (parametros simples y contenedor de salida).
+   - Asegurar que el endpoint .NET llamara al metodo X++ a traves de AxaptaSessionManager.
+
+3) Implementar el endpoint en C#:
+   - Crear la accion siguiendo la estructura de CrmTemplateController.cs.
+   - Consumir Axapta via AxaptaSessionManager y mapear contenedor Axapta a DTO de salida.
+   - Devolver siempre IndApiResponse<T> o IndPagedResponse<T> con Success, Message, ErrorCode, etc.
+   - Usar codigos HTTP estandar segun el resultado real (exito, no encontrado, validacion, error interno).
+
+4) Actualizar OpenAPI/Swagger:
+   - Añadir/ajustar XML documentation en el metodo del controlador (summary, remarks, param, returns) en espanol.
+   - Declarar tipos de respuesta en las anotaciones ([ResponseType] / [SwaggerResponse]) usando IndApiResponse<T> o IndPagedResponse<T>.
+   - Documentar posibles ErrorCode relevantes en las remarks.
+
+5) Logs de seguimiento:
+   - Usar la infraestructura de log existente.
+   - Registrar como minimo para cada llamada:
+     - Nombre de accion / ruta.
+     - Verbo HTTP.
+     - Codigo HTTP de respuesta final.
+   - No registrar datos sensibles ni cuerpos completos si no es necesario; enfocar el log en trazabilidad y estado.
+
+APLICACION FUTURA
+- Todas las nuevas funcionalidades expuestas como API REST deben seguir este flujo.
+- Si se crea un nuevo modulo o controlador, repetir estas mismas reglas de diseno, respuesta, documentacion y logs.

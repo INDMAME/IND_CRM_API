@@ -4,7 +4,6 @@ using System.Linq;
 using System.Web.Http;
 using System.Web.Http.Description;
 using AxaptaCOMConnector;
-using Swashbuckle.Swagger.Annotations;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
@@ -23,6 +22,7 @@ namespace IND_CRM_API.Controllers.CRM
     /// </summary>
     [Authorize]
     [RoutePrefix("api/crm/template")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class CrmTemplateController : BaseCrmController
     {
         private readonly IAxaptaSessionManager _sessionManager;
@@ -32,10 +32,18 @@ namespace IND_CRM_API.Controllers.CRM
             _sessionManager = sessionManager;
         }
 
-        // Ejemplo: Llamada gen?rica a un m?todo AX que devuelve contenedor
+        /// <summary>
+        /// Ejemplo base para crear nuevos endpoints CRM contra Axapta.
+        /// </summary>
+        /// <remarks>
+        /// Copia este metodo, ajusta el nombre de ruta y el metodo X++ a invocar.
+        /// Rellena el contenedor con los parametros que requiera Axapta y mapea la respuesta a tu DTO.
+        /// Usa IndApiResponse para comandos o IndPagedResponse para listados, con codigos de IndErrorCodes.
+        /// Este controlador se oculta del OpenAPI para servir solo como plantilla interna.
+        /// </remarks>
+        /// <returns>Plantilla de respuesta con datos de ejemplo.</returns>
         [HttpGet, Route("sample")]
         [ResponseType(typeof(IndPagedResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Template" })]
         public IHttpActionResult Sample()
         {
             var traceId = Guid.NewGuid().ToString("N");

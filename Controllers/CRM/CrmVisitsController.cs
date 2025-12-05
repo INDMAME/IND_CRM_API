@@ -155,6 +155,137 @@ namespace IND_CRM_API.Controllers.CRM
                 return Content(HttpStatusCode.InternalServerError, response);
             }
         }
+
+        /// <summary>
+        /// Elimina un asistente vinculado a una actividad.
+        /// </summary>
+        /// <remarks>
+        /// Llama al metodo X++ deleteVisitaAsistente.  
+        /// ErrorCode posibles: ValidationError si faltan datos, AxComError en errores AX, CrmActivityNotFound si la combinacion no existe.
+        /// </remarks>
+        /// <param name="body">Datos del asistente a eliminar.</param>
+        [HttpDelete, Route("deleteVisitaAsistente")]
+        [ResponseType(typeof(IndApiResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
+        public IHttpActionResult DeleteVisitaAsistente([FromBody] DeleteVisitaAsistenteRequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new System.Collections.Generic.List<IndValidationError>();
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.refRecIdActividad))
+                    validationErrors.Add(new IndValidationError { Field = "refRecIdActividad", Message = "refRecIdActividad es obligatorio." });
+                if (string.IsNullOrWhiteSpace(body.asistenteId))
+                    validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
+            }
+
+            if (validationErrors.Count > 0)
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((System.Net.HttpStatusCode)422, validationResponse);
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+
+                Logger.Log($"[API-IN] DeleteVisitaAsistente llamado por {username} refRecIdActividad={body.refRecIdActividad} asistenteId={body.asistenteId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+
+                con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
+                con.Append(body.asistenteId?.Trim() ?? string.Empty);
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMApiClass",
+                    "deleteVisitaAsistente",
+                    con
+                );
+
+                var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
+                if (root == null || root.Length() == 0)
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Contenedor vacio.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
+                if (row == null || row.Length() < 2)
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Estructura inesperada en la respuesta.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                string result = row.Peek(1)?.ToString() ?? string.Empty;
+                string message = row.Peek(2)?.ToString() ?? string.Empty;
+
+                bool successFlag =
+                    string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
+
+                var okResponse = new IndApiResponse<object>
+                {
+                    Success = successFlag,
+                    Message = message,
+                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", System.StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
+                    Errors = null,
+                    Data = new { body.refRecIdActividad, body.asistenteId },
+                    TraceId = traceId
+                };
+
+                if (successFlag)
+                    return Content(System.Net.HttpStatusCode.NoContent, okResponse);
+
+                if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
+                    return Content(System.Net.HttpStatusCode.NotFound, okResponse);
+
+                return Content(System.Net.HttpStatusCode.InternalServerError, okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] DeleteVisitaAsistente API: {ex.Message}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Error DeleteVisitaAsistente: {ex.Message}",
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content(System.Net.HttpStatusCode.InternalServerError, response);
+            }
+        }
     }
 }
 

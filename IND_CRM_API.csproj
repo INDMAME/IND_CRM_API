@@ -159,6 +159,8 @@
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
+    <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
+    <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Models\Responses\INDApiResponse.cs" />
     <Compile Include="Models\Responses\INDErrorCodes.cs" />
     <Compile Include="Models\Responses\INDPagedResponse.cs" />
