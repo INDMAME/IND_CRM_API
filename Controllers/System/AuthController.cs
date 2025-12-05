@@ -45,7 +45,7 @@ namespace IND_CRM_API.Controllers.System
         public IHttpActionResult Login([FromBody] LoginRequest dto)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var errors = new System.Collections.Generic.List<IndValidationError>();
+            var errors = new global::System.Collections.Generic.List<IndValidationError>();
 
             if (dto == null)
             {

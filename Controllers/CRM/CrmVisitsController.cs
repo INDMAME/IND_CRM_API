@@ -7,6 +7,7 @@ using System;
 using System.Net;
 using System.Web.Http.Description;
 using System.Web.Http;
+using Swashbuckle.Swagger.Annotations;
 
 namespace IND_CRM_API.Controllers.CRM
 {
@@ -28,7 +29,7 @@ namespace IND_CRM_API.Controllers.CRM
         public IHttpActionResult CreateVisitaAsistente([FromBody] CreateVisitaAsistenteRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var validationErrors = new System.Collections.Generic.List<IndValidationError>();
+            var validationErrors = new global::System.Collections.Generic.List<IndValidationError>();
 
             if (body == null)
             {

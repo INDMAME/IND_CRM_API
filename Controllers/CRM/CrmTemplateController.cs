@@ -4,6 +4,7 @@ using System.Linq;
 using System.Web.Http;
 using System.Web.Http.Description;
 using AxaptaCOMConnector;
+using Swashbuckle.Swagger.Annotations;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
@@ -61,7 +62,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Data = null,
                         TraceId = traceId
                     };
-                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                    return Content(global::System.Net.HttpStatusCode.InternalServerError, errorResponse);
                 }
 
                 var data = Helpers.AxContainerHelper.ToArray(root);
