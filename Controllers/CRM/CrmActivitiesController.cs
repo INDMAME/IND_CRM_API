@@ -303,7 +303,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
-                con.Append(recId);
+                // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(recId.ToString());
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(body.visitType?.Trim() ?? string.Empty);
                 con.Append(body.userId?.Trim() ?? string.Empty);
@@ -429,7 +430,8 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
-                con.Append(recId);
+                // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(recId.ToString());
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -548,7 +550,8 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
-                con.Append(recId);
+                // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(recId.ToString());
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",

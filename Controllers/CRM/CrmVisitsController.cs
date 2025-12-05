@@ -170,7 +170,7 @@ namespace IND_CRM_API.Controllers.CRM
         public IHttpActionResult DeleteVisitaAsistente([FromBody] DeleteVisitaAsistenteRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var validationErrors = new System.Collections.Generic.List<IndValidationError>();
+            var validationErrors = new global::System.Collections.Generic.List<IndValidationError>();
 
             if (body == null)
             {
@@ -195,7 +195,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Data = null,
                     TraceId = traceId
                 };
-                return Content((System.Net.HttpStatusCode)422, validationResponse);
+                return Content((global::System.Net.HttpStatusCode)422, validationResponse);
             }
 
             try
@@ -228,7 +228,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Data = null,
                         TraceId = traceId
                     };
-                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                    return Content(global::System.Net.HttpStatusCode.InternalServerError, errorResponse);
                 }
 
                 var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
@@ -243,7 +243,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Data = null,
                         TraceId = traceId
                     };
-                    return Content(System.Net.HttpStatusCode.InternalServerError, errorResponse);
+                return Content(global::System.Net.HttpStatusCode.InternalServerError, errorResponse);
                 }
 
                 string result = row.Peek(1)?.ToString() ?? string.Empty;
@@ -257,19 +257,19 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Success = successFlag,
                     Message = message,
-                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", System.StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
+                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", global::System.StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
                     Errors = null,
                     Data = new { body.refRecIdActividad, body.asistenteId },
                     TraceId = traceId
                 };
 
                 if (successFlag)
-                    return Content(System.Net.HttpStatusCode.NoContent, okResponse);
+                    return Content(global::System.Net.HttpStatusCode.NoContent, okResponse);
 
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
-                    return Content(System.Net.HttpStatusCode.NotFound, okResponse);
+                    return Content(global::System.Net.HttpStatusCode.NotFound, okResponse);
 
-                return Content(System.Net.HttpStatusCode.InternalServerError, okResponse);
+                return Content(global::System.Net.HttpStatusCode.InternalServerError, okResponse);
             }
             catch (Exception ex)
             {
@@ -283,7 +283,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Data = null,
                     TraceId = traceId
                 };
-                return Content(System.Net.HttpStatusCode.InternalServerError, response);
+                return Content(global::System.Net.HttpStatusCode.InternalServerError, response);
             }
         }
     }
