@@ -256,3 +256,6 @@ FLUJO PARA CADA NUEVO ENDPOINT
 APLICACION FUTURA
 - Todas las nuevas funcionalidades expuestas como API REST deben seguir este flujo.
 - Si se crea un nuevo modulo o controlador, repetir estas mismas reglas de diseno, respuesta, documentacion y logs.
+
+RECORDATORIO OPERATIVO
+- Cada endpoint nuevo debe nacer con DTOs y responses tipados; refactoriza las interfaces (contratos de entrada/salida) en cuanto los toques para mantener el codigo limpio y alineado con IndApiResponse/IndPagedResponse e IndErrorCodes.

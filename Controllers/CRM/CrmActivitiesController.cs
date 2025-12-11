@@ -1,10 +1,10 @@
-using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Responses;
 using AxaptaCOMConnector;
 using System;
 using System.Collections.Generic;
@@ -614,6 +614,196 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
+        /// <summary>
+        /// Obtiene una actividad CRM por su ActivityId alfanumérico.
+        /// </summary>
+        /// <remarks>
+        /// Llama al método X++ getActivityByCode.  
+        /// ErrorCode posibles: CrmActivityNotFound si no existe, AxComError/AxSessionError en errores de AX, CrmActivityMissingFields cuando falta el id.
+        /// </remarks>
+        /// <param name="code">Identificador alfanumérico de la actividad.</param>
+        [HttpGet, Route("by-code/{code}")]
+        [ResponseType(typeof(IndApiResponse<ActivityDetailDto>))]
+        [SwaggerOperation(Tags = new[] { "Actividades" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndApiResponse<ActivityDetailDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<ActivityDetailDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validación", typeof(IndApiResponse<ActivityDetailDto>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ActivityDetailDto>))]
+        public IHttpActionResult GetActivityByCode(string code)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                var validationResponse = new IndApiResponse<ActivityDetailDto>
+                {
+                    Success = false,
+                    Message = "code es obligatorio.",
+                    ErrorCode = IndErrorCodes.CrmActivityMissingFields,
+                    Errors = new List<IndValidationError> { new IndValidationError { Field = "code", Message = "Valor inválido." } },
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
+            object resultObj = null;
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log($"[API-IN] GetActivityByCode code={code} llamado por {username}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(code.Trim());
+
+                resultObj = ax.CallStaticClassMethod(
+                    "INDCRMApiClass",
+                    "getActivityByCode",
+                    con
+                );
+
+                var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
+                if (root == null || root.Length() == 0)
+                {
+                    var notFound = new IndApiResponse<ActivityDetailDto>
+                    {
+                        Success = false,
+                        Message = "Actividad no encontrada.",
+                        ErrorCode = IndErrorCodes.CrmActivityNotFound,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.NotFound, notFound);
+                }
+
+                var dto = MapActivityDetail(root);
+                if (dto == null)
+                {
+                    var notFound = new IndApiResponse<ActivityDetailDto>
+                    {
+                        Success = false,
+                        Message = "Actividad no encontrada.",
+                        ErrorCode = IndErrorCodes.CrmActivityNotFound,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.NotFound, notFound);
+                }
+
+                var okResponse = new IndApiResponse<ActivityDetailDto>
+                {
+                    Success = true,
+                    Message = "OK",
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = dto,
+                    TraceId = traceId
+                };
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    if (resultObj != null)
+                    {
+                        string serialized = SafeSerializeResultObject(resultObj);
+                        Logger.Log($"[ERROR] GetActivityById - resultObj: {serialized}");
+                    }
+                }
+                catch { /* ignore */ }
+
+                Logger.Log($"[ERROR] GetActivityByCode API: {ex}");
+                var response = new IndApiResponse<ActivityDetailDto>
+                {
+                    Success = false,
+                    Message = $"Error GetActivityByCode: {ex.GetType().FullName} {ex.Message}",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
+        /// Mapea el contenedor devuelto por AX a un DTO tipado para la actividad.
+        /// </summary>
+        private ActivityDetailDto MapActivityDetail(AxaptaCOMConnector.IAxaptaContainer root)
+        {
+            if (root == null || root.Length() == 0)
+            {
+                return null;
+            }
+
+            var row = root.Peek(1) as AxaptaCOMConnector.IAxaptaContainer;
+            if (row == null || row.Length() < 13)
+            {
+                return null;
+            }
+
+            string SafeString(AxaptaCOMConnector.IAxaptaContainer c, int index)
+            {
+                try
+                {
+                    return c.Peek(index)?.ToString() ?? string.Empty;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+
+            var dto = new ActivityDetailDto
+            {
+                ActividadId = SafeString(row, 1),
+                RecId = SafeString(row, 2),
+                Nombre = SafeString(row, 3),
+                AccountNum = SafeString(row, 4),
+                TransDate = SafeString(row, 5),
+                Country = SafeString(row, 6),
+                ActividadType = SafeString(row, 7),
+                TipoVisita = SafeString(row, 8),
+                Description = SafeString(row, 9),
+                Comentarios = SafeString(row, 10),
+                Antecedentes = SafeString(row, 11),
+                Conclusiones = SafeString(row, 12),
+                Asistentes = new List<ActivityAssistantDto>()
+            };
+
+            var asistentesCon = row.Length() >= 13 ? row.Peek(13) as AxaptaCOMConnector.IAxaptaContainer : null;
+            if (asistentesCon != null)
+            {
+                try
+                {
+                    var length = asistentesCon.Length();
+                    for (int i = 1; i <= length; i++)
+                    {
+                        var asistRow = asistentesCon.Peek(i) as AxaptaCOMConnector.IAxaptaContainer;
+                        if (asistRow == null)
+                            continue;
+
+                        dto.Asistentes.Add(new ActivityAssistantDto
+                        {
+                            AsistenteId = SafeString(asistRow, 1),
+                            AsistenteTipo = SafeString(asistRow, 2),
+                            AsistenteCargo = SafeString(asistRow, 3)
+                        });
+                    }
+                }
+                catch
+                {
+                    // Ignorar fallos puntuales; se devuelve lista parcial
+                }
+            }
+
+            return dto;
+        }
+
         private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)
         {
             object resultObj = null;
@@ -790,5 +980,3 @@ namespace IND_CRM_API.Controllers.CRM
         }
     }
 }
-
-
