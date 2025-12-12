@@ -663,46 +663,26 @@ namespace IND_CRM_API.Controllers.CRM
                     con
                 );
 
+                // AX puede devolver un JSON ya serializado; lo deserializamos para evitar doble parse en el cliente.
+                var preSerialized = TryUnwrapSerializedActivityResponse(resultObj, traceId);
+                if (preSerialized != null)
+                {
+                    return Ok(preSerialized);
+                }
+
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null || root.Length() == 0)
                 {
-                    var notFound = new IndApiResponse<ActivityDetailDto>
-                    {
-                        Success = false,
-                        Message = "Actividad no encontrada.",
-                        ErrorCode = IndErrorCodes.CrmActivityNotFound,
-                        Errors = null,
-                        Data = null,
-                        TraceId = traceId
-                    };
-                    return Content(HttpStatusCode.NotFound, notFound);
+                    return Content(HttpStatusCode.NotFound, BuildActivityNotFound(traceId));
                 }
 
                 var dto = MapActivityDetail(root);
                 if (dto == null)
                 {
-                    var notFound = new IndApiResponse<ActivityDetailDto>
-                    {
-                        Success = false,
-                        Message = "Actividad no encontrada.",
-                        ErrorCode = IndErrorCodes.CrmActivityNotFound,
-                        Errors = null,
-                        Data = null,
-                        TraceId = traceId
-                    };
-                    return Content(HttpStatusCode.NotFound, notFound);
+                    return Content(HttpStatusCode.NotFound, BuildActivityNotFound(traceId));
                 }
 
-                var okResponse = new IndApiResponse<ActivityDetailDto>
-                {
-                    Success = true,
-                    Message = "OK",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = dto,
-                    TraceId = traceId
-                };
-                return Ok(okResponse);
+                return Ok(BuildActivityOk(dto, traceId));
             }
             catch (Exception ex)
             {
@@ -728,6 +708,121 @@ namespace IND_CRM_API.Controllers.CRM
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
+        }
+
+        /// <summary>
+        /// Construye la respuesta exitosa con el detalle de la actividad.
+        /// </summary>
+        private IndApiResponse<ActivityDetailDto> BuildActivityOk(ActivityDetailDto dto, string traceId)
+        {
+            return new IndApiResponse<ActivityDetailDto>
+            {
+                Success = true,
+                Message = "OK",
+                ErrorCode = null,
+                Errors = null,
+                Data = dto,
+                TraceId = traceId
+            };
+        }
+
+        /// <summary>
+        /// Respuesta estándar de actividad no encontrada.
+        /// </summary>
+        private IndApiResponse<ActivityDetailDto> BuildActivityNotFound(string traceId)
+        {
+            return new IndApiResponse<ActivityDetailDto>
+            {
+                Success = false,
+                Message = "Actividad no encontrada.",
+                ErrorCode = IndErrorCodes.CrmActivityNotFound,
+                Errors = null,
+                Data = null,
+                TraceId = traceId
+            };
+        }
+
+        /// <summary>
+        /// Deserializa un envelope JSON que venga como texto para evitar que el cliente tenga que deserializar dos veces.
+        /// </summary>
+        private IndApiResponse<ActivityDetailDto> TryUnwrapSerializedActivityResponse(object rawResult, string traceId)
+        {
+            try
+            {
+                if (rawResult is string rawString)
+                {
+                    var parsed = DeserializeActivityEnvelope(rawString, traceId);
+                    if (parsed != null)
+                    {
+                        Logger.Log("[INFO] GetActivityByCode: respuesta JSON pre-serializada recibida, se deserializa antes de retornar.");
+                        return parsed;
+                    }
+                }
+
+                var container = rawResult as AxaptaCOMConnector.IAxaptaContainer;
+                if (container != null && container.Length() == 1)
+                {
+                    try
+                    {
+                        var inner = container.Peek(1) as string;
+                        var parsed = DeserializeActivityEnvelope(inner, traceId);
+                        if (parsed != null)
+                        {
+                            Logger.Log("[INFO] GetActivityByCode: envelope deserializado desde contenedor de un solo elemento.");
+                            return parsed;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignorar y continuar con el flujo normal.
+                    }
+                }
+            }
+            catch
+            {
+                // No romper el flujo si la detección falla.
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Intenta materializar el JSON en IndApiResponse o en ActivityDetailDto.
+        /// </summary>
+        private IndApiResponse<ActivityDetailDto> DeserializeActivityEnvelope(string rawJson, string traceId)
+        {
+            if (string.IsNullOrWhiteSpace(rawJson))
+                return null;
+
+            try
+            {
+                var envelope = JsonConvert.DeserializeObject<IndApiResponse<ActivityDetailDto>>(rawJson);
+                if (envelope != null)
+                {
+                    if (string.IsNullOrWhiteSpace(envelope.TraceId))
+                        envelope.TraceId = traceId;
+                    return envelope;
+                }
+            }
+            catch
+            {
+                // Ignorar y probar con el DTO directo.
+            }
+
+            try
+            {
+                var dto = JsonConvert.DeserializeObject<ActivityDetailDto>(rawJson);
+                if (dto != null)
+                {
+                    return BuildActivityOk(dto, traceId);
+                }
+            }
+            catch
+            {
+                // No es JSON válido para nuestros modelos.
+            }
+
+            return null;
         }
 
         /// <summary>
