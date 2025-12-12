@@ -259,3 +259,63 @@ APLICACION FUTURA
 
 RECORDATORIO OPERATIVO
 - Cada endpoint nuevo debe nacer con DTOs y responses tipados; refactoriza las interfaces (contratos de entrada/salida) en cuanto los toques para mantener el codigo limpio y alineado con IndApiResponse/IndPagedResponse e IndErrorCodes.
+
+
+
+Usa siempre IndPagedResponse<T> para endpoints de lectura (GET y POST que solo devuelven datos). Estructura: success, message, items (lista tipada), opcional total, page, pageSize solo si realmente paginas; traceId siempre.
+Para detalle único, devuelve items con un solo elemento y omite total/page/pageSize si no aplican.
+Para listas, rellena items con todos los registros y, si paginas, añade total, page, pageSize.
+En errores o validaciones, sigue usando IndApiResponse<T> con success=false, message corto, errorCode de IndErrorCodes, errors si hay validación, traceId.
+No metas el objeto en Message ni serialices manualmente; el objeto va en items y Message es texto breve (“OK”, “Validación”, etc.).
+Loguea la ruta, método y código HTTP; no loguees bodies sensibles.
+Prompt/código base (copiar-pegar y adaptar)
+
+[HttpGet, Route("by-code/{code}")]
+[ResponseType(typeof(IndPagedResponse<ActivityDetailDto>))]
+public IHttpActionResult GetActivityByCode(string code)
+{
+    var traceId = Guid.NewGuid().ToString("N");
+    if (string.IsNullOrWhiteSpace(code))
+        return Content((HttpStatusCode)422, new IndApiResponse<object>{
+            Success=false, Message="code es obligatorio.", ErrorCode=IndErrorCodes.CrmActivityMissingFields,
+            Errors=new List<IndValidationError>{ new IndValidationError{Field="code", Message="Valor inválido."}},
+            TraceId=traceId });
+
+    try
+    {
+        var username = GetAuthenticatedUsername();
+        Logger.Log($"[API-IN] GetActivityByCode code={code} user={username}");
+
+        var ax = SessionManager.GetAxInstanceForUser(username);
+        var con = ax.CreateContainer();
+        con.Append(code.Trim());
+
+        var resultObj = ax.CallStaticClassMethod("INDCRMApiClass","getActivityByCode",con);
+
+        // deserializa si AX devolvió JSON ya serializado
+        var pre = TryUnwrapSerializedActivityResponse(resultObj, traceId);
+        if (pre != null) return Ok(pre);
+
+        var root = resultObj as IAxaptaContainer;
+        var dto = MapActivityDetail(root);
+        if (dto == null)
+            return Content(HttpStatusCode.NotFound, new IndApiResponse<object>{
+                Success=false, Message="Actividad no encontrada.", ErrorCode=IndErrorCodes.CrmActivityNotFound, TraceId=traceId });
+
+        return Ok(new IndPagedResponse<ActivityDetailDto>{
+            Success=true, Message="OK", Items=new List<ActivityDetailDto>{ dto }, TraceId=traceId });
+    }
+    catch (Exception ex)
+    {
+        Logger.Log($"[ERROR] GetActivityByCode: {ex}");
+        return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>{
+            Success=false, Message=$"Error GetActivityByCode: {ex.Message}",
+            ErrorCode=ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
+            TraceId=traceId });
+    }
+}
+Regla breve para nuevos endpoints de consulta
+
+Detalle o lista sin mutar datos → IndPagedResponse<T> con items.
+Comandos (crear/actualizar/borrar) → IndApiResponse<T> con data.
+Nunca serialices manualmente; deja que el formatter JSON entregue el objeto tipado.

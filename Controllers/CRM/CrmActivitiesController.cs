@@ -623,9 +623,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="code">Identificador alfanumérico de la actividad.</param>
         [HttpGet, Route("by-code/{code}")]
-        [ResponseType(typeof(IndApiResponse<ActivityDetailDto>))]
+        [ResponseType(typeof(IndPagedResponse<ActivityDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndApiResponse<ActivityDetailDto>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndPagedResponse<ActivityDetailDto>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<ActivityDetailDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validación", typeof(IndApiResponse<ActivityDetailDto>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ActivityDetailDto>))]
@@ -711,17 +711,15 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Construye la respuesta exitosa con el detalle de la actividad.
+        /// Construye la respuesta exitosa con el detalle de la actividad dentro de Items.
         /// </summary>
-        private IndApiResponse<ActivityDetailDto> BuildActivityOk(ActivityDetailDto dto, string traceId)
+        private IndPagedResponse<ActivityDetailDto> BuildActivityOk(ActivityDetailDto dto, string traceId)
         {
-            return new IndApiResponse<ActivityDetailDto>
+            return new IndPagedResponse<ActivityDetailDto>
             {
                 Success = true,
                 Message = "OK",
-                ErrorCode = null,
-                Errors = null,
-                Data = dto,
+                Items = new List<ActivityDetailDto> { dto },
                 TraceId = traceId
             };
         }
@@ -745,7 +743,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Deserializa un envelope JSON que venga como texto para evitar que el cliente tenga que deserializar dos veces.
         /// </summary>
-        private IndApiResponse<ActivityDetailDto> TryUnwrapSerializedActivityResponse(object rawResult, string traceId)
+        private IndPagedResponse<ActivityDetailDto> TryUnwrapSerializedActivityResponse(object rawResult, string traceId)
         {
             try
             {
@@ -787,21 +785,41 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Intenta materializar el JSON en IndApiResponse o en ActivityDetailDto.
+        /// Intenta materializar el JSON en IndPagedResponse, IndApiResponse o en ActivityDetailDto.
         /// </summary>
-        private IndApiResponse<ActivityDetailDto> DeserializeActivityEnvelope(string rawJson, string traceId)
+        private IndPagedResponse<ActivityDetailDto> DeserializeActivityEnvelope(string rawJson, string traceId)
         {
             if (string.IsNullOrWhiteSpace(rawJson))
                 return null;
 
             try
             {
+                // Caso esperado: respuesta paginada (Items)
+                var paged = JsonConvert.DeserializeObject<IndPagedResponse<ActivityDetailDto>>(rawJson);
+                if (paged != null && paged.Items != null)
+                {
+                    if (paged.Items.Count == 0 && TryExtractSingleFromData(paged, out var dtoFromData))
+                    {
+                        paged.Items = new List<ActivityDetailDto> { dtoFromData };
+                    }
+                    if (string.IsNullOrWhiteSpace(paged.TraceId))
+                        paged.TraceId = traceId;
+                    return paged;
+                }
+            }
+            catch
+            {
+                // Ignorar y continuar.
+            }
+
+            try
+            {
                 var envelope = JsonConvert.DeserializeObject<IndApiResponse<ActivityDetailDto>>(rawJson);
-                if (envelope != null)
+                if (envelope != null && envelope.Success && envelope.Data != null)
                 {
                     if (string.IsNullOrWhiteSpace(envelope.TraceId))
                         envelope.TraceId = traceId;
-                    return envelope;
+                    return BuildActivityOk(envelope.Data, envelope.TraceId);
                 }
             }
             catch
@@ -823,6 +841,28 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Extrae un DTO desde Data si el contrato venía desalineado.
+        /// </summary>
+        private bool TryExtractSingleFromData(IndPagedResponse<ActivityDetailDto> paged, out ActivityDetailDto dto)
+        {
+            dto = null;
+            try
+            {
+                // Algunos contratos antiguos podían usar Data en vez de Items.
+                var raw = JsonConvert.SerializeObject(paged);
+                var envelope = JsonConvert.DeserializeObject<IndApiResponse<ActivityDetailDto>>(raw);
+                if (envelope != null && envelope.Data != null)
+                {
+                    dto = envelope.Data;
+                    return true;
+                }
+            }
+            catch { /* ignore */ }
+
+            return false;
         }
 
         /// <summary>
