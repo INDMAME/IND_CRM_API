@@ -80,8 +80,8 @@ namespace IND_CRM_API.Controllers.System
                 var expirationSetting = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
                 int expirationMinutes = int.TryParse(expirationSetting, out var exp) ? exp : 60;
 
-                var tokenInfo = _jwt.GenerateToken(dto.Username, expirationMinutes);
-                var sessionCreated = _sessionManager.CreateOrGetSession(dto.Username, dto.Password, tokenInfo);
+                // Primero validar credenciales contra Axapta, luego emitir el token.
+                var sessionCreated = _sessionManager.CreateOrGetSession(dto.Username, dto.Password, null);
 
                 if (!sessionCreated)
                 {
@@ -96,6 +96,22 @@ namespace IND_CRM_API.Controllers.System
                         TraceId = traceId
                     };
                     return Content(HttpStatusCode.Unauthorized, failResponse);
+                }
+
+                var tokenInfo = _jwt.GenerateToken(dto.Username, expirationMinutes);
+                if (!_sessionManager.RefreshSessionToken(dto.Username, tokenInfo, null))
+                {
+                    _logger.Log($"[AUTH-ERROR] Could not bind token to session for {dto.Username}");
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error interno de autenticacion.",
+                        ErrorCode = IndErrorCodes.InternalError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
 
                 _logger.Log($"[AUTH-SUCCESS] Token issued for {dto.Username}");

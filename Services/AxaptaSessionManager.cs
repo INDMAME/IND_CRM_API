@@ -89,12 +89,24 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                if (_sessionsByUser.ContainsKey(username))
+                if (_sessionsByUser.TryGetValue(username, out var existingSession) && existingSession != null)
                 {
+                    // Seguridad: si el usuario ya tiene sesión, no aceptar "login" con un password distinto.
+                    if (!string.IsNullOrWhiteSpace(password))
+                    {
+                        if (!_passwordByUser.TryGetValue(username, out var storedPassword) ||
+                            string.IsNullOrWhiteSpace(storedPassword) ||
+                            !string.Equals(storedPassword, password, StringComparison.Ordinal))
+                        {
+                            Log($"[SESSION-REFRESH-DENIED] {username} -> password no coincide con la sesión actual.", LogLevel.Warning);
+                            return false;
+                        }
+                    }
+
                     if (tokenInfo != null)
                     {
                         _tokenToUser[tokenInfo.Token] = username;
-                        _sessionsByUser[username].Expiration = tokenInfo.Expiration;
+                        existingSession.Expiration = tokenInfo.Expiration;
                     }
                     if (!string.IsNullOrWhiteSpace(password))
                         _passwordByUser[username] = password;
@@ -526,4 +538,3 @@ namespace IND_CRM_API.Services
         }
     }
 }
-
