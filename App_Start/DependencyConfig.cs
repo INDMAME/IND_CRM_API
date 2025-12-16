@@ -18,12 +18,14 @@ namespace IND_CRM_API.App_Start
             var axLogger = new FileAxLogger();
             var jwtService = new JwtService();
             var sessionManager = new AxaptaSessionManager(axLogger);
+            var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
 
             var services = new Dictionary<Type, object>
             {
                 { typeof(IAxaptaSessionManager), sessionManager },
                 { typeof(IJwtService), jwtService },
-                { typeof(IAxLogger), axLogger }
+                { typeof(IAxLogger), axLogger },
+                { typeof(IND_IAudioTranscriptionService), speechService }
             };
 
             // Register message handler to refresh tokens automatically
