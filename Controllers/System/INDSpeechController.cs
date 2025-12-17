@@ -49,6 +49,8 @@ namespace IND_CRM_API.Controllers.System
             "audio/x-aac",
             "audio/wav",
             "audio/x-wav",
+            "audio/wave",
+            "audio/vnd.wave",
             "audio/flac",
             "application/octet-stream"
         };
