@@ -63,11 +63,13 @@ namespace IND_CRM_API.Controllers.System
         };
 
         private readonly IND_IAudioTranscriptionService _transcription;
+        private readonly IND_ITextModerationService _moderation;
         private readonly IAxLogger _logger;
 
-        public INDSpeechController(IND_IAudioTranscriptionService transcription, IAxLogger logger)
+        public INDSpeechController(IND_IAudioTranscriptionService transcription, IND_ITextModerationService moderation, IAxLogger logger)
         {
             _transcription = transcription ?? throw new ArgumentNullException(nameof(transcription));
+            _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
             _logger = logger ?? new FileAxLogger();
         }
 
@@ -214,6 +216,15 @@ namespace IND_CRM_API.Controllers.System
                         temperature,
                         prompt,
                         cancellationToken);
+                }
+
+                // Moderacion del texto resultante para bloquear contenido ofensivo/ilícito.
+                var moderationModel = ConfigurationManager.AppSettings["OpenAI:ModerationModel"];
+                var modResult = await _moderation.ModerateAsync(text, openAiApiKey, moderationModel, cancellationToken);
+                if (modResult?.IsFlagged == true)
+                {
+                    _logger.Log($"[OPENAI-MOD] Contenido bloqueado categories={modResult.CategorySummary ?? \"\"} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
+                    return ReturnError((HttpStatusCode)422, traceId, "Contenido rechazado por politicas de uso.", IndErrorCodes.ValidationError, "text");
                 }
 
                 var ok = new IndApiResponse<string>

@@ -185,8 +185,10 @@
     <Compile Include="Services\AxSession.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
+    <Compile Include="Services\IND_OpenAiModerationService.cs" />
     <Compile Include="Services\IAxLogger.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
+    <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
