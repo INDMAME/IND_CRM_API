@@ -223,7 +223,8 @@ namespace IND_CRM_API.Controllers.System
                 var modResult = await _moderation.ModerateAsync(text, openAiApiKey, moderationModel, cancellationToken);
                 if (modResult?.IsFlagged == true)
                 {
-                    _logger.Log($"[OPENAI-MOD] Contenido bloqueado categories={modResult.CategorySummary ?? \"\"} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
+                    var categorySummary = modResult.CategorySummary ?? string.Empty;
+                    _logger.Log($"[OPENAI-MOD] Contenido bloqueado categories={categorySummary} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
                     return ReturnError((HttpStatusCode)422, traceId, "Contenido rechazado por politicas de uso.", IndErrorCodes.ValidationError, "text");
                 }
 
