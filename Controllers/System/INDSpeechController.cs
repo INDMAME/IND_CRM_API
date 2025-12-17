@@ -25,12 +25,16 @@ namespace IND_CRM_API.Controllers.System
     public class INDSpeechController : ApiController
     {
         private const int MaxAudioBytes = 10 * 1024 * 1024; // 10 MB internal limit
+        private const int UpdatedMaxAudioBytes = 25 * 1024 * 1024; // 25 MB per OpenAI limit
+        private const int MaxPromptWords = 500; // soft cap to keep prompt concise while staying within OpenAI prompt limits
 
         private static readonly HashSet<string> AllowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".mp3",
-            ".m4a"
-            // Future extensions supported by OpenAI: mp4, mpeg, mpga, wav, webm, ogg, flac
+            ".m4a",
+            ".wav",
+            ".flac"
+            // Future extensions supported by OpenAI: mp4, mpeg, mpga, webm, ogg
         };
 
         private static readonly HashSet<string> AllowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -42,6 +46,9 @@ namespace IND_CRM_API.Controllers.System
             "audio/x-m4a",
             "audio/aac",
             "audio/x-aac",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/flac",
             "application/octet-stream"
         };
 
@@ -99,6 +106,32 @@ namespace IND_CRM_API.Controllers.System
                         BuildError(traceId, "languageId is required.", IndErrorCodes.ValidationError, "languageId"));
                 }
 
+                // Optional controls
+                var temperatureValue = await ReadFormFieldAsync(provider, "temperature");
+                double temperature = 0.0;
+                if (!string.IsNullOrWhiteSpace(temperatureValue))
+                {
+                    if (!double.TryParse(temperatureValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out temperature) ||
+                        temperature < 0 || temperature > 1)
+                    {
+                        return Content(
+                            (HttpStatusCode)422,
+                            BuildError(traceId, "temperature must be a number between 0 and 1.", IndErrorCodes.ValidationError, "temperature"));
+                    }
+                }
+
+                var prompt = await ReadFormFieldAsync(provider, "prompt");
+                if (!string.IsNullOrWhiteSpace(prompt))
+                {
+                    var wordCount = CountWords(prompt);
+                    if (wordCount > MaxPromptWords)
+                    {
+                        return Content(
+                            (HttpStatusCode)422,
+                            BuildError(traceId, $"prompt too long (max {MaxPromptWords} words).", IndErrorCodes.ValidationError, "prompt"));
+                    }
+                }
+
                 var filePart = FindFilePart(provider, "audioFile");
                 if (filePart == null)
                 {
@@ -120,7 +153,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     return Content(
                         (HttpStatusCode)422,
-                        BuildError(traceId, "Unsupported audio file extension. Only .mp3 and .m4a are allowed.", IndErrorCodes.ValidationError, "audioFile"));
+                        BuildError(traceId, "Unsupported audio file extension. Allowed: .mp3, .m4a, .wav, .flac.", IndErrorCodes.ValidationError, "audioFile"));
                 }
 
                 var mediaType = filePart.Headers?.ContentType?.MediaType;
@@ -132,11 +165,11 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var contentLength = filePart.Headers?.ContentLength;
-                if (contentLength.HasValue && contentLength.Value > MaxAudioBytes)
+                if (contentLength.HasValue && contentLength.Value > UpdatedMaxAudioBytes)
                 {
                     return Content(
                         (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile exceeds the 10 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
+                        BuildError(traceId, "audioFile exceeds the 25 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
                 }
 
                 var audioBytes = await filePart.ReadAsByteArrayAsync();
@@ -147,11 +180,11 @@ namespace IND_CRM_API.Controllers.System
                         BuildError(traceId, "audioFile is empty.", IndErrorCodes.ValidationError, "audioFile"));
                 }
 
-                if (audioBytes.Length > MaxAudioBytes)
+                if (audioBytes.Length > UpdatedMaxAudioBytes)
                 {
                     return Content(
                         (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile exceeds the 10 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
+                        BuildError(traceId, "audioFile exceeds the 25 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
                 }
 
                 // Read OpenAI API key from server config only (never from client).
@@ -173,6 +206,8 @@ namespace IND_CRM_API.Controllers.System
                         Path.GetFileName(originalFileName),
                         openAiApiKey,
                         languageId.Trim(),
+                        temperature,
+                        prompt,
                         cancellationToken);
                 }
 
@@ -260,6 +295,15 @@ namespace IND_CRM_API.Controllers.System
             {
                 return null;
             }
+        }
+
+        private static int CountWords(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
+
+            // Simple split by whitespace; adequate for prompt length control.
+            return text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
         }
 
         private static string GetOpenAiApiKey()

@@ -41,6 +41,8 @@ namespace IND_CRM_API.Services
             string fileName,
             string openAiApiKey,
             string languageId,
+            double temperature,
+            string prompt,
             CancellationToken cancellationToken)
         {
             if (audioStream == null) throw new ArgumentNullException(nameof(audioStream));
@@ -48,6 +50,7 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("fileName is required.", nameof(fileName));
             if (string.IsNullOrWhiteSpace(openAiApiKey)) throw new ArgumentException("OpenAI API key is required.", nameof(openAiApiKey));
             if (string.IsNullOrWhiteSpace(languageId)) throw new ArgumentException("languageId is required.", nameof(languageId));
+            if (temperature < 0 || temperature > 1) throw new ArgumentOutOfRangeException(nameof(temperature), "temperature must be between 0 and 1.");
 
             if (audioStream.CanSeek)
                 audioStream.Position = 0;
@@ -75,6 +78,13 @@ namespace IND_CRM_API.Services
                 // If languageId is "auto", do not send the language parameter.
                 if (!string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
                     form.Add(new StringContent(languageId, Encoding.UTF8), "language");
+
+                // Temperature: controls randomness. Default 0 for deterministic.
+                form.Add(new StringContent(temperature.ToString(System.Globalization.CultureInfo.InvariantCulture), Encoding.UTF8), "temperature");
+
+                // Optional prompt / context to bias transcription vocabulary.
+                if (!string.IsNullOrWhiteSpace(prompt))
+                    form.Add(new StringContent(prompt, Encoding.UTF8), "prompt");
 
                 request.Content = form;
 

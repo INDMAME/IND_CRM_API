@@ -17,13 +17,16 @@ namespace IND_CRM_API.Services.Interfaces
         /// <param name="fileName">Original file name (used as multipart file name).</param>
         /// <param name="openAiApiKey">OpenAI API key (server-side only). Never log this value.</param>
         /// <param name="languageId">Language hint or "auto" to let the model detect it.</param>
+        /// <param name="temperature">Sampling temperature (0-1). Use 0 for more deterministic output.</param>
+        /// <param name="prompt">Optional context prompt with domain terms (limited words enforced by caller).</param>
         /// <param name="cancellationToken">Request cancellation token.</param>
         Task<string> TranscribeAsync(
             Stream audioStream,
             string fileName,
             string openAiApiKey,
             string languageId,
+            double temperature,
+            string prompt,
             CancellationToken cancellationToken);
     }
 }
-
