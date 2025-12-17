@@ -13,18 +13,17 @@ using System.Threading.Tasks;
 namespace IND_CRM_API.Services
 {
     /// <summary>
-    /// OpenAI implementation for audio transcription.
-    /// Notes:
-    /// - This uses the OpenAI Audio Transcriptions API: POST https://api.openai.com/v1/audio/transcriptions
-    /// - The recommended model is configured via App.config (OpenAI:AudioModel), default "gpt-4o-transcribe".
-    /// - Comments are ASCII-only by project agreement.
+    /// Implementacion de OpenAI para transcripcion de audio.
+    /// Notas:
+    /// - Usa Audio Transcriptions API: POST https://api.openai.com/v1/audio/transcriptions
+    /// - El modelo se lee desde App.config (OpenAI:AudioModel). Por defecto: "gpt-4o-transcribe".
     /// </summary>
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
         private const string DefaultModel = "gpt-4o-transcribe";
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
-        // Reuse HttpClient for the whole process to avoid socket exhaustion.
+        // Reutilizar HttpClient para evitar agotamiento de sockets.
         private static readonly HttpClient _httpClient = CreateHttpClient();
 
         private readonly IAxLogger _logger;
@@ -46,23 +45,22 @@ namespace IND_CRM_API.Services
             CancellationToken cancellationToken)
         {
             if (audioStream == null) throw new ArgumentNullException(nameof(audioStream));
-            if (!audioStream.CanRead) throw new ArgumentException("audioStream must be readable.", nameof(audioStream));
-            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("fileName is required.", nameof(fileName));
-            if (string.IsNullOrWhiteSpace(openAiApiKey)) throw new ArgumentException("OpenAI API key is required.", nameof(openAiApiKey));
-            if (string.IsNullOrWhiteSpace(languageId)) throw new ArgumentException("languageId is required.", nameof(languageId));
-            if (temperature < 0 || temperature > 1) throw new ArgumentOutOfRangeException(nameof(temperature), "temperature must be between 0 and 1.");
+            if (!audioStream.CanRead) throw new ArgumentException("audioStream debe ser legible.", nameof(audioStream));
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("fileName es obligatorio.", nameof(fileName));
+            if (string.IsNullOrWhiteSpace(openAiApiKey)) throw new ArgumentException("OpenAI API key es obligatoria.", nameof(openAiApiKey));
+            if (string.IsNullOrWhiteSpace(languageId)) throw new ArgumentException("languageId es obligatorio.", nameof(languageId));
+            if (temperature < 0 || temperature > 1) throw new ArgumentOutOfRangeException(nameof(temperature), "temperature debe estar entre 0 y 1.");
 
             if (audioStream.CanSeek)
                 audioStream.Position = 0;
 
-            // OpenAI accepts mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac.
-            // We validate formats in the controller; the service assumes it receives a valid audio stream.
+            // El controlador valida extension y Content-Type. Aqui asumimos un flujo valido.
             using (var form = new MultipartFormDataContent())
             using (var request = new HttpRequestMessage(HttpMethod.Post, TranscriptionsUrl))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAiApiKey);
 
-                // Identify the application in a simple way.
+                // Identificar la aplicacion en el User-Agent.
                 request.Headers.UserAgent.Clear();
                 request.Headers.UserAgent.Add(new ProductInfoHeaderValue("IND_CRM_API", "1.0"));
 
@@ -72,17 +70,17 @@ namespace IND_CRM_API.Services
 
                 form.Add(new StringContent(_model, Encoding.UTF8), "model");
 
-                // Per OpenAI docs, gpt-4o-transcribe expects JSON response format.
+                // gpt-4o-transcribe devuelve JSON; extraemos solo el campo "text".
                 form.Add(new StringContent("json", Encoding.UTF8), "response_format");
 
-                // If languageId is "auto", do not send the language parameter.
+                // Si languageId es "auto", no enviar el parametro language.
                 if (!string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
                     form.Add(new StringContent(languageId, Encoding.UTF8), "language");
 
-                // Temperature: controls randomness. Default 0 for deterministic.
+                // Temperatura: controla aleatoriedad. Por defecto 0 para salida mas determinista.
                 form.Add(new StringContent(temperature.ToString(System.Globalization.CultureInfo.InvariantCulture), Encoding.UTF8), "temperature");
 
-                // Optional prompt / context to bias transcription vocabulary.
+                // Prompt opcional para guiar vocabulario.
                 if (!string.IsNullOrWhiteSpace(prompt))
                     form.Add(new StringContent(prompt, Encoding.UTF8), "prompt");
 
@@ -92,7 +90,7 @@ namespace IND_CRM_API.Services
                 string responseBody = null;
                 try
                 {
-                    // Ensure TLS 1.2 on older environments.
+                    // Asegurar TLS 1.2 en entornos antiguos.
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
                     response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
@@ -102,30 +100,30 @@ namespace IND_CRM_API.Services
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        _logger.Log($"[OPENAI] Transcription failed. Status={(int)response.StatusCode} Body={TruncateForLog(responseBody, 1024)}", AxaptaSessionManager.LogLevel.Error);
-                        throw new Exception("OpenAI transcription request failed.");
+                        var summary = TryExtractOpenAiErrorSummary(responseBody);
+                        _logger.Log($"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} {summary}".Trim(), AxaptaSessionManager.LogLevel.Error);
+                        throw new Exception("Fallo al transcribir con OpenAI.");
                     }
 
                     var text = TryExtractText(responseBody);
                     if (string.IsNullOrWhiteSpace(text))
-                        throw new Exception("OpenAI transcription returned empty text.");
+                        throw new Exception("OpenAI devolvio texto vacio.");
 
                     return text;
                 }
                 catch (TaskCanceledException ex)
                 {
-                    // This can be client cancellation or request timeout.
-                    _logger.Log("[OPENAI] Transcription request canceled: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                    _logger.Log("[OPENAI] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
                     throw;
                 }
                 catch (HttpRequestException ex)
                 {
-                    _logger.Log("[OPENAI] HTTP error calling OpenAI: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                    _logger.Log("[OPENAI] Error HTTP: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.Log("[OPENAI] Unexpected transcription error: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                    _logger.Log("[OPENAI] Error inesperado: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
                     throw;
                 }
                 finally
@@ -175,7 +173,7 @@ namespace IND_CRM_API.Services
 
         private static string SanitizeFileName(string fileName)
         {
-            // Keep only the file name component to avoid path injection.
+            // Mantener solo el nombre del archivo para evitar path injection.
             try
             {
                 return Path.GetFileName(fileName) ?? "audio";
@@ -186,16 +184,31 @@ namespace IND_CRM_API.Services
             }
         }
 
-        private static string TruncateForLog(string value, int maxChars)
+        private static string TryExtractOpenAiErrorSummary(string json)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (string.IsNullOrWhiteSpace(json))
                 return string.Empty;
 
-            var cleaned = value.Replace("\r", " ").Replace("\n", " ").Trim();
-            if (cleaned.Length <= maxChars)
-                return cleaned;
+            try
+            {
+                var root = JObject.Parse(json);
+                var err = root["error"] as JObject;
+                if (err == null)
+                    return string.Empty;
 
-            return cleaned.Substring(0, maxChars) + "...";
+                var type = err["type"]?.ToString();
+                var code = err["code"]?.ToString();
+
+                var parts = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrWhiteSpace(type)) parts.Add("type=" + type);
+                if (!string.IsNullOrWhiteSpace(code)) parts.Add("code=" + code);
+
+                return parts.Count == 0 ? string.Empty : string.Join(" ", parts);
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }

@@ -18,16 +18,23 @@ using System.Web.Http.Description;
 namespace IND_CRM_API.Controllers.System
 {
     /// <summary>
-    /// Speech endpoints for internal use (IND_CRM_APP -> IND_CRM_API).
-    /// This controller keeps the OpenAI API key on the server and never exposes it to clients.
+    /// Endpoints de voz para uso interno (IND_CRM_APP -> IND_CRM_API).
+    /// La API key de OpenAI se mantiene solo en servidor y nunca se expone al cliente.
     /// </summary>
     [Authorize]
     [RoutePrefix("api/speech")]
     public class INDSpeechController : ApiController
     {
-        private const int MaxAudioBytes = 10 * 1024 * 1024; // 10 MB internal limit
-        private const int UpdatedMaxAudioBytes = 25 * 1024 * 1024; // 25 MB per OpenAI limit
-        private const int MaxPromptWords = 500; // soft cap to keep prompt concise while staying within OpenAI prompt limits
+        private const int MaxAudioBytes = 25 * 1024 * 1024; // 25 MB (limite interno alineado con OpenAI)
+        private const int DefaultMaxPromptWords = 500; // limite local por defecto para mantener el prompt acotado
+
+        private const string DefaultPromptEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT";
+        private const string DefaultPromptPathEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH";
+        private const string DefaultPromptAppSettingKey = "OpenAI:TranscriptionDefaultPrompt";
+        private const string DefaultPromptPathAppSettingKey = "OpenAI:TranscriptionDefaultPromptFile";
+        private const string PromptMaxWordsAppSettingKey = "OpenAI:TranscriptionPromptMaxWords";
+
+        private static readonly int MaxPromptWords = ReadPromptMaxWordsFromConfig();
 
         private static readonly HashSet<string> AllowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -35,7 +42,7 @@ namespace IND_CRM_API.Controllers.System
             ".m4a",
             ".wav",
             ".flac"
-            // Future extensions supported by OpenAI: mp4, mpeg, mpga, webm, ogg
+            // OpenAI tambien soporta: mp4, mpeg, mpga, webm, ogg
         };
 
         private static readonly HashSet<string> AllowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -65,37 +72,42 @@ namespace IND_CRM_API.Controllers.System
         }
 
         /// <summary>
-        /// Transcribes a short audio note to plain text using OpenAI speech-to-text.
+        /// Transcribe un audio a texto usando OpenAI (speech-to-text).
         /// </summary>
         /// <remarks>
-        /// Input: multipart/form-data with fields:
-        /// - languageId: "auto" or a language code like "es" / "es-ES" / "en"
-        /// - audioFile: mp3 or m4a audio file
-        /// Output: IndApiResponse&lt;string&gt; with Data = transcribed text only (no OpenAI metadata).
+        /// Entrada: multipart/form-data con campos:
+        /// - languageId: "auto" o codigo de idioma (ej: "es" / "es-ES" / "en")
+        /// - audioFile: archivo .mp3/.m4a/.wav/.flac (max 25 MB)
+        /// - temperature (opcional): numero entre 0 y 1 (por defecto 0)
+        /// - prompt/context (opcional): contexto para mejorar vocabulario (max configurado en OpenAI:TranscriptionPromptMaxWords; por defecto 500)
+        /// Salida: IndApiResponse&lt;string&gt; con Data = texto transcrito (sin metadatos de OpenAI).
         ///
-        /// Recommended client format (voice notes):
-        /// - M4A (AAC) or MP3, mono, 32-64 kbps.
-        /// - Target size ~150 KB for short notes.
-        ///
-        /// Security notes:
-        /// - OpenAI API key is read from server config/env only and never returned.
-        /// - Consider adding per-user/company rate limiting in the future to avoid abuse.
-        /// - Ensure usage complies with OpenAI policies (privacy, illegal content, etc.).
+        /// Seguridad:
+        /// - La API key de OpenAI se lee de configuracion/entorno y nunca se devuelve.
+        /// - A futuro, se recomienda rate limiting por usuario/empresa para evitar abuso.
         /// </remarks>
         [HttpPost, Route("transcribe")]
+        [SwaggerResponse(HttpStatusCode.OK, "Transcripcion correcta", typeof(IndApiResponse<string>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<string>))]
+        [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<string>))]
+        [SwaggerResponse(HttpStatusCode.UnsupportedMediaType, "Tipo de contenido no soportado", typeof(IndApiResponse<string>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<string>))]
         [ResponseType(typeof(IndApiResponse<string>))]
-        [SwaggerOperation(Tags = new[] { "Speech" })]
+        [SwaggerOperation(Tags = new[] { "Voz" })]
         public async Task<IHttpActionResult> Transcribe(CancellationToken cancellationToken)
         {
             var traceId = Guid.NewGuid().ToString("N");
 
             try
             {
+                var username = User?.Identity?.Name ?? "unknown";
+                var method = Request?.Method?.Method ?? "POST";
+                var path = Request?.RequestUri?.AbsolutePath ?? "/api/speech/transcribe";
+                _logger.Log($"[API-IN] {method} {path} user={username} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+
                 if (Request?.Content == null || !Request.Content.IsMimeMultipartContent())
                 {
-                    return Content(
-                        HttpStatusCode.UnsupportedMediaType,
-                        BuildError(traceId, "multipart/form-data is required.", IndErrorCodes.ValidationError, "contentType"));
+                    return ReturnError(HttpStatusCode.UnsupportedMediaType, traceId, "Se requiere multipart/form-data.", IndErrorCodes.ValidationError, "contentType");
                 }
 
                 var provider = new MultipartMemoryStreamProvider();
@@ -104,12 +116,10 @@ namespace IND_CRM_API.Controllers.System
                 var languageId = await ReadFormFieldAsync(provider, "languageId");
                 if (string.IsNullOrWhiteSpace(languageId))
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "languageId is required.", IndErrorCodes.ValidationError, "languageId"));
+                    return ReturnError((HttpStatusCode)422, traceId, "languageId es obligatorio.", IndErrorCodes.ValidationError, "languageId");
                 }
 
-                // Optional controls
+                // Controles opcionales
                 var temperatureValue = await ReadFormFieldAsync(provider, "temperature");
                 double temperature = 0.0;
                 if (!string.IsNullOrWhiteSpace(temperatureValue))
@@ -117,88 +127,80 @@ namespace IND_CRM_API.Controllers.System
                     if (!double.TryParse(temperatureValue, NumberStyles.Float, CultureInfo.InvariantCulture, out temperature) ||
                         temperature < 0 || temperature > 1)
                     {
-                        return Content(
-                            (HttpStatusCode)422,
-                            BuildError(traceId, "temperature must be a number between 0 and 1.", IndErrorCodes.ValidationError, "temperature"));
+                        return ReturnError((HttpStatusCode)422, traceId, "temperature debe ser un numero entre 0 y 1.", IndErrorCodes.ValidationError, "temperature");
                     }
                 }
 
                 var prompt = await ReadFormFieldAsync(provider, "prompt");
+                if (string.IsNullOrWhiteSpace(prompt))
+                    prompt = await ReadFormFieldAsync(provider, "context");
+                var promptProvided = !string.IsNullOrWhiteSpace(prompt);
+                if (!promptProvided)
+                    prompt = GetDefaultTranscriptionPrompt();
+
                 if (!string.IsNullOrWhiteSpace(prompt))
                 {
                     var wordCount = CountWords(prompt);
                     if (wordCount > MaxPromptWords)
                     {
-                        return Content(
-                            (HttpStatusCode)422,
-                            BuildError(traceId, $"prompt too long (max {MaxPromptWords} words).", IndErrorCodes.ValidationError, "prompt"));
+                        if (promptProvided)
+                        {
+                            return ReturnError((HttpStatusCode)422, traceId, $"prompt es demasiado largo (max {MaxPromptWords} palabras).", IndErrorCodes.ValidationError, "prompt");
+                        }
+
+                        // Si el prompt por defecto esta mal configurado, seguimos sin prompt para no romper el endpoint.
+                        _logger.Log($"[SPEECH] Prompt por defecto supera {MaxPromptWords} palabras. Se continua sin prompt. traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
+                        prompt = null;
                     }
                 }
 
                 var filePart = FindFilePart(provider, "audioFile");
                 if (filePart == null)
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile is required.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "audioFile es obligatorio.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
                 var originalFileName = GetFileName(filePart);
                 if (string.IsNullOrWhiteSpace(originalFileName))
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile must have a file name.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "audioFile debe incluir nombre de archivo.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
                 var extension = Path.GetExtension(originalFileName);
                 if (string.IsNullOrWhiteSpace(extension) || !AllowedExtensions.Contains(extension))
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "Unsupported audio file extension. Allowed: .mp3, .m4a, .wav, .flac.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "Extension de audio no soportada. Permitidas: .mp3, .m4a, .wav, .flac.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
                 var mediaType = filePart.Headers?.ContentType?.MediaType;
                 if (!string.IsNullOrWhiteSpace(mediaType) && !AllowedContentTypes.Contains(mediaType))
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "Unsupported audio content type.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "Content-Type de audio no soportado.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
                 var contentLength = filePart.Headers?.ContentLength;
-                if (contentLength.HasValue && contentLength.Value > UpdatedMaxAudioBytes)
+                if (contentLength.HasValue && contentLength.Value > MaxAudioBytes)
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile exceeds the 25 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "audioFile supera el limite de 25 MB.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
                 var audioBytes = await filePart.ReadAsByteArrayAsync();
                 if (audioBytes == null || audioBytes.Length <= 0)
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile is empty.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "audioFile esta vacio.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
-                if (audioBytes.Length > UpdatedMaxAudioBytes)
+                if (audioBytes.Length > MaxAudioBytes)
                 {
-                    return Content(
-                        (HttpStatusCode)422,
-                        BuildError(traceId, "audioFile exceeds the 25 MB limit.", IndErrorCodes.ValidationError, "audioFile"));
+                    return ReturnError((HttpStatusCode)422, traceId, "audioFile supera el limite de 25 MB.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
-                // Read OpenAI API key from server config only (never from client).
-                // The user provided an API key in chat; do NOT hardcode it in source control.
+                // Leer API key de OpenAI solo desde servidor (nunca desde el cliente).
                 var openAiApiKey = GetOpenAiApiKey();
                 if (string.IsNullOrWhiteSpace(openAiApiKey))
                 {
-                    _logger.Log("[SPEECH] OpenAI API key not configured.", AxaptaSessionManager.LogLevel.Error);
-                    return Content(
-                        HttpStatusCode.InternalServerError,
-                        BuildError(traceId, "OpenAI API key is not configured.", IndErrorCodes.InternalError, null));
+                    _logger.Log("[SPEECH] OpenAI API key no esta configurada.", AxaptaSessionManager.LogLevel.Error);
+                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "OpenAI API key no esta configurada.", IndErrorCodes.InternalError, null);
                 }
 
                 string text;
@@ -223,17 +225,37 @@ namespace IND_CRM_API.Controllers.System
                     Data = text ?? string.Empty,
                     TraceId = traceId
                 };
+
+                LogApiOut(HttpStatusCode.OK, traceId, AxaptaSessionManager.LogLevel.Info);
                 return Ok(ok);
             }
             catch (Exception ex)
             {
-                // Never log the OpenAI API key. Log only the exception summary.
-                _logger.Log("[SPEECH] Transcribe error: " + ex.GetType().FullName + " " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                // Nunca loguear la API key. Solo registrar el resumen del error.
+                _logger.Log("[SPEECH] Transcribe error: " + ex.GetType().FullName + " " + ex.Message + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
+                LogApiOut(HttpStatusCode.InternalServerError, traceId, AxaptaSessionManager.LogLevel.Error);
 
                 return Content(
                     HttpStatusCode.InternalServerError,
-                    BuildError(traceId, "Audio transcription error.", IndErrorCodes.InternalError, null));
+                    BuildError(traceId, "Error de transcripcion de audio.", IndErrorCodes.InternalError, null));
             }
+        }
+
+        private IHttpActionResult ReturnError(HttpStatusCode statusCode, string traceId, string message, string errorCode, string field)
+        {
+            var level = statusCode == HttpStatusCode.InternalServerError
+                ? AxaptaSessionManager.LogLevel.Error
+                : AxaptaSessionManager.LogLevel.Warning;
+
+            LogApiOut(statusCode, traceId, level);
+            return Content(statusCode, BuildError(traceId, message, errorCode, field));
+        }
+
+        private void LogApiOut(HttpStatusCode statusCode, string traceId, AxaptaSessionManager.LogLevel level)
+        {
+            var method = Request?.Method?.Method ?? "POST";
+            var path = Request?.RequestUri?.AbsolutePath ?? "/api/speech/transcribe";
+            _logger.Log($"[API-OUT] {method} {path} {(int)statusCode} traceId={traceId}", level);
         }
 
         private static IndApiResponse<string> BuildError(string traceId, string message, string errorCode, string field)
@@ -262,7 +284,7 @@ namespace IND_CRM_API.Controllers.System
                 if (!string.Equals(name, fieldName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // Use ReadAsStringAsync; keep it simple and defensive.
+                // Leer como texto de forma simple y defensiva.
                 var value = await part.ReadAsStringAsync().ConfigureAwait(false);
                 return value?.Trim();
             }
@@ -274,7 +296,7 @@ namespace IND_CRM_API.Controllers.System
         {
             if (provider == null) return null;
 
-            // Prefer the named file part.
+            // Priorizar la parte de archivo con el nombre esperado.
             var byName = provider.Contents.FirstOrDefault(c =>
             {
                 var name = c.Headers?.ContentDisposition?.Name?.Trim('\"');
@@ -284,7 +306,7 @@ namespace IND_CRM_API.Controllers.System
             });
             if (byName != null) return byName;
 
-            // Fallback: first content that looks like a file upload.
+            // Alternativa: primera parte que parezca un fichero (multipart file upload).
             return provider.Contents.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Headers?.ContentDisposition?.FileName));
         }
 
@@ -305,15 +327,62 @@ namespace IND_CRM_API.Controllers.System
             if (string.IsNullOrWhiteSpace(text))
                 return 0;
 
-            // Simple split by whitespace; adequate for prompt length control.
+            // Conteo simple por espacios para acotar el prompt.
             return text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
+        }
+
+        private static string GetDefaultTranscriptionPrompt()
+        {
+            // No hardcodear prompts confidenciales en codigo fuente.
+            // Preferir leer desde fichero externo o variable de entorno en el servidor.
+            try
+            {
+                var envPath = Environment.GetEnvironmentVariable(DefaultPromptPathEnvVar);
+                var fromEnvFile = TryReadPromptFromFile(envPath);
+                if (!string.IsNullOrWhiteSpace(fromEnvFile))
+                    return fromEnvFile;
+
+                var envValue = Environment.GetEnvironmentVariable(DefaultPromptEnvVar);
+                if (!string.IsNullOrWhiteSpace(envValue))
+                    return envValue;
+
+                var cfgPath = ConfigurationManager.AppSettings[DefaultPromptPathAppSettingKey];
+                var fromCfgFile = TryReadPromptFromFile(cfgPath);
+                if (!string.IsNullOrWhiteSpace(fromCfgFile))
+                    return fromCfgFile;
+
+                var cfgValue = ConfigurationManager.AppSettings[DefaultPromptAppSettingKey];
+                return string.IsNullOrWhiteSpace(cfgValue) ? null : cfgValue;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string TryReadPromptFromFile(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return null;
+
+                if (!File.Exists(path))
+                    return null;
+
+                return File.ReadAllText(path);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static string GetOpenAiApiKey()
         {
             try
             {
-                // Prefer environment variable in production.
+                // En produccion, preferir variable de entorno.
                 var env = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
                 if (!string.IsNullOrWhiteSpace(env))
                     return env.Trim();
@@ -325,6 +394,22 @@ namespace IND_CRM_API.Controllers.System
             {
                 return null;
             }
+        }
+
+        private static int ReadPromptMaxWordsFromConfig()
+        {
+            try
+            {
+                var cfg = ConfigurationManager.AppSettings[PromptMaxWordsAppSettingKey];
+                if (int.TryParse(cfg, out var value) && value > 0)
+                    return value;
+            }
+            catch
+            {
+                // Ignorar y aplicar valor por defecto.
+            }
+
+            return DefaultMaxPromptWords;
         }
     }
 }

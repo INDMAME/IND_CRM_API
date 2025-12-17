@@ -5,21 +5,21 @@ using System.Threading.Tasks;
 namespace IND_CRM_API.Services.Interfaces
 {
     /// <summary>
-    /// Audio transcription service abstraction.
-    /// This is used by the API controller to call OpenAI speech-to-text without exposing the API key to clients.
+    /// Contrato de servicio para transcribir audio a texto.
+    /// Se usa desde el controlador para llamar a OpenAI sin exponer la API key al cliente.
     /// </summary>
     public interface IND_IAudioTranscriptionService
     {
         /// <summary>
-        /// Sends an audio stream to OpenAI /v1/audio/transcriptions and returns only the transcribed text.
+        /// Envia el audio a OpenAI /v1/audio/transcriptions y devuelve solo el texto transcrito.
         /// </summary>
-        /// <param name="audioStream">Input audio stream (mp3/m4a). The stream must be readable.</param>
-        /// <param name="fileName">Original file name (used as multipart file name).</param>
-        /// <param name="openAiApiKey">OpenAI API key (server-side only). Never log this value.</param>
-        /// <param name="languageId">Language hint or "auto" to let the model detect it.</param>
-        /// <param name="temperature">Sampling temperature (0-1). Use 0 for more deterministic output.</param>
-        /// <param name="prompt">Optional context prompt with domain terms (limited words enforced by caller).</param>
-        /// <param name="cancellationToken">Request cancellation token.</param>
+        /// <param name="audioStream">Stream de audio (debe ser legible).</param>
+        /// <param name="fileName">Nombre original del archivo (se usa en el multipart).</param>
+        /// <param name="openAiApiKey">API key de OpenAI (solo servidor). Nunca loguear este valor.</param>
+        /// <param name="languageId">Codigo de idioma o "auto" para deteccion automatica.</param>
+        /// <param name="temperature">Temperatura de muestreo (0-1). Usar 0 para salida mas determinista.</param>
+        /// <param name="prompt">Prompt opcional de contexto para guiar vocabulario.</param>
+        /// <param name="cancellationToken">Token de cancelacion.</param>
         Task<string> TranscribeAsync(
             Stream audioStream,
             string fileName,
