@@ -5,6 +5,7 @@ using Swashbuckle.Swagger.Annotations;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -111,7 +112,7 @@ namespace IND_CRM_API.Controllers.System
                 double temperature = 0.0;
                 if (!string.IsNullOrWhiteSpace(temperatureValue))
                 {
-                    if (!double.TryParse(temperatureValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out temperature) ||
+                    if (!double.TryParse(temperatureValue, NumberStyles.Float, CultureInfo.InvariantCulture, out temperature) ||
                         temperature < 0 || temperature > 1)
                     {
                         return Content(
