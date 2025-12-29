@@ -136,8 +136,10 @@ namespace IND_CRM_API.Services
                 // Intentamos Logon
                 try
                 {
+                    //ax.Logon("", "", "", _configPath);
                     ax.Logon2(user, pass, "", "", "", "", _configPath, false, null, null);
                 }
+
                 catch
                 {
                     // AÑADIDO: Si falla el logon, liberar inmediatamente de forma segura
