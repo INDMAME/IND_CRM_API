@@ -99,7 +99,7 @@ echo Servicio instalado e iniciado correctamente.
 echo Puerto: %PORT%
 echo ------------------------------------------------------
 echo Acceso local:   http://localhost:%PORT%/swagger/ui/index
-echo Acceso publico: http://212.142.143.182:%PORT%/swagger/ui/index
+echo Acceso publico: https://crm.insertec.biz:%PORT%/swagger/ui/index
 echo ======================================================
 echo.
 pause

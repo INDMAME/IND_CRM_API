@@ -48,23 +48,50 @@ namespace IND_CRM_API
             DependencyConfig.Register(config);
             INDSwaggerConfig.Configure(config);
 
-            // CORS restringido a or�genes permitidos
-            var corsPolicy = new CorsPolicy
-            {
-                AllowAnyHeader = true,
-                AllowAnyMethod = true,
-                SupportsCredentials = true
-            };
-            corsPolicy.Origins.Add("http://localhost:7776");
-            corsPolicy.Origins.Add("http://212.142.143.182:7776");
+            // CORS opcional por configuracion (deshabilitado por defecto)
+            var corsEnabled = false;
+            var corsEnabledSetting = ConfigurationManager.AppSettings["CorsSettings:Enabled"];
+            if (!string.IsNullOrWhiteSpace(corsEnabledSetting))
+                bool.TryParse(corsEnabledSetting, out corsEnabled);
 
-            app.UseCors(new CorsOptions
+            if (corsEnabled)
             {
-                PolicyProvider = new CorsPolicyProvider
+                var originsSetting = ConfigurationManager.AppSettings["CorsSettings:AllowedOrigins"] ?? string.Empty;
+                var origins = originsSetting
+                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(o => o.Trim())
+                    .Where(o => !string.IsNullOrWhiteSpace(o))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var corsPolicy = new CorsPolicy
                 {
-                    PolicyResolver = _ => Task.FromResult(corsPolicy)
+                    AllowAnyHeader = true,
+                    AllowAnyMethod = true,
+                    SupportsCredentials = false
+                };
+
+                if (origins.Any(o => o == "*"))
+                {
+                    corsPolicy.AllowAnyOrigin = true;
                 }
-            });
+                else
+                {
+                    foreach (var origin in origins)
+                        corsPolicy.Origins.Add(origin);
+                }
+
+                if (corsPolicy.AllowAnyOrigin || corsPolicy.Origins.Count > 0)
+                {
+                    app.UseCors(new CorsOptions
+                    {
+                        PolicyProvider = new CorsPolicyProvider
+                        {
+                            PolicyResolver = _ => Task.FromResult(corsPolicy)
+                        }
+                    });
+                }
+            }
 
             // ===========================================
             //    Autenticaci�n JWT
