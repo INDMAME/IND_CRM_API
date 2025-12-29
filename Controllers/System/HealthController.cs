@@ -13,11 +13,12 @@ namespace IND_CRM_API.Controllers.System
     {
         private static readonly DateTime _startTimeUtc = DateTime.UtcNow;
 
-        private readonly AxaptaSessionManager _sessionManager = AxSession.Manager;
+        private readonly IAxaptaSessionManager _sessionManager;
         private readonly IAxLogger _logger;
 
-        public HealthController(IAxLogger logger)
+        public HealthController(IAxaptaSessionManager sessionManager, IAxLogger logger)
         {
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _logger = logger ?? new FileAxLogger();
         }
 

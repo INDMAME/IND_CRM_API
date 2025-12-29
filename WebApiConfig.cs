@@ -1,4 +1,5 @@
 ﻿using System.Web.Http;
+using IND_CRM_API.App_Start;
 
 namespace IND_CRM_API
 {
@@ -28,10 +29,13 @@ namespace IND_CRM_API
             config.Formatters.JsonFormatter.SerializerSettings.Formatting =
                 Newtonsoft.Json.Formatting.Indented;
 
-            // Permite mostrar detalles de error completos (solo para depuración)
+            // Permite mostrar detalles de error completos (solo para depuracion)
             config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Always;
 
-            // Serialización estándar (omite valores nulos)
+            // Filtro global de errores (respuesta estandar 500)
+            config.Filters.Add(new IndGlobalExceptionFilter());
+
+            // Serializacion estandar (omite valores nulos)
             config.Formatters.JsonFormatter.SerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
             {
                 NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,

@@ -1,4 +1,5 @@
 ﻿using AxaptaCOMConnector;
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json.Linq;
 using System;
@@ -39,8 +40,8 @@ namespace IND_CRM_API.Services
 
         // Configuracion de Axapta
         private readonly string _configPath = ConfigurationManager.AppSettings["AxConfigFile"];
-        private readonly string _defaultUser = ConfigurationManager.AppSettings["Axapta.User"];
-        private readonly string _defaultPass = ConfigurationManager.AppSettings["Axapta.Password"];
+        private readonly string _defaultUser = AppSettingsHelper.GetSetting("Axapta.User", "USER_DEFAULT");
+        private readonly string _defaultPass = AppSettingsHelper.GetSetting("Axapta.Password", "USER_PASS_DEFAULT");
         private readonly bool _verbose = bool.TryParse(ConfigurationManager.AppSettings["Axapta.VerboseLogging"], out var v) && v;
         private readonly string _verbosePath = ConfigurationManager.AppSettings["Axapta.VerboseLogPath"] ?? @"C:\INDAxaptaLogs";
 

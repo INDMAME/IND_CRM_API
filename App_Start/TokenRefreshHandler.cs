@@ -1,4 +1,5 @@
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Configuration;
@@ -135,10 +136,10 @@ namespace IND_CRM_API.App_Start
         {
             var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
             var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
-            var secret = ConfigurationManager.AppSettings["JwtSettings:SecretKey"];
+            var secret = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
 
             if (string.IsNullOrWhiteSpace(secret))
-                throw new Exception("Falta JwtSettings:SecretKey en App.config");
+                throw new Exception("Falta JwtSettings:SecretKey en App.config o variable de entorno JWT_SECRET_KEY");
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
             return new TokenValidationParameters

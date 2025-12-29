@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Web.Http;
 using IND_CRM_API.Services;
+using IND_CRM_API.Services.Interfaces;
 using AxaptaCOMConnector;
 using IND_CRM_API.Models.Responses;
 using Swashbuckle.Swagger.Annotations;
@@ -12,8 +13,12 @@ namespace IND_CRM_API.Controllers.System
     [RoutePrefix("api/system")]
     public class EnvironmentController : ApiController
     {
-        // Use global AxSession singleton
-        private readonly AxaptaSessionManager _sessionManager = AxSession.Manager;
+        private readonly IAxaptaSessionManager _sessionManager;
+
+        public EnvironmentController(IAxaptaSessionManager sessionManager)
+        {
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        }
 
         private string GetAuthenticatedUsername()
         {

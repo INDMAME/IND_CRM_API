@@ -21,6 +21,9 @@ namespace IND_CRM_API.App_Start
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
 
+            // Compartir la misma instancia en todo el proceso.
+            AxSession.Initialize(sessionManager);
+
             var services = new Dictionary<Type, object>
             {
                 { typeof(IAxaptaSessionManager), sessionManager },

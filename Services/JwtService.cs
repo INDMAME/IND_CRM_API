@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Services.Interfaces;
 
 namespace IND_CRM_API.Services
@@ -14,7 +15,7 @@ namespace IND_CRM_API.Services
     /// Servicio responsable de generar tokens JWT (JSON Web Token)
     /// utilizados para autenticar las solicitudes entre el cliente y la API.
     /// 
-    /// Los parámetros de configuración se leen desde App.config:
+    /// Los parametros de configuracion se leen desde App.config o variables de entorno:
     /// <list type="bullet">
     /// <item><description><b>JwtSettings:SecretKey</b> → Clave secreta de firma (256 bits o superior).</description></item>
     /// <item><description><b>JwtSettings:Issuer</b> → Emisor del token (identificador del servicio).</description></item>
@@ -60,13 +61,13 @@ namespace IND_CRM_API.Services
         /// </exception>
         public JwtTokenInfo GenerateToken(string username, int? overrideMinutes = null)
         {
-            // Leer configuración JWT desde App.config
-            var secretKey = ConfigurationManager.AppSettings["JwtSettings:SecretKey"];
+            // Leer configuracion JWT desde App.config o variables de entorno
+            var secretKey = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
             var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
             var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
 
             if (string.IsNullOrEmpty(secretKey) || string.IsNullOrEmpty(issuer) || string.IsNullOrEmpty(audience))
-                throw new Exception("Faltan valores JWT en el archivo de configuración.");
+                throw new Exception("Faltan valores JWT en App.config o variables de entorno.");
 
             int expirationMinutes = overrideMinutes ?? GetConfiguredExpirationMinutes();
 

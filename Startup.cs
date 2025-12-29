@@ -5,6 +5,7 @@ using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Jwt;
 using Owin;
 using IND_CRM_API.App_Start;
+using IND_CRM_API.Helpers;
 using System;
 using System.Configuration;
 using System.IO;
@@ -20,34 +21,34 @@ using System.Threading.Tasks;
 namespace IND_CRM_API
 {
     /// <summary>
-    /// Clase de inicio de la aplicación OWIN.
+    /// Clase de inicio de la aplicaciï¿½n OWIN.
     /// Configura el pipeline principal de la API:
     /// <list type="number">
     /// <item>Inicializa WebAPI y Swagger.</item>
     /// <item>Habilita CORS global.</item>
-    /// <item>Configura autenticación JWT (Bearer Token).</item>
-    /// <item>Agrega logging básico de solicitudes y compresión GZIP.</item>
+    /// <item>Configura autenticaciï¿½n JWT (Bearer Token).</item>
+    /// <item>Agrega logging bï¿½sico de solicitudes y compresiï¿½n GZIP.</item>
     /// </list>
     /// </summary>
     public class Startup
     {
         /// <summary>
         /// Configura los middlewares y servicios del pipeline OWIN.
-        /// Se ejecuta automáticamente al iniciar el servicio SelfHost.
+        /// Se ejecuta automï¿½ticamente al iniciar el servicio SelfHost.
         /// </summary>
         /// <param name="app">Instancia del constructor OWIN (<see cref="IAppBuilder"/>).</param>
 
         public void Configuration(IAppBuilder app)
         {
             // ===========================================
-            //    Inicialización de WebAPI y CORS
+            //    Inicializaciï¿½n de WebAPI y CORS
             // ===========================================
             var config = new HttpConfiguration();
             WebApiConfig.Register(config);
             DependencyConfig.Register(config);
             INDSwaggerConfig.Configure(config);
 
-            // CORS restringido a orígenes permitidos
+            // CORS restringido a orï¿½genes permitidos
             var corsPolicy = new CorsPolicy
             {
                 AllowAnyHeader = true,
@@ -66,14 +67,14 @@ namespace IND_CRM_API
             });
 
             // ===========================================
-            //    Autenticación JWT
+            //    Autenticaciï¿½n JWT
             // ===========================================
             var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
             var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
-            var secret = ConfigurationManager.AppSettings["JwtSettings:SecretKey"];
+            var secret = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
 
             if (string.IsNullOrEmpty(secret))
-                throw new Exception("Falta JwtSettings:SecretKey en App.config");
+                throw new Exception("Falta JwtSettings:SecretKey en App.config o variable de entorno JWT_SECRET_KEY");
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
 
@@ -100,7 +101,7 @@ namespace IND_CRM_API
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {context.Request.Method} {context.Request.Uri}");
 
-                // Redirigir raíz a Swagger UI
+                // Redirigir raï¿½z a Swagger UI
                 if (context.Request.Path.Value == "/" || context.Request.Path.Value == "")
                 {
                     context.Response.Redirect("/swagger/ui/index");
@@ -114,7 +115,7 @@ namespace IND_CRM_API
             });
 
             // =========================================================
-            //     COMPRESIÓN GZIP MANUAL
+            //     COMPRESIï¿½N GZIP MANUAL
             // =========================================================
             app.Use(async (context, next) =>
             {

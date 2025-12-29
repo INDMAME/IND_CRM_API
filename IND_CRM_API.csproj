@@ -158,6 +158,7 @@
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
+    <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
@@ -176,6 +177,7 @@
     <Compile Include="Controllers\System\AuthController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
+    <Compile Include="Helpers\AppSettingsHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
     <Compile Include="Helpers\ContainerDebugHelper.cs" />
