@@ -5,6 +5,7 @@ using Swashbuckle.Swagger.Annotations;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -99,6 +100,7 @@ namespace IND_CRM_API.Controllers.System
         public async Task<IHttpActionResult> Transcribe(CancellationToken cancellationToken)
         {
             var traceId = Guid.NewGuid().ToString("N");
+            var totalSw = Stopwatch.StartNew();
 
             try
             {
@@ -113,8 +115,12 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var provider = new MultipartMemoryStreamProvider();
+                var multipartSw = Stopwatch.StartNew();
                 await Request.Content.ReadAsMultipartAsync(provider, cancellationToken);
+                multipartSw.Stop();
+                _logger.Log($"[SPEECH] Multipart leido ms={multipartSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
 
+                var fieldsSw = Stopwatch.StartNew();
                 var languageId = await ReadFormFieldAsync(provider, "languageId");
                 if (string.IsNullOrWhiteSpace(languageId))
                 {
@@ -139,6 +145,8 @@ namespace IND_CRM_API.Controllers.System
                 var promptProvided = !string.IsNullOrWhiteSpace(prompt);
                 if (!promptProvided)
                     prompt = GetDefaultTranscriptionPrompt();
+                fieldsSw.Stop();
+                _logger.Log($"[SPEECH] Campos leidos ms={fieldsSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
 
                 if (!string.IsNullOrWhiteSpace(prompt))
                 {
@@ -186,11 +194,14 @@ namespace IND_CRM_API.Controllers.System
                     return ReturnError((HttpStatusCode)422, traceId, "audioFile supera el limite de 25 MB.", IndErrorCodes.ValidationError, "audioFile");
                 }
 
+                var fileReadSw = Stopwatch.StartNew();
                 var audioBytes = await filePart.ReadAsByteArrayAsync();
+                fileReadSw.Stop();
                 if (audioBytes == null || audioBytes.Length <= 0)
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "audioFile esta vacio.", IndErrorCodes.ValidationError, "audioFile");
                 }
+                _logger.Log($"[SPEECH] Audio leido bytes={audioBytes.Length} ms={fileReadSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
 
                 if (audioBytes.Length > MaxAudioBytes)
                 {
@@ -206,6 +217,7 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 string text;
+                var transcribeSw = Stopwatch.StartNew();
                 using (var audioStream = new MemoryStream(audioBytes, writable: false))
                 {
                     text = await _transcription.TranscribeAsync(
@@ -217,10 +229,15 @@ namespace IND_CRM_API.Controllers.System
                         prompt,
                         cancellationToken);
                 }
+                transcribeSw.Stop();
+                _logger.Log($"[SPEECH] OpenAI transcribe ms={transcribeSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
 
                 // Moderacion del texto resultante para bloquear contenido ofensivo/ilícito.
+                var moderationSw = Stopwatch.StartNew();
                 var moderationModel = ConfigurationManager.AppSettings["OpenAI:ModerationModel"];
                 var modResult = await _moderation.ModerateAsync(text, openAiApiKey, moderationModel, cancellationToken);
+                moderationSw.Stop();
+                _logger.Log($"[SPEECH] OpenAI moderation ms={moderationSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
                 if (modResult?.IsFlagged == true)
                 {
                     var categorySummary = modResult.CategorySummary ?? string.Empty;
@@ -238,13 +255,16 @@ namespace IND_CRM_API.Controllers.System
                     TraceId = traceId
                 };
 
+                totalSw.Stop();
+                _logger.Log($"[SPEECH] Total ms={totalSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
                 LogApiOut(HttpStatusCode.OK, traceId, AxaptaSessionManager.LogLevel.Info);
                 return Ok(ok);
             }
             catch (Exception ex)
             {
                 // Nunca loguear la API key. Solo registrar el resumen del error.
-                _logger.Log("[SPEECH] Transcribe error: " + ex.GetType().FullName + " " + ex.Message + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
+                totalSw.Stop();
+                _logger.Log("[SPEECH] Transcribe error: " + ex.GetType().FullName + " " + ex.Message + " totalMs=" + totalSw.ElapsedMilliseconds + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
                 LogApiOut(HttpStatusCode.InternalServerError, traceId, AxaptaSessionManager.LogLevel.Error);
 
                 return Content(

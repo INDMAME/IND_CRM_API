@@ -2,6 +2,7 @@ using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Configuration;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -51,6 +52,11 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(languageId)) throw new ArgumentException("languageId es obligatorio.", nameof(languageId));
             if (temperature < 0 || temperature > 1) throw new ArgumentOutOfRangeException(nameof(temperature), "temperature debe estar entre 0 y 1.");
 
+            var totalSw = Stopwatch.StartNew();
+            long sendMs = -1;
+            long readMs = -1;
+            string statusCode = "na";
+
             if (audioStream.CanSeek)
                 audioStream.Position = 0;
 
@@ -93,10 +99,19 @@ namespace IND_CRM_API.Services
                     // Asegurar TLS 1.2 en entornos antiguos.
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
+                    var sendSw = Stopwatch.StartNew();
                     response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
                         .ConfigureAwait(false);
+                    sendSw.Stop();
+                    sendMs = sendSw.ElapsedMilliseconds;
 
+                    var readSw = Stopwatch.StartNew();
                     responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    readSw.Stop();
+                    readMs = readSw.ElapsedMilliseconds;
+                    statusCode = ((int)response.StatusCode).ToString();
+                    totalSw.Stop();
+                    _logger.Log($"[OPENAI] Timings status={statusCode} sendMs={sendMs} readMs={readMs} totalMs={totalSw.ElapsedMilliseconds}", AxaptaSessionManager.LogLevel.Info);
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -113,17 +128,21 @@ namespace IND_CRM_API.Services
                 }
                 catch (TaskCanceledException ex)
                 {
-                    _logger.Log("[OPENAI] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                    totalSw.Stop();
+                    var reason = cancellationToken.IsCancellationRequested ? "token" : "timeout";
+                    _logger.Log("[OPENAI] Peticion cancelada reason=" + reason + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds + " msg=" + ex.Message, AxaptaSessionManager.LogLevel.Warning);
                     throw;
                 }
                 catch (HttpRequestException ex)
                 {
-                    _logger.Log("[OPENAI] Error HTTP: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                    totalSw.Stop();
+                    _logger.Log("[OPENAI] Error HTTP: " + ex.Message + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds, AxaptaSessionManager.LogLevel.Error);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.Log("[OPENAI] Error inesperado: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                    totalSw.Stop();
+                    _logger.Log("[OPENAI] Error inesperado: " + ex.Message + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds, AxaptaSessionManager.LogLevel.Error);
                     throw;
                 }
                 finally

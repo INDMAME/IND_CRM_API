@@ -28,3 +28,6 @@ PublishProfiles/
 # Local settings
 appsettings.Development.json
 *.dbmdl
+
+# Local certificates
+certificados/
