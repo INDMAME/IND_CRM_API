@@ -22,10 +22,11 @@ namespace IND_CRM_API.Services
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
         private const string DefaultModel = "gpt-4o-transcribe";
-        private const int DefaultTimeoutSeconds = 300;
+        private const int DefaultTimeoutSeconds = 600;
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
         // Reutilizar HttpClient para evitar agotamiento de sockets.
+        private static readonly int _timeoutSeconds = ReadTimeoutSecondsFromConfig();
         private static readonly HttpClient _httpClient = CreateHttpClient();
 
         private readonly IAxLogger _logger;
@@ -57,6 +58,7 @@ namespace IND_CRM_API.Services
             long sendMs = -1;
             long readMs = -1;
             string statusCode = "na";
+            var timeoutSeconds = _timeoutSeconds;
 
             if (audioStream.CanSeek)
                 audioStream.Position = 0;
@@ -70,6 +72,10 @@ namespace IND_CRM_API.Services
                 // Identificar la aplicacion en el User-Agent.
                 request.Headers.UserAgent.Clear();
                 request.Headers.UserAgent.Add(new ProductInfoHeaderValue("IND_CRM_API", "1.0"));
+                // Avoid 100-continue delays on large uploads.
+                request.Headers.ExpectContinue = false;
+
+                _logger.Log($"[OPENAI] Request model={_model} timeoutSeconds={timeoutSeconds}", AxaptaSessionManager.LogLevel.Info);
 
                 var fileContent = new StreamContent(audioStream);
                 if (audioStream.CanSeek)
@@ -158,7 +164,7 @@ namespace IND_CRM_API.Services
         private static HttpClient CreateHttpClient()
         {
             var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(ReadTimeoutSecondsFromConfig());
+            client.Timeout = TimeSpan.FromSeconds(_timeoutSeconds);
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
