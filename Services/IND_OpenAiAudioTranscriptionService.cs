@@ -22,6 +22,7 @@ namespace IND_CRM_API.Services
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
         private const string DefaultModel = "gpt-4o-transcribe";
+        private const int DefaultTimeoutSeconds = 300;
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
         // Reutilizar HttpClient para evitar agotamiento de sockets.
@@ -71,6 +72,8 @@ namespace IND_CRM_API.Services
                 request.Headers.UserAgent.Add(new ProductInfoHeaderValue("IND_CRM_API", "1.0"));
 
                 var fileContent = new StreamContent(audioStream);
+                if (audioStream.CanSeek)
+                    fileContent.Headers.ContentLength = audioStream.Length;
                 fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                 form.Add(fileContent, "file", SanitizeFileName(fileName));
 
@@ -155,7 +158,7 @@ namespace IND_CRM_API.Services
         private static HttpClient CreateHttpClient()
         {
             var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(90);
+            client.Timeout = TimeSpan.FromSeconds(ReadTimeoutSecondsFromConfig());
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
@@ -172,6 +175,23 @@ namespace IND_CRM_API.Services
             {
                 return DefaultModel;
             }
+        }
+
+        // Lee el timeout de OpenAI desde configuracion con fallback seguro.
+        private static int ReadTimeoutSecondsFromConfig()
+        {
+            try
+            {
+                var cfg = ConfigurationManager.AppSettings["OpenAI:TimeoutSeconds"];
+                if (int.TryParse(cfg, out var value) && value > 0)
+                    return value;
+            }
+            catch
+            {
+                // Ignorar y aplicar valor por defecto.
+            }
+
+            return DefaultTimeoutSeconds;
         }
 
         private static string TryExtractText(string json)
