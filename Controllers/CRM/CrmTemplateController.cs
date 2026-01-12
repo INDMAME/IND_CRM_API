@@ -49,6 +49,11 @@ namespace IND_CRM_API.Controllers.CRM
             var traceId = Guid.NewGuid().ToString("N");
             try
             {
+                // Validar header de compania (si el metodo X++ lo requiere).
+                RequireCompanyOrReturn422(out var companyError, traceId);
+                if (companyError != null)
+                    return companyError;
+
                 var username = GetAuthenticatedUsername();
                 var ax = _sessionManager.GetAxInstanceForUser(username);
 
@@ -78,20 +83,17 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Success = true,
                     Message = "OK",
-                    Total = data?.Length ?? 0,
-                    Page = 1,
-                    PageSize = data?.Length ?? 0,
                     Items = data?.ToList() ?? new List<object>(),
                     TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
-                Logger.Log($"[ERROR] Sample API: {ex.Message}");
+                Logger.Log($"[ERROR] Sample API: {ex}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error Sample: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,

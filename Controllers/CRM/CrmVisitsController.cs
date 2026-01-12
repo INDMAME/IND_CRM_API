@@ -26,10 +26,19 @@ namespace IND_CRM_API.Controllers.CRM
         [HttpPost, Route("createVisitaAsistente")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
+        [SwaggerResponse(HttpStatusCode.Created, "Asistente creado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Registro no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult CreateVisitaAsistente([FromBody] CreateVisitaAsistenteRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new global::System.Collections.Generic.List<IndValidationError>();
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (body == null)
             {
@@ -43,6 +52,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.asistenteId))
                     validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
+                if (string.IsNullOrWhiteSpace(body.createdByUserId))
+                    validationErrors.Add(new IndValidationError { Field = "createdByUserId", Message = "createdByUserId es obligatorio." });
             }
 
             if (validationErrors.Count > 0)
@@ -63,19 +74,22 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username}");
+                Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username} company={company}");
                 Logger.Log($" -> refRecIdActividad: {body.refRecIdActividad}");
                 Logger.Log($" -> asistenteTipo: {body.asistenteTipo}");
                 Logger.Log($" -> asistenteId: {body.asistenteId}");
                 Logger.Log($" -> contactoRecId: {body.contactoRecId}");
+                Logger.Log($" -> createdByUserId: {body.createdByUserId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
+                con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
                 con.Append(body.asistenteTipo?.Trim() ?? string.Empty);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
+                con.Append(body.createdByUserId?.Trim() ?? string.Empty);
 
                 Logger.Log("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -93,7 +107,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Contenedor vacio.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -108,7 +122,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Estructura inesperada en la respuesta.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -126,27 +140,31 @@ namespace IND_CRM_API.Controllers.CRM
 
                 Logger.Log($"[API-OUT] Resultado CreateVisitaAsistente: {result} - {message}");
 
+                var isNotFound = message.IndexOf("no encontrada", StringComparison.OrdinalIgnoreCase) >= 0;
                 var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message,
-                    ErrorCode = successFlag ? null : IndErrorCodes.AxComError,
+                    Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (isNotFound ? "Registro no encontrado." : (string.IsNullOrWhiteSpace(message) ? "No se pudo crear el asistente." : message)),
+                    ErrorCode = successFlag ? null : (isNotFound ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.ValidationError),
                     Errors = null,
-                    Data = new { Result = result, Message = message },
+                    Data = successFlag ? new { Result = result, Message = message } : null,
                     TraceId = traceId
                 };
 
                 if (successFlag)
                     return Content(HttpStatusCode.Created, okResponse);
 
-                return Content(HttpStatusCode.BadRequest, okResponse);
+                if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
+                    return Content(HttpStatusCode.NotFound, okResponse);
+
+                return Content((HttpStatusCode)422, okResponse);
             }
             catch (Exception ex)
             {
-                Logger.Log($"[ERROR] CreateVisitaAsistente API: {ex.Message}");
+                Logger.Log($"[ERROR] CreateVisitaAsistente API: {ex}");
                 var response = new IndApiResponse<object> {
                     Success = false,
-                    Message = $"Error CreateVisitaAsistente: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,
@@ -165,12 +183,21 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="body">Datos del asistente a eliminar.</param>
         [HttpDelete, Route("deleteVisitaAsistente")]
-        [ResponseType(typeof(IndApiResponse<object>))]
+        [ResponseType(typeof(void))]
         [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
+        [SwaggerResponse(HttpStatusCode.NoContent, "Asistente eliminado")]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Registro no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteVisitaAsistente([FromBody] DeleteVisitaAsistenteRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new global::System.Collections.Generic.List<IndValidationError>();
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (body == null)
             {
@@ -207,6 +234,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
+                con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
 
@@ -222,7 +250,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Contenedor vacio.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -237,7 +265,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Estructura inesperada en la respuesta.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -253,31 +281,32 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
+                var isNotFound = message.IndexOf("no encontrada", global::System.StringComparison.OrdinalIgnoreCase) >= 0;
                 var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message,
-                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", global::System.StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
+                    Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (isNotFound ? "Registro no encontrado." : (string.IsNullOrWhiteSpace(message) ? "No se pudo eliminar el asistente." : message)),
+                    ErrorCode = successFlag ? null : (isNotFound ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.ValidationError),
                     Errors = null,
-                    Data = new { body.refRecIdActividad, body.asistenteId },
+                    Data = null,
                     TraceId = traceId
                 };
 
                 if (successFlag)
-                    return Content(global::System.Net.HttpStatusCode.NoContent, okResponse);
+                    return StatusCode(global::System.Net.HttpStatusCode.NoContent);
 
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
                     return Content(global::System.Net.HttpStatusCode.NotFound, okResponse);
 
-                return Content(global::System.Net.HttpStatusCode.InternalServerError, okResponse);
+                return Content((global::System.Net.HttpStatusCode)422, okResponse);
             }
             catch (Exception ex)
             {
-                Logger.Log($"[ERROR] DeleteVisitaAsistente API: {ex.Message}");
+                Logger.Log($"[ERROR] DeleteVisitaAsistente API: {ex}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error DeleteVisitaAsistente: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,

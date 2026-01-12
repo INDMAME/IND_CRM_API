@@ -31,6 +31,9 @@ namespace IND_CRM_API.App_Start
                         .Name("Authorization")
                         .In("header");
 
+                    // Agrega el header de compania en endpoints CRM.
+                    c.OperationFilter<CompanyHeaderOperationFilter>();
+
                     // Swagger usa los XML comments generados en la compilacion para enriquecer el OpenAPI.
                     var xmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_API.xml");
                     if (File.Exists(xmlPath))

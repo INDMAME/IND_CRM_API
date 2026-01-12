@@ -83,19 +83,19 @@ namespace IND_CRM_API.Controllers.System
         /// - audioFile: archivo .mp3/.m4a/.wav/.flac (max 25 MB)
         /// - temperature (opcional): numero entre 0 y 1 (por defecto 0)
         /// - prompt/context (opcional): contexto para mejorar vocabulario (max configurado en OpenAI:TranscriptionPromptMaxWords; por defecto 500)
-        /// Salida: IndApiResponse&lt;string&gt; con Data = texto transcrito (sin metadatos de OpenAI).
+        /// Output: IndPagedResponse&lt;string&gt; with Items containing the transcript (no OpenAI metadata).
         ///
         /// Seguridad:
         /// - La API key de OpenAI se lee de configuracion/entorno y nunca se devuelve.
         /// - A futuro, se recomienda rate limiting por usuario/empresa para evitar abuso.
         /// </remarks>
         [HttpPost, Route("transcribe")]
-        [SwaggerResponse(HttpStatusCode.OK, "Transcripcion correcta", typeof(IndApiResponse<string>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Transcripcion correcta", typeof(IndPagedResponse<string>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.UnsupportedMediaType, "Tipo de contenido no soportado", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<string>))]
-        [ResponseType(typeof(IndApiResponse<string>))]
+        [ResponseType(typeof(IndPagedResponse<string>))]
         [SwaggerOperation(Tags = new[] { "Voz" })]
         public async Task<IHttpActionResult> Transcribe(CancellationToken cancellationToken)
         {
@@ -213,7 +213,7 @@ namespace IND_CRM_API.Controllers.System
                 if (string.IsNullOrWhiteSpace(openAiApiKey))
                 {
                     _logger.Log("[SPEECH] OpenAI API key no esta configurada.", AxaptaSessionManager.LogLevel.Error);
-                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "OpenAI API key no esta configurada.", IndErrorCodes.InternalError, null);
+                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error interno del servidor.", IndErrorCodes.InternalError, null);
                 }
 
                 string text;
@@ -245,13 +245,11 @@ namespace IND_CRM_API.Controllers.System
                     return ReturnError((HttpStatusCode)422, traceId, "Contenido rechazado por politicas de uso.", IndErrorCodes.ValidationError, "text");
                 }
 
-                var ok = new IndApiResponse<string>
+                var ok = new IndPagedResponse<string>
                 {
                     Success = true,
                     Message = "OK",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = text ?? string.Empty,
+                    Items = new List<string> { text ?? string.Empty },
                     TraceId = traceId
                 };
 

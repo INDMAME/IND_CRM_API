@@ -4,6 +4,7 @@ using IND_CRM_API.Services.Interfaces;
 using System;
 using System.Net;
 using System.Web.Http;
+using System.Web.Http.Description;
 using Swashbuckle.Swagger.Annotations;
 
 namespace IND_CRM_API.Controllers.System
@@ -28,16 +29,19 @@ namespace IND_CRM_API.Controllers.System
         [AllowAnonymous]
         [HttpGet, Route("ping")]
         [SwaggerOperation(Tags = new[] { "Salud" })]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Estado del servicio", typeof(IndPagedResponse<object>))]
         public IHttpActionResult Ping()
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var response = new IndApiResponse<object>
+            var response = new IndPagedResponse<object>
             {
                 Success = true,
-                Message = "Servicio en linea.",
-                ErrorCode = null,
-                Errors = null,
-                Data = new { status = "Online", startedUtc = _startTimeUtc },
+                Message = "OK",
+                Items = new global::System.Collections.Generic.List<object>
+                {
+                    new { status = "Online", startedUtc = _startTimeUtc }
+                },
                 TraceId = traceId
             };
             return Ok(response);
@@ -49,6 +53,9 @@ namespace IND_CRM_API.Controllers.System
         [Authorize]
         [HttpGet, Route("health")]
         [SwaggerOperation(Tags = new[] { "Salud" })]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Estado de Axapta", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult AxaptaHealth()
         {
             var traceId = Guid.NewGuid().ToString("N");
@@ -58,24 +65,22 @@ namespace IND_CRM_API.Controllers.System
 
                 _sessionManager.CreateOrGetSession(username, null, null);
 
-                var okResponse = new IndApiResponse<object>
+                var okResponse = new IndPagedResponse<object>
                 {
                     Success = true,
-                    Message = "AX operativo.",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = new { status = "Ok" },
+                    Message = "OK",
+                    Items = new global::System.Collections.Generic.List<object> { new { status = "Ok" } },
                     TraceId = traceId
                 };
                 return Ok(okResponse);
             }
             catch (Exception ex)
             {
-                _logger.Log("[HEALTH-ERROR] " + ex.Message);
+                _logger.Log("[HEALTH-ERROR] " + ex);
                 var errorResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = "Error al validar AX.",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxSessionError,
                     Errors = null,
                     Data = null,

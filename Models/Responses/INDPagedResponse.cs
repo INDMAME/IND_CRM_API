@@ -15,13 +15,13 @@ namespace IND_CRM_API.Models.Responses
         public string Message { get; set; }
 
         /// <summary>Total de elementos disponibles para la consulta.</summary>
-        public int Total { get; set; }
+        public int? Total { get; set; }
 
         /// <summary>Numero de pagina actual (1-based).</summary>
-        public int Page { get; set; }
+        public int? Page { get; set; }
 
         /// <summary>Tamano de pagina solicitado.</summary>
-        public int PageSize { get; set; }
+        public int? PageSize { get; set; }
 
         /// <summary>Elementos devueltos en la pagina actual.</summary>
         public List<T> Items { get; set; }

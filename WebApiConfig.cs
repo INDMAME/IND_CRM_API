@@ -1,48 +1,42 @@
-﻿using System.Web.Http;
+using System.Web.Http;
 using IND_CRM_API.App_Start;
 
 namespace IND_CRM_API
 {
     /// <summary>
-    /// Configuración general de rutas y formato de salida para los controladores WebAPI.
-    /// Define las rutas por atributo y la convención base "api/{controller}/{action}/{id}".
+    /// General route and output format configuration for WebAPI controllers.
+    /// Defines attribute routes and the base convention "api/{controller}/{action}/{id}".
     /// </summary>
     public static class WebApiConfig
     {
         /// <summary>
-        /// Registra las rutas y formateadores globales de la API.
+        /// Registers global routes and formatters for the API.
         /// </summary>
-        /// <param name="config">Instancia de configuración de WebAPI.</param>
+        /// <param name="config">WebAPI configuration instance.</param>
         public static void Register(HttpConfiguration config)
         {
-            // Permite usar [Route()] en controladores
+            // Enable attribute routing in controllers.
             config.MapHttpAttributeRoutes();
 
-            // Define ruta por defecto
+            // Define default route.
             config.Routes.MapHttpRoute(
                 name: "DefaultApi",
                 routeTemplate: "api/{controller}/{action}/{id}",
                 defaults: new { id = RouteParameter.Optional }
             );
 
-            // Formato JSON por defecto (indentado para lectura)
-            config.Formatters.JsonFormatter.SerializerSettings.Formatting =
-                Newtonsoft.Json.Formatting.Indented;
-
-            // Permite mostrar detalles de error completos (solo para depuracion)
-            config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Always;
-
-            // Filtro global de errores (respuesta estandar 500)
+            // Global error filter (standard 500 response envelope).
             config.Filters.Add(new IndGlobalExceptionFilter());
 
-            // Serializacion estandar (omite valores nulos)
+            // Do not expose detailed errors in responses.
+            config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Never;
+
+            // Standard JSON serialization (omit nulls).
             config.Formatters.JsonFormatter.SerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
             {
                 NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
                 Formatting = Newtonsoft.Json.Formatting.None
             };
-
-
         }
     }
 }

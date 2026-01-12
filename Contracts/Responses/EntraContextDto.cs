@@ -1,0 +1,51 @@
+using System.Collections.Generic;
+
+namespace IND_CRM_API.Contracts.Responses
+{
+    /// <summary>
+    /// Resultado tipado del contexto Entra.
+    /// </summary>
+    public class EntraContextDto
+    {
+        /// <summary>Header de estado del contexto.</summary>
+        public EntraContextHeaderDto Header { get; set; }
+
+        /// <summary>Companias con modulos y permisos.</summary>
+        public List<EntraCompanyDto> Companies { get; set; }
+    }
+
+    /// <summary>
+    /// Encabezado de estado devuelto por AX.
+    /// </summary>
+    public class EntraContextHeaderDto
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string AxUserId { get; set; }
+        public bool UserActive { get; set; }
+        public bool AppActive { get; set; }
+        public string DefaultCompany { get; set; }
+    }
+
+    /// <summary>
+    /// Compania disponible para el usuario.
+    /// </summary>
+    public class EntraCompanyDto
+    {
+        public string CompanyId { get; set; }
+        public bool IsDefault { get; set; }
+        public string CompanyName { get; set; }
+        public List<EntraModuleDto> Modules { get; set; }
+    }
+
+    /// <summary>
+    /// Modulo y permisos de acceso.
+    /// </summary>
+    public class EntraModuleDto
+    {
+        public string ModuleCode { get; set; }
+        public string Description { get; set; }
+        public bool IsActive { get; set; }
+        public int AccessRightsInt { get; set; }
+    }
+}

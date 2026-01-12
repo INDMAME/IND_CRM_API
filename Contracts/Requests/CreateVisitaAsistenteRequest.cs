@@ -11,5 +11,6 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public string asistenteTipo { get; set; }       // enum AX como string
         [Required] public string asistenteId { get; set; }
         [Required] public string contactoRecId { get; set; }       // long en AX
+        [Required] public string createdByUserId { get; set; }
     }
 }

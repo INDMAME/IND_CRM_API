@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Web.Http;
+using System.Web.Http.Description;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using AxaptaCOMConnector;
@@ -34,6 +35,9 @@ namespace IND_CRM_API.Controllers.System
         // ---------------------------------------------------------
         [HttpGet, Route("getEnvironmentName")]
         [SwaggerOperation(Tags = new[] { "Sistema" })]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Entorno del sistema", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetEnvironmentName()
         {
             var traceId = Guid.NewGuid().ToString("N");
@@ -52,13 +56,11 @@ namespace IND_CRM_API.Controllers.System
 
                 if (root == null || root.Length() == 0)
                 {
-                    var emptyResponse = new IndApiResponse<object>
+                    var emptyResponse = new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        ErrorCode = null,
-                        Errors = null,
-                        Data = new { environment = "Unknown" },
+                        Items = new System.Collections.Generic.List<object> { new { environment = "Unknown" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -67,13 +69,11 @@ namespace IND_CRM_API.Controllers.System
                 var row = root.Peek(1) as IAxaptaContainer;
                 if (row == null || row.Length() < 1)
                 {
-                    var emptyResponse = new IndApiResponse<object>
+                    var emptyResponse = new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        ErrorCode = null,
-                        Errors = null,
-                        Data = new { environment = "Unknown" },
+                        Items = new System.Collections.Generic.List<object> { new { environment = "Unknown" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -83,13 +83,11 @@ namespace IND_CRM_API.Controllers.System
                 if (string.IsNullOrWhiteSpace(env))
                     env = "Unknown";
 
-                var okResponse = new IndApiResponse<object>
+                var okResponse = new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = new { environment = env },
+                    Items = new System.Collections.Generic.List<object> { new { environment = env } },
                     TraceId = traceId
                 };
                 return Ok(okResponse);
@@ -100,7 +98,7 @@ namespace IND_CRM_API.Controllers.System
                 var errorResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error GetEnvironmentName: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,
@@ -117,6 +115,9 @@ namespace IND_CRM_API.Controllers.System
         // ---------------------------------------------------------
         [HttpGet, Route("getCompanyName")]
         [SwaggerOperation(Tags = new[] { "Sistema" })]
+        [ResponseType(typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Compania del sistema", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetCompanyName()
         {
             var traceId = Guid.NewGuid().ToString("N");
@@ -135,13 +136,11 @@ namespace IND_CRM_API.Controllers.System
 
                 if (root == null || root.Length() == 0)
                 {
-                    var emptyResponse = new IndApiResponse<object>
+                    var emptyResponse = new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        ErrorCode = null,
-                        Errors = null,
-                        Data = new { companyId = "", companyName = "", company = "" },
+                        Items = new System.Collections.Generic.List<object> { new { companyId = "", companyName = "", company = "" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -150,13 +149,11 @@ namespace IND_CRM_API.Controllers.System
                 var row = root.Peek(1) as IAxaptaContainer;
                 if (row == null || row.Length() < 2)
                 {
-                    var emptyResponse = new IndApiResponse<object>
+                    var emptyResponse = new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        ErrorCode = null,
-                        Errors = null,
-                        Data = new { companyId = "", companyName = "", company = "" },
+                        Items = new System.Collections.Generic.List<object> { new { companyId = "", companyName = "", company = "" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -165,13 +162,11 @@ namespace IND_CRM_API.Controllers.System
                 string companyId = row.Peek(1)?.ToString() ?? string.Empty;
                 string companyName = row.Peek(2)?.ToString() ?? string.Empty;
 
-                var okResponse = new IndApiResponse<object>
+                var okResponse = new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = new { companyId, companyName, company = companyName },
+                    Items = new System.Collections.Generic.List<object> { new { companyId, companyName, company = companyName } },
                     TraceId = traceId
                 };
                 return Ok(okResponse);
@@ -182,7 +177,7 @@ namespace IND_CRM_API.Controllers.System
                 var errorResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error GetCompanyName: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,
@@ -193,4 +188,3 @@ namespace IND_CRM_API.Controllers.System
         }
     }
 }
-

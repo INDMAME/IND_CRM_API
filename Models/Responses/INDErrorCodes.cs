@@ -20,6 +20,9 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Credenciales invalidas.</summary>
         public const string AuthInvalidCredentials = "AUTH_INVALID_CREDENTIALS";
 
+        /// <summary>Acceso denegado por permisos.</summary>
+        public const string AuthForbidden = "AUTH_FORBIDDEN";
+
         /// <summary>Campos obligatorios faltantes en actividad CRM.</summary>
         public const string CrmActivityMissingFields = "CRM_ACTIVITY_MISSING_FIELDS";
 

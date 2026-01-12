@@ -16,6 +16,7 @@ using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 using System.Net;
 using System.Net.Http;
+using System.Globalization;
 
 namespace IND_CRM_API.Controllers.CRM
 {
@@ -52,13 +53,18 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
         [SwaggerResponse(HttpStatusCode.Created, "Actividad creada correctamente", typeof(IndApiResponse<object>))]
-        [SwaggerResponse(HttpStatusCode.BadRequest, "Error en llamada a AX", typeof(IndApiResponse<object>))]
-        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult CreateActivity([FromBody] CreateActivityRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            DateTime transDate = default(DateTime);
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (body == null)
             {
@@ -72,8 +78,10 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
                 if (string.IsNullOrWhiteSpace(body.userId))
                     validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
-                if (string.IsNullOrWhiteSpace(body.transDate) || !DateTime.TryParse(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate is required and must be a valid date." });
+                if (string.IsNullOrWhiteSpace(body.createdByUserId))
+                    validationErrors.Add(new IndValidationError { Field = "createdByUserId", Message = "createdByUserId es obligatorio." });
+                if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
             }
 
             if (validationErrors.Any())
@@ -81,7 +89,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = "Validation error.",
+                    Message = "Error de validacion.",
                     ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = validationErrors,
                     Data = null,
@@ -94,22 +102,24 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] CreateActivity llamado por {username}");
+                Logger.Log($"[API-IN] CreateActivity llamado por {username} company={company}");
                 Logger.Log($" -> accountNum: {body.accountNum}");
                 Logger.Log($" -> visitType: {body.visitType}");
                 Logger.Log($" -> userId: {body.userId}");
+                Logger.Log($" -> createdByUserId: {body.createdByUserId}");
                 Logger.Log($" -> transDate: {body.transDate}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
+                con.Append(company);
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(body.visitType?.Trim() ?? string.Empty);
                 con.Append(body.userId?.Trim() ?? string.Empty);
+                con.Append(body.createdByUserId?.Trim() ?? string.Empty);
                 con.Append(body.description?.Trim() ?? string.Empty);
 
-                DateTime dt = DateTime.Parse(body.transDate);
-                string axDate = dt.ToString("yyyyMMdd");
+                string axDate = transDate.ToString("yyyyMMdd");
                 con.Append(axDate);
 
                 con.Append(body.comentarios ?? string.Empty);
@@ -133,7 +143,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Empty container from AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Data = null,
                         TraceId = traceId
@@ -148,7 +158,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Unexpected response structure.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Data = null,
                         TraceId = traceId
@@ -168,9 +178,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message,
+                    Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (string.IsNullOrWhiteSpace(message) ? "No se pudo crear la actividad." : message),
                     ErrorCode = null,
-                    Data = new { Result = result, Message = message },
+                    Data = successFlag ? new { Result = result, Message = message } : null,
                     TraceId = traceId
                 };
 
@@ -178,8 +188,8 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.Created, okResponse);
 
                 okResponse.Success = false;
-                okResponse.ErrorCode = IndErrorCodes.AxComError;
-                return Content(HttpStatusCode.BadRequest, okResponse);
+                okResponse.ErrorCode = IndErrorCodes.ValidationError;
+                return Content((HttpStatusCode)422, okResponse);
             }
             catch (Exception ex)
             {
@@ -187,7 +197,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error CreateActivity: {ex.GetType().FullName} {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
                     Data = null,
                     TraceId = traceId
@@ -261,6 +271,12 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            DateTime transDate = default(DateTime);
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (recId <= 0)
                 validationErrors.Add(new IndValidationError { Field = "recId", Message = "recId es obligatorio y mayor que cero." });
@@ -277,8 +293,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.userId))
                     validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.transDate) || !DateTime.TryParse(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser fecha valida." });
+                if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
             }
 
             if (validationErrors.Any())
@@ -304,12 +320,13 @@ namespace IND_CRM_API.Controllers.CRM
                 var con = ax.CreateContainer();
 
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(company);
                 con.Append(recId.ToString());
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(body.visitType?.Trim() ?? string.Empty);
                 con.Append(body.userId?.Trim() ?? string.Empty);
                 con.Append(body.description?.Trim() ?? string.Empty);
-                con.Append(DateTime.Parse(body.transDate).ToString("yyyyMMdd"));
+                con.Append(transDate.ToString("yyyyMMdd"));
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
@@ -326,7 +343,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Contenedor nulo desde AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -341,7 +358,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Estructura inesperada en respuesta AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -357,13 +374,14 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
+                var isNotFound = message.IndexOf("no encontrada", StringComparison.OrdinalIgnoreCase) >= 0;
                 var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message,
-                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
+                    Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (isNotFound ? "Actividad no encontrada." : (string.IsNullOrWhiteSpace(message) ? "No se pudo actualizar la actividad." : message)),
+                    ErrorCode = successFlag ? null : (isNotFound ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.ValidationError),
                     Errors = null,
-                    Data = new { RecId = recId, Message = message },
+                    Data = successFlag ? new { RecId = recId, Message = message } : null,
                     TraceId = traceId
                 };
 
@@ -373,7 +391,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
                     return Content(HttpStatusCode.NotFound, okResponse);
 
-                return Content(HttpStatusCode.InternalServerError, okResponse);
+                return Content((HttpStatusCode)422, okResponse);
             }
             catch (Exception ex)
             {
@@ -381,7 +399,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error UpdateActivity: {ex.GetType().FullName} {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
                     Errors = null,
                     Data = null,
@@ -400,14 +418,20 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="recId">Identificador de la actividad (RecId).</param>
         [HttpDelete, Route("{recId}")]
-        [ResponseType(typeof(IndApiResponse<object>))]
+        [ResponseType(typeof(void))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Actividad eliminada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NoContent, "Actividad eliminada")]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteActivity(long recId)
         {
             var traceId = Guid.NewGuid().ToString("N");
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (recId <= 0)
             {
@@ -431,6 +455,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(company);
                 con.Append(recId.ToString());
 
                 object resultObj = ax.CallStaticClassMethod(
@@ -445,7 +470,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Contenedor nulo desde AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -460,7 +485,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Estructura inesperada en respuesta AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -476,23 +501,24 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
+                var isNotFound = message.IndexOf("no encontrada", StringComparison.OrdinalIgnoreCase) >= 0;
                 var okResponse = new IndApiResponse<object>
                 {
                     Success = successFlag,
-                    Message = message,
-                    ErrorCode = successFlag ? null : (message.IndexOf("no encontrada", StringComparison.OrdinalIgnoreCase) >= 0 ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.AxComError),
+                    Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (isNotFound ? "Actividad no encontrada." : (string.IsNullOrWhiteSpace(message) ? "No se pudo eliminar la actividad." : message)),
+                    ErrorCode = successFlag ? null : (isNotFound ? IndErrorCodes.CrmActivityNotFound : IndErrorCodes.ValidationError),
                     Errors = null,
-                    Data = new { RecId = recId, Message = message },
+                    Data = null,
                     TraceId = traceId
                 };
 
                 if (successFlag)
-                    return Ok(okResponse);
+                    return StatusCode(HttpStatusCode.NoContent);
 
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
                     return Content(HttpStatusCode.NotFound, okResponse);
 
-                return Content(HttpStatusCode.InternalServerError, okResponse);
+                return Content((HttpStatusCode)422, okResponse);
             }
             catch (Exception ex)
             {
@@ -500,7 +526,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error DeleteActivity: {ex.GetType().FullName} {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
                     Errors = null,
                     Data = null,
@@ -519,14 +545,20 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="recId">Identificador de la actividad (RecId).</param>
         [HttpGet, Route("{recId}")]
-        [ResponseType(typeof(IndApiResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetActivityByRecId(long recId)
         {
             var traceId = Guid.NewGuid().ToString("N");
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (recId <= 0)
             {
@@ -551,6 +583,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
+                con.Append(company);
                 con.Append(recId.ToString());
 
                 resultObj = ax.CallStaticClassMethod(
@@ -577,13 +610,11 @@ namespace IND_CRM_API.Controllers.CRM
                 // Convertir el contenedor a arreglo legible
                 var data = Helpers.AxContainerHelper.ToArray(root);
 
-                var okResponse = new IndApiResponse<object>
+                var okResponse = new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
-                    ErrorCode = null,
-                    Errors = null,
-                    Data = data,
+                    Items = (data ?? Array.Empty<object>()).ToList(),
                     TraceId = traceId
                 };
                 return Ok(okResponse);
@@ -604,7 +635,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error GetActivityByRecId: {ex.GetType().FullName} {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
                     Errors = null,
                     Data = null,
@@ -633,6 +664,11 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
 
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
             if (string.IsNullOrWhiteSpace(code))
             {
                 var validationResponse = new IndApiResponse<ActivityDetailDto>
@@ -655,6 +691,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
+                con.Append(company);
                 con.Append(code.Trim());
 
                 resultObj = ax.CallStaticClassMethod(
@@ -700,7 +737,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var response = new IndApiResponse<ActivityDetailDto>
                 {
                     Success = false,
-                    Message = $"Error GetActivityByCode: {ex.GetType().FullName} {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
                     Errors = null,
                     Data = null,
@@ -939,11 +976,32 @@ namespace IND_CRM_API.Controllers.CRM
             return dto;
         }
 
+        /// <summary>
+        /// Parses dates in yyyyMMdd or yyyy-MM-dd deterministically.
+        /// </summary>
+        private static bool TryParseAxDate(string value, out DateTime date)
+        {
+            var formats = new[] { "yyyyMMdd", "yyyy-MM-dd" };
+            return DateTime.TryParseExact(
+                (value ?? string.Empty).Trim(),
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out date);
+        }
+
         private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)
         {
             object resultObj = null;
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            DateTime fromDate = default(DateTime);
+            DateTime toDate = default(DateTime);
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (body == null)
             {
@@ -953,10 +1011,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.userId))
                     validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
-                if (string.IsNullOrWhiteSpace(body.fromDate) || !DateTime.TryParse(body.fromDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "fromDate", Message = "fromDate is required and must be a valid date." });
-                if (string.IsNullOrWhiteSpace(body.toDate) || !DateTime.TryParse(body.toDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "toDate", Message = "toDate is required and must be a valid date." });
+                if (string.IsNullOrWhiteSpace(body.fromDate) || !TryParseAxDate(body.fromDate, out fromDate))
+                    validationErrors.Add(new IndValidationError { Field = "fromDate", Message = "fromDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (string.IsNullOrWhiteSpace(body.toDate) || !TryParseAxDate(body.toDate, out toDate))
+                    validationErrors.Add(new IndValidationError { Field = "toDate", Message = "toDate debe ser yyyyMMdd o yyyy-MM-dd." });
             }
 
             if (validationErrors.Any())
@@ -964,7 +1022,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = "Validation error.",
+                    Message = "Error de validacion.",
                     ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = validationErrors,
                     Data = null,
@@ -980,9 +1038,10 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
+                con.Append(company);
                 con.Append(body.userId ?? string.Empty);
-                con.Append(DateTime.Parse(body.fromDate).ToString("yyyyMMdd"));
-                con.Append(DateTime.Parse(body.toDate).ToString("yyyyMMdd"));
+                con.Append(fromDate.ToString("yyyyMMdd"));
+                con.Append(toDate.ToString("yyyyMMdd"));
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -996,7 +1055,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var nullResponse = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = "Null container from AX.",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -1008,14 +1067,17 @@ namespace IND_CRM_API.Controllers.CRM
                 try
                 {
                     var data = Helpers.AxContainerHelper.ToArray(root) ?? Array.Empty<object>();
-                    var size = pageSize > 0 ? pageSize : data.Length;
+                    var usePaging = pageSize > 0;
+                    var responseTotal = usePaging ? (int?)data.Length : null;
+                    var responsePage = usePaging ? (int?)page : null;
+                    var responsePageSize = usePaging ? (int?)pageSize : null;
                     return Ok(new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        Total = data.Length,
-                        Page = page,
-                        PageSize = size,
+                        Total = responseTotal,
+                        Page = responsePage,
+                        PageSize = responsePageSize,
                         Items = data.ToList(),
                         TraceId = traceId
                     });
@@ -1029,7 +1091,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var response = new IndApiResponse<object>
                     {
                         Success = false,
-                        Message = $"Error ListActivities: COMException HResult={comEx.ErrorCode} Message={comEx.Message}",
+                        Message = "Error al procesar la respuesta de AX.",
                         ErrorCode = IndErrorCodes.AxComError,
                         Errors = null,
                         Data = null,
@@ -1052,11 +1114,10 @@ namespace IND_CRM_API.Controllers.CRM
                 catch { /* ignore */ }
 
                 Logger.Log($"[ERROR] ListActivities API: {ex}");
-                int h = ex is COMException cex ? cex.ErrorCode : 0;
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error ListActivities: {ex.GetType().FullName} {ex.Message} HResult={h}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
                     Errors = null,
                     Data = null,

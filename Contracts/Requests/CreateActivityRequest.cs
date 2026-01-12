@@ -10,6 +10,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public string accountNum { get; set; } 
         [Required] public string visitType { get; set; }
         [Required] public string userId { get; set; }
+        [Required] public string createdByUserId { get; set; }
         [Required] public string description { get; set; } 
         [Required] public string transDate { get; set; }
         public string comentarios { get; set; }

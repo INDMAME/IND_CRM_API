@@ -52,12 +52,19 @@ namespace IND_CRM_API.Controllers.CRM
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
 
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
             }
             else
             {
+                if (string.IsNullOrWhiteSpace(body.accountNum))
+                    validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum es obligatorio." });
                 if (body.page <= 0) validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
             }
@@ -83,9 +90,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
-                con.Append(body.accountNum ?? "");
-                con.Append(body.page);
-                con.Append(body.pageSize);
+                con.Append(company);
+                con.Append(body.accountNum?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -110,25 +116,27 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
+                var items = ApplyPaging(data, body.page, body.pageSize);
+                var total = data?.Length ?? 0;
 
                 return Ok(new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
-                    Total = data?.Length ?? 0,
+                    Total = total,
                     Page = body.page,
                     PageSize = body.pageSize,
-                    Items = data?.ToList() ?? new List<object>(),
+                    Items = items,
                     TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
-                Logger.Log($"[ERROR] GetContactoContainer API: {ex.Message}");
+                Logger.Log($"[ERROR] GetContactoContainer API: {ex}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error GetContactoContainer: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,
@@ -148,6 +156,11 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+
+            // Validar header de compania.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
 
             if (body == null)
             {
@@ -180,9 +193,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
-                con.Append(body.accountNum ?? "");
-                con.Append(body.page);
-                con.Append(body.pageSize);
+                con.Append(company);
+                con.Append(body.accountNum?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMApiClass",
@@ -207,25 +219,27 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
+                var items = ApplyPaging(data, body.page, body.pageSize);
+                var total = data?.Length ?? 0;
 
                 return Ok(new IndPagedResponse<object>
                 {
                     Success = true,
                     Message = "OK",
-                    Total = data?.Length ?? 0,
+                    Total = total,
                     Page = body.page,
                     PageSize = body.pageSize,
-                    Items = data?.ToList() ?? new List<object>(),
+                    Items = items,
                     TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
-                Logger.Log($"[ERROR] GetAccounts API: {ex.Message}");
+                Logger.Log($"[ERROR] GetAccounts API: {ex}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = $"Error GetAccounts: {ex.Message}",
+                    Message = "Error interno del servidor.",
                     ErrorCode = IndErrorCodes.AxComError,
                     Errors = null,
                     Data = null,
@@ -233,6 +247,27 @@ namespace IND_CRM_API.Controllers.CRM
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
+        }
+
+        /// <summary>
+        /// Applies in-memory paging over the array returned by AX.
+        /// </summary>
+        private static List<object> ApplyPaging(object[] data, int page, int pageSize)
+        {
+            if (data == null || data.Length == 0)
+                return new List<object>();
+
+            if (page <= 0 || pageSize <= 0)
+                return data.ToList();
+
+            var skip = (page - 1) * pageSize;
+            if (skip < 0)
+                skip = 0;
+
+            if (skip >= data.Length)
+                return new List<object>();
+
+            return data.Skip(skip).Take(pageSize).ToList();
         }
     }
 }
