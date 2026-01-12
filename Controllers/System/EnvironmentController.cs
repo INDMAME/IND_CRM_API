@@ -7,6 +7,7 @@ using IND_CRM_API.Services.Interfaces;
 using AxaptaCOMConnector;
 using IND_CRM_API.Models.Responses;
 using Swashbuckle.Swagger.Annotations;
+using System.Collections.Generic; // <-- Agregar esta línea
 
 namespace IND_CRM_API.Controllers.System
 {
@@ -60,7 +61,7 @@ namespace IND_CRM_API.Controllers.System
                     {
                         Success = true,
                         Message = "OK",
-                        Items = new System.Collections.Generic.List<object> { new { environment = "Unknown" } },
+                        Items = new List<object> { new { environment = "Unknown" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -73,7 +74,7 @@ namespace IND_CRM_API.Controllers.System
                     {
                         Success = true,
                         Message = "OK",
-                        Items = new System.Collections.Generic.List<object> { new { environment = "Unknown" } },
+                        Items = new List<object> { new { environment = "Unknown" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -87,7 +88,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     Success = true,
                     Message = "OK",
-                    Items = new System.Collections.Generic.List<object> { new { environment = env } },
+                    Items = new List<object> { new { environment = env } },
                     TraceId = traceId
                 };
                 return Ok(okResponse);
@@ -140,7 +141,7 @@ namespace IND_CRM_API.Controllers.System
                     {
                         Success = true,
                         Message = "OK",
-                        Items = new System.Collections.Generic.List<object> { new { companyId = "", companyName = "", company = "" } },
+                        Items = new List<object> { new { companyId = "", companyName = "", company = "" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -153,7 +154,7 @@ namespace IND_CRM_API.Controllers.System
                     {
                         Success = true,
                         Message = "OK",
-                        Items = new System.Collections.Generic.List<object> { new { companyId = "", companyName = "", company = "" } },
+                        Items = new List<object> { new { companyId = "", companyName = "", company = "" } },
                         TraceId = traceId
                     };
                     return Ok(emptyResponse);
@@ -166,7 +167,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     Success = true,
                     Message = "OK",
-                    Items = new System.Collections.Generic.List<object> { new { companyId, companyName, company = companyName } },
+                    Items = new List<object> { new { companyId, companyName, company = companyName } },
                     TraceId = traceId
                 };
                 return Ok(okResponse);
