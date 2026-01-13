@@ -183,9 +183,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="body">Datos del asistente a eliminar.</param>
         [HttpDelete, Route("deleteVisitaAsistente")]
-        [ResponseType(typeof(void))]
+        [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
-        [SwaggerResponse(HttpStatusCode.NoContent, "Asistente eliminado")]
+        [SwaggerResponse(HttpStatusCode.OK, "Asistente eliminado", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Registro no encontrado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -292,8 +292,9 @@ namespace IND_CRM_API.Controllers.CRM
                     TraceId = traceId
                 };
 
+                // Devolver el mensaje de AX cuando la eliminacion es exitosa.
                 if (successFlag)
-                    return StatusCode(global::System.Net.HttpStatusCode.NoContent);
+                    return Ok(okResponse);
 
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
                     return Content(global::System.Net.HttpStatusCode.NotFound, okResponse);

@@ -319,3 +319,10 @@ Regla breve para nuevos endpoints de consulta
 Detalle o lista sin mutar datos → IndPagedResponse<T> con items.
 Comandos (crear/actualizar/borrar) → IndApiResponse<T> con data.
 Nunca serialices manualmente; deja que el formatter JSON entregue el objeto tipado.
+ACTUALIZACION 2026-01-12
+- Lista de endpoints actualizada en .codex/ENDPOINTS.md.
+- Documentacion Postman en .codex/POSTMAN.md.
+- Collection Postman en .codex/postman/IND_CRM_API.postman_collection.json.
+- Nueva directriz: todo endpoint de creacion (POST que crea recursos) debe requerir userId en el body.
+- Nueva directriz: todos los endpoints de negocio deben exigir companyId via header X-IND-Company.
+  Las excepciones deben documentarse de forma explicita en ENDPOINTS.md.

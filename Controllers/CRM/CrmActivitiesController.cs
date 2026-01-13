@@ -418,9 +418,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="recId">Identificador de la actividad (RecId).</param>
         [HttpDelete, Route("{recId}")]
-        [ResponseType(typeof(void))]
+        [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.NoContent, "Actividad eliminada")]
+        [SwaggerResponse(HttpStatusCode.OK, "Actividad eliminada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -512,8 +512,9 @@ namespace IND_CRM_API.Controllers.CRM
                     TraceId = traceId
                 };
 
+                // Devolver mensaje de AX en el body cuando la eliminacion es exitosa.
                 if (successFlag)
-                    return StatusCode(HttpStatusCode.NoContent);
+                    return Ok(okResponse);
 
                 if (okResponse.ErrorCode == IndErrorCodes.CrmActivityNotFound)
                     return Content(HttpStatusCode.NotFound, okResponse);
