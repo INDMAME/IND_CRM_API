@@ -160,6 +160,7 @@
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
+    <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
@@ -190,6 +191,8 @@
     <Compile Include="Services\AxaptaSessionManager.cs" />
     <Compile Include="Services\AxSession.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
+    <Compile Include="Services\IND_AxRequestContext.cs" />
+    <Compile Include="Services\IND_AxSessionGuard.cs" />
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
     <Compile Include="Services\IND_OpenAiModerationService.cs" />
     <Compile Include="Services\IAxLogger.cs" />

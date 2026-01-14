@@ -33,6 +33,10 @@ namespace IND_CRM_API.App_Start
                 { typeof(IND_ITextModerationService), moderationService }
             };
 
+            // Per-request Axapta session scope
+            var scopeHandler = new IND_AxSessionScopeHandler(sessionManager);
+            config.MessageHandlers.Add(scopeHandler);
+
             // Register message handler to refresh tokens automatically
             var refreshThresholdMinutes = 5; // renovar cuando queden 5 minutos o menos
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["JwtSettings:RefreshThresholdMinutes"], out var cfg))
