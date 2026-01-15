@@ -64,8 +64,8 @@ sc create IND_CRM_API ^
     binPath= "%~dp0IND_CRM_API.exe" ^
     DisplayName= "IND CRM API" ^
     start= auto ^
-    obj= "INSERTEC\MARCO.MEZA" ^
-    password= "LaMaMeSa@1113" >nul 2>&1
+    obj= "INSERTEC\API_AXUSER" ^
+    password= "MaMeAxAp#48" >nul 2>&1
 
 if errorlevel 1 (
     echo ❌ ERROR: No se pudo crear el servicio IND_CRM_API.
