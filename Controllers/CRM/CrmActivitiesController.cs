@@ -278,8 +278,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
-            if (recId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "recId", Message = "recId es obligatorio y mayor que cero." });
+            if (recId == 0)
+                validationErrors.Add(new IndValidationError { Field = "recId", Message = "recId es obligatorio y distinto de cero." });
 
             if (body == null)
             {
@@ -433,12 +433,12 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
-            if (recId <= 0)
+            if (recId == 0)
             {
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = "recId es obligatorio y mayor que cero.",
+                    Message = "recId es obligatorio y distinto de cero.",
                     ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = new List<IndValidationError> { new IndValidationError { Field = "recId", Message = "Valor invalido." } },
                     Data = null,
@@ -561,12 +561,12 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
-            if (recId <= 0)
+            if (recId == 0)
             {
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
-                    Message = "recId es obligatorio y mayor que cero.",
+                    Message = "recId es obligatorio y distinto de cero.",
                     ErrorCode = IndErrorCodes.CrmActivityMissingFields,
                     Errors = new List<IndValidationError> { new IndValidationError { Field = "recId", Message = "Valor invalido." } },
                     Data = null,
