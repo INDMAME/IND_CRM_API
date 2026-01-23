@@ -69,5 +69,23 @@ Endpoints
   Body required: refRecIdActividad, asistenteId
   Respuesta 200 OK con mensaje en body (IndApiResponse). 404/422 si aplica.
 
+## CRM Expense Sheets
+- POST /api/crm/expensesheets (Authorize + X-IND-Company)
+  Body required: userId, description, currencyCode, projId, lines[]
+  Optional: exchRate, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
+- GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company)
+- PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company)
+  Body required: description, currencyCode, projId (exchRate optional)
+- PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company)
+  Body required: transDate (yyyymmdd), typeValue, description, qty, amount
+- DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company)
+  Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
+- GET /api/crm/expensesheets/list?filter=... (Authorize + X-IND-Company)
+  Nota: si no hay filtro, AX devuelve lista vacia.
+
+## CRM Projects
+- GET /api/crm/projects/list?filter=... (Authorize + X-IND-Company)
+  Nota: si no hay filtro, AX devuelve lista vacia.
+
 ## Internal (no expuesto en Swagger)
 - GET /api/crm/template/sample

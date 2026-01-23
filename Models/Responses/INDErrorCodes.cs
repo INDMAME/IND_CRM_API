@@ -32,6 +32,18 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Cuenta CRM no encontrada.</summary>
         public const string CrmAccountNotFound = "CRM_ACCOUNT_NOT_FOUND";
 
+        /// <summary>Missing required fields for expense sheet operations.</summary>
+        public const string CrmExpenseSheetMissingFields = "CRM_EXPENSESHEET_MISSING_FIELDS";
+
+        /// <summary>Expense sheet not found.</summary>
+        public const string CrmExpenseSheetNotFound = "CRM_EXPENSESHEET_NOT_FOUND";
+
+        /// <summary>Expense sheet line not found.</summary>
+        public const string CrmExpenseSheetLineNotFound = "CRM_EXPENSESHEET_LINE_NOT_FOUND";
+
+        /// <summary>Expense sheet is locked by voucher.</summary>
+        public const string CrmExpenseSheetLocked = "CRM_EXPENSESHEET_LOCKED";
+
         /// <summary>Error de sesion de Axapta.</summary>
         public const string AxSessionError = "AX_SESSION_ERROR";
 

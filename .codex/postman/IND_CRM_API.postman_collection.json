@@ -505,6 +505,159 @@
                               ]
                  },
                  {
+                     "name":  "CRM Expense Sheets",
+                     "item":  [
+                                  {
+                                      "name":  "Create Expense Sheet",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"userId\": \"AXUSER\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"PRJ-001\",\n  \"lines\": [\n    {\n      \"transDate\": \"20260115\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"ticket\": true,\n      \"qty\": 1,\n      \"amount\": 25.5,\n      \"projId\": \"PRJ-001\",\n      \"indAttachFiles\": \"\"\n    }\n  ]\n}"
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get Expense Sheet",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/HS-001"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update Expense Sheet Header",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"PRJ-001\"\n}"
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/HS-001"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update Expense Sheet Line",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"transDate\": \"20260115\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"ticket\": true,\n  \"qty\": 1,\n  \"amount\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"indAttachFiles\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Delete Expense Sheet Line",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345?deleteWholeSheet=false"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List Expense Sheets",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/list?filter=GASTO"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "CRM Projects",
+                     "item":  [
+                                  {
+                                      "name":  "List Projects",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/crm/projects/list?filter=PROJ"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
                      "name":  "Internal",
                      "item":  [
                                   {

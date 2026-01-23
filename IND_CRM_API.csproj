@@ -162,11 +162,17 @@
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
+    <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
+    <Compile Include="Contracts\Requests\UpdateExpenseSheetHeaderRequest.cs" />
+    <Compile Include="Contracts\Requests\UpdateExpenseSheetLineRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />
+    <Compile Include="Contracts\Responses\ProjectListItemDto.cs" />
     <Compile Include="Models\Responses\INDApiResponse.cs" />
     <Compile Include="Models\Responses\INDErrorCodes.cs" />
     <Compile Include="Models\Responses\INDPagedResponse.cs" />
@@ -176,6 +182,8 @@
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
+    <Compile Include="Controllers\CRM\CrmExpenseSheetsController.cs" />
+    <Compile Include="Controllers\CRM\CrmProjectsController.cs" />
     <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
     <Compile Include="Controllers\System\AuthController.cs" />
