@@ -354,8 +354,6 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.currencyCode))
                     validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.projId))
-                    validationErrors.Add(new IndValidationError { Field = "projId", Message = "projId es obligatorio." });
             }
 
             if (validationErrors.Any())

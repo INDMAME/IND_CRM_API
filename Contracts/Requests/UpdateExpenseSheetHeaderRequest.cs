@@ -10,6 +10,6 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public string description { get; set; }
         [Required] public string currencyCode { get; set; }
         public decimal? exchRate { get; set; }
-        [Required] public string projId { get; set; }
+        public string projId { get; set; }
     }
 }
