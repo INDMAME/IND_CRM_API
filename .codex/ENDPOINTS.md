@@ -75,8 +75,8 @@ Endpoints
 
 ## CRM Expense Sheets
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description, currencyCode, projId, lines[]
-  Optional: exchRate, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
+  Body required: description, currencyCode, lines[]
+  Optional: projId, exchRate, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode, projId (exchRate optional)
