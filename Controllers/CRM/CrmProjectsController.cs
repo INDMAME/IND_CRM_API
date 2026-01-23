@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Web.Http;
@@ -34,20 +35,43 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Lists projects filtered by search text.
         /// </summary>
+        /// <param name="filter">Filtro de busqueda.</param>
+        /// <param name="page">Numero de pagina (>= 1).</param>
+        /// <param name="pageSize">Tamano de pagina (>= 1).</param>
         [HttpGet, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ProjectListItemDto>))]
         [SwaggerOperation(Tags = new[] { "Proyectos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Listado de proyectos", typeof(IndPagedResponse<ProjectListItemDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult GetProjectsList([FromUri] string filter = null)
+        public IHttpActionResult GetProjectsList([FromUri] string filter = null, [FromUri] int? page = null, [FromUri] int? pageSize = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
                 return companyError;
+
+            if (!page.HasValue || page.Value <= 0)
+                validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+            if (!pageSize.HasValue || pageSize.Value <= 0)
+                validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+
+            if (validationErrors.Count > 0)
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
 
             // Logs the HTTP status for this action.
             void LogOut(HttpStatusCode statusCode)
@@ -58,7 +82,7 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetProjectsList filter={filter} user={username} traceId={traceId}");
+                Logger.Log($"[API-IN] GetProjectsList filter={filter} page={page} pageSize={pageSize} user={username} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -87,12 +111,15 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var items = MapProjectList(root, out var message);
+                var pagedItems = ApplyPaging(items, page.Value, pageSize.Value);
                 var okResponse = new IndPagedResponse<ProjectListItemDto>
                 {
                     Success = true,
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
                     Total = items.Count,
-                    Items = items,
+                    Page = page,
+                    PageSize = pageSize,
+                    Items = pagedItems,
                     TraceId = traceId
                 };
 
@@ -142,6 +169,25 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return items;
+        }
+
+        // Applies in-memory paging over the list of projects.
+        private static List<ProjectListItemDto> ApplyPaging(List<ProjectListItemDto> items, int page, int pageSize)
+        {
+            if (items == null || items.Count == 0)
+                return new List<ProjectListItemDto>();
+
+            if (page <= 0 || pageSize <= 0)
+                return items;
+
+            var skip = (page - 1) * pageSize;
+            if (skip < 0)
+                skip = 0;
+
+            if (skip >= items.Count)
+                return new List<ProjectListItemDto>();
+
+            return items.Skip(skip).Take(pageSize).ToList();
         }
 
         // Checks the common AX "Sin datos." marker.

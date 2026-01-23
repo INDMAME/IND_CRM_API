@@ -31,3 +31,6 @@ appsettings.Development.json
 
 # Local certificates
 certificados/
+
+# Postman collections (local)
+.codex/Postman/

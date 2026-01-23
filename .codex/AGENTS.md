@@ -325,5 +325,6 @@ ACTUALIZACION 2026-01-12
 - Collection Postman en .codex/postman/IND_CRM_API.postman_collection.json.
 - Regla de versionado Postman en .codex/Postman/POSTMAN_VERSIONING.md.
 - Nueva directriz: todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
+- Nueva directriz: listas de proyectos y hojas de gastos deben usar paginacion con page y pageSize (>= 1).
 - Nueva directriz: todos los endpoints de negocio deben exigir companyId via header X-IND-Company.
   Las excepciones deben documentarse de forma explicita en ENDPOINTS.md.

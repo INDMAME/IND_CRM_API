@@ -103,14 +103,11 @@ Formatversion: 1
         #        return [INDCRMExpenseSheetService::buildHeader(false, 'Header input invalido. Se esperan 5 campos.', conNull()), conNull()];
         #
         #    axUserId     = conPeek(headerIn, 1);
-        #    crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #
         #    descr        = conPeek(headerIn, 2);
         #    currencyCode = conPeek(headerIn, 3);
         #    exchRate     = conPeek(headerIn, 4);
         #    projId       = conPeek(headerIn, 5);
-        #
-        #    if (!crmUserId)
-        #        return [INDCRMExpenseSheetService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
         #
         #    if (!descr)
         #        return [INDCRMExpenseSheetService::buildHeader(false, 'Description es obligatorio.', conNull()), conNull()];
@@ -129,6 +126,10 @@ Formatversion: 1
         #    {
         #        changecompany(companyId)
         #        {
+        #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #            if (!crmUserId)
+        #                return [INDCRMExpenseSheetService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
         #            ttsbegin;
         #
         #            header.clear();
@@ -284,16 +285,19 @@ Formatversion: 1
         #        return INDCRMExpenseSheetService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
         #
         #    axUserId = conPeek(_data, 2);
-        #    crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
-        #    hojaId = conPeek(_data, 3);
+        #    hojaId   = conPeek(_data, 3);
         #
-        #    if (!crmUserId || !hojaId)
-        #        return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #    if (!hojaId)
+        #        return INDCRMExpenseSheetService::buildHeader(false, 'HojaGastosId es obligatorio.', conNull());
         #
         #    try
         #    {
         #        changecompany(companyId)
         #        {
+        #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #            if (!crmUserId)
+        #                return [INDCRMExpenseSheetService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
         #            ttsbegin;
         #
         #            header = INDCRMExpenseSheetService::findHeaderForUpdate(crmUserId, hojaId);
@@ -396,11 +400,8 @@ Formatversion: 1
         #    lineRecId         = conPeek(_data, 4);
         #    deleteWholeSheet  = conPeek(_data, 5);
         #
-        #    // Convert AX user to CRM user
-        #    crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #
-        #    if (!crmUserId || !hojaId)
-        #        return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #    if (!hojaId)
+        #        return INDCRMExpenseSheetService::buildHeader(false, 'HojaGastosId es obligatorio.', conNull());
         #
         #    // If not deleting whole sheet, lineRecId must be provided
         #    if (!deleteWholeSheet && !lineRecId)
@@ -413,6 +414,10 @@ Formatversion: 1
         #    {
         #        changecompany(companyId)
         #        {
+        #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #            if (!crmUserId)
+        #                return [INDCRMExpenseSheetService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
         #            ttsbegin;
         #
         #            header = INDCRMExpenseSheetService::findHeaderForUpdate(crmUserId, hojaId);
@@ -542,11 +547,12 @@ Formatversion: 1
         #        return [INDCRMExpenseSheetService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull()), conNull()];
         #
         #    axUserId  = conPeek(_data, 2);
-        #    crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
         #    hojaId    = conPeek(_data, 3);
         #
         #    changecompany(companyId)
         #    {
+        #
+        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
         #
         #        if (!crmUserId || !hojaId)
         #            return [INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull()), conNull()];
@@ -783,13 +789,15 @@ Formatversion: 1
         #    exchRate     = conPeek(_data, 6);
         #    projId       = conPeek(_data, 7);
         #
-        #    if (!crmUserId || !hojaId)
-        #        return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
         #
         #    try
         #    {
         #        changecompany(companyId)
         #        {
+        #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #            if (!crmUserId || !hojaId)
+        #                return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #
         #            ttsbegin;
         #
         #            header = INDCRMExpenseSheetService::findHeaderForUpdate(crmUserId, hojaId);
@@ -917,8 +925,8 @@ Formatversion: 1
         #    projId        = conPeek(_data, 12);
         #    attachFiles   = conPeek(_data, 13);
         #
-        #    if (!crmUserId || !hojaId || !lineRecId)
-        #        return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId, HojaGastosId y LineRecId son obligatorios.', conNull());
+        #    if (!lineRecId)
+        #        return INDCRMExpenseSheetService::buildHeader(false, 'LineRecId es obligatorio.', conNull());
         #
         #    if (!INDCRMExpenseSheetService::isValidGastoType(typeValue))
         #        return INDCRMExpenseSheetService::buildHeader(false, strFmt('Tipo de gasto invalido: %1', typeValue), conNull());
@@ -934,6 +942,10 @@ Formatversion: 1
         #    {
         #        changecompany(companyId)
         #        {
+        #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #            if (!crmUserId || !hojaId)
+        #                return INDCRMExpenseSheetService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #
         #            ttsbegin;
         #
         #            header = INDCRMExpenseSheetService::findHeaderForUpdate(crmUserId, hojaId);

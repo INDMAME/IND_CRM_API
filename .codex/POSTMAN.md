@@ -22,4 +22,5 @@ Uso rapido
 Notas
 - Los endpoints CRM ya incluyen el header X-IND-Company apuntando a {{companyId}}.
 - Los endpoints que requieren usuario incluyen X-IND-AxUserId apuntando a {{axUserId}}.
+- Los listados de proyectos y hojas de gastos requieren page y pageSize en query.
 - Los endpoints protegidos usan Authorization: Bearer {{tokenId}}.

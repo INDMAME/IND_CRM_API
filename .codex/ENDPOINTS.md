@@ -11,6 +11,7 @@ Autenticacion y headers comunes
 
 Reglas nuevas (directrices)
 - Todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
+- Las listas de proyectos y hojas de gastos deben usar paginacion con page y pageSize (>= 1).
 - Todos los endpoints de negocio deben exigir companyId por header X-IND-Company.
   Excepciones deben documentarse de forma explicita.
 
@@ -83,12 +84,12 @@ Endpoints
   Body required: transDate (yyyymmdd), typeValue, description, qty, amount
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company + X-IND-AxUserId)
   Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
-- GET /api/crm/expensesheets/list?filter=... (Authorize + X-IND-Company)
-  Nota: si no hay filtro, AX devuelve lista vacia.
+- GET /api/crm/expensesheets/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)
+  Nota: page y pageSize son obligatorios. Si no hay filtro, AX devuelve lista vacia.
 
 ## CRM Projects
-- GET /api/crm/projects/list?filter=... (Authorize + X-IND-Company)
-  Nota: si no hay filtro, AX devuelve lista vacia.
+- GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)
+  Nota: page y pageSize son obligatorios. Si no hay filtro, AX devuelve lista vacia.
 
 ## Internal (no expuesto en Swagger)
 - GET /api/crm/template/sample
