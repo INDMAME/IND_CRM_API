@@ -66,6 +66,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Request body is required." });
@@ -76,10 +80,6 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum is required." });
                 if (string.IsNullOrWhiteSpace(body.visitType))
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
-                if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
-                if (string.IsNullOrWhiteSpace(body.createdByUserId))
-                    validationErrors.Add(new IndValidationError { Field = "createdByUserId", Message = "createdByUserId es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
             }
@@ -102,11 +102,23 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] CreateActivity llamado por {username} company={company}");
+                if (!string.IsNullOrWhiteSpace(body.userId) &&
+                    !string.Equals(body.userId.Trim(), axUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Log($"[WARN] CreateActivity userId mismatch body={body.userId} header={axUserId} token={username}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(body.createdByUserId) &&
+                    !string.Equals(body.createdByUserId.Trim(), axUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Log($"[WARN] CreateActivity createdByUserId mismatch body={body.createdByUserId} header={axUserId} token={username}");
+                }
+
+                Logger.Log($"[API-IN] CreateActivity llamado por {username} axUserId={axUserId} company={company}");
                 Logger.Log($" -> accountNum: {body.accountNum}");
                 Logger.Log($" -> visitType: {body.visitType}");
-                Logger.Log($" -> userId: {body.userId}");
-                Logger.Log($" -> createdByUserId: {body.createdByUserId}");
+                Logger.Log($" -> userId(header): {axUserId}");
+                Logger.Log($" -> createdByUserId(header): {axUserId}");
                 Logger.Log($" -> transDate: {body.transDate}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
@@ -115,8 +127,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(body.visitType?.Trim() ?? string.Empty);
-                con.Append(body.userId?.Trim() ?? string.Empty);
-                con.Append(body.createdByUserId?.Trim() ?? string.Empty);
+                con.Append(axUserId);
+                con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
 
                 string axDate = transDate.ToString("yyyyMMdd");
@@ -213,7 +225,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// Devuelve 200 con IndPagedResponse.  
         /// ErrorCode posibles: CrmActivityMissingFields en validacion, AxComError/AxSessionError en fallos de AX.
         /// </remarks>
-        /// <param name="userId">Identificador de usuario de AX.</param>
+        /// <param name="userId">Identificador de usuario de AX (se ignora, usar header X-IND-AxUserId).</param>
         /// <param name="fromDate">Fecha inicio (yyyy-MM-dd).</param>
         /// <param name="toDate">Fecha fin (yyyy-MM-dd).</param>
         [HttpGet, Route("list")]
@@ -278,6 +290,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (recId == 0)
                 validationErrors.Add(new IndValidationError { Field = "recId", Message = "recId es obligatorio y distinto de cero." });
 
@@ -291,8 +307,6 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.visitType))
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
             }
@@ -324,7 +338,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(recId.ToString());
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(body.visitType?.Trim() ?? string.Empty);
-                con.Append(body.userId?.Trim() ?? string.Empty);
+                con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(transDate.ToString("yyyyMMdd"));
                 con.Append(body.comentarios ?? string.Empty);
@@ -1004,14 +1018,16 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Request body is required." });
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId is required." });
                 if (string.IsNullOrWhiteSpace(body.fromDate) || !TryParseAxDate(body.fromDate, out fromDate))
                     validationErrors.Add(new IndValidationError { Field = "fromDate", Message = "fromDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (string.IsNullOrWhiteSpace(body.toDate) || !TryParseAxDate(body.toDate, out toDate))
@@ -1040,7 +1056,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var con = ax.CreateContainer();
 
                 con.Append(company);
-                con.Append(body.userId ?? string.Empty);
+                con.Append(axUserId);
                 con.Append(fromDate.ToString("yyyyMMdd"));
                 con.Append(toDate.ToString("yyyyMMdd"));
 

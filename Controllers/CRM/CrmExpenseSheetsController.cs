@@ -53,14 +53,16 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(body.userId))
-                    validationErrors.Add(new IndValidationError { Field = "userId", Message = "userId es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.description))
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.currencyCode))
@@ -97,12 +99,12 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
                 if (!string.IsNullOrWhiteSpace(body.userId) &&
-                    !string.Equals(body.userId.Trim(), username, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(body.userId.Trim(), axUserId, StringComparison.OrdinalIgnoreCase))
                 {
-                    Logger.Log($"[WARN] CreateExpenseSheet userId mismatch body={body.userId} token={username}");
+                    Logger.Log($"[WARN] CreateExpenseSheet userId mismatch body={body.userId} header={axUserId} token={username}");
                 }
 
-                Logger.Log($"[API-IN] CreateExpenseSheet user={username} company={company} traceId={traceId}");
+                Logger.Log($"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var rootCon = ax.CreateContainer();
@@ -110,7 +112,7 @@ namespace IND_CRM_API.Controllers.CRM
                 rootCon.Append(company);
 
                 var headerCon = ax.CreateContainer();
-                headerCon.Append(username);
+                headerCon.Append(axUserId);
                 headerCon.Append(body.description?.Trim() ?? string.Empty);
                 headerCon.Append(body.currencyCode?.Trim() ?? string.Empty);
                 headerCon.Append(body.exchRate ?? 0m);
@@ -214,6 +216,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
             if (string.IsNullOrWhiteSpace(hojaGastosId))
             {
                 var validationResponse = new IndApiResponse<object>
@@ -237,12 +243,12 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} traceId={traceId}");
+                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(username);
+                con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
 
                 object resultObj = ax.CallStaticClassMethod(
@@ -333,6 +339,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
 
@@ -373,12 +383,12 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} traceId={traceId}");
+                Logger.Log($"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(username);
+                con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
@@ -460,6 +470,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
             if (lineRecId <= 0)
@@ -506,12 +520,12 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} user={username} traceId={traceId}");
+                Logger.Log($"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(username);
+                con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 con.Append(lineRecId.ToString());
 
@@ -603,6 +617,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
             var validationErrors = new List<IndValidationError>();
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
@@ -632,12 +650,12 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] DeleteExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} deleteWholeSheet={deleteWholeSheet} user={username} traceId={traceId}");
+                Logger.Log($"[API-IN] DeleteExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} deleteWholeSheet={deleteWholeSheet} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(username);
+                con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 var lineRecIdValue = deleteWholeSheet ? 0 : lineRecId;
                 con.Append(lineRecIdValue.ToString());

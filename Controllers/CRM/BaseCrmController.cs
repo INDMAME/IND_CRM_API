@@ -93,6 +93,34 @@ namespace IND_CRM_API.Controllers
             return company.Trim();
         }
 
+        /// <summary>
+        /// Valida header X-IND-AxUserId (422 si falta).
+        /// </summary>
+        protected string RequireAxUserIdOrReturn422(out IHttpActionResult errorResult, string traceId, string errorCode = null)
+        {
+            errorResult = null;
+            var axUserId = GetHeaderValue("X-IND-AxUserId");
+            if (string.IsNullOrWhiteSpace(axUserId))
+            {
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "axUserId es obligatorio.",
+                    ErrorCode = string.IsNullOrWhiteSpace(errorCode) ? IndErrorCodes.ValidationError : errorCode,
+                    Errors = new List<IndValidationError>
+                    {
+                        new IndValidationError { Field = "axUserId", Message = "Header X-IND-AxUserId requerido." }
+                    },
+                    Data = null,
+                    TraceId = traceId
+                };
+                errorResult = Content((HttpStatusCode)422, response);
+                return null;
+            }
+
+            return axUserId.Trim();
+        }
+
         private string GetHeaderValue(string headerName)
         {
             try

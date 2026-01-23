@@ -323,6 +323,7 @@ ACTUALIZACION 2026-01-12
 - Lista de endpoints actualizada en .codex/ENDPOINTS.md.
 - Documentacion Postman en .codex/POSTMAN.md.
 - Collection Postman en .codex/postman/IND_CRM_API.postman_collection.json.
-- Nueva directriz: todo endpoint de creacion (POST que crea recursos) debe requerir userId en el body.
+- Regla de versionado Postman en .codex/Postman/POSTMAN_VERSIONING.md.
+- Nueva directriz: todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
 - Nueva directriz: todos los endpoints de negocio deben exigir companyId via header X-IND-Company.
   Las excepciones deben documentarse de forma explicita en ENDPOINTS.md.

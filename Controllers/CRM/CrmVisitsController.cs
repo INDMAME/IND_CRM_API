@@ -40,6 +40,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.ValidationError);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
@@ -52,8 +56,6 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.asistenteId))
                     validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.createdByUserId))
-                    validationErrors.Add(new IndValidationError { Field = "createdByUserId", Message = "createdByUserId es obligatorio." });
             }
 
             if (validationErrors.Count > 0)
@@ -74,12 +76,18 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username} company={company}");
+                if (!string.IsNullOrWhiteSpace(body.createdByUserId) &&
+                    !string.Equals(body.createdByUserId.Trim(), axUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Log($"[WARN] CreateVisitaAsistente createdByUserId mismatch body={body.createdByUserId} header={axUserId} token={username}");
+                }
+
+                Logger.Log($"[API-IN] CreateVisitaAsistente llamado por {username} axUserId={axUserId} company={company}");
                 Logger.Log($" -> refRecIdActividad: {body.refRecIdActividad}");
                 Logger.Log($" -> asistenteTipo: {body.asistenteTipo}");
                 Logger.Log($" -> asistenteId: {body.asistenteId}");
                 Logger.Log($" -> contactoRecId: {body.contactoRecId}");
-                Logger.Log($" -> createdByUserId: {body.createdByUserId}");
+                Logger.Log($" -> createdByUserId(header): {axUserId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -89,7 +97,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.asistenteTipo?.Trim() ?? string.Empty);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
-                con.Append(body.createdByUserId?.Trim() ?? string.Empty);
+                con.Append(axUserId);
 
                 Logger.Log("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
                 for (int i = 1; i <= con.Length(); i++)

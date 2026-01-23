@@ -8,7 +8,7 @@ namespace IND_CRM_API.Contracts.Requests
     /// </summary>
     public class CreateExpenseSheetRequest
     {
-        [Required] public string userId { get; set; }
+        public string userId { get; set; }
         [Required] public string description { get; set; }
         [Required] public string currencyCode { get; set; }
         public decimal? exchRate { get; set; }
