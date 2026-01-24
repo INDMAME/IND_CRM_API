@@ -84,8 +84,9 @@ Endpoints
   Body required: transDate (yyyymmdd), typeValue, description, qty, amount
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company + X-IND-AxUserId)
   Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
-- GET /api/crm/expensesheets/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)
+- GET /api/crm/expensesheets/list?filter=...&billedMode=0|1|2&page=1&pageSize=50 (Authorize + X-IND-Company + X-IND-AxUserId)
   Nota: page y pageSize son obligatorios. Si no hay filtro, AX devuelve lista vacia.
+  billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
 ## CRM Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

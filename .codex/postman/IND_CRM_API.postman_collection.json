@@ -16,6 +16,10 @@
                      {
                          "key":  "companyId",
                          "value":  ""
+                     },
+                     {
+                         "key":  "axUserId",
+                         "value":  ""
                      }
                  ],
     "item":  [
@@ -101,6 +105,10 @@
                                                                                     "  if (!items || !items.length) return;",
                                                                                     "  var first = items[0];",
                                                                                     "  var header = first.Header || first.header || {};",
+                                                                                    "  var axUserId = header.AxUserId || header.axUserId;",
+                                                                                    "  if (axUserId) {",
+                                                                                    "    pm.collectionVariables.set(\u0027axUserId\u0027, axUserId);",
+                                                                                    "  }",
                                                                                     "  var defaultCompany = header.DefaultCompany || header.defaultCompany;",
                                                                                     "  if (defaultCompany) {",
                                                                                     "    pm.collectionVariables.set(\u0027companyId\u0027, defaultCompany);",
@@ -628,9 +636,13 @@
                                                                      {
                                                                          "key":  "X-IND-Company",
                                                                          "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-AxUserId",
+                                                                         "value":  "{{axUserId}}"
                                                                      }
                                                                  ],
-                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/list?filter=GASTO"
+                                                      "url":  "{{baseUrl}}/api/crm/expensesheets/list?filter=GASTO&billedMode=2&page=1&pageSize=50"
                                                   }
                                   }
                               ]

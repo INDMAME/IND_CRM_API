@@ -718,13 +718,14 @@ namespace IND_CRM_API.Controllers.CRM
         /// <param name="filter">Filtro de busqueda.</param>
         /// <param name="page">Numero de pagina (>= 1).</param>
         /// <param name="pageSize">Tamano de pagina (>= 1).</param>
+        /// <param name="billedMode">Modo de facturacion: 0=no facturado, 1=facturado, 2=ambos.</param>
         [HttpGet, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Listado de hojas de gastos", typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult GetExpenseSheetsList([FromUri] string filter = null, [FromUri] int? page = null, [FromUri] int? pageSize = null)
+        public IHttpActionResult GetExpenseSheetsList([FromUri] string filter = null, [FromUri] int? page = null, [FromUri] int? pageSize = null, [FromUri] int? billedMode = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
@@ -733,6 +734,10 @@ namespace IND_CRM_API.Controllers.CRM
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
                 return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
 
             if (!page.HasValue || page.Value <= 0)
                 validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
@@ -762,12 +767,18 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetExpenseSheetsList filter={filter} page={page} pageSize={pageSize} user={username} traceId={traceId}");
+                var billedModeValue = billedMode ?? 0;
+                if (billedModeValue != 0 && billedModeValue != 1 && billedModeValue != 2)
+                    billedModeValue = 0;
+
+                Logger.Log($"[API-IN] GetExpenseSheetsList filter={filter} billedMode={billedModeValue} page={page} pageSize={pageSize} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
+                con.Append(axUserId);
                 con.Append(filter?.Trim() ?? string.Empty);
+                con.Append(billedModeValue);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
