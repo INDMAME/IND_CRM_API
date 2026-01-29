@@ -300,7 +300,7 @@ namespace IND_CRM_API.Controllers.System
                 con.Append(body.appCode?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMUtilityService",
                     "loginEntraContext",
                     con
                 );

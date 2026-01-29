@@ -36,6 +36,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string userId { get; set; }
             public string fromDate { get; set; }
             public string toDate { get; set; }
+            public string accountNum { get; set; }
         }
 
         /// <summary>
@@ -143,7 +144,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Logger.Log($" - Item {i}: {con.Peek(i)}");
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "createActivity",
                     con
                 );
@@ -234,13 +235,14 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.OK, "Listado de actividades", typeof(IndPagedResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error en AX/COM", typeof(IndApiResponse<object>))]
-        public IHttpActionResult ListActivitiesGet([FromUri] string userId, [FromUri] string fromDate, [FromUri] string toDate)
+        public IHttpActionResult ListActivitiesGet([FromUri] string userId, [FromUri] string fromDate, [FromUri] string toDate, [FromUri] string accountNum)
         {
             var request = new GetActivitiesRequest
             {
                 userId = userId,
                 fromDate = fromDate,
-                toDate = toDate
+                toDate = toDate,
+                accountNum = accountNum
             };
             return BuildActivitiesListResponse(request, 1, 0);
         }
@@ -346,7 +348,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.conclusiones ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "updateActivity",
                     con
                 );
@@ -473,7 +475,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(recId.ToString());
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "deleteActivity",
                     con
                 );
@@ -602,7 +604,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(recId.ToString());
 
                 resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "getActivityByRecIdContainer",
                     con
                 );
@@ -710,7 +712,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(code.Trim());
 
                 resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "getActivityByCode",
                     con
                 );
@@ -1059,9 +1061,10 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(axUserId);
                 con.Append(fromDate.ToString("yyyyMMdd"));
                 con.Append(toDate.ToString("yyyyMMdd"));
+                con.Append(body.accountNum?.Trim() ?? string.Empty);
 
                 resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "getActivityContainer",
                     con
                 );

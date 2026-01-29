@@ -290,7 +290,7 @@ public IHttpActionResult GetActivityByCode(string code)
         var con = ax.CreateContainer();
         con.Append(code.Trim());
 
-        var resultObj = ax.CallStaticClassMethod("INDCRMApiClass","getActivityByCode",con);
+        var resultObj = ax.CallStaticClassMethod("INDCRMVisitsService","getActivityByCode",con);
 
         // deserializa si AX devolvió JSON ya serializado
         var pre = TryUnwrapSerializedActivityResponse(resultObj, traceId);

@@ -58,7 +58,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var ax = _sessionManager.GetAxInstanceForUser(username);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "sampleMethod"
                 );
 

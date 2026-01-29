@@ -49,7 +49,7 @@ namespace IND_CRM_API.Controllers.System
 
                 object resultObj = _sessionManager.CallMethodByUser(
                     username,
-                    "INDCRMApiClass",
+                    "INDCRMUtilityService",
                     "getEnvironmentName"
                 );
 
@@ -129,7 +129,7 @@ namespace IND_CRM_API.Controllers.System
 
                 object resultObj = _sessionManager.CallMethodByUser(
                     username,
-                    "INDCRMApiClass",
+                    "INDCRMUtilityService",
                     "getCompanyName"
                 );
 

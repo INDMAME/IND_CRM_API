@@ -50,11 +50,11 @@ Endpoints
   Body required: accountNum, visitType, description, transDate (yyyyMMdd or yyyy-MM-dd)
   Optional: comentarios, antecedentes, conclusiones
   Nota: userId/createdByUserId se toman de X-IND-AxUserId.
-- GET /api/crm/activities/list?userId=&fromDate=&toDate= (Authorize + X-IND-Company + X-IND-AxUserId)
+- GET /api/crm/activities/list?userId=&fromDate=&toDate=&accountNum= (Authorize + X-IND-Company + X-IND-AxUserId)
   Dates: yyyyMMdd or yyyy-MM-dd
-  Nota: userId en query se ignora; se usa X-IND-AxUserId.
+  Nota: userId en query se ignora; se usa X-IND-AxUserId. accountNum es opcional.
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body: { fromDate, toDate }
+  Body: { fromDate, toDate, accountNum (optional) }
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: accountNum, visitType, description, transDate
   Optional: comentarios, antecedentes, conclusiones
@@ -63,7 +63,7 @@ Endpoints
 - GET /api/crm/activities/{recId} (Authorize + X-IND-Company)
 - GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company)
 - POST /api/crm/activities/test (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body: { fromDate, toDate }
+  Body: { fromDate, toDate, accountNum (optional) }
 
 ## CRM Visits
 - POST /api/crm/visits/createVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)

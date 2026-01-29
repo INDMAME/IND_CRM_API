@@ -94,7 +94,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "getContactoContainer",
                     con
                 );
@@ -197,7 +197,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "getAccountContainer",
                     con
                 );

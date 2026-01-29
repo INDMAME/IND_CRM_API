@@ -104,7 +104,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Logger.Log($" - Item {i}: {con.Peek(i)}");
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "createVisitaAsistente",
                     con
                 );
@@ -247,7 +247,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMApiClass",
+                    "INDCRMVisitsService",
                     "deleteVisitaAsistente",
                     con
                 );

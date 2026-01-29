@@ -70,7 +70,7 @@ namespace IND_CRM_API.Services
             {
                 ax = EnsureLoggedOn(username, password, ctx);
                 // Llamada inocua para validar conexion.
-                ax.CallStaticClassMethod("INDCRMApiClass", "getEnvironmentName");
+                ax.CallStaticClassMethod("INDCRMUtilityService", "getEnvironmentName");
                 sw.Stop();
                 Log("smoke-test", ctx, AxaptaSessionManager.LogLevel.Info, null, durationMs: (int)sw.ElapsedMilliseconds);
                 return true;
