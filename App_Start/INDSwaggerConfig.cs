@@ -22,7 +22,7 @@ namespace IND_CRM_API.App_Start
             config
                 .EnableSwagger(c =>
                 {
-                    c.SingleApiVersion("v1", "INDTestAPIs SelfHost (Axapta Integration)");
+                    c.SingleApiVersion("v1", "CRM - SelfHost (Axapta Integration)");
                     // Usa el nombre completo del tipo para evitar colisiones de schemaId.
                     c.UseFullTypeNameInSchemaIds();
 
@@ -33,6 +33,7 @@ namespace IND_CRM_API.App_Start
 
                     // Agrega el header de compania en endpoints CRM.
                     c.OperationFilter<CompanyHeaderOperationFilter>();
+                    c.DocumentFilter<McpToolsDocumentFilter>();
 
                     // Swagger usa los XML comments generados en la compilacion para enriquecer el OpenAPI.
                     var xmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IND_CRM_API.xml");

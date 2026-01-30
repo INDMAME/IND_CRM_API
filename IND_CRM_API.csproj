@@ -54,9 +54,6 @@
     <StartupObject>IND_CRM_API.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CommonServiceLocator, Version=2.0.6.0, Culture=neutral, PublicKeyToken=489b6accfaf20ef0, processorArchitecture=MSIL">
-      <HintPath>packages\CommonServiceLocator.2.0.6\lib\net48\CommonServiceLocator.dll</HintPath>
-    </Reference>
     <Reference Include="FSharp.Core, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\FSharp.Core.8.0.301\lib\netstandard2.0\FSharp.Core.dll</HintPath>
     </Reference>
@@ -157,6 +154,7 @@
     <Compile Include="App_Start\DependencyConfig.cs" />
     <Compile Include="App_Start\CompanyHeaderOperationFilter.cs" />
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
+    <Compile Include="App_Start\McpToolsDocumentFilter.cs" />
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
@@ -188,11 +186,13 @@
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
     <Compile Include="Controllers\System\AuthController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
+    <Compile Include="Controllers\System\McpToolsController.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
     <Compile Include="Helpers\AppSettingsHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
     <Compile Include="Helpers\ContainerDebugHelper.cs" />
+    <Compile Include="Helpers\McpToolsLoader.cs" />
     <Compile Include="Helpers\UserCompanyAccessCache.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

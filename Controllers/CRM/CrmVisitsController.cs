@@ -25,7 +25,7 @@ namespace IND_CRM_API.Controllers.CRM
         // CREAR ASISTENTE (Container)
         [HttpPost, Route("createVisitaAsistente")]
         [ResponseType(typeof(IndApiResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
+        [SwaggerOperation(Tags = new[] { "Visitas" })]
         [SwaggerResponse(HttpStatusCode.Created, "Asistente creado", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Registro no encontrado", typeof(IndApiResponse<object>))]
@@ -192,7 +192,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <param name="body">Datos del asistente a eliminar.</param>
         [HttpDelete, Route("deleteVisitaAsistente")]
         [ResponseType(typeof(IndApiResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Visitas CRM" })]
+        [SwaggerOperation(Tags = new[] { "Visitas" })]
         [SwaggerResponse(HttpStatusCode.OK, "Asistente eliminado", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o negocio", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Registro no encontrado", typeof(IndApiResponse<object>))]

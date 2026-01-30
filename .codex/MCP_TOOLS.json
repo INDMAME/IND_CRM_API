@@ -1,0 +1,2040 @@
+{
+  "version": "1.0",
+  "baseUrl": "{{baseUrl}}",
+  "tools": [
+    {
+      "name": "auth_login",
+      "description": "Login de usuario de servicio. Devuelve token y expiracion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "Username": {
+                "type": "string"
+              },
+              "Password": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "Username",
+              "Password"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "auth": "none",
+        "requiredHeaders": [
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "Username": "<user>",
+            "Password": "<password>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_refresh",
+      "description": "Renueva el token JWT.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/auth/refresh",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_entra_context",
+      "description": "Obtiene contexto Entra y valores companyId/axUserId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "entraOid": {
+                "type": "string",
+                "description": "GUID de Entra ID"
+              },
+              "appCode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "entraOid",
+              "appCode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/auth/entra/context",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "entraOid": "<guid>",
+            "appCode": "CRM"
+          }
+        }
+      ]
+    },
+    {
+      "name": "health_ping",
+      "description": "Ping de salud publico.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/health/ping",
+        "auth": "none"
+      },
+      "examples": [
+        {}
+      ]
+    },
+    {
+      "name": "health_health",
+      "description": "Health check de Axapta.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/health/health",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "system_get_environment_name",
+      "description": "Obtiene el nombre del entorno.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/system/getEnvironmentName",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "system_get_company_name",
+      "description": "Obtiene el nombre de la compania.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/system/getCompanyName",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "speech_transcribe",
+      "description": "Transcribe audio con parametros opcionales.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "languageId": {
+                "type": "string"
+              },
+              "audioFile": {
+                "type": "string",
+                "format": "binary"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "prompt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "languageId",
+              "audioFile"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/speech/transcribe",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ],
+        "contentType": "multipart/form-data"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          },
+          "body": {
+            "languageId": "auto",
+            "audioFile": "<binary>",
+            "temperature": 0,
+            "prompt": "<context>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_accounts_list_contacts",
+      "description": "Lista contactos de cuenta.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "accountNum": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "accountNum",
+              "page",
+              "pageSize"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/accounts/listContacts",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "accountNum": "ACC-001",
+            "page": 1,
+            "pageSize": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_accounts_list_accounts",
+      "description": "Lista cuentas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "accountNum": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "page",
+              "pageSize"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/accounts/listAccounts",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "accountNum": "ACC-001",
+            "page": 1,
+            "pageSize": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_create",
+      "description": "Crea una actividad.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "accountNum": {
+                "type": "string"
+              },
+              "visitType": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "transDate": {
+                "type": "string",
+                "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "comentarios": {
+                "type": "string"
+              },
+              "antecedentes": {
+                "type": "string"
+              },
+              "conclusiones": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountNum",
+              "visitType",
+              "description",
+              "transDate"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/activities/create",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "accountNum": "ACC-001",
+            "visitType": "VISITA",
+            "description": "Visita comercial",
+            "transDate": "2026-01-15",
+            "comentarios": "",
+            "antecedentes": "",
+            "conclusiones": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_list_post",
+      "description": "Lista actividades por rango de fechas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "fromDate": {
+                "type": "string",
+                "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "toDate": {
+                "type": "string",
+                "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "accountNum": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fromDate",
+              "toDate"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/activities/list",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "fromDate": "2026-01-01",
+            "toDate": "2026-01-31",
+            "accountNum": "ACC-001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_update",
+      "description": "Actualiza actividad por recId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "recId": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "recId"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "accountNum": {
+                "type": "string"
+              },
+              "visitType": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "transDate": {
+                "type": "string",
+                "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "comentarios": {
+                "type": "string"
+              },
+              "antecedentes": {
+                "type": "string"
+              },
+              "conclusiones": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountNum",
+              "visitType",
+              "description",
+              "transDate"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "PUT",
+        "path": "/api/crm/activities/{recId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "path": {
+            "recId": 123
+          },
+          "body": {
+            "accountNum": "ACC-001",
+            "visitType": "VISITA",
+            "description": "Actualizacion",
+            "transDate": "2026-01-15",
+            "comentarios": "",
+            "antecedentes": "",
+            "conclusiones": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_delete",
+      "description": "Elimina actividad por recId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "recId": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "recId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "DELETE",
+        "path": "/api/crm/activities/{recId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          },
+          "path": {
+            "recId": 123
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_get_by_recid",
+      "description": "Obtiene actividad por recId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "recId": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "recId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/activities/{recId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          },
+          "path": {
+            "recId": 123
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_activities_get_by_code",
+      "description": "Obtiene actividad por codigo.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/activities/by-code/{code}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          },
+          "path": {
+            "code": "ACT-001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_visits_create_visita_asistente",
+      "description": "Crea asistente de visita.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "refRecIdActividad": {
+                "type": "string"
+              },
+              "asistenteTipo": {
+                "type": "string"
+              },
+              "asistenteId": {
+                "type": "string"
+              },
+              "contactoRecId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "refRecIdActividad",
+              "asistenteTipo",
+              "asistenteId",
+              "contactoRecId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/visits/createVisitaAsistente",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "refRecIdActividad": "288079847",
+            "asistenteTipo": "CONTACTO",
+            "asistenteId": "Juan Perez",
+            "contactoRecId": "-123456"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_visits_delete_visita_asistente",
+      "description": "Elimina asistente de visita.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "refRecIdActividad": {
+                "type": "string"
+              },
+              "asistenteId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "refRecIdActividad",
+              "asistenteId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "DELETE",
+        "path": "/api/crm/visits/deleteVisitaAsistente",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "refRecIdActividad": "288079847",
+            "asistenteId": "Juan Perez"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_create",
+      "description": "Crea hoja de gastos.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "currencyCode": {
+                "type": "string"
+              },
+              "projId": {
+                "type": "string"
+              },
+              "exchRate": {
+                "type": "number"
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "transDate": {
+                      "type": "string",
+                      "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                      "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                    },
+                    "typeValue": {
+                      "type": "integer"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "qty": {
+                      "type": "number"
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "internacional": {
+                      "type": "boolean"
+                    },
+                    "ticket": {
+                      "type": "boolean"
+                    },
+                    "projId": {
+                      "type": "string"
+                    },
+                    "indAttachFiles": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "transDate",
+                    "typeValue",
+                    "description",
+                    "qty",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "description",
+              "currencyCode",
+              "lines"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/crm/expensesheets",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "description": "Gastos visita",
+            "currencyCode": "EUR",
+            "exchRate": 1,
+            "projId": "",
+            "lines": [
+              {
+                "transDate": "20260115",
+                "typeValue": 5,
+                "description": "Comida",
+                "qty": 1,
+                "amount": 25.5,
+                "internacional": false,
+                "ticket": true,
+                "projId": "",
+                "indAttachFiles": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_get",
+      "description": "Obtiene hoja de gastos por id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "hojaGastosId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "hojaGastosId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/expensesheets/{hojaGastosId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>"
+          },
+          "path": {
+            "hojaGastosId": "HS-001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_update_header",
+      "description": "Actualiza cabecera de hoja de gastos.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "hojaGastosId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "hojaGastosId"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "currencyCode": {
+                "type": "string"
+              },
+              "projId": {
+                "type": "string"
+              },
+              "exchRate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "description",
+              "currencyCode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "PUT",
+        "path": "/api/crm/expensesheets/{hojaGastosId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "path": {
+            "hojaGastosId": "HS-001"
+          },
+          "body": {
+            "description": "Gastos",
+            "currencyCode": "EUR",
+            "projId": "",
+            "exchRate": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_update_line",
+      "description": "Actualiza linea de hoja de gastos.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId",
+              "Content-Type"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "hojaGastosId": {
+                "type": "string"
+              },
+              "lineRecId": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "hojaGastosId",
+              "lineRecId"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "transDate": {
+                "type": "string",
+                "description": "Fecha en formato yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "typeValue": {
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "qty": {
+                "type": "number"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "internacional": {
+                "type": "boolean"
+              },
+              "ticket": {
+                "type": "boolean"
+              },
+              "projId": {
+                "type": "string"
+              },
+              "indAttachFiles": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "transDate",
+              "typeValue",
+              "description",
+              "qty",
+              "amount"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "PUT",
+        "path": "/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
+          },
+          "path": {
+            "hojaGastosId": "HS-001",
+            "lineRecId": 12345
+          },
+          "body": {
+            "transDate": "20260115",
+            "typeValue": 5,
+            "description": "Comida",
+            "qty": 1,
+            "amount": 30.0,
+            "internacional": false,
+            "ticket": true,
+            "projId": "",
+            "indAttachFiles": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_delete_line",
+      "description": "Elimina linea de hoja de gastos. Puede eliminar hoja completa.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId"
+            ],
+            "additionalProperties": false
+          },
+          "path": {
+            "type": "object",
+            "properties": {
+              "hojaGastosId": {
+                "type": "string"
+              },
+              "lineRecId": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "hojaGastosId",
+              "lineRecId"
+            ],
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "deleteWholeSheet": {
+                "type": "string",
+                "description": "0|1 or true|false",
+                "pattern": "^(0|1|true|false)$"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "path",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "DELETE",
+        "path": "/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>"
+          },
+          "path": {
+            "hojaGastosId": "HS-001",
+            "lineRecId": 12345
+          },
+          "query": {
+            "deleteWholeSheet": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_expensesheets_list",
+      "description": "Lista hojas de gastos con paginacion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              },
+              "X-IND-AxUserId": {
+                "type": "string",
+                "description": "AX user id from /api/auth/entra/context."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company",
+              "X-IND-AxUserId"
+            ],
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "filter": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "billedMode": {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              }
+            },
+            "required": [
+              "filter",
+              "page",
+              "pageSize"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/expensesheets/list",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company",
+          "X-IND-AxUserId"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>",
+            "X-IND-AxUserId": "<axUserId>"
+          },
+          "query": {
+            "filter": "GASTO",
+            "page": 1,
+            "pageSize": 50,
+            "billedMode": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_projects_list",
+      "description": "Lista proyectos con paginacion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "filter": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "filter",
+              "page",
+              "pageSize"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/projects/list",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          },
+          "query": {
+            "filter": "PROJ",
+            "page": 1,
+            "pageSize": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm_template_sample",
+      "description": "Endpoint interno de ejemplo. No exponer en Swagger.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/template/sample",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          }
+        }
+      ],
+      "x-internal": true
+    }
+  ]
+}

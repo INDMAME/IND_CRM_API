@@ -220,38 +220,10 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Obtiene la lista paginada de actividades CRM filtrada por usuario y rango de fechas (GET).
+        /// Obtiene la lista paginada de actividades CRM.
         /// </summary>
         /// <remarks>
-        /// Devuelve 200 con IndPagedResponse.  
-        /// ErrorCode posibles: CrmActivityMissingFields en validacion, AxComError/AxSessionError en fallos de AX.
-        /// </remarks>
-        /// <param name="userId">Identificador de usuario de AX (se ignora, usar header X-IND-AxUserId).</param>
-        /// <param name="fromDate">Fecha inicio (yyyy-MM-dd).</param>
-        /// <param name="toDate">Fecha fin (yyyy-MM-dd).</param>
-        [HttpGet, Route("list")]
-        [ResponseType(typeof(IndPagedResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Listado de actividades", typeof(IndPagedResponse<object>))]
-        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
-        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error en AX/COM", typeof(IndApiResponse<object>))]
-        public IHttpActionResult ListActivitiesGet([FromUri] string userId, [FromUri] string fromDate, [FromUri] string toDate, [FromUri] string accountNum)
-        {
-            var request = new GetActivitiesRequest
-            {
-                userId = userId,
-                fromDate = fromDate,
-                toDate = toDate,
-                accountNum = accountNum
-            };
-            return BuildActivitiesListResponse(request, 1, 0);
-        }
-
-        /// <summary>
-        /// Obtiene la lista paginada de actividades CRM (POST, compatibilidad clientes actuales).
-        /// </summary>
-        /// <remarks>
-        /// Igual que GET /list pero recibe el filtro en el cuerpo. ErrorCode y respuestas iguales.
+        /// Recibe el filtro en el cuerpo. ErrorCode y respuestas iguales.
         /// </remarks>
         /// <param name="body">Filtros de usuario y rango de fechas.</param>
         [HttpPost, Route("list")]
@@ -1183,16 +1155,5 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        /// <summary>
-        /// Endpoint de prueba que reusa la logica de listado de actividades.
-        /// </summary>
-        /// <param name="body">Filtros de usuario y fechas.</param>
-        [HttpPost, Route("test")]
-        [ResponseType(typeof(IndPagedResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Actividades" })]
-        public IHttpActionResult TestActivities([FromBody] GetActivitiesRequest body)
-        {
-            return BuildActivitiesListResponse(body, 1, 0);
-        }
     }
 }

@@ -46,7 +46,7 @@ namespace IND_CRM_API.Controllers.CRM
         // -----------------------------------------
         [HttpPost, Route("listContacts")]
         [ResponseType(typeof(IndPagedResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Cuentas CRM" })]
+        [SwaggerOperation(Tags = new[] { "Cuentas" })]
         public IHttpActionResult GetContactoContainer([FromBody] GetContactosRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
@@ -151,7 +151,7 @@ namespace IND_CRM_API.Controllers.CRM
         // -----------------------------------------
         [HttpPost, Route("listAccounts")]
         [ResponseType(typeof(IndPagedResponse<object>))]
-        [SwaggerOperation(Tags = new[] { "Cuentas CRM" })]
+        [SwaggerOperation(Tags = new[] { "Cuentas" })]
         public IHttpActionResult GetAccounts([FromBody] GetAccountsRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");

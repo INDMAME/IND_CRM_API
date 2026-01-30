@@ -14,6 +14,7 @@ Reglas nuevas (directrices)
 - Las listas de proyectos y hojas de gastos deben usar paginacion con page y pageSize (>= 1).
 - Todos los endpoints de negocio deben exigir companyId por header X-IND-Company.
   Excepciones deben documentarse de forma explicita.
+- Cada endpoint debe tener documentacion Swagger completa (summary, params, responses, security) para gestionarlo via MCP.
 
 Endpoints
 
@@ -34,23 +35,26 @@ Endpoints
 - GET /api/system/getEnvironmentName (Authorize)
 - GET /api/system/getCompanyName (Authorize)
 
+## MCP
+- GET /api/mcp/tools (Authorize)
+  Response: catalogo MCP (MCP_TOOLS.json)
+
 ## Speech
 - POST /api/speech/transcribe (Authorize)
   Content-Type: multipart/form-data
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)
 
-## CRM Accounts
+## Accounts
 - POST /api/crm/accounts/listContacts (Authorize + X-IND-Company)
   Body: { accountNum (required), page (required >0), pageSize (required >0) }
 - POST /api/crm/accounts/listAccounts (Authorize + X-IND-Company)
   Body: { accountNum (optional), page (required >0), pageSize (required >0) }
 
-## CRM Activities
+## Activities
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: accountNum, visitType, description, transDate (yyyyMMdd or yyyy-MM-dd)
   Optional: comentarios, antecedentes, conclusiones
   Nota: userId/createdByUserId se toman de X-IND-AxUserId.
-- GET /api/crm/activities/list?userId=&fromDate=&toDate=&accountNum= (Authorize + X-IND-Company + X-IND-AxUserId)
   Dates: yyyyMMdd or yyyy-MM-dd
   Nota: userId en query se ignora; se usa X-IND-AxUserId. accountNum es opcional.
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -62,10 +66,9 @@ Endpoints
   Respuesta 200 OK con mensaje en body (IndApiResponse). 404/422 si aplica.
 - GET /api/crm/activities/{recId} (Authorize + X-IND-Company)
 - GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company)
-- POST /api/crm/activities/test (Authorize + X-IND-Company + X-IND-AxUserId)
   Body: { fromDate, toDate, accountNum (optional) }
 
-## CRM Visits
+## Visits
 - POST /api/crm/visits/createVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: refRecIdActividad, asistenteTipo, asistenteId, contactoRecId
   Nota: createdByUserId se toma de X-IND-AxUserId.
@@ -73,7 +76,7 @@ Endpoints
   Body required: refRecIdActividad, asistenteId
   Respuesta 200 OK con mensaje en body (IndApiResponse). 404/422 si aplica.
 
-## CRM Expense Sheets
+## Expense Sheets
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode, lines[]
   Optional: projId, exchRate, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
@@ -88,7 +91,7 @@ Endpoints
   Nota: page y pageSize son obligatorios. Si no hay filtro, AX devuelve lista vacia.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
-## CRM Projects
+## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)
   Nota: page y pageSize son obligatorios. Si no hay filtro, AX devuelve lista vacia.
 
