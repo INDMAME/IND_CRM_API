@@ -1,0 +1,16 @@
+{
+  "name": "ind-crm-api-codex-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Codex reference sync utilities for IND_CRM_API",
+  "scripts": {
+    "sync:skill:references": "node scripts/sync-skill-references.mjs",
+    "sync:local:skill:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",
+    "sync:codex:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",
+    "sync:codex:references:watch": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails --watch",
+    "check:codex:references": "node scripts/check-codex-references.mjs",
+    "precommit:sync:local-skill": "node scripts/pre-commit-sync-local-skill-references.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
+    "prepare": "npm run hooks:install"
+  }
+}

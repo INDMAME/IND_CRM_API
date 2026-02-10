@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Web.Http;
@@ -8,6 +7,7 @@ using System.Web.Http.Description;
 using AxaptaCOMConnector;
 using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Controllers;
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
@@ -111,7 +111,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var items = MapProjectList(root, out var message);
-                var pagedItems = ApplyPaging(items, page.Value, pageSize.Value);
+                var pagedItems = PagingHelper.Apply(items, page.Value, pageSize.Value);
                 var okResponse = new IndPagedResponse<ProjectListItemDto>
                 {
                     Success = true,
@@ -148,129 +148,27 @@ namespace IND_CRM_API.Controllers.CRM
             message = string.Empty;
             var items = new List<ProjectListItemDto>();
 
-            if (root == null || SafeLength(root) == 0)
+            if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
                 return items;
 
-            if (IsSinDatos(root, out message))
+            if (AxContainerReadHelper.IsSinDatos(root, out message))
                 return items;
 
-            var len = SafeLength(root);
+            var len = AxContainerReadHelper.SafeLength(root);
             for (int i = 1; i <= len; i++)
             {
-                var row = SafePeekContainer(root, i);
-                if (row == null || SafeLength(row) < 2)
+                var row = AxContainerReadHelper.SafePeekContainer(root, i);
+                if (row == null || AxContainerReadHelper.SafeLength(row) < 2)
                     continue;
 
                 items.Add(new ProjectListItemDto
                 {
-                    ProjId = SafeString(row, 1),
-                    Name = SafeString(row, 2)
+                    ProjId = AxContainerReadHelper.SafeString(row, 1),
+                    Name = AxContainerReadHelper.SafeString(row, 2)
                 });
             }
 
             return items;
-        }
-
-        // Applies in-memory paging over the list of projects.
-        private static List<ProjectListItemDto> ApplyPaging(List<ProjectListItemDto> items, int page, int pageSize)
-        {
-            if (items == null || items.Count == 0)
-                return new List<ProjectListItemDto>();
-
-            if (page <= 0 || pageSize <= 0)
-                return items;
-
-            var skip = (page - 1) * pageSize;
-            if (skip < 0)
-                skip = 0;
-
-            if (skip >= items.Count)
-                return new List<ProjectListItemDto>();
-
-            return items.Skip(skip).Take(pageSize).ToList();
-        }
-
-        // Checks the common AX "Sin datos." marker.
-        private static bool IsSinDatos(IAxaptaContainer root, out string message)
-        {
-            message = string.Empty;
-            if (root == null || SafeLength(root) == 0)
-                return false;
-
-            if (SafeLength(root) == 1)
-            {
-                var single = SafeValue(root, 1);
-                if (single is string str && str.Equals("Sin datos.", StringComparison.OrdinalIgnoreCase))
-                {
-                    message = "Sin datos.";
-                    return true;
-                }
-
-                var row = single as IAxaptaContainer;
-                if (row != null && SafeLength(row) == 1)
-                {
-                    var first = SafeString(row, 1);
-                    if (first.Equals("Sin datos.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        message = "Sin datos.";
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        // Safe container peek.
-        private static IAxaptaContainer SafePeekContainer(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index) as IAxaptaContainer;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        // Safe container length.
-        private static int SafeLength(IAxaptaContainer container)
-        {
-            try
-            {
-                return container?.Length() ?? 0;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        // Safe string conversion from container.
-        private static string SafeString(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index)?.ToString() ?? string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        // Safe raw value from container.
-        private static object SafeValue(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index);
-            }
-            catch
-            {
-                return null;
-            }
         }
     }
 }

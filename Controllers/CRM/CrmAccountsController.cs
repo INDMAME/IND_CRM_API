@@ -116,7 +116,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
-                var items = ApplyPaging(data, body.page, body.pageSize);
+                var items = PagingHelper.Apply(data, body.page, body.pageSize);
                 var total = data?.Length ?? 0;
 
                 return Ok(new IndPagedResponse<object>
@@ -219,7 +219,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
-                var items = ApplyPaging(data, body.page, body.pageSize);
+                var items = PagingHelper.Apply(data, body.page, body.pageSize);
                 var total = data?.Length ?? 0;
 
                 return Ok(new IndPagedResponse<object>
@@ -249,26 +249,6 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        /// <summary>
-        /// Applies in-memory paging over the array returned by AX.
-        /// </summary>
-        private static List<object> ApplyPaging(object[] data, int page, int pageSize)
-        {
-            if (data == null || data.Length == 0)
-                return new List<object>();
-
-            if (page <= 0 || pageSize <= 0)
-                return data.ToList();
-
-            var skip = (page - 1) * pageSize;
-            if (skip < 0)
-                skip = 0;
-
-            if (skip >= data.Length)
-                return new List<object>();
-
-            return data.Skip(skip).Take(pageSize).ToList();
-        }
     }
 }
 

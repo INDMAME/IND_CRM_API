@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "[pre-commit] Running local Codex skill reference sync."
+node scripts/pre-commit-sync-local-skill-references.mjs

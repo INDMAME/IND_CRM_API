@@ -55,6 +55,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerOperation(Tags = new[] { "Salud" })]
         [ResponseType(typeof(IndPagedResponse<object>))]
         [SwaggerResponse(HttpStatusCode.OK, "Estado de Axapta", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "No disponible", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult AxaptaHealth()
         {
@@ -62,8 +63,21 @@ namespace IND_CRM_API.Controllers.System
             try
             {
                 var username = User?.Identity?.Name ?? "health-check";
-
-                _sessionManager.CreateOrGetSession(username, null, null);
+                var sessionReady = _sessionManager.CreateOrGetSession(username, null, null);
+                if (!sessionReady)
+                {
+                    _logger.Log("[HEALTH-WARN] No se pudo validar sesion AX para " + username);
+                    var unavailableResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se pudo validar la sesion de Axapta.",
+                        ErrorCode = IndErrorCodes.AxSessionError,
+                        Errors = null,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return Content(HttpStatusCode.ServiceUnavailable, unavailableResponse);
+                }
 
                 var okResponse = new IndPagedResponse<object>
                 {
