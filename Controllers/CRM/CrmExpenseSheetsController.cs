@@ -10,6 +10,7 @@ using AxaptaCOMConnector;
 using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Controllers;
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
@@ -715,20 +716,19 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Lists expense sheets filtered by search text.
         /// </summary>
-        /// <param name="filter">Filtro de busqueda.</param>
-        /// <param name="page">Numero de pagina (>= 1).</param>
-        /// <param name="pageSize">Tamano de pagina (>= 1).</param>
-        /// <param name="billedMode">Modo de facturacion: 0=no facturado, 1=facturado, 2=ambos.</param>
-        [HttpGet, Route("list")]
+        /// <param name="body">Filtros y paginacion del listado.</param>
+        [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Listado de hojas de gastos", typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult GetExpenseSheetsList([FromUri] string filter = null, [FromUri] int? page = null, [FromUri] int? pageSize = null, [FromUri] int? billedMode = null)
+        public IHttpActionResult GetExpenseSheetsList([FromBody] GetExpenseSheetsListRequest body)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            string createdDateFromYmd = string.Empty;
+            string createdDateToYmd = string.Empty;
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
@@ -739,10 +739,37 @@ namespace IND_CRM_API.Controllers.CRM
             if (userError != null)
                 return userError;
 
-            if (!page.HasValue || page.Value <= 0)
-                validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
-            if (!pageSize.HasValue || pageSize.Value <= 0)
-                validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (body.page <= 0)
+                    validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+                if (body.pageSize <= 0)
+                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+
+                if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
+                    validationErrors.Add(new IndValidationError { Field = "createdDateFrom", Message = "createdDateFrom debe ser yyyyMMdd o yyyy-MM-dd." });
+
+                if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
+                    validationErrors.Add(new IndValidationError { Field = "createdDateTo", Message = "createdDateTo debe ser yyyyMMdd o yyyy-MM-dd." });
+
+                if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
+                {
+                    var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
+                    var toOk = DateTime.TryParseExact(createdDateToYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate);
+                    if (fromOk && toOk && fromDate > toDate)
+                    {
+                        validationErrors.Add(new IndValidationError
+                        {
+                            Field = "createdDateFrom",
+                            Message = "createdDateFrom no puede ser mayor que createdDateTo."
+                        });
+                    }
+                }
+            }
 
             if (validationErrors.Count > 0)
             {
@@ -767,18 +794,31 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                var billedModeValue = billedMode ?? 0;
+                var pageValue = body.page;
+                var pageSizeValue = body.pageSize;
+                var filterValue = body.filter?.Trim() ?? string.Empty;
+                var billedModeValue = body.billedMode ?? 0;
                 if (billedModeValue != 0 && billedModeValue != 1 && billedModeValue != 2)
                     billedModeValue = 0;
 
-                Logger.Log($"[API-IN] GetExpenseSheetsList filter={filter} billedMode={billedModeValue} page={page} pageSize={pageSize} user={username} axUserId={axUserId} traceId={traceId}");
+                var projIdValue = body.projId?.Trim() ?? string.Empty;
+                var currencyCodeValue = body.currencyCode?.Trim() ?? string.Empty;
+
+                Logger.Log(
+                    $"[API-IN] GetExpenseSheetsList filter={filterValue} billedMode={billedModeValue} page={pageValue} pageSize={pageSizeValue} " +
+                    $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} projId={projIdValue} currencyCode={currencyCodeValue} " +
+                    $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
                 con.Append(axUserId);
-                con.Append(filter?.Trim() ?? string.Empty);
+                con.Append(filterValue);
                 con.Append(billedModeValue);
+                con.Append(createdDateFromYmd);
+                con.Append(createdDateToYmd);
+                con.Append(projIdValue);
+                con.Append(currencyCodeValue);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -788,15 +828,15 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var root = resultObj as IAxaptaContainer;
                 var items = MapExpenseSheetList(root, out var message);
-                var pagedItems = ApplyPaging(items, page.Value, pageSize.Value);
+                var pagedItems = PagingHelper.Apply(items, pageValue, pageSizeValue);
 
                 var okResponse = new IndPagedResponse<ExpenseSheetListItemDto>
                 {
                     Success = true,
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
                     Total = items.Count,
-                    Page = page,
-                    PageSize = pageSize,
+                    Page = pageValue,
+                    PageSize = pageSizeValue,
                     Items = pagedItems,
                     TraceId = traceId
                 };
@@ -892,20 +932,20 @@ namespace IND_CRM_API.Controllers.CRM
             if (root == null)
                 return false;
 
-            var rootLen = SafeLength(root);
-            IAxaptaContainer headerCon = rootLen >= 2 ? SafePeekContainer(root, 1) : root;
-            linesCon = rootLen >= 2 ? SafePeekContainer(root, 2) : null;
+            var rootLen = AxContainerReadHelper.SafeLength(root);
+            IAxaptaContainer headerCon = rootLen >= 2 ? AxContainerReadHelper.SafePeekContainer(root, 1) : root;
+            linesCon = rootLen >= 2 ? AxContainerReadHelper.SafePeekContainer(root, 2) : null;
 
-            var rowCon = SafePeekContainer(headerCon, 1) ?? headerCon;
-            if (rowCon == null || SafeLength(rowCon) < 2)
+            var rowCon = AxContainerReadHelper.SafePeekContainer(headerCon, 1) ?? headerCon;
+            if (rowCon == null || AxContainerReadHelper.SafeLength(rowCon) < 2)
                 return false;
 
-            success = ToBool(SafeString(rowCon, 1));
-            message = SafeString(rowCon, 2);
+            success = ToBool(AxContainerReadHelper.SafeString(rowCon, 1));
+            message = AxContainerReadHelper.SafeString(rowCon, 2);
 
-            var len = SafeLength(rowCon);
+            var len = AxContainerReadHelper.SafeLength(rowCon);
             for (int i = 3; i <= len; i++)
-                extras.Add(SafeString(rowCon, i));
+                extras.Add(AxContainerReadHelper.SafeString(rowCon, i));
 
             return true;
         }
@@ -969,25 +1009,25 @@ namespace IND_CRM_API.Controllers.CRM
                 Lines = new List<ExpenseSheetLineDto>()
             };
 
-            var lineCount = SafeLength(linesCon);
+            var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)
             {
-                var row = SafePeekContainer(linesCon, i);
-                if (row == null || SafeLength(row) < 10)
+                var row = AxContainerReadHelper.SafePeekContainer(linesCon, i);
+                if (row == null || AxContainerReadHelper.SafeLength(row) < 10)
                     continue;
 
                 var line = new ExpenseSheetLineDto
                 {
-                    RecId = SafeString(row, 1),
-                    TransDate = SafeString(row, 2),
+                    RecId = AxContainerReadHelper.SafeString(row, 1),
+                    TransDate = AxContainerReadHelper.SafeString(row, 2),
                     TypeValue = SafeInt(row, 3),
-                    Description = SafeString(row, 4),
-                    Internacional = ToBool(SafeString(row, 5)),
-                    Ticket = ToBool(SafeString(row, 6)),
+                    Description = AxContainerReadHelper.SafeString(row, 4),
+                    Internacional = ToBool(AxContainerReadHelper.SafeString(row, 5)),
+                    Ticket = ToBool(AxContainerReadHelper.SafeString(row, 6)),
                     Qty = SafeDecimal(row, 7),
                     Amount = SafeDecimal(row, 8),
-                    ProjId = SafeString(row, 9),
-                    IndAttachFiles = SafeString(row, 10)
+                    ProjId = AxContainerReadHelper.SafeString(row, 9),
+                    IndAttachFiles = AxContainerReadHelper.SafeString(row, 10)
                 };
 
                 detail.Lines.Add(line);
@@ -1002,57 +1042,41 @@ namespace IND_CRM_API.Controllers.CRM
             message = string.Empty;
             var items = new List<ExpenseSheetListItemDto>();
 
-            if (root == null || SafeLength(root) == 0)
+            if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
                 return items;
 
-            if (IsSinDatos(root, out message))
+            if (AxContainerReadHelper.IsSinDatos(root, out message))
                 return items;
 
-            var len = SafeLength(root);
+            var len = AxContainerReadHelper.SafeLength(root);
             for (int i = 1; i <= len; i++)
             {
-                var row = SafePeekContainer(root, i);
-                if (row == null || SafeLength(row) < 3)
+                var row = AxContainerReadHelper.SafePeekContainer(root, i);
+                var rowLen = AxContainerReadHelper.SafeLength(row);
+                if (row == null || rowLen < 3)
                     continue;
 
                 items.Add(new ExpenseSheetListItemDto
                 {
-                    HojaGastosId = SafeString(row, 1),
-                    Description = SafeString(row, 2),
-                    ProjId = SafeString(row, 3)
+                    HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                    Description = AxContainerReadHelper.SafeString(row, 2),
+                    ProjId = AxContainerReadHelper.SafeString(row, 3),
+                    CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
+                    CreatedDate = rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty
                 });
             }
 
             return items;
         }
 
-        // Applies in-memory paging over the list of expense sheets.
-        private static List<ExpenseSheetListItemDto> ApplyPaging(List<ExpenseSheetListItemDto> items, int page, int pageSize)
-        {
-            if (items == null || items.Count == 0)
-                return new List<ExpenseSheetListItemDto>();
-
-            if (page <= 0 || pageSize <= 0)
-                return items;
-
-            var skip = (page - 1) * pageSize;
-            if (skip < 0)
-                skip = 0;
-
-            if (skip >= items.Count)
-                return new List<ExpenseSheetListItemDto>();
-
-            return items.Skip(skip).Take(pageSize).ToList();
-        }
-
         // Extracts RecId list from AX container.
         private static List<long> MapRecIdList(IAxaptaContainer linesCon)
         {
             var list = new List<long>();
-            var len = SafeLength(linesCon);
+            var len = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= len; i++)
             {
-                var value = SafeValue(linesCon, i);
+                var value = AxContainerReadHelper.SafeValue(linesCon, i);
                 if (TryToLong(value, out var recId))
                     list.Add(recId);
             }
@@ -1060,93 +1084,10 @@ namespace IND_CRM_API.Controllers.CRM
             return list;
         }
 
-        // Checks the common AX "Sin datos." marker.
-        private static bool IsSinDatos(IAxaptaContainer root, out string message)
-        {
-            message = string.Empty;
-            if (root == null || SafeLength(root) == 0)
-                return false;
-
-            if (SafeLength(root) == 1)
-            {
-                var single = SafeValue(root, 1);
-                if (single is string str && str.Equals("Sin datos.", StringComparison.OrdinalIgnoreCase))
-                {
-                    message = "Sin datos.";
-                    return true;
-                }
-
-                var row = single as IAxaptaContainer;
-                if (row != null && SafeLength(row) == 1)
-                {
-                    var first = SafeString(row, 1);
-                    if (first.Equals("Sin datos.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        message = "Sin datos.";
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        // Safe container peek.
-        private static IAxaptaContainer SafePeekContainer(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index) as IAxaptaContainer;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        // Safe container length.
-        private static int SafeLength(IAxaptaContainer container)
-        {
-            try
-            {
-                return container?.Length() ?? 0;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        // Safe string conversion from container.
-        private static string SafeString(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index)?.ToString() ?? string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        // Safe raw value from container.
-        private static object SafeValue(IAxaptaContainer container, int index)
-        {
-            try
-            {
-                return container?.Peek(index);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         // Converts container value to int.
         private static int? SafeInt(IAxaptaContainer container, int index)
         {
-            var value = SafeString(container, index);
+            var value = AxContainerReadHelper.SafeString(container, index);
             if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
             return null;
@@ -1155,7 +1096,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Converts container value to decimal.
         private static decimal? SafeDecimal(IAxaptaContainer container, int index)
         {
-            return ToDecimal(SafeString(container, index));
+            return ToDecimal(AxContainerReadHelper.SafeString(container, index));
         }
 
         // Converts a string to decimal with invariant culture.

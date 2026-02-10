@@ -161,6 +161,7 @@
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
+    <Compile Include="Contracts\Requests\GetExpenseSheetsListRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetHeaderRequest.cs" />
@@ -187,12 +188,14 @@
     <Compile Include="Controllers\System\AuthController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
     <Compile Include="Controllers\System\McpToolsController.cs" />
+    <Compile Include="Helpers\AxContainerReadHelper.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
     <Compile Include="Helpers\AppSettingsHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
     <Compile Include="Helpers\ContainerDebugHelper.cs" />
     <Compile Include="Helpers\McpToolsLoader.cs" />
+    <Compile Include="Helpers\PagingHelper.cs" />
     <Compile Include="Helpers\UserCompanyAccessCache.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -1839,16 +1839,21 @@
               "X-IND-AxUserId": {
                 "type": "string",
                 "description": "AX user id from /api/auth/entra/context."
+              },
+              "Content-Type": {
+                "type": "string",
+                "description": "Content type for body."
               }
             },
             "required": [
               "Authorization",
               "X-IND-Company",
-              "X-IND-AxUserId"
+              "X-IND-AxUserId",
+              "Content-Type"
             ],
             "additionalProperties": false
           },
-          "query": {
+          "body": {
             "type": "object",
             "properties": {
               "filter": {
@@ -1869,10 +1874,25 @@
                   1,
                   2
                 ]
+              },
+              "createdDateFrom": {
+                "type": "string",
+                "description": "Fecha de creacion desde en yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "createdDateTo": {
+                "type": "string",
+                "description": "Fecha de creacion hasta en yyyyMMdd o yyyy-MM-dd",
+                "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+              },
+              "projId": {
+                "type": "string"
+              },
+              "currencyCode": {
+                "type": "string"
               }
             },
             "required": [
-              "filter",
               "page",
               "pageSize"
             ],
@@ -1881,32 +1901,39 @@
         },
         "required": [
           "headers",
-          "query"
+          "body"
         ],
         "additionalProperties": false
       },
       "x-http": {
-        "method": "GET",
+        "method": "POST",
         "path": "/api/crm/expensesheets/list",
         "auth": "bearer",
         "requiredHeaders": [
           "Authorization",
           "X-IND-Company",
-          "X-IND-AxUserId"
-        ]
+          "X-IND-AxUserId",
+          "Content-Type"
+        ],
+        "contentType": "application/json"
       },
       "examples": [
         {
           "headers": {
             "Authorization": "Bearer <token>",
             "X-IND-Company": "<companyId>",
-            "X-IND-AxUserId": "<axUserId>"
+            "X-IND-AxUserId": "<axUserId>",
+            "Content-Type": "application/json"
           },
-          "query": {
+          "body": {
             "filter": "GASTO",
             "page": 1,
             "pageSize": 50,
-            "billedMode": 0
+            "billedMode": 0,
+            "createdDateFrom": "20260101",
+            "createdDateTo": "20260131",
+            "projId": "PROJ-001",
+            "currencyCode": "USD"
           }
         }
       ]
