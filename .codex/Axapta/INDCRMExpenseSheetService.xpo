@@ -108,113 +108,11 @@ Formatversion: 1
         #            conItem = [[
         #                strFmt("%1", hoja.HojaGastosId),
         #                strFmt("%1", hoja.Description),
+        #                strFmt("%1", hoja.Voucher),
         #                strFmt("%1", hoja.ProjId),
         #                strFmt("%1", hoja.CurrencyCode),
         #                strFmt("%1", hoja.TotalAmountMST()),
         #                strFmt("%1", hoja.CreatedDate)
-        #            ]];
-        #
-        #            conResult += conItem;
-        #        }
-        #    }
-        #
-        #    return conResult ? conResult : [["Sin datos."]];
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getExpenseSheetsList_v3
-        #static server container getExpenseSheetsList_v3(container _data)
-        #{
-        #    DataAreaId           _company;
-        #
-        #    UserId               axUserId;
-        #    CRMUserId            crmUserId;
-        #
-        #    str 1000             filterTxt;
-        #    str 1000             likePattern;
-        #
-        #    int                  billedMode;
-        #
-        #    // Filtros nuevos
-        #    date                 createdDateFrom;
-        #    date                 createdDateTo;
-        #    ProjId               projId;
-        #    CurrencyCode         currencyCode;
-        #
-        #    CRMHojaGastosTable   hoja;
-        #    container            conResult, conItem;
-        #
-        #    _company = INDCRMUtilityService::getCompany(_data);
-        #    if (!_company)
-        #        return conNull();
-        #
-        #    // Contrato mínimo
-        #    if (conLen(_data) < 4)
-        #        return conResult;
-        #
-        #    axUserId   = conPeek(_data, 2);
-        #    filterTxt  = conPeek(_data, 3);
-        #    billedMode = conPeek(_data, 4);
-        #
-        #    // Nuevos filtros (opcionales)
-        #    if (conLen(_data) >= 5)
-        #        createdDateFrom = str2Date(conPeek(_data, 5), 321);
-        #
-        #    if (conLen(_data) >= 6)
-        #        createdDateTo = str2Date(conPeek(_data, 6), 321);
-        #
-        #    if (conLen(_data) >= 7)
-        #        projId = conPeek(_data, 7);
-        #
-        #    if (conLen(_data) >= 8)
-        #        currencyCode = conPeek(_data, 8);
-        #
-        #    // Regla existente: sin texto no devolvemos nada
-        #    if (!filterTxt)
-        #        return conResult;
-        #
-        #    // billedMode permitido: 0, 1, 2
-        #    if (billedMode != 0 && billedMode != 1 && billedMode != 2)
-        #        billedMode = 0;
-        #
-        #    likePattern = strFmt("*%1*", filterTxt);
-        #
-        #    changecompany (_company)
-        #    {
-        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #        if (!crmUserId)
-        #            return conResult;
-        #
-        #        while select hoja
-        #            index hint INDSearchKeyIdx
-        #            where hoja.UserId       == crmUserId
-        #               && hoja.INDSearchKey like likePattern
-        #               // Facturación
-        #               && (
-        #                      (billedMode == 2)
-        #                   || (billedMode == 0 && hoja.Voucher == '')
-        #                   || (billedMode == 1 && hoja.Voucher != '')
-        #                  )
-        #               // Fecha creación (opcional)
-        #               && (
-        #                      (!createdDateFrom && !createdDateTo)
-        #                   || ( createdDateFrom && !createdDateTo && hoja.CreatedDate >= createdDateFrom)
-        #                   || (!createdDateFrom &&  createdDateTo && hoja.CreatedDate <= createdDateTo)
-        #                   || ( createdDateFrom &&  createdDateTo &&
-        #                        hoja.CreatedDate >= createdDateFrom &&
-        #                        hoja.CreatedDate <= createdDateTo)
-        #                  )
-        #               // Proyecto (opcional)
-        #               && ( !projId || hoja.ProjId == projId )
-        #               // Moneda (opcional)
-        #               && ( !currencyCode || hoja.CurrencyCode == currencyCode )
-        #        {
-        #            conItem = [[
-        #                strFmt("%1", hoja.HojaGastosId),
-        #                strFmt("%1", hoja.Description),
-        #                strFmt("%1", hoja.ProjId),
-        #                strFmt("%1", hoja.CurrencyCode),
-        #                strFmt("%1", hoja.createdDate)
         #            ]];
         #
         #            conResult += conItem;
@@ -311,6 +209,7 @@ Formatversion: 1
         #        changecompany(companyId)
         #        {
         #            crmUserId    = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;//Lo convierto al usuario de System al de CRM
+        #
         #            if (!crmUserId)
         #                return [INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
         #
@@ -735,8 +634,8 @@ Formatversion: 1
         #
         #        headerOut = INDCRMUtilityService::buildHeader(true, 'OK', [
         #            header.HojaGastosId,
-        #            header.UserId,
         #            header.Description,
+        #            header.UserId,
         #            header.CurrencyCode,
         #            header.TotalAmountMST(),
         #            header.ExchRate,
@@ -768,135 +667,6 @@ Formatversion: 1
         #    }
         #
         #    return [INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull()), conNull()];
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getExpenseSheetsList_v2
-        #// Method: getExpenseSheetsList
-        #// Purpose: Returns container of expense sheets filtered by user, INDSearchKey, and billed mode.
-        #// Input container:
-        #//  - _data[1] = CompanyId
-        #//  - _data[2] = axUserId
-        #//  - _data[3] = filterTxt (optional)
-        #//  - _data[4] = billedMode (0=no billed, 1=billed, 2=both)
-        #// Output:
-        #//  - Container items: [[HojaGastosId, Description, ProjId], ...]
-        #static server container getExpenseSheetsList_v2(container _data)
-        #{
-        #    DataAreaId           _company;
-        #
-        #    UserId               axUserId;
-        #    CRMUserId            crmUserId;
-        #
-        #    str 1000             filterTxt;
-        #    str 1000             likePattern;
-        #
-        #    int                  billedMode;
-        #
-        #    CRMHojaGastosTable   hoja;
-        #    container            conResult, conItem;
-        #
-        #    _company = INDCRMUtilityService::getCompany(_data);
-        #    if (!_company)
-        #        return conNull();
-        #
-        #    // Validacion basica de longitud esperada
-        #    // Si no viene todo, devolvemos lista vacia para no romper el consumidor.
-        #    if (conLen(_data) < 4)
-        #        return conResult;
-        #
-        #    axUserId   = conPeek(_data, 2);
-        #    filterTxt  = conPeek(_data, 3);
-        #    billedMode = conPeek(_data, 4);
-        #
-        #    // Igual que el metodo base: si no hay filtro, no devolvemos nada (lista vacia).
-        #    if (!filterTxt)
-        #        return conResult;
-        #
-        #    // billedMode permitido: 0, 1, 2
-        #    if (billedMode != 0 && billedMode != 1 && billedMode != 2)
-        #        billedMode = 0;
-        #
-        #    likePattern = strFmt("*%1*", filterTxt);
-        #
-        #    changecompany (_company)
-        #    {
-        #        // Convert AX user to CRM user
-        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #        if (!crmUserId)
-        #            return conResult;
-        #
-        #        while select hoja
-        #            index hint INDSearchKeyIdx
-        #            where hoja.UserId       == crmUserId
-        #               && hoja.INDSearchKey like likePattern
-        #               && (
-        #                      (billedMode == 2)
-        #                   || (billedMode == 0 && hoja.Voucher == '')
-        #                   || (billedMode == 1 && hoja.Voucher != '')
-        #                  )
-        #        {
-        #            conItem = [[
-        #                strFmt("%1", hoja.HojaGastosId),
-        #                strFmt("%1", hoja.Description),
-        #                strFmt("%1", hoja.ProjId)
-        #            ]];
-        #
-        #            conResult += conItem;
-        #        }
-        #    }
-        #
-        #    return conResult ? conResult : [["Sin datos."]];
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getExpenseSheetsList_old
-        #// Method: getExpenseSheetsList
-        #// Purpose: Returns container of open expense sheets (Voucher empty) filtered by INDSearchKey.
-        #// Input container:
-        #//  - _data[1] = CompanyId
-        #//  - _data[2] = filterTxt (optional)
-        #// Output:
-        #//  - Container items: [[HojaGastosId, Description, ProjId], ...]
-        #static server container getExpenseSheetsList_old(container _data)
-        #{
-        #    DataAreaId           _company;
-        #    str 1000             filterTxt;
-        #    str 1000             likePattern;
-        #
-        #    CRMHojaGastosTable   hoja;
-        #    container            conResult, conItem;
-        #
-        #    _company = INDCRMUtilityService::getCompany(_data);
-        #    if (!_company)
-        #        return conNull();
-        #
-        #    filterTxt = conPeek(_data, 2);
-        #
-        #    // Igual que el metodo base: si no hay filtro, no devolvemos nada (lista vacia).
-        #    if (!filterTxt)
-        #        return conResult;
-        #
-        #    likePattern = strFmt("*%1*", filterTxt);
-        #
-        #    changecompany (_company)
-        #    {
-        #        while select hoja
-        #            index hint INDSearchKeyIdx
-        #            where (hoja.Voucher == '')
-        #               && (hoja.INDSearchKey like likePattern)
-        #        {
-        #            conItem = [[
-        #                strFmt("%1", hoja.HojaGastosId),
-        #                strFmt("%1", hoja.Description),
-        #                strFmt("%1", hoja.ProjId)
-        #            ]];
-        #
-        #            conResult += conItem;
-        #        }
-        #    }
-        #
-        #    return conResult ? conResult : [["Sin datos."]];
         #}
         #
       ENDSOURCE

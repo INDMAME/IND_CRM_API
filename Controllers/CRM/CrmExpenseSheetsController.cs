@@ -997,14 +997,17 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras == null || headerExtras.Count < 7)
                 return null;
 
-            // Supports both the old AX header shape (7 fields) and the new one (8 fields with TotalAmountMST).
+            // AX detail header mapping:
+            // New (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
+            // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
             var hasNewHeaderShape = headerExtras.Count >= 8;
+            var userAndDescription = ResolveDetailUserAndDescription(headerExtras[1], headerExtras[2], hasNewHeaderShape);
 
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
-                UserId = headerExtras[1],
-                Description = headerExtras[2],
+                Description = userAndDescription.Description,
+                UserId = userAndDescription.UserId,
                 CurrencyCode = headerExtras[3],
                 TotalAmountMST = hasNewHeaderShape ? ToDecimal(headerExtras[4]) : null,
                 ExchRate = hasNewHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4]),
@@ -1060,12 +1063,31 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 3)
                     continue;
 
+                // AX list row mapping:
+                // New (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
+                // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
+                if (rowLen >= 7)
+                {
+                    items.Add(new ExpenseSheetListItemDto
+                    {
+                        HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                        Description = AxContainerReadHelper.SafeString(row, 2),
+                        Voucher = AxContainerReadHelper.SafeString(row, 3),
+                        ProjId = AxContainerReadHelper.SafeString(row, 4),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
+                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        CreatedDate = AxContainerReadHelper.SafeString(row, 7)
+                    });
+                    continue;
+                }
+
                 var amountAndDate = ResolveAmountAndDate(row, rowLen);
 
                 items.Add(new ExpenseSheetListItemDto
                 {
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
+                    Voucher = string.Empty,
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
                     TotalAmountMST = amountAndDate.TotalAmountMST,
@@ -1074,6 +1096,25 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return items;
+        }
+
+        // Resolve user and description positions for detail header in old/new AX layouts.
+        private static (string UserId, string Description) ResolveDetailUserAndDescription(string second, string third, bool hasTotalAmount)
+        {
+            if (!hasTotalAmount)
+                return (second, third);
+
+            // New layout places Description before UserId; keep legacy fallback if detected.
+            var secondLooksUser = IsLikelyUserIdentifier(second);
+            var thirdLooksUser = IsLikelyUserIdentifier(third);
+
+            if (secondLooksUser && !thirdLooksUser)
+                return (second, third);
+
+            if (!secondLooksUser && thirdLooksUser)
+                return (third, second);
+
+            return (third, second);
         }
 
         // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.
@@ -1256,6 +1297,25 @@ namespace IND_CRM_API.Controllers.CRM
                 return true;
 
             return DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out _);
+        }
+
+        // Heuristic to identify AX user identifiers when header field order changes.
+        private static bool IsLikelyUserIdentifier(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var trimmed = value.Trim();
+            if (trimmed.Length > 40)
+                return false;
+
+            if (trimmed.Any(char.IsWhiteSpace))
+                return false;
+
+            if (trimmed.Contains("@") || trimmed.Contains("\\") || trimmed.Contains("/"))
+                return true;
+
+            return trimmed.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.');
         }
 
         // Converts a string to bool.
