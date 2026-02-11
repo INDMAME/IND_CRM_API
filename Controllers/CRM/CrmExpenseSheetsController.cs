@@ -1060,8 +1060,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 3)
                     continue;
 
-                // Supports old AX list rows (5 fields) and new rows (6 fields with TotalAmountMST).
-                var hasNewRowShape = rowLen >= 6;
+                var amountAndDate = ResolveAmountAndDate(row, rowLen);
 
                 items.Add(new ExpenseSheetListItemDto
                 {
@@ -1069,14 +1068,55 @@ namespace IND_CRM_API.Controllers.CRM
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
-                    TotalAmountMST = hasNewRowShape ? ToDecimal(AxContainerReadHelper.SafeString(row, 5)) : null,
-                    CreatedDate = hasNewRowShape
-                        ? AxContainerReadHelper.SafeString(row, 6)
-                        : (rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty)
+                    TotalAmountMST = amountAndDate.TotalAmountMST,
+                    CreatedDate = amountAndDate.CreatedDate
                 });
             }
 
             return items;
+        }
+
+        // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.
+        private static (decimal? TotalAmountMST, string CreatedDate) ResolveAmountAndDate(IAxaptaContainer row, int rowLen)
+        {
+            var value5 = rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty;
+            var value6 = rowLen >= 6 ? AxContainerReadHelper.SafeString(row, 6) : string.Empty;
+
+            if (rowLen >= 6)
+            {
+                var value5IsDate = IsLikelyDateValue(value5);
+                var value6IsDate = IsLikelyDateValue(value6);
+                var value5Amount = ToDecimal(value5);
+                var value6Amount = ToDecimal(value6);
+
+                if (!value5IsDate && value6IsDate)
+                    return (value5Amount, value6);
+
+                if (value5IsDate && !value6IsDate)
+                    return (value6Amount, value5);
+
+                if (value5Amount.HasValue && !value6Amount.HasValue)
+                    return (value5Amount, value6);
+
+                if (!value5Amount.HasValue && value6Amount.HasValue)
+                    return (value6Amount, value5);
+
+                return (value5Amount, value6);
+            }
+
+            if (rowLen == 5)
+            {
+                if (IsLikelyDateValue(value5))
+                    return (null, value5);
+
+                var amount = ToDecimal(value5);
+                if (amount.HasValue)
+                    return (amount, string.Empty);
+
+                return (null, value5);
+            }
+
+            return (null, string.Empty);
         }
 
         // Extracts RecId list from AX container.
@@ -1122,6 +1162,29 @@ namespace IND_CRM_API.Controllers.CRM
                 return parsed;
 
             return null;
+        }
+
+        // Detecta textos de fecha comunes para distinguirlos de importes numericos.
+        private static bool IsLikelyDateValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var trimmed = value.Trim();
+            var acceptedFormats = new[]
+            {
+                "yyyyMMdd",
+                "yyyy-MM-dd",
+                "MM/dd/yyyy",
+                "M/d/yyyy",
+                "dd/MM/yyyy",
+                "d/M/yyyy"
+            };
+
+            if (DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                return true;
+
+            return DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out _);
         }
 
         // Converts a string to bool.
