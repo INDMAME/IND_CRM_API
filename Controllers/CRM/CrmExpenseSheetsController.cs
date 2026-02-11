@@ -1001,13 +1001,12 @@ namespace IND_CRM_API.Controllers.CRM
             // New (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
             // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
             var hasNewHeaderShape = headerExtras.Count >= 8;
-            var resolvedUserId = ResolveDetailUserId(headerExtras, hasNewHeaderShape);
 
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
                 Description = hasNewHeaderShape ? headerExtras[1] : headerExtras[2],
-                UserId = resolvedUserId,
+                UserId = hasNewHeaderShape ? headerExtras[2] : headerExtras[1],
                 CurrencyCode = headerExtras[3],
                 TotalAmountMST = hasNewHeaderShape ? ToDecimal(headerExtras[4]) : null,
                 ExchRate = hasNewHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4]),
@@ -1096,25 +1095,6 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return items;
-        }
-
-        // Resolves CRM user id from AX header and avoids placeholder values such as "0".
-        private static string ResolveDetailUserId(List<string> headerExtras, bool hasNewHeaderShape)
-        {
-            var expectedUser = hasNewHeaderShape ? headerExtras[2] : headerExtras[1];
-            if (IsLikelyCrmUserId(expectedUser))
-                return expectedUser.Trim();
-
-            // Search only the first header fields where user id can appear.
-            var maxIndex = Math.Min(headerExtras.Count - 1, 3);
-            for (int i = 1; i <= maxIndex; i++)
-            {
-                var candidate = headerExtras[i];
-                if (IsLikelyCrmUserId(candidate))
-                    return candidate.Trim();
-            }
-
-            return string.IsNullOrWhiteSpace(expectedUser) ? string.Empty : expectedUser.Trim();
         }
 
         // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.
@@ -1297,24 +1277,6 @@ namespace IND_CRM_API.Controllers.CRM
                 return true;
 
             return DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out _);
-        }
-
-        // Detects CRM user ids like P00014 while rejecting placeholders such as "0".
-        private static bool IsLikelyCrmUserId(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return false;
-
-            var trimmed = value.Trim();
-            if (trimmed == "0")
-                return false;
-
-            if (trimmed.Any(char.IsWhiteSpace))
-                return false;
-
-            var hasLetter = trimmed.Any(char.IsLetter);
-            var hasDigit = trimmed.Any(char.IsDigit);
-            return hasLetter && hasDigit;
         }
 
         // AX can return voucher as "0" when it is effectively empty.
