@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 2/10/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Miércoles 2/11/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -18,6 +18,112 @@ Formatversion: 1
       Version: 3
       SOURCE #getExpenseSheetsList
         #static server container getExpenseSheetsList(container _data)
+        #{
+        #    DataAreaId           _company;
+        #
+        #    UserId               axUserId;
+        #    CRMUserId            crmUserId;
+        #
+        #    str 1000             filterTxt;
+        #    str 1000             likePattern;
+        #
+        #    int                  billedMode;
+        #
+        #    // Filtros nuevos
+        #    date                 createdDateFrom;
+        #    date                 createdDateTo;
+        #    ProjId               projId;
+        #    CurrencyCode         currencyCode;
+        #
+        #    CRMHojaGastosTable   hoja;
+        #    container            conResult, conItem;
+        #
+        #    _company = INDCRMUtilityService::getCompany(_data);
+        #    if (!_company)
+        #        return conNull();
+        #
+        #    if (conLen(_data) < 4)
+        #        return conResult;
+        #
+        #    axUserId   = conPeek(_data, 2);
+        #    filterTxt  = conPeek(_data, 3);
+        #    billedMode = conPeek(_data, 4);
+        #
+        #    // Filtros opcionales nuevos
+        #    if (conLen(_data) >= 5 && conPeek(_data, 5))
+        #        createdDateFrom = str2Date(conPeek(_data, 5), 321);
+        #
+        #    if (conLen(_data) >= 6 && conPeek(_data, 6))
+        #        createdDateTo = str2Date(conPeek(_data, 6), 321);
+        #
+        #    if (conLen(_data) >= 7)
+        #        projId = conPeek(_data, 7);
+        #
+        #    if (conLen(_data) >= 8)
+        #        currencyCode = conPeek(_data, 8);
+        #
+        #    // billedMode permitido
+        #    if (billedMode != 0 && billedMode != 1 && billedMode != 2)
+        #        billedMode = 0;
+        #
+        #    if (filterTxt)
+        #        likePattern = strFmt("*%1*", filterTxt);
+        #
+        #    changecompany (_company)
+        #    {
+        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #        if (!crmUserId)
+        #            return conResult;
+        #
+        #        while select hoja
+        #            index hint INDSearchKeyIdx
+        #            where hoja.UserId == crmUserId
+        #
+        #               // Texto opcional
+        #               && ( !filterTxt || hoja.INDSearchKey like likePattern )
+        #
+        #               // Facturación
+        #               && (
+        #                      (billedMode == 2)
+        #                   || (billedMode == 0 && hoja.Voucher == '')
+        #                   || (billedMode == 1 && hoja.Voucher != '')
+        #                  )
+        #
+        #               // Fecha creación opcional
+        #               && (
+        #                      (!createdDateFrom && !createdDateTo)
+        #                   || ( createdDateFrom && !createdDateTo && hoja.CreatedDate >= createdDateFrom)
+        #                   || (!createdDateFrom &&  createdDateTo && hoja.CreatedDate <= createdDateTo)
+        #                   || ( createdDateFrom &&  createdDateTo &&
+        #                        hoja.CreatedDate >= createdDateFrom &&
+        #                        hoja.CreatedDate <= createdDateTo)
+        #                  )
+        #
+        #               // Proyecto opcional
+        #               && ( !projId || hoja.ProjId == projId )
+        #
+        #               // Moneda opcional
+        #               && ( !currencyCode || hoja.CurrencyCode == currencyCode )
+        #        {
+        #            conItem = [[
+        #                strFmt("%1", hoja.HojaGastosId),
+        #                strFmt("%1", hoja.Description),
+        #                strFmt("%1", hoja.ProjId),
+        #                strFmt("%1", hoja.CurrencyCode),
+        #                strFmt("%1", hoja.TotalAmountMST()),
+        #                strFmt("%1", hoja.CreatedDate)
+        #            ]];
+        #
+        #            conResult += conItem;
+        #        }
+        #    }
+        #
+        #    return conResult ? conResult : [["Sin datos."]];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getExpenseSheetsList_v3
+        #static server container getExpenseSheetsList_v3(container _data)
         #{
         #    DataAreaId           _company;
         #
@@ -632,6 +738,7 @@ Formatversion: 1
         #            header.UserId,
         #            header.Description,
         #            header.CurrencyCode,
+        #            header.TotalAmountMST(),
         #            header.ExchRate,
         #            header.ProjId,
         #            header.Voucher

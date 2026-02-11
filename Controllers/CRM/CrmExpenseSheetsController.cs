@@ -997,15 +997,19 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras == null || headerExtras.Count < 7)
                 return null;
 
+            // Supports both the old AX header shape (7 fields) and the new one (8 fields with TotalAmountMST).
+            var hasNewHeaderShape = headerExtras.Count >= 8;
+
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
                 UserId = headerExtras[1],
                 Description = headerExtras[2],
                 CurrencyCode = headerExtras[3],
-                ExchRate = ToDecimal(headerExtras[4]),
-                ProjId = headerExtras[5],
-                Voucher = headerExtras[6],
+                TotalAmountMST = hasNewHeaderShape ? ToDecimal(headerExtras[4]) : null,
+                ExchRate = hasNewHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4]),
+                ProjId = hasNewHeaderShape ? headerExtras[6] : headerExtras[5],
+                Voucher = hasNewHeaderShape ? headerExtras[7] : headerExtras[6],
                 Lines = new List<ExpenseSheetLineDto>()
             };
 
@@ -1056,13 +1060,19 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 3)
                     continue;
 
+                // Supports old AX list rows (5 fields) and new rows (6 fields with TotalAmountMST).
+                var hasNewRowShape = rowLen >= 6;
+
                 items.Add(new ExpenseSheetListItemDto
                 {
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
-                    CreatedDate = rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty
+                    TotalAmountMST = hasNewRowShape ? ToDecimal(AxContainerReadHelper.SafeString(row, 5)) : null,
+                    CreatedDate = hasNewRowShape
+                        ? AxContainerReadHelper.SafeString(row, 6)
+                        : (rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty)
                 });
             }
 

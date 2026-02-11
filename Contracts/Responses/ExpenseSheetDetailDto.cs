@@ -11,6 +11,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string UserId { get; set; }
         public string Description { get; set; }
         public string CurrencyCode { get; set; }
+        // Total amount in company currency returned by AX.
+        public decimal? TotalAmountMST { get; set; }
         public decimal? ExchRate { get; set; }
         public string ProjId { get; set; }
         public string Voucher { get; set; }
