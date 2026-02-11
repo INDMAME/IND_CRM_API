@@ -1001,18 +1001,17 @@ namespace IND_CRM_API.Controllers.CRM
             // New (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
             // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
             var hasNewHeaderShape = headerExtras.Count >= 8;
-            var userAndDescription = ResolveDetailUserAndDescription(headerExtras[1], headerExtras[2], hasNewHeaderShape);
 
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
-                Description = userAndDescription.Description,
-                UserId = userAndDescription.UserId,
+                Description = hasNewHeaderShape ? headerExtras[1] : headerExtras[2],
+                UserId = hasNewHeaderShape ? headerExtras[2] : headerExtras[1],
                 CurrencyCode = headerExtras[3],
                 TotalAmountMST = hasNewHeaderShape ? ToDecimal(headerExtras[4]) : null,
                 ExchRate = hasNewHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4]),
                 ProjId = hasNewHeaderShape ? headerExtras[6] : headerExtras[5],
-                Voucher = hasNewHeaderShape ? headerExtras[7] : headerExtras[6],
+                Voucher = NormalizeVoucher(hasNewHeaderShape ? headerExtras[7] : headerExtras[6]),
                 Lines = new List<ExpenseSheetLineDto>()
             };
 
@@ -1096,25 +1095,6 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return items;
-        }
-
-        // Resolve user and description positions for detail header in old/new AX layouts.
-        private static (string UserId, string Description) ResolveDetailUserAndDescription(string second, string third, bool hasTotalAmount)
-        {
-            if (!hasTotalAmount)
-                return (second, third);
-
-            // New layout places Description before UserId; keep legacy fallback if detected.
-            var secondLooksUser = IsLikelyUserIdentifier(second);
-            var thirdLooksUser = IsLikelyUserIdentifier(third);
-
-            if (secondLooksUser && !thirdLooksUser)
-                return (second, third);
-
-            if (!secondLooksUser && thirdLooksUser)
-                return (third, second);
-
-            return (third, second);
         }
 
         // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.
@@ -1299,23 +1279,14 @@ namespace IND_CRM_API.Controllers.CRM
             return DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out _);
         }
 
-        // Heuristic to identify AX user identifiers when header field order changes.
-        private static bool IsLikelyUserIdentifier(string value)
+        // AX can return voucher as "0" when it is effectively empty.
+        private static string NormalizeVoucher(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
-                return false;
+                return string.Empty;
 
             var trimmed = value.Trim();
-            if (trimmed.Length > 40)
-                return false;
-
-            if (trimmed.Any(char.IsWhiteSpace))
-                return false;
-
-            if (trimmed.Contains("@") || trimmed.Contains("\\") || trimmed.Contains("/"))
-                return true;
-
-            return trimmed.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.');
+            return trimmed == "0" ? string.Empty : trimmed;
         }
 
         // Converts a string to bool.
