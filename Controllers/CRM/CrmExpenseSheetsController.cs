@@ -1155,13 +1155,84 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(value))
                 return null;
 
-            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            var normalized = NormalizeDecimalValue(value);
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
 
-            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.CurrentCulture, out parsed))
+            // Culturas de respaldo para ambientes AX con separadores regionales.
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-MX"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-ES"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out parsed))
                 return parsed;
 
             return null;
+        }
+
+        // Normaliza montos de AX para parsear separadores regionales de forma consistente.
+        private static string NormalizeDecimalValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var raw = value.Trim()
+                .Replace("\u00A0", string.Empty)
+                .Replace(" ", string.Empty);
+
+            var hasComma = raw.Contains(",");
+            var hasDot = raw.Contains(".");
+
+            if (hasComma && hasDot)
+            {
+                var lastComma = raw.LastIndexOf(',');
+                var lastDot = raw.LastIndexOf('.');
+                var decimalSeparator = lastComma > lastDot ? ',' : '.';
+                var thousandSeparator = decimalSeparator == ',' ? "." : ",";
+
+                var withoutThousands = raw.Replace(thousandSeparator, string.Empty);
+                return decimalSeparator == ','
+                    ? withoutThousands.Replace(',', '.')
+                    : withoutThousands;
+            }
+
+            if (hasComma)
+            {
+                var commaCount = raw.Count(c => c == ',');
+                var lastComma = raw.LastIndexOf(',');
+                var digitsAfter = lastComma >= 0 ? raw.Length - lastComma - 1 : 0;
+
+                // Caso tipico de AX: coma como separador decimal.
+                if (digitsAfter > 0 && digitsAfter <= 2)
+                {
+                    var whole = raw.Substring(0, lastComma).Replace(",", string.Empty);
+                    var fraction = raw.Substring(lastComma + 1);
+                    return string.Concat(whole, ".", fraction);
+                }
+
+                // Si la coma solo agrupa miles, se elimina.
+                if (commaCount >= 1)
+                    return raw.Replace(",", string.Empty);
+            }
+
+            if (hasDot)
+            {
+                var dotCount = raw.Count(c => c == '.');
+                if (dotCount > 1)
+                {
+                    var lastDot = raw.LastIndexOf('.');
+                    var whole = raw.Substring(0, lastDot).Replace(".", string.Empty);
+                    var fraction = raw.Substring(lastDot + 1);
+                    return string.Concat(whole, ".", fraction);
+                }
+            }
+
+            return raw;
         }
 
         // Detecta textos de fecha comunes para distinguirlos de importes numericos.
