@@ -4,16 +4,40 @@ using System.ComponentModel.DataAnnotations;
 namespace IND_CRM_API.Contracts.Requests
 {
     /// <summary>
-    /// Request data to create an expense sheet with lines.
+    /// Request body for expense sheet creation with mode-based behavior.
     /// </summary>
     public class CreateExpenseSheetRequest
     {
         public string userId { get; set; }
-        [Required] public string description { get; set; }
-        [Required] public string currencyCode { get; set; }
+
+        /// <summary>
+        /// Operation mode. 0 = create header and lines (default), 1 = create header only, 2 = add lines to an existing header.
+        /// </summary>
+        [Range(0, 2)]
+        public int? mode { get; set; }
+
+        /// <summary>
+        /// Existing header id. Required only when mode = 2.
+        /// </summary>
+        public string existingHojaGastosId { get; set; }
+
+        /// <summary>
+        /// Header description. Required when mode = 0 or mode = 1.
+        /// </summary>
+        public string description { get; set; }
+
+        /// <summary>
+        /// Header currency code. Required when mode = 0 or mode = 1.
+        /// </summary>
+        public string currencyCode { get; set; }
+
         public decimal? exchRate { get; set; }
         public string projId { get; set; }
-        [Required] public List<CreateExpenseSheetLineRequest> lines { get; set; }
+
+        /// <summary>
+        /// Lines payload. Required with at least one line in mode = 0 and mode = 2. Must be null or empty in mode = 1.
+        /// </summary>
+        public List<CreateExpenseSheetLineRequest> lines { get; set; }
     }
 
     /// <summary>

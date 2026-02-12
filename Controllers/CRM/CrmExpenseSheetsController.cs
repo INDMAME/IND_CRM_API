@@ -25,6 +25,10 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/expensesheets")]
     public class CrmExpenseSheetsController : BaseCrmController
     {
+        private const int ModeCreateHeaderAndLines = 0;
+        private const int ModeCreateHeaderOnly = 1;
+        private const int ModeAddLinesToExisting = 2;
+
         private readonly IAxaptaSessionManager _sessionManager;
 
         /// <summary>
@@ -36,8 +40,14 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Creates an expense sheet with lines in AX.
+        /// Creates expense sheet content in AX using mode-based behavior.
         /// </summary>
+        /// <remarks>
+        /// Conditional request body rules:
+        /// - mode 0 (default): description, currencyCode and lines are required.
+        /// - mode 1: description and currencyCode are required, lines must be null or empty.
+        /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
+        /// </remarks>
         [HttpPost, Route("")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -48,6 +58,7 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            var modeValue = ResolveCreateExpenseMode(body);
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
@@ -64,14 +75,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(body.description))
-                    validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.currencyCode))
-                    validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio." });
-                if (body.lines == null || body.lines.Count == 0)
-                    validationErrors.Add(new IndValidationError { Field = "lines", Message = "lines es obligatorio." });
-                else
-                    ValidateLines(body.lines, validationErrors);
+                ValidateCreateExpenseSheetBody(body, modeValue, validationErrors);
             }
 
             if (validationErrors.Any())
@@ -97,13 +101,14 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
+                var existingHojaGastosId = (body.existingHojaGastosId ?? string.Empty).Trim();
                 if (!string.IsNullOrWhiteSpace(body.userId) &&
                     !string.Equals(body.userId.Trim(), axUserId, StringComparison.OrdinalIgnoreCase))
                 {
                     Logger.Log($"[WARN] CreateExpenseSheet userId mismatch body={body.userId} header={axUserId} token={username}");
                 }
 
-                Logger.Log($"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} traceId={traceId}");
+                Logger.Log($"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} mode={modeValue} existingHojaGastosId={existingHojaGastosId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var rootCon = ax.CreateContainer();
@@ -119,24 +124,32 @@ namespace IND_CRM_API.Controllers.CRM
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
-                foreach (var line in body.lines)
+                if (body.lines != null)
                 {
-                    var lineCon = ax.CreateContainer();
-                    var normalizedDate = NormalizeYmdDate(line.transDate);
+                    foreach (var line in body.lines)
+                    {
+                        var lineCon = ax.CreateContainer();
+                        var normalizedDate = NormalizeYmdDate(line.transDate);
 
-                    lineCon.Append(normalizedDate);
-                    lineCon.Append(line.typeValue ?? 0);
-                    lineCon.Append(line.description?.Trim() ?? string.Empty);
-                    lineCon.Append(ToAxBool(line.internacional));
-                    lineCon.Append(ToAxBool(line.ticket));
-                    lineCon.Append(line.qty ?? 0m);
-                    lineCon.Append(line.amount ?? 0m);
-                    lineCon.Append(line.projId?.Trim() ?? string.Empty);
-                    lineCon.Append(line.indAttachFiles ?? string.Empty);
+                        lineCon.Append(normalizedDate);
+                        lineCon.Append(line.typeValue ?? 0);
+                        lineCon.Append(line.description?.Trim() ?? string.Empty);
+                        lineCon.Append(ToAxBool(line.internacional));
+                        lineCon.Append(ToAxBool(line.ticket));
+                        lineCon.Append(line.qty ?? 0m);
+                        lineCon.Append(line.amount ?? 0m);
+                        lineCon.Append(line.projId?.Trim() ?? string.Empty);
+                        lineCon.Append(line.indAttachFiles ?? string.Empty);
 
-                    linesCon.Append(lineCon);
+                        linesCon.Append(lineCon);
+                    }
                 }
                 rootCon.Append(linesCon);
+
+                var optionsCon = ax.CreateContainer();
+                optionsCon.Append(modeValue);
+                optionsCon.Append(existingHojaGastosId);
+                rootCon.Append(optionsCon);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -857,6 +870,70 @@ namespace IND_CRM_API.Controllers.CRM
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, response);
             }
+        }
+
+        // Resolves creation mode with backward-compatible default.
+        private static int ResolveCreateExpenseMode(CreateExpenseSheetRequest body)
+        {
+            if (body == null || !body.mode.HasValue)
+                return ModeCreateHeaderAndLines;
+
+            return body.mode.Value;
+        }
+
+        // Validates create expense sheet body based on selected mode.
+        private static void ValidateCreateExpenseSheetBody(CreateExpenseSheetRequest body, int mode, List<IndValidationError> errors)
+        {
+            if (mode != ModeCreateHeaderAndLines && mode != ModeCreateHeaderOnly && mode != ModeAddLinesToExisting)
+            {
+                errors.Add(new IndValidationError
+                {
+                    Field = "mode",
+                    Message = "mode invalido. Valores permitidos: 0, 1, 2."
+                });
+                return;
+            }
+
+            if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
+            {
+                if (string.IsNullOrWhiteSpace(body.description))
+                    errors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio cuando mode es 0 o 1." });
+
+                if (string.IsNullOrWhiteSpace(body.currencyCode))
+                    errors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio cuando mode es 0 o 1." });
+            }
+
+            var hasLines = body.lines != null && body.lines.Count > 0;
+
+            if (mode == ModeCreateHeaderAndLines)
+            {
+                if (!hasLines)
+                {
+                    errors.Add(new IndValidationError { Field = "lines", Message = "lines es obligatorio cuando mode es 0." });
+                    return;
+                }
+
+                ValidateLines(body.lines, errors);
+                return;
+            }
+
+            if (mode == ModeCreateHeaderOnly)
+            {
+                if (hasLines)
+                    errors.Add(new IndValidationError { Field = "lines", Message = "lines debe ser null o vacio cuando mode es 1." });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body.existingHojaGastosId))
+                errors.Add(new IndValidationError { Field = "existingHojaGastosId", Message = "existingHojaGastosId es obligatorio cuando mode es 2." });
+
+            if (!hasLines)
+            {
+                errors.Add(new IndValidationError { Field = "lines", Message = "lines debe incluir al menos una linea cuando mode es 2." });
+                return;
+            }
+
+            ValidateLines(body.lines, errors);
         }
 
         // Validates line inputs for create operations.
