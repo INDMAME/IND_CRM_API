@@ -664,7 +664,17 @@ namespace IND_CRM_API.Services
                         ["items"] = BuildLineSchema()
                     }
                 },
-                ["required"] = new JArray("description", "currencyCode", "lines")
+                ["required"] = new JArray(
+                    "mode",
+                    "description",
+                    "currencyCode",
+                    "exchRate",
+                    "projId",
+                    "confidence",
+                    "warnings",
+                    "rawCurrency",
+                    "merchant",
+                    "lines")
             };
         }
 
@@ -714,7 +724,16 @@ namespace IND_CRM_API.Services
                         ["type"] = "string"
                     }
                 },
-                ["required"] = new JArray("typeValue", "description", "ticket", "qty", "amount")
+                ["required"] = new JArray(
+                    "transDate",
+                    "typeValue",
+                    "description",
+                    "internacional",
+                    "ticket",
+                    "qty",
+                    "amount",
+                    "projId",
+                    "indAttachFiles")
             };
         }
     }
