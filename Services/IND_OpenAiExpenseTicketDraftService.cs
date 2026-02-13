@@ -258,7 +258,10 @@ namespace IND_CRM_API.Services
                         }
                     }
                 },
-                ["response_format"] = schema,
+                ["text"] = new JObject
+                {
+                    ["format"] = schema
+                },
                 ["max_output_tokens"] = 1536
             };
 
