@@ -113,7 +113,6 @@ Endpoints
 - Headers: `Authorization`
 - Body (multipart/form-data):
   - `ticketImage` (file, requerido)
-  - `currencyHint` (string, opcional)
 - Respuesta: `IndApiResponse<ExpenseSheetDraftResponse>`
 - Notas: no crea el gasto, devuelve sugerencia para el formulario.
 

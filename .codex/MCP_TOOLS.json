@@ -415,9 +415,6 @@
               "ticketImage": {
                 "type": "string",
                 "format": "binary"
-              },
-              "currencyHint": {
-                "type": "string"
               }
             },
             "required": [
@@ -447,8 +444,7 @@
             "Authorization": "Bearer <token>"
           },
           "body": {
-            "ticketImage": "<binary>",
-            "currencyHint": "EUR"
+            "ticketImage": "<binary>"
           }
         }
       ]

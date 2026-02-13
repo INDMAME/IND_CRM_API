@@ -49,7 +49,6 @@ namespace IND_CRM_API.Services
             byte[] imageBytes,
             string fileName,
             string contentType,
-            string currencyHint,
             CancellationToken cancellationToken)
         {
             if (imageBytes == null || imageBytes.Length == 0)
@@ -66,7 +65,7 @@ namespace IND_CRM_API.Services
                 throw new InvalidOperationException("OpenAI API key no esta configurada.");
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
-            var promptText = BuildPayloadPromptText(currencyHint);
+            var promptText = BuildPayloadPromptText();
             var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, _model);
 
             using (var request = new HttpRequestMessage(HttpMethod.Post, ResponsesUrl))
@@ -266,13 +265,9 @@ namespace IND_CRM_API.Services
             return JsonConvert.SerializeObject(payload);
         }
 
-        private static string BuildPayloadPromptText(string currencyHint)
+        private static string BuildPayloadPromptText()
         {
-            var currency = string.IsNullOrWhiteSpace(currencyHint) ? string.Empty : currencyHint.Trim();
-
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
+            return @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
 - Si un campo no se puede inferir con confianza, usa null y agrega advertencia en warnings.
 - tipo de lineas:
@@ -295,7 +290,8 @@ namespace IND_CRM_API.Services
 - description corto y util para una linea de gasto.
 - currencyCode en cabecera si se detecta; si no, deja null.
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
-- Moneda de referencia o pista del usuario: {0}.", currency)
+- Deduce la moneda y el valor monetario de la imagen, sin soporte externo.
+- Si un campo es imposible de inferir con calidad suficiente, usa null y deja una advertencia clara."
                 .Trim();
         }
 
@@ -335,7 +331,7 @@ namespace IND_CRM_API.Services
                 mode = 0,
                 userId = string.Empty,
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
-                currencyCode = NormalizeText(root["currencyCode"]?.ToString(), string.Empty),
+                currencyCode = NormalizeText(root["currencyCode"]?.ToString(), null),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -346,6 +342,11 @@ namespace IND_CRM_API.Services
             };
 
             var warnings = request.Warnings;
+            if (string.IsNullOrWhiteSpace(request.currencyCode))
+            {
+                warnings = EnsureWarnings(warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
+            }
+
             var lines = root["lines"] as JArray;
             if (lines != null)
             {

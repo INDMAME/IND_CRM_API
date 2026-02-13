@@ -301,7 +301,6 @@ namespace IND_CRM_API.Controllers.System
         /// <remarks>
         /// Entrada: multipart/form-data con campos:
         /// - ticketImage: archivo .jpg/.jpeg/.png/.webp (max 50 MB)
-        /// - currencyHint (opcional)
         /// </remarks>
         [HttpPost, Route("expensefromticket")]
         [SwaggerResponse(HttpStatusCode.OK, "Borrador de hoja de gastos generado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
@@ -330,8 +329,6 @@ namespace IND_CRM_API.Controllers.System
 
                 var provider = new MultipartMemoryStreamProvider();
                 await Request.Content.ReadAsMultipartAsync(provider, cancellationToken);
-
-                var currencyHint = await ReadFormFieldAsync(provider, "currencyHint");
 
                 var filePart = FindFilePart(provider, "ticketImage");
                 if (filePart == null)
@@ -389,7 +386,6 @@ namespace IND_CRM_API.Controllers.System
                     imageBytes,
                     originalFileName,
                     mediaType,
-                    currencyHint,
                     cancellationToken);
                 draftSw.Stop();
                 _logger.Log($"[IA-DRAFT] OpenAI draft generated ms={draftSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
