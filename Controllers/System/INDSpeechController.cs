@@ -1,4 +1,5 @@
 using IND_CRM_API.Models.Responses;
+using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using Swashbuckle.Swagger.Annotations;
@@ -23,11 +24,12 @@ namespace IND_CRM_API.Controllers.System
     /// La API key de OpenAI se mantiene solo en servidor y nunca se expone al cliente.
     /// </summary>
     [Authorize]
-    [RoutePrefix("api/speech")]
+    [RoutePrefix("api/ia/service")]
     public class INDSpeechController : ApiController
     {
         private const int MaxAudioBytes = 25 * 1024 * 1024; // 25 MB (limite interno alineado con OpenAI)
         private const int DefaultMaxPromptWords = 500; // limite local por defecto para mantener el prompt acotado
+        private const int MaxExpenseTicketImageBytes = 50 * 1024 * 1024; // 50 MB (align OpenAI payload limit)
 
         private const string DefaultPromptEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT";
         private const string DefaultPromptPathEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH";
@@ -63,14 +65,36 @@ namespace IND_CRM_API.Controllers.System
             "application/octet-stream"
         };
 
+        private static readonly HashSet<string> AllowedTicketImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp"
+        };
+
+        private static readonly HashSet<string> AllowedTicketImageContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "image/jpeg",
+            "image/pjpeg",
+            "image/png",
+            "image/webp"
+        };
+
         private readonly IND_IAudioTranscriptionService _transcription;
         private readonly IND_ITextModerationService _moderation;
+        private readonly IND_IExpenseTicketDraftService _ticketDraft;
         private readonly IAxLogger _logger;
 
-        public INDSpeechController(IND_IAudioTranscriptionService transcription, IND_ITextModerationService moderation, IAxLogger logger)
+        public INDSpeechController(
+            IND_IAudioTranscriptionService transcription,
+            IND_ITextModerationService moderation,
+            IND_IExpenseTicketDraftService ticketDraft,
+            IAxLogger logger)
         {
             _transcription = transcription ?? throw new ArgumentNullException(nameof(transcription));
             _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
+            _ticketDraft = ticketDraft ?? throw new ArgumentNullException(nameof(ticketDraft));
             _logger = logger ?? new FileAxLogger();
         }
 
@@ -89,7 +113,7 @@ namespace IND_CRM_API.Controllers.System
         /// - La API key de OpenAI se lee de configuracion/entorno y nunca se devuelve.
         /// - A futuro, se recomienda rate limiting por usuario/empresa para evitar abuso.
         /// </remarks>
-        [HttpPost, Route("transcribe")]
+        [HttpPost, Route("speech")]
         [SwaggerResponse(HttpStatusCode.OK, "Transcripcion correcta", typeof(IndPagedResponse<string>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<string>))]
@@ -106,7 +130,7 @@ namespace IND_CRM_API.Controllers.System
             {
                 var username = User?.Identity?.Name ?? "unknown";
                 var method = Request?.Method?.Method ?? "POST";
-                var path = Request?.RequestUri?.AbsolutePath ?? "/api/speech/transcribe";
+                var path = Request?.RequestUri?.AbsolutePath ?? "/api/ia/service/speech";
                 _logger.Log($"[API-IN] {method} {path} user={username} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
 
                 if (Request?.Content == null || !Request.Content.IsMimeMultipartContent())
@@ -267,7 +291,153 @@ namespace IND_CRM_API.Controllers.System
 
                 return Content(
                     HttpStatusCode.InternalServerError,
-                    BuildError(traceId, "Error de transcripcion de audio.", IndErrorCodes.InternalError, null));
+                    BuildError<string>(traceId, "Error de transcripcion de audio.", IndErrorCodes.InternalError, null));
+            }
+        }
+
+        /// <summary>
+        /// Extrae un borrador de hoja de gastos desde una imagen de ticket.
+        /// </summary>
+        /// <remarks>
+        /// Entrada: multipart/form-data con campos:
+        /// - ticketImage: archivo .jpg/.jpeg/.png/.webp (max 50 MB)
+        /// - languageId (opcional): codigo de idioma, default es
+        /// - currencyHint (opcional)
+        /// - prompt (opcional): instrucciones adicionales para la IA
+        /// </remarks>
+        [HttpPost, Route("expensefromticket")]
+        [SwaggerResponse(HttpStatusCode.OK, "Borrador de hoja de gastos generado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [SwaggerResponse(HttpStatusCode.UnsupportedMediaType, "Tipo de contenido no soportado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
+        [SwaggerOperation(Tags = new[] { "Voz" })]
+        public async Task<IHttpActionResult> ExtractExpenseTicketDraft(CancellationToken cancellationToken)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var totalSw = Stopwatch.StartNew();
+
+            try
+            {
+                var username = User?.Identity?.Name ?? "unknown";
+                var method = Request?.Method?.Method ?? "POST";
+                var path = Request?.RequestUri?.AbsolutePath ?? "/api/ia/service/expensefromticket";
+                _logger.Log($"[API-IN] {method} {path} user={username} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+
+                if (Request?.Content == null || !Request.Content.IsMimeMultipartContent())
+                {
+                    return ReturnError(HttpStatusCode.UnsupportedMediaType, traceId, "Se requiere multipart/form-data.", IndErrorCodes.ValidationError, "contentType");
+                }
+
+                var provider = new MultipartMemoryStreamProvider();
+                await Request.Content.ReadAsMultipartAsync(provider, cancellationToken);
+
+                var languageId = await ReadFormFieldAsync(provider, "languageId");
+                if (string.IsNullOrWhiteSpace(languageId))
+                    languageId = "es";
+
+                var currencyHint = await ReadFormFieldAsync(provider, "currencyHint");
+                var prompt = await ReadFormFieldAsync(provider, "prompt");
+
+                var filePart = FindFilePart(provider, "ticketImage");
+                if (filePart == null)
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "ticketImage es obligatorio.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                var originalFileName = GetFileName(filePart);
+                if (string.IsNullOrWhiteSpace(originalFileName))
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "ticketImage debe incluir nombre de archivo.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                var extension = Path.GetExtension(originalFileName);
+                if (string.IsNullOrWhiteSpace(extension) || !AllowedTicketImageExtensions.Contains(extension))
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "Formato de imagen no soportado. Permitidos: .jpg, .jpeg, .png, .webp", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                var mediaType = filePart.Headers?.ContentType?.MediaType;
+                if (!string.IsNullOrWhiteSpace(mediaType) && !AllowedTicketImageContentTypes.Contains(mediaType))
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "Content-Type de imagen no soportado.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                var contentLength = filePart.Headers?.ContentLength;
+                if (contentLength.HasValue && contentLength.Value > MaxExpenseTicketImageBytes)
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "ticketImage supera el limite de 50 MB.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                var fileReadSw = Stopwatch.StartNew();
+                var imageBytes = await filePart.ReadAsByteArrayAsync();
+                fileReadSw.Stop();
+                if (imageBytes == null || imageBytes.Length <= 0)
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "ticketImage esta vacio.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+                if (imageBytes.Length > MaxExpenseTicketImageBytes)
+                {
+                    return ReturnError((HttpStatusCode)422, traceId, "ticketImage supera el limite de 50 MB.", IndErrorCodes.ValidationError, "ticketImage");
+                }
+
+                _logger.Log($"[IA-DRAFT] Image read bytes={imageBytes.Length} ms={fileReadSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+
+                var openAiApiKey = GetOpenAiApiKey();
+                if (string.IsNullOrWhiteSpace(openAiApiKey))
+                {
+                    _logger.Log("[IA-DRAFT] OpenAI API key no esta configurada.", AxaptaSessionManager.LogLevel.Error);
+                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error interno del servidor.", IndErrorCodes.InternalError, null);
+                }
+
+                var draftSw = Stopwatch.StartNew();
+                var draft = await _ticketDraft.ExtractFromTicketImageAsync(
+                    imageBytes,
+                    originalFileName,
+                    mediaType,
+                    languageId,
+                    currencyHint,
+                    prompt,
+                    cancellationToken);
+                draftSw.Stop();
+                _logger.Log($"[IA-DRAFT] OpenAI draft generated ms={draftSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+
+                if (draft == null)
+                {
+                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "No se pudo generar el borrador desde el ticket.", IndErrorCodes.InternalError, null);
+                }
+
+                totalSw.Stop();
+                _logger.Log($"[IA-DRAFT] Total ms={totalSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+                LogApiOut(HttpStatusCode.OK, traceId, AxaptaSessionManager.LogLevel.Info);
+                return Ok(new IndApiResponse<ExpenseSheetDraftResponse>
+                {
+                    Success = true,
+                    Message = "OK",
+                    Data = draft,
+                    ErrorCode = null,
+                    Errors = null,
+                    TraceId = traceId
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.Log("[IA-DRAFT] Validacion: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                LogApiOut((HttpStatusCode)422, traceId, AxaptaSessionManager.LogLevel.Warning);
+                return ReturnError((HttpStatusCode)422, traceId, ex.Message, IndErrorCodes.ValidationError, null);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.Log("[IA-DRAFT] Request cancelado: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                LogApiOut(HttpStatusCode.InternalServerError, traceId, AxaptaSessionManager.LogLevel.Error);
+                return ReturnError(HttpStatusCode.InternalServerError, traceId, "Timeout o cancelacion en la extraccion del draft.", IndErrorCodes.InternalError, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log("[IA-DRAFT] Error: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                LogApiOut(HttpStatusCode.InternalServerError, traceId, AxaptaSessionManager.LogLevel.Error);
+                return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error de extraccion de borrador.", IndErrorCodes.InternalError, null);
             }
         }
 
@@ -278,19 +448,19 @@ namespace IND_CRM_API.Controllers.System
                 : AxaptaSessionManager.LogLevel.Warning;
 
             LogApiOut(statusCode, traceId, level);
-            return Content(statusCode, BuildError(traceId, message, errorCode, field));
+            return Content(statusCode, BuildError<string>(traceId, message, errorCode, field));
         }
 
         private void LogApiOut(HttpStatusCode statusCode, string traceId, AxaptaSessionManager.LogLevel level)
         {
             var method = Request?.Method?.Method ?? "POST";
-            var path = Request?.RequestUri?.AbsolutePath ?? "/api/speech/transcribe";
+            var path = Request?.RequestUri?.AbsolutePath ?? "/api/ia/service/speech";
             _logger.Log($"[API-OUT] {method} {path} {(int)statusCode} traceId={traceId}", level);
         }
 
-        private static IndApiResponse<string> BuildError(string traceId, string message, string errorCode, string field)
+        private static IndApiResponse<T> BuildError<T>(string traceId, string message, string errorCode, string field)
         {
-            return new IndApiResponse<string>
+            return new IndApiResponse<T>
             {
                 Success = false,
                 Message = message,

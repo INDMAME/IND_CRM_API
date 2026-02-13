@@ -369,7 +369,7 @@
       },
       "x-http": {
         "method": "POST",
-        "path": "/api/speech/transcribe",
+        "path": "/api/ia/service/speech",
         "auth": "bearer",
         "requiredHeaders": [
           "Authorization"
@@ -386,6 +386,77 @@
             "audioFile": "<binary>",
             "temperature": 0,
             "prompt": "<context>"
+          }
+        }
+      ]
+    },
+    {
+      "name": "expensefromticket_draft",
+      "description": "Extrae un borrador de hoja de gastos desde imagen de ticket.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "ticketImage": {
+                "type": "string",
+                "format": "binary"
+              },
+              "languageId": {
+                "type": "string"
+              },
+              "currencyHint": {
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ticketImage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "POST",
+        "path": "/api/ia/service/expensefromticket",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ],
+        "contentType": "multipart/form-data"
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          },
+          "body": {
+            "ticketImage": "<binary>",
+            "languageId": "es",
+            "currencyHint": "EUR",
+            "prompt": ""
           }
         }
       ]

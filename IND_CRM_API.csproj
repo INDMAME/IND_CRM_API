@@ -169,6 +169,7 @@
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />
     <Compile Include="Contracts\Responses\ProjectListItemDto.cs" />
@@ -206,8 +207,10 @@
     <Compile Include="Services\IND_AxSessionGuard.cs" />
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
     <Compile Include="Services\IND_OpenAiModerationService.cs" />
+    <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IAxLogger.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
+    <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />

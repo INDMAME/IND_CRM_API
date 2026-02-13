@@ -1,7 +1,7 @@
 # Postman project (actualizado 2026-02-10)
 
 Archivos
-- Collection: .codex/Postman/IND_CRM_API V10.postman_collection.json
+- Collection: .codex/Postman/IND_CRM_API V11.postman_collection.json
 
 Variables globales (collection variables)
 - baseUrl: URL base compartida (por defecto https://crm.insertec.biz:7776)

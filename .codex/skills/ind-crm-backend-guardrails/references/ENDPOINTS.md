@@ -39,10 +39,13 @@ Endpoints
 - GET /api/mcp/tools (Authorize)
   Response: catalogo MCP (MCP_TOOLS.json)
 
-## Speech
-- POST /api/speech/transcribe (Authorize)
+## IA Services
+- POST /api/ia/service/speech (Authorize)
   Content-Type: multipart/form-data
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)
+- POST /api/ia/service/expensefromticket (Authorize)
+  Content-Type: multipart/form-data
+  Fields: ticketImage (required), languageId (optional), currencyHint (optional), prompt (optional)
 
 ## Accounts
 - POST /api/crm/accounts/listContacts (Authorize + X-IND-Company)

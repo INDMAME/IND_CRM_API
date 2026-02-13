@@ -1,6 +1,6 @@
 # IND_CRM_API MCP Endpoints (actualizado 2026-02-10)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V10 (`.codex/Postman/IND_CRM_API V10.postman_collection.json`).
+Fuentes: `.codex/ENDPOINTS.md` + Postman V11 (`.codex/Postman/IND_CRM_API V11.postman_collection.json`).
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Notas MCP (Context7 MCP)
@@ -93,10 +93,10 @@ Endpoints
 - Headers: `Authorization`
 - Respuesta: Catalogo MCP (MCP_TOOLS.json)
 
-## Speech
+## IA Services
 
 ### Tool: speech_transcribe
-- HTTP: POST `/api/speech/transcribe`
+- HTTP: POST `/api/ia/service/speech`
 - Auth: Bearer token
 - Headers: `Authorization`
 - Body (multipart/form-data):
@@ -106,6 +106,18 @@ Endpoints
   - `prompt` (string, opcional)
 - Respuesta: `IndApiResponse<string>` (transcripcion)
 - Notas: no incluir contenido sensible en el prompt.
+
+### Tool: expensefromticket_draft
+- HTTP: POST `/api/ia/service/expensefromticket`
+- Auth: Bearer token
+- Headers: `Authorization`
+- Body (multipart/form-data):
+  - `ticketImage` (file, requerido)
+  - `languageId` (string, opcional)
+  - `currencyHint` (string, opcional)
+  - `prompt` (string, opcional)
+- Respuesta: `IndApiResponse<ExpenseSheetDraftResponse>`
+- Notas: no crea el gasto, devuelve sugerencia para el formulario.
 
 ## Accounts
 

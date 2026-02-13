@@ -20,6 +20,7 @@ namespace IND_CRM_API.App_Start
             var sessionManager = new AxaptaSessionManager(axLogger);
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
+            var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
 
             // Compartir la misma instancia en todo el proceso.
             AxSession.Initialize(sessionManager);
@@ -30,7 +31,8 @@ namespace IND_CRM_API.App_Start
                 { typeof(IJwtService), jwtService },
                 { typeof(IAxLogger), axLogger },
                 { typeof(IND_IAudioTranscriptionService), speechService },
-                { typeof(IND_ITextModerationService), moderationService }
+                { typeof(IND_ITextModerationService), moderationService },
+                { typeof(IND_IExpenseTicketDraftService), expenseDraftService }
             };
 
             // Per-request Axapta session scope
