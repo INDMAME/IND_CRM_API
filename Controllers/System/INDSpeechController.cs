@@ -465,7 +465,7 @@ namespace IND_CRM_API.Controllers.System
                 Success = false,
                 Message = message,
                 ErrorCode = errorCode,
-                Data = null,
+                Data = default,
                 Errors = string.IsNullOrWhiteSpace(field)
                     ? null
                     : new List<IndValidationError> { new IndValidationError { Field = field, Message = message } },
@@ -480,7 +480,7 @@ namespace IND_CRM_API.Controllers.System
 
             foreach (var part in provider.Contents)
             {
-                var name = part.Headers?.ContentDisposition?.Name?.Trim('\"');
+                var name = part.Headers?.ContentDisposition?.Name?.Trim('"');
                 if (!string.Equals(name, fieldName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -499,7 +499,7 @@ namespace IND_CRM_API.Controllers.System
             // Priorizar la parte de archivo con el nombre esperado.
             var byName = provider.Contents.FirstOrDefault(c =>
             {
-                var name = c.Headers?.ContentDisposition?.Name?.Trim('\"');
+                var name = c.Headers?.ContentDisposition?.Name?.Trim('"');
                 var fileName = c.Headers?.ContentDisposition?.FileName;
                 return !string.IsNullOrWhiteSpace(fileName) &&
                        string.Equals(name, expectedName, StringComparison.OrdinalIgnoreCase);
@@ -514,7 +514,7 @@ namespace IND_CRM_API.Controllers.System
         {
             try
             {
-                return filePart?.Headers?.ContentDisposition?.FileName?.Trim('\"');
+                return filePart?.Headers?.ContentDisposition?.FileName?.Trim('"');
             }
             catch
             {

@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
@@ -203,7 +204,7 @@ namespace IND_CRM_API.Services
                 return "image/jpeg";
 
             var normalized = contentType;
-            if (normalized.IndexOf(';', StringComparison.OrdinalIgnoreCase) >= 0)
+            if (normalized.IndexOf(';') >= 0)
                 normalized = normalized.Split(';')[0];
 
             normalized = normalized.Trim().ToLowerInvariant();
@@ -344,7 +345,7 @@ return string.Format(
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
                 Confidence = NormalizeConfidence(root["confidence"]),
-                warnings = ExtractWarnings(root["warnings"]),
+                Warnings = ExtractWarnings(root["warnings"]),
                 RawCurrency = NormalizeText(root["rawCurrency"]?.ToString(), null),
                 Merchant = NormalizeText(root["merchant"]?.ToString(), null)
             };
