@@ -246,11 +246,7 @@ namespace IND_CRM_API.Services
                             new JObject
                             {
                                 ["type"] = "input_image",
-                                ["image_url"] = new JObject
-                                {
-                                    ["url"] = $"data:{contentType};base64,{base64Image}",
-                                    ["detail"] = "high"
-                                }
+                                ["image_url"] = $"data:{contentType};base64,{base64Image}"
                             }
                         }
                     }
