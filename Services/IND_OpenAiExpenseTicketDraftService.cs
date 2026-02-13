@@ -49,7 +49,6 @@ namespace IND_CRM_API.Services
             byte[] imageBytes,
             string fileName,
             string contentType,
-            string languageId,
             string currencyHint,
             CancellationToken cancellationToken)
         {
@@ -67,7 +66,7 @@ namespace IND_CRM_API.Services
                 throw new InvalidOperationException("OpenAI API key no esta configurada.");
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
-            var promptText = BuildPayloadPromptText(languageId, currencyHint);
+            var promptText = BuildPayloadPromptText(currencyHint);
             var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, _model);
 
             using (var request = new HttpRequestMessage(HttpMethod.Post, ResponsesUrl))
@@ -267,9 +266,8 @@ namespace IND_CRM_API.Services
             return JsonConvert.SerializeObject(payload);
         }
 
-        private static string BuildPayloadPromptText(string languageId, string currencyHint)
+        private static string BuildPayloadPromptText(string currencyHint)
         {
-            var language = string.IsNullOrWhiteSpace(languageId) ? "es" : languageId.Trim();
             var currency = string.IsNullOrWhiteSpace(currencyHint) ? string.Empty : currencyHint.Trim();
 
             return string.Format(
@@ -297,8 +295,7 @@ namespace IND_CRM_API.Services
 - description corto y util para una linea de gasto.
 - currencyCode en cabecera si se detecta; si no, deja null.
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
-- Idioma de lectura principal del ticket: {0}.
-- Moneda de referencia o pista del usuario: {1}.", language, currency)
+- Moneda de referencia o pista del usuario: {0}.", currency)
                 .Trim();
         }
 

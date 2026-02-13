@@ -301,7 +301,6 @@ namespace IND_CRM_API.Controllers.System
         /// <remarks>
         /// Entrada: multipart/form-data con campos:
         /// - ticketImage: archivo .jpg/.jpeg/.png/.webp (max 50 MB)
-        /// - languageId (opcional): codigo de idioma, default es
         /// - currencyHint (opcional)
         /// </remarks>
         [HttpPost, Route("expensefromticket")]
@@ -331,10 +330,6 @@ namespace IND_CRM_API.Controllers.System
 
                 var provider = new MultipartMemoryStreamProvider();
                 await Request.Content.ReadAsMultipartAsync(provider, cancellationToken);
-
-                var languageId = await ReadFormFieldAsync(provider, "languageId");
-                if (string.IsNullOrWhiteSpace(languageId))
-                    languageId = "es";
 
                 var currencyHint = await ReadFormFieldAsync(provider, "currencyHint");
 
@@ -394,7 +389,6 @@ namespace IND_CRM_API.Controllers.System
                     imageBytes,
                     originalFileName,
                     mediaType,
-                    languageId,
                     currencyHint,
                     cancellationToken);
                 draftSw.Stop();

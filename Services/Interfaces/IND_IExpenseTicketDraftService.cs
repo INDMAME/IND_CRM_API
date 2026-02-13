@@ -13,7 +13,6 @@ namespace IND_CRM_API.Services.Interfaces
             byte[] imageBytes,
             string fileName,
             string contentType,
-            string languageId,
             string currencyHint,
             CancellationToken cancellationToken);
     }

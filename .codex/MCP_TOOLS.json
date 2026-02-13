@@ -416,9 +416,6 @@
                 "type": "string",
                 "format": "binary"
               },
-              "languageId": {
-                "type": "string"
-              },
               "currencyHint": {
                 "type": "string"
               }
@@ -451,7 +448,6 @@
           },
           "body": {
             "ticketImage": "<binary>",
-            "languageId": "es",
             "currencyHint": "EUR"
           }
         }
