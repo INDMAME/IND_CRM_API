@@ -217,15 +217,12 @@ namespace IND_CRM_API.Services
 
         private static string BuildPayloadJson(string base64Image, string contentType, string fileName, string prompt, string model)
         {
-            var schema = new JObject
+            var format = new JObject
             {
                 ["type"] = "json_schema",
-                ["json_schema"] = new JObject
-                {
-                    ["name"] = "expense_ticket_draft",
-                    ["strict"] = true,
-                    ["schema"] = BuildResponseSchema()
-                }
+                ["name"] = "expense_ticket_draft",
+                ["schema"] = BuildResponseSchema(),
+                ["strict"] = true
             };
 
             var payload = new JObject
@@ -253,7 +250,7 @@ namespace IND_CRM_API.Services
                 },
                 ["text"] = new JObject
                 {
-                    ["format"] = schema
+                    ["format"] = format
                 },
                 ["max_output_tokens"] = 1536
             };
