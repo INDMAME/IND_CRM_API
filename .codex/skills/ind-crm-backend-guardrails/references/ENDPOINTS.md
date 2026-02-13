@@ -45,7 +45,7 @@ Endpoints
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)
 - POST /api/ia/service/expensefromticket (Authorize)
   Content-Type: multipart/form-data
-  Fields: ticketImage (required), languageId (optional), currencyHint (optional), prompt (optional)
+  Fields: ticketImage (required), languageId (optional, default es), currencyHint (optional)
 
 ## Accounts
 - POST /api/crm/accounts/listContacts (Authorize + X-IND-Company)

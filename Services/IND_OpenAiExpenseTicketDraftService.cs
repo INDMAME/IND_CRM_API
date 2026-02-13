@@ -51,7 +51,6 @@ namespace IND_CRM_API.Services
             string contentType,
             string languageId,
             string currencyHint,
-            string prompt,
             CancellationToken cancellationToken)
         {
             if (imageBytes == null || imageBytes.Length == 0)
@@ -68,7 +67,7 @@ namespace IND_CRM_API.Services
                 throw new InvalidOperationException("OpenAI API key no esta configurada.");
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
-            var promptText = BuildPayloadPromptText(languageId, currencyHint, prompt);
+            var promptText = BuildPayloadPromptText(languageId, currencyHint);
             var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, _model);
 
             using (var request = new HttpRequestMessage(HttpMethod.Post, ResponsesUrl))
@@ -268,15 +267,14 @@ namespace IND_CRM_API.Services
             return JsonConvert.SerializeObject(payload);
         }
 
-        private static string BuildPayloadPromptText(string languageId, string currencyHint, string prompt)
+        private static string BuildPayloadPromptText(string languageId, string currencyHint)
         {
             var language = string.IsNullOrWhiteSpace(languageId) ? "es" : languageId.Trim();
             var currency = string.IsNullOrWhiteSpace(currencyHint) ? string.Empty : currencyHint.Trim();
-            var customPrompt = string.IsNullOrWhiteSpace(prompt) ? string.Empty : $" Prompt adicional: {prompt.Trim()}";
 
-return string.Format(
+            return string.Format(
                 CultureInfo.InvariantCulture,
-@"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
+                @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
 - Si un campo no se puede inferir con confianza, usa null y agrega advertencia en warnings.
 - tipo de lineas:
@@ -300,11 +298,8 @@ return string.Format(
 - currencyCode en cabecera si se detecta; si no, deja null.
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
 - Idioma de lectura principal del ticket: {0}.
-- Moneda de referencia o pista del usuario: {1}.
-{2}".Trim(),
-                language,
-                currency,
-                customPrompt);
+- Moneda de referencia o pista del usuario: {1}.", language, currency)
+                .Trim();
         }
 
         private static string TryExtractOpenAiErrorSummary(string json)

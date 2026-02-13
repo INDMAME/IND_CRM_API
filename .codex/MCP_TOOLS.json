@@ -421,9 +421,6 @@
               },
               "currencyHint": {
                 "type": "string"
-              },
-              "prompt": {
-                "type": "string"
               }
             },
             "required": [
@@ -455,8 +452,7 @@
           "body": {
             "ticketImage": "<binary>",
             "languageId": "es",
-            "currencyHint": "EUR",
-            "prompt": ""
+            "currencyHint": "EUR"
           }
         }
       ]

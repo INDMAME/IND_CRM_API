@@ -15,7 +15,6 @@ namespace IND_CRM_API.Services.Interfaces
             string contentType,
             string languageId,
             string currencyHint,
-            string prompt,
             CancellationToken cancellationToken);
     }
 }

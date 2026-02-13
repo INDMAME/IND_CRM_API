@@ -303,7 +303,6 @@ namespace IND_CRM_API.Controllers.System
         /// - ticketImage: archivo .jpg/.jpeg/.png/.webp (max 50 MB)
         /// - languageId (opcional): codigo de idioma, default es
         /// - currencyHint (opcional)
-        /// - prompt (opcional): instrucciones adicionales para la IA
         /// </remarks>
         [HttpPost, Route("expensefromticket")]
         [SwaggerResponse(HttpStatusCode.OK, "Borrador de hoja de gastos generado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
@@ -338,7 +337,6 @@ namespace IND_CRM_API.Controllers.System
                     languageId = "es";
 
                 var currencyHint = await ReadFormFieldAsync(provider, "currencyHint");
-                var prompt = await ReadFormFieldAsync(provider, "prompt");
 
                 var filePart = FindFilePart(provider, "ticketImage");
                 if (filePart == null)
@@ -398,7 +396,6 @@ namespace IND_CRM_API.Controllers.System
                     mediaType,
                     languageId,
                     currencyHint,
-                    prompt,
                     cancellationToken);
                 draftSw.Stop();
                 _logger.Log($"[IA-DRAFT] OpenAI draft generated ms={draftSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
