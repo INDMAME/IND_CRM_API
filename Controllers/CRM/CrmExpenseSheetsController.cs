@@ -47,6 +47,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// - mode 0 (default): description, currencyCode and lines are required.
         /// - mode 1: description and currencyCode are required, lines must be null or empty.
         /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
+        /// Optional header enums: expenseSheetStatus and exchangeRateMode.
         /// </remarks>
         [HttpPost, Route("")]
         [ResponseType(typeof(IndApiResponse<object>))]
@@ -121,6 +122,12 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body.currencyCode?.Trim() ?? string.Empty);
                 headerCon.Append(body.exchRate ?? 0m);
                 headerCon.Append(body.projId?.Trim() ?? string.Empty);
+                if (body.expenseSheetStatus.HasValue)
+                {
+                    headerCon.Append(body.expenseSheetStatus.Value);
+                    if (body.exchangeRateMode.HasValue)
+                        headerCon.Append(body.exchangeRateMode.Value);
+                }
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -334,6 +341,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Updates the header data of an expense sheet.
         /// </summary>
+        /// <remarks>
+        /// Optional header enums: expenseSheetStatus and exchangeRateMode.
+        /// </remarks>
         [HttpPut, Route("{hojaGastosId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -368,6 +378,12 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.currencyCode))
                     validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio." });
+                if (body.expenseSheetStatus.HasValue && body.expenseSheetStatus.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus debe ser mayor o igual que 0." });
+                if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
+                if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
+                    validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
             }
 
             if (validationErrors.Any())
@@ -404,6 +420,12 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
+                if (body.expenseSheetStatus.HasValue)
+                {
+                    con.Append(body.expenseSheetStatus.Value);
+                    if (body.exchangeRateMode.HasValue)
+                        con.Append(body.exchangeRateMode.Value);
+                }
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -894,6 +916,13 @@ namespace IND_CRM_API.Controllers.CRM
                 return;
             }
 
+            if (body.expenseSheetStatus.HasValue && body.expenseSheetStatus.Value < 0)
+                errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus debe ser mayor o igual que 0." });
+            if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
+                errors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
+            if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
+                errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
+
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
                 if (string.IsNullOrWhiteSpace(body.description))
@@ -1075,20 +1104,24 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // New (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
+            // Current (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
+            // Previous (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
             // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
-            var hasNewHeaderShape = headerExtras.Count >= 8;
+            var hasCurrentHeaderShape = headerExtras.Count >= 10;
+            var hasPreviousHeaderShape = !hasCurrentHeaderShape && headerExtras.Count >= 8;
 
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
-                Description = hasNewHeaderShape ? headerExtras[1] : headerExtras[2],
-                UserId = hasNewHeaderShape ? headerExtras[2] : headerExtras[1],
-                CurrencyCode = headerExtras[3],
-                TotalAmountMST = hasNewHeaderShape ? ToDecimal(headerExtras[4]) : null,
-                ExchRate = hasNewHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4]),
-                ProjId = hasNewHeaderShape ? headerExtras[6] : headerExtras[5],
-                Voucher = NormalizeVoucher(hasNewHeaderShape ? headerExtras[7] : headerExtras[6]),
+                Description = hasCurrentHeaderShape ? headerExtras[1] : (hasPreviousHeaderShape ? headerExtras[1] : headerExtras[2]),
+                ExpenseSheetStatus = hasCurrentHeaderShape ? ToInt(headerExtras[2]) : null,
+                UserId = hasCurrentHeaderShape ? headerExtras[3] : (hasPreviousHeaderShape ? headerExtras[2] : headerExtras[1]),
+                CurrencyCode = hasCurrentHeaderShape ? headerExtras[4] : headerExtras[3],
+                TotalAmountMST = hasCurrentHeaderShape ? ToDecimal(headerExtras[5]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[4]) : null),
+                ExchRate = hasCurrentHeaderShape ? ToDecimal(headerExtras[6]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4])),
+                ExchangeRateMode = hasCurrentHeaderShape ? ToInt(headerExtras[7]) : null,
+                ProjId = hasCurrentHeaderShape ? headerExtras[8] : (hasPreviousHeaderShape ? headerExtras[6] : headerExtras[5]),
+                Voucher = NormalizeVoucher(hasCurrentHeaderShape ? headerExtras[9] : (hasPreviousHeaderShape ? headerExtras[7] : headerExtras[6])),
                 Lines = new List<ExpenseSheetLineDto>()
             };
 
@@ -1140,18 +1173,38 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
-                // New (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
+                // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
+                // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
+                if (rowLen >= 11)
+                {
+                    items.Add(new ExpenseSheetListItemDto
+                    {
+                        HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                        Description = AxContainerReadHelper.SafeString(row, 2),
+                        ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
+                        ProjId = AxContainerReadHelper.SafeString(row, 9),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
+                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
+                        CreatedDate = AxContainerReadHelper.SafeString(row, 11)
+                    });
+                    continue;
+                }
+
                 if (rowLen >= 7)
                 {
                     items.Add(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
+                        ExpenseSheetStatus = null,
                         Voucher = AxContainerReadHelper.SafeString(row, 3),
                         ProjId = AxContainerReadHelper.SafeString(row, 4),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
                         TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        ExchangeRateMode = null,
                         CreatedDate = AxContainerReadHelper.SafeString(row, 7)
                     });
                     continue;
@@ -1163,10 +1216,12 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
+                    ExpenseSheetStatus = null,
                     Voucher = string.Empty,
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
                     TotalAmountMST = amountAndDate.TotalAmountMST,
+                    ExchangeRateMode = null,
                     CreatedDate = amountAndDate.CreatedDate
                 });
             }
@@ -1238,6 +1293,18 @@ namespace IND_CRM_API.Controllers.CRM
             var value = AxContainerReadHelper.SafeString(container, index);
             if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
+            return null;
+        }
+
+        // Converts a string to int with invariant culture.
+        private static int? ToInt(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
             return null;
         }
 

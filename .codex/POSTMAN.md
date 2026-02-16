@@ -1,8 +1,8 @@
-# Postman project (actualizado 2026-02-13)
+# Postman project (actualizado 2026-02-16)
 
 Archivos
-- Collection: .codex/Postman/IND_CRM_API V12.postman_collection.json
-- Collection exportable (versionable): Notes/IND_CRM_API V12.postman_collection.json
+- Collection: .codex/Postman/IND_CRM_API V13.postman_collection.json
+- Collection exportable (versionable): Notes/IND_CRM_API V13.postman_collection.json
 
 Variables globales (collection variables)
 - baseUrl: URL base compartida (por defecto https://crm.insertec.biz:7776)
@@ -32,4 +32,6 @@ Notas
 - Los endpoints que requieren usuario incluyen X-IND-AxUserId apuntando a {{axUserId}}.
 - El listado de proyectos usa page y pageSize en query.
 - El listado de hojas de gastos usa POST con body y soporta filtros opcionales: createdDateFrom, createdDateTo, projId, currencyCode.
+- Create/Update de hojas de gastos ahora incluyen los campos opcionales: expenseSheetStatus y exchangeRateMode.
+- Get/List de hojas de gastos ya incluyen expenseSheetStatus y exchangeRateMode en la salida.
 - Los endpoints protegidos usan Authorization: Bearer {{tokenId}}.

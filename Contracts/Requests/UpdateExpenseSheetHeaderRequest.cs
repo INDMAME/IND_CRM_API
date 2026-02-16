@@ -11,5 +11,15 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public string currencyCode { get; set; }
         public decimal? exchRate { get; set; }
         public string projId { get; set; }
+
+        /// <summary>
+        /// Expense sheet status enum value from AX.
+        /// </summary>
+        public int? expenseSheetStatus { get; set; }
+
+        /// <summary>
+        /// Exchange rate mode enum value from AX.
+        /// </summary>
+        public int? exchangeRateMode { get; set; }
     }
 }

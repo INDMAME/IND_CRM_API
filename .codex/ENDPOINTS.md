@@ -82,10 +82,11 @@ Endpoints
 ## Expense Sheets
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode, lines[]
-  Optional: projId, exchRate, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
+  Optional: projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Response header fields include: expenseSheetStatus, exchangeRateMode
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description, currencyCode (projId optional, exchRate optional)
+  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional)
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (yyyymmdd), typeValue, description, qty, amount
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -93,6 +94,7 @@ Endpoints
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode
+  Response list fields include: expenseSheetStatus, exchangeRateMode
   Nota: Si no hay filtro, AX devuelve lista vacia.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 

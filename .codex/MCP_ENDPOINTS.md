@@ -1,6 +1,6 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-10)
+# IND_CRM_API MCP Endpoints (actualizado 2026-02-16)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V11 (`.codex/Postman/IND_CRM_API V11.postman_collection.json`).
+Fuentes: `.codex/ENDPOINTS.md` + Postman V13 (`.codex/Postman/IND_CRM_API V13.postman_collection.json`).
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Notas MCP (Context7 MCP)
@@ -251,6 +251,8 @@ Endpoints
     - `lines[].indAttachFiles` (string, opcional)
   - `projId` (string, opcional)
   - `exchRate` (number, opcional)
+  - `expenseSheetStatus` (int, opcional)
+  - `exchangeRateMode` (int, opcional; requiere `expenseSheetStatus`)
 - Respuesta: `IndApiResponse<ExpenseSheetDto>`
 
 ### Tool: crm_expensesheets_get
@@ -260,6 +262,7 @@ Endpoints
 - Path:
   - `hojaGastosId` (string)
 - Respuesta: `IndApiResponse<ExpenseSheetDto>`
+- Campos de salida relevantes: `expenseSheetStatus`, `exchangeRateMode` en el encabezado.
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
@@ -272,6 +275,8 @@ Endpoints
   - `currencyCode` (string)
   - `projId` (string, opcional)
   - `exchRate` (number, opcional)
+  - `expenseSheetStatus` (int, opcional)
+  - `exchangeRateMode` (int, opcional; requiere `expenseSheetStatus`)
 - Respuesta: `IndApiResponse<ExpenseSheetDto>`
 
 ### Tool: crm_expensesheets_update_line
@@ -319,6 +324,7 @@ Endpoints
   - `projId` (string, opcional)
   - `currencyCode` (string, opcional)
 - Respuesta: `IndPagedResponse<ExpenseSheetListItemDto>`
+- Campos de salida relevantes por item: `expenseSheetStatus`, `exchangeRateMode`.
 - Nota: si no hay filtro, AX devuelve lista vacia.
 
 ## Projects

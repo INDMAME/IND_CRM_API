@@ -319,6 +319,47 @@
       ]
     },
     {
+      "name": "mcp_tools",
+      "description": "Devuelve el catalogo MCP de tools disponibles.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              }
+            },
+            "required": [
+              "Authorization"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/mcp/tools",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>"
+          }
+        }
+      ]
+    },
+    {
       "name": "speech_transcribe",
       "description": "Transcribe audio con parametros opcionales.",
       "inputSchema": {
@@ -1361,6 +1402,15 @@
               "exchRate": {
                 "type": "number"
               },
+              "expenseSheetStatus": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "exchangeRateMode": {
+                "type": "integer",
+                "description": "Requiere expenseSheetStatus cuando se envia.",
+                "minimum": 0
+              },
               "lines": {
                 "type": "array",
                 "items": {
@@ -1446,6 +1496,8 @@
             "currencyCode": "EUR",
             "exchRate": 1,
             "projId": "",
+            "expenseSheetStatus": 0,
+            "exchangeRateMode": 0,
             "lines": [
               {
                 "transDate": "20260115",
@@ -1594,6 +1646,15 @@
               },
               "exchRate": {
                 "type": "number"
+              },
+              "expenseSheetStatus": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "exchangeRateMode": {
+                "type": "integer",
+                "description": "Requiere expenseSheetStatus cuando se envia.",
+                "minimum": 0
               }
             },
             "required": [
@@ -1637,7 +1698,9 @@
             "description": "Gastos",
             "currencyCode": "EUR",
             "projId": "",
-            "exchRate": 1
+            "exchRate": 1,
+            "expenseSheetStatus": 0,
+            "exchangeRateMode": 0
           }
         }
       ]

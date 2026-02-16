@@ -35,6 +35,16 @@ namespace IND_CRM_API.Contracts.Requests
         public string projId { get; set; }
 
         /// <summary>
+        /// Expense sheet status enum value from AX.
+        /// </summary>
+        public int? expenseSheetStatus { get; set; }
+
+        /// <summary>
+        /// Exchange rate mode enum value from AX.
+        /// </summary>
+        public int? exchangeRateMode { get; set; }
+
+        /// <summary>
         /// Lines payload. Required with at least one line in mode = 0 and mode = 2. Must be null or empty in mode = 1.
         /// </summary>
         public List<CreateExpenseSheetLineRequest> lines { get; set; }
