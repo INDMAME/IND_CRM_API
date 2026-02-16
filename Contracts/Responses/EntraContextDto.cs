@@ -25,6 +25,7 @@ namespace IND_CRM_API.Contracts.Responses
         public bool UserActive { get; set; }
         public bool AppActive { get; set; }
         public string DefaultCompany { get; set; }
+        public string DefaultCurrencyCode { get; set; }
     }
 
     /// <summary>
@@ -35,6 +36,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string CompanyId { get; set; }
         public bool IsDefault { get; set; }
         public string CompanyName { get; set; }
+        public string CurrencyCode { get; set; }
         public List<EntraModuleDto> Modules { get; set; }
     }
 

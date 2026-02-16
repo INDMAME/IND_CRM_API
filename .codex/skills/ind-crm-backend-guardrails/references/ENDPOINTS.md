@@ -26,6 +26,7 @@ Endpoints
   Headers: Authorization
 - POST /api/auth/entra/context (Authorize)
   Body: { "entraOid": "GUID", "appCode": "APP" }
+  Response context fields include: Header.DefaultCurrencyCode, Companies[].CurrencyCode
 
 ## Health
 - GET /api/health/ping (AllowAnonymous)

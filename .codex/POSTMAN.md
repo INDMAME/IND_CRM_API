@@ -11,6 +11,7 @@ Variables globales (collection variables)
 - tokenId: se llena automaticamente desde /api/auth/login
 - companyId: definir manualmente o tomar desde /api/auth/entra/context
 - axUserId: se llena automaticamente desde /api/auth/entra/context (Header.AxUserId)
+- defaultCurrencyCode: se llena automaticamente desde /api/auth/entra/context (Header.DefaultCurrencyCode o Companies[].CurrencyCode)
 - entraOid: GUID de Entra requerido por /api/auth/entra/context
 - appCode: codigo de app para /api/auth/entra/context (por defecto CRM)
 
@@ -24,8 +25,9 @@ Uso rapido
 4) Configura entraOid.
 5) Ejecuta Auth/Login y verifica que tokenId se actualice.
 6) Login ejecuta automaticamente una llamada interna a /api/auth/entra/context y rellena companyId + axUserId.
-7) Si quieres validar manualmente el contexto, ejecuta Auth/Entra Context.
-8) Ejecuta los endpoints CRM con Authorization, X-IND-Company y X-IND-AxUserId.
+7) Entra Context tambien rellena defaultCurrencyCode cuando viene en el contexto.
+8) Si quieres validar manualmente el contexto, ejecuta Auth/Entra Context.
+9) Ejecuta los endpoints CRM con Authorization, X-IND-Company y X-IND-AxUserId.
 
 Notas
 - Los endpoints CRM ya incluyen el header X-IND-Company apuntando a {{companyId}}.

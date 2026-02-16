@@ -56,7 +56,7 @@ Endpoints
   - `entraOid` (string GUID)
   - `appCode` (string)
 - Respuesta: `IndApiResponse<{ header, items }>`
-- Notas: de aqui se obtiene `companyId` y `axUserId`.
+- Notas: de aqui se obtiene `companyId`, `axUserId`, `header.defaultCurrencyCode` y `companies[].currencyCode`.
 
 ## Health
 

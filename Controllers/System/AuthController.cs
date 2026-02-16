@@ -412,7 +412,8 @@ namespace IND_CRM_API.Controllers.System
                 AxUserId = string.Empty,
                 UserActive = false,
                 AppActive = false,
-                DefaultCompany = string.Empty
+                DefaultCompany = string.Empty,
+                DefaultCurrencyCode = string.Empty
             };
 
             if (SafeLength(headerRow) >= 6)
@@ -421,6 +422,10 @@ namespace IND_CRM_API.Controllers.System
                 header.UserActive = ToBool(SafeString(headerRow, 4));
                 header.AppActive = ToBool(SafeString(headerRow, 5));
                 header.DefaultCompany = SafeString(headerRow, 6);
+
+                // Nuevo contrato AX: Header[7] = DefaultCurrencyCode.
+                if (SafeLength(headerRow) >= 7)
+                    header.DefaultCurrencyCode = SafeString(headerRow, 7);
             }
 
             if (string.IsNullOrWhiteSpace(header.Message))
@@ -441,13 +446,24 @@ namespace IND_CRM_API.Controllers.System
                 if (companyCon == null)
                     continue;
 
-                var modulesCon = SafePeekContainer(companyCon, 4);
+                // Nuevo contrato AX: CompanyItem = [companyId, isDefault, companyName, currencyCode, modulesCon].
+                var modulesCon = SafePeekContainer(companyCon, 5);
+                var currencyCode = SafeString(companyCon, 4);
+
+                // Compatibilidad defensiva con formato anterior:
+                // [companyId, isDefault, companyName, modulesCon].
+                if (modulesCon == null)
+                {
+                    modulesCon = SafePeekContainer(companyCon, 4);
+                    currencyCode = string.Empty;
+                }
 
                 companies.Add(new EntraCompanyDto
                 {
                     CompanyId = SafeString(companyCon, 1),
                     IsDefault = ToBool(SafeString(companyCon, 2)),
                     CompanyName = SafeString(companyCon, 3),
+                    CurrencyCode = currencyCode,
                     Modules = MapEntraModules(modulesCon)
                 });
             }

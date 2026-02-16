@@ -168,26 +168,34 @@
                                                                                     "  var items = json.items || json.Items;",
                                                                                     "  if (!items || !items.length) return;",
                                                                                     "  var first = items[0];",
-                                                                                    "  var header = first.Header || first.header || {};",
-                                                                                    "  var axUserId = header.AxUserId || header.axUserId;",
-                                                                                    "  if (axUserId) {",
-                                                                                    "    pm.collectionVariables.set(\u0027axUserId\u0027, axUserId);",
-                                                                                    "  }",
-                                                                                    "  var defaultCompany = header.DefaultCompany || header.defaultCompany;",
-                                                                                    "  if (defaultCompany) {",
-                                                                                    "    pm.collectionVariables.set(\u0027companyId\u0027, defaultCompany);",
-                                                                                    "    return;",
+                                                                                     "  var header = first.Header || first.header || {};",
+                                                                                     "  var axUserId = header.AxUserId || header.axUserId;",
+                                                                                     "  if (axUserId) {",
+                                                                                     "    pm.collectionVariables.set(\u0027axUserId\u0027, axUserId);",
+                                                                                     "  }",
+                                                                                     "  var defaultCurrencyCode = header.DefaultCurrencyCode || header.defaultCurrencyCode;",
+                                                                                     "  if (defaultCurrencyCode) {",
+                                                                                     "    pm.collectionVariables.set(\u0027defaultCurrencyCode\u0027, defaultCurrencyCode);",
+                                                                                     "  }",
+                                                                                     "  var defaultCompany = header.DefaultCompany || header.defaultCompany;",
+                                                                                     "  if (defaultCompany) {",
+                                                                                     "    pm.collectionVariables.set(\u0027companyId\u0027, defaultCompany);",
+                                                                                     "    return;",
                                                                                     "  }",
                                                                                     "  var companies = first.Companies || first.companies || [];",
                                                                                     "  if (companies.length \u003e 0) {",
                                                                                     "    var selected = companies.find(function(c){ return c.IsDefault || c.isDefault; }) || companies[0];",
-                                                                                    "    var companyId = selected.CompanyId || selected.companyId;",
-                                                                                    "    if (companyId) {",
-                                                                                    "      pm.collectionVariables.set(\u0027companyId\u0027, companyId);",
-                                                                                    "    }",
-                                                                                    "  }",
-                                                                                    "} catch (e) {}"
-                                                                                ],
+                                                                                     "    var companyId = selected.CompanyId || selected.companyId;",
+                                                                                     "    if (companyId) {",
+                                                                                     "      pm.collectionVariables.set(\u0027companyId\u0027, companyId);",
+                                                                                     "    }",
+                                                                                     "    var companyCurrencyCode = selected.CurrencyCode || selected.currencyCode;",
+                                                                                     "    if (companyCurrencyCode \u0026\u0026 !pm.collectionVariables.get(\u0027defaultCurrencyCode\u0027)) {",
+                                                                                     "      pm.collectionVariables.set(\u0027defaultCurrencyCode\u0027, companyCurrencyCode);",
+                                                                                     "    }",
+                                                                                     "  }",
+                                                                                     "} catch (e) {}"
+                                                                                 ],
                                                                        "type":  "text/javascript",
                                                                        "packages":  {
 
@@ -228,7 +236,51 @@
                                                               }
                                                   },
                                       "response":  [
+                                                       {
+                                                           "name":  "200 - Entra Context",
+                                                           "originalRequest":  {
+                                                                                   "method":  "POST",
+                                                                                   "header":  [
+                                                                                                  {
+                                                                                                      "key":  "Authorization",
+                                                                                                      "value":  "Bearer {{tokenId}}"
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "key":  "Content-Type",
+                                                                                                      "value":  "application/json"
+                                                                                                  }
+                                                                                              ],
+                                                                                   "body":  {
+                                                                                                "mode":  "raw",
+                                                                                                "raw":  "{\n  \"entraOid\": \"{{entraOid}}\",\n  \"appCode\": \"{{appCode}}\"\n}"
+                                                                                            },
+                                                                                   "url":  {
+                                                                                               "raw":  "{{baseUrl}}/api/auth/entra/context",
+                                                                                               "host":  [
+                                                                                                            "{{baseUrl}}"
+                                                                                                        ],
+                                                                                               "path":  [
+                                                                                                            "api",
+                                                                                                            "auth",
+                                                                                                            "entra",
+                                                                                                            "context"
+                                                                                                        ]
+                                                                                           }
+                                                                               },
+                                                           "status":  "OK",
+                                                           "code":  200,
+                                                           "_postman_previewlanguage":  "json",
+                                                           "header":  [
+                                                                          {
+                                                                              "key":  "Content-Type",
+                                                                              "value":  "application/json"
+                                                                          }
+                                                                      ],
+                                                           "cookie":  [
 
+                                                                      ],
+                                                           "body":  "{\n  \"success\": true,\n  \"message\": \"OK\",\n  \"items\": [\n    {\n      \"header\": {\n        \"success\": true,\n        \"message\": \"OK\",\n        \"axUserId\": \"USR001\",\n        \"userActive\": true,\n        \"appActive\": true,\n        \"defaultCompany\": \"TAZ\",\n        \"defaultCurrencyCode\": \"USD\"\n      },\n      \"companies\": [\n        {\n          \"companyId\": \"TAZ\",\n          \"isDefault\": true,\n          \"companyName\": \"Insertec TAZ\",\n          \"currencyCode\": \"USD\",\n          \"modules\": [\n            {\n              \"moduleCode\": \"CRM\",\n              \"description\": \"CRM\",\n              \"isActive\": true,\n              \"accessRightsInt\": 3\n            }\n          ]\n        }\n      ]\n    }\n  ],\n  \"traceId\": \"sample-trace-id\"\n}"
+                                                       }
                                                    ]
                                   }
                               ]
@@ -1326,6 +1378,10 @@
                      },
                      {
                          "key":  "axUserId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "defaultCurrencyCode",
                          "value":  ""
                      },
                      {
