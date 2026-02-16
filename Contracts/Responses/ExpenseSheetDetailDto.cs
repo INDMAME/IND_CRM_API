@@ -20,6 +20,7 @@ namespace IND_CRM_API.Contracts.Responses
         public int? ExchangeRateMode { get; set; }
         public string ProjId { get; set; }
         public string Voucher { get; set; }
+        public string CreatedDate { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
     }
 

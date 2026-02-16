@@ -751,7 +751,7 @@ Formatversion: 1
         #    CRMUserId        crmUserId;
         #    UserId           axUserId;
         #    CRMHojaGastosId  hojaId;
-        #    int            lineRecId;
+        #    RecId lineRecId;
         #    int              deleteWholeSheet;
         #
         #    CRMHojaGastosTable header;
@@ -1362,7 +1362,7 @@ Formatversion: 1
         #    CRMUserId         crmUserId;
         #    UserId            axUserId;
         #    CRMHojaGastosId   hojaId;
-        #    int lineRecId;
+        #    RecId lineRecId;
         #
         #    str   transDateStr;
         #    date  transDate;

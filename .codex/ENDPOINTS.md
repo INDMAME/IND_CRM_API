@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-10)
+# IND_CRM_API Endpoints (actualizado 2026-02-16)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -34,6 +34,11 @@ Endpoints
 ## System
 - GET /api/system/getEnvironmentName (Authorize)
 - GET /api/system/getCompanyName (Authorize)
+- GET /api/system/exchange-rate?baseCurrency=EUR&targetCurrency=USD&date=2026-02-16 (Authorize)
+  Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
+  Query optional: date (yyyy-MM-dd; si no se envia usa latest)
+  Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source=ECB
+  ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404), INTERNAL_ERROR (500)
 
 ## MCP
 - GET /api/mcp/tools (Authorize)
@@ -84,7 +89,7 @@ Endpoints
   Body required: description, currencyCode, lines[]
   Optional: projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: expenseSheetStatus, exchangeRateMode
+  Response header fields include: expenseSheetStatus, exchangeRateMode, createdDate
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional)
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -94,7 +99,7 @@ Endpoints
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode
-  Response list fields include: expenseSheetStatus, exchangeRateMode
+  Response list fields include: expenseSheetStatus, exchangeRateMode, userId, exchRate, createdDate
   Nota: Si no hay filtro, AX devuelve lista vacia.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 

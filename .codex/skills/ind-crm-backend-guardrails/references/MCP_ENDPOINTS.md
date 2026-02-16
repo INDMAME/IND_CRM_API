@@ -1,6 +1,6 @@
 # IND_CRM_API MCP Endpoints (actualizado 2026-02-16)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V13 (`.codex/Postman/IND_CRM_API V13.postman_collection.json`).
+Fuentes: `.codex/ENDPOINTS.md` + Postman V14 (`.codex/Postman/IND_CRM_API V14.postman_collection.json`).
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Notas MCP (Context7 MCP)
@@ -84,6 +84,56 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`
 - Respuesta: `IndApiResponse<string>`
+
+### Tool: system_exchange_rate
+- HTTP: GET `/api/system/exchange-rate`
+- Auth: Bearer token
+- Headers: `Authorization`
+- Query (requerido):
+  - `baseCurrency` (string, ISO 4217, 3 letras)
+  - `targetCurrency` (string, ISO 4217, 3 letras)
+- Query (opcional):
+  - `date` (string, `yyyy-MM-dd`; si no se envia usa latest)
+- Respuesta: `IndApiResponse<ExchangeRateDto>`
+- Error codes:
+  - `VALIDATION_ERROR` (422)
+  - `EXCHANGE_RATE_NOT_FOUND` (404)
+  - `INTERNAL_ERROR` (500)
+- Notas:
+  - Idempotencia: si.
+  - Side effects: ninguno.
+  - Conversion: si base/target no es EUR, se resuelve via EUR con series ECB.
+- Input schema JSON:
+```json
+{
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token. Format: Bearer <token>"
+        }
+      },
+      "required": ["Authorization"],
+      "additionalProperties": false
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "baseCurrency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+        "targetCurrency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+      },
+      "required": ["baseCurrency", "targetCurrency"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["headers", "query"],
+  "additionalProperties": false
+}
+```
 
 ## MCP
 
@@ -262,7 +312,7 @@ Endpoints
 - Path:
   - `hojaGastosId` (string)
 - Respuesta: `IndApiResponse<ExpenseSheetDto>`
-- Campos de salida relevantes: `expenseSheetStatus`, `exchangeRateMode` en el encabezado.
+- Campos de salida relevantes: `expenseSheetStatus`, `exchangeRateMode`, `createdDate` en el encabezado.
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
@@ -324,7 +374,7 @@ Endpoints
   - `projId` (string, opcional)
   - `currencyCode` (string, opcional)
 - Respuesta: `IndPagedResponse<ExpenseSheetListItemDto>`
-- Campos de salida relevantes por item: `expenseSheetStatus`, `exchangeRateMode`.
+- Campos de salida relevantes por item: `expenseSheetStatus`, `exchangeRateMode`, `userId`, `exchRate`, `createdDate`.
 - Nota: si no hay filtro, AX devuelve lista vacia.
 
 ## Projects

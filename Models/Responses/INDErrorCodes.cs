@@ -44,6 +44,9 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Expense sheet is locked by voucher.</summary>
         public const string CrmExpenseSheetLocked = "CRM_EXPENSESHEET_LOCKED";
 
+        /// <summary>Exchange rate not available for requested currencies/date.</summary>
+        public const string ExchangeRateNotFound = "EXCHANGE_RATE_NOT_FOUND";
+
         /// <summary>Error de sesion de Axapta.</summary>
         public const string AxSessionError = "AX_SESSION_ERROR";
 

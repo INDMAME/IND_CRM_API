@@ -21,6 +21,8 @@ namespace IND_CRM_API.App_Start
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
             var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
+            var ecbHttpClient = new EcbHttpClient(axLogger);
+            var exchangeRateProvider = new EcbExchangeRateProvider(ecbHttpClient, axLogger);
 
             // Compartir la misma instancia en todo el proceso.
             AxSession.Initialize(sessionManager);
@@ -32,7 +34,9 @@ namespace IND_CRM_API.App_Start
                 { typeof(IAxLogger), axLogger },
                 { typeof(IND_IAudioTranscriptionService), speechService },
                 { typeof(IND_ITextModerationService), moderationService },
-                { typeof(IND_IExpenseTicketDraftService), expenseDraftService }
+                { typeof(IND_IExpenseTicketDraftService), expenseDraftService },
+                { typeof(IEcbHttpClient), ecbHttpClient },
+                { typeof(IExchangeRateProvider), exchangeRateProvider }
             };
 
             // Per-request Axapta session scope

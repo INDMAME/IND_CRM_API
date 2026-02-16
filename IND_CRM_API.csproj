@@ -120,6 +120,7 @@
       <HintPath>packages\System.Runtime.InteropServices.RuntimeInformation.4.3.0\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Runtime.Caching" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Security" />
     <Reference Include="System.ServiceProcess" />
@@ -172,6 +173,7 @@
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />
+    <Compile Include="Contracts\Responses\ExchangeRateDto.cs" />
     <Compile Include="Contracts\Responses\ProjectListItemDto.cs" />
     <Compile Include="Models\Responses\INDApiResponse.cs" />
     <Compile Include="Models\Responses\INDErrorCodes.cs" />
@@ -194,6 +196,7 @@
     <Compile Include="Helpers\AppSettingsHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
+    <Compile Include="Controllers\System\SystemController.cs" />
     <Compile Include="Helpers\ContainerDebugHelper.cs" />
     <Compile Include="Helpers\McpToolsLoader.cs" />
     <Compile Include="Helpers\PagingHelper.cs" />
@@ -202,6 +205,10 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
     <Compile Include="Services\AxSession.cs" />
+    <Compile Include="Services\EcbExchangeRateProvider.cs" />
+    <Compile Include="Services\EcbHttpClient.cs" />
+    <Compile Include="Services\EcbObservationResult.cs" />
+    <Compile Include="Services\ExchangeRateProviderResult.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
     <Compile Include="Services\IND_AxRequestContext.cs" />
     <Compile Include="Services\IND_AxSessionGuard.cs" />
@@ -213,6 +220,8 @@
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
+    <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
+    <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
     <Compile Include="Startup.cs" />
