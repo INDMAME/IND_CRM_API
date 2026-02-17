@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
@@ -18,8 +19,8 @@ namespace IND_CRM_API.Services
     {
         private static readonly string[] HostPriority =
         {
-            "https://sdw-wsrest.ecb.europa.eu",
-            "https://data-api.ecb.europa.eu"
+            "https://data-api.ecb.europa.eu",
+            "https://sdw-wsrest.ecb.europa.eu"
         };
 
         private static readonly HttpClient SharedHttpClient = CreateSharedHttpClient();
@@ -71,7 +72,11 @@ namespace IND_CRM_API.Services
                         if (TryParseObservation(payload, out var parsed))
                             return parsed;
 
-                        _logger.Log($"[ECB-HTTP] Invalid ECB payload for {requestUrl}", AxaptaSessionManager.LogLevel.Warning);
+                        var contentType = response.Content?.Headers?.ContentType?.ToString() ?? "unknown";
+                        var preview = BuildPayloadPreview(payload);
+                        _logger.Log(
+                            $"[ECB-HTTP] Invalid ECB payload for {requestUrl} contentType={contentType} preview={preview}",
+                            AxaptaSessionManager.LogLevel.Warning);
                     }
                 }
                 catch (TaskCanceledException)
@@ -83,7 +88,11 @@ namespace IND_CRM_API.Services
                 }
                 catch (HttpRequestException ex)
                 {
-                    _logger.Log($"[ECB-HTTP] Request error for {requestUrl}: {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                    var inner = ex.InnerException?.Message;
+                    var detail = string.IsNullOrWhiteSpace(inner)
+                        ? ex.Message
+                        : $"{ex.Message} | inner={inner}";
+                    _logger.Log($"[ECB-HTTP] Request error for {requestUrl}: {detail}", AxaptaSessionManager.LogLevel.Warning);
                 }
                 catch (Exception ex)
                 {
@@ -96,13 +105,23 @@ namespace IND_CRM_API.Services
 
         private static HttpClient CreateSharedHttpClient()
         {
-            var client = new HttpClient
+            // Asegura TLS 1.2 en entornos .NET Framework legacy.
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+            var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+
+            var client = new HttpClient(handler)
             {
                 Timeout = TimeSpan.FromSeconds(3)
             };
 
             client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.sdmx.data+json"));
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("IND_CRM_API/1.0");
             return client;
         }
 
@@ -164,16 +183,22 @@ namespace IND_CRM_API.Services
             }
 
             var series = root["dataSets"]?[0]?["series"] as JObject;
-            if (series == null || !series.Properties().Any())
-                return false;
+            JObject observations = null;
+            if (series != null && series.Properties().Any())
+            {
+                var firstSeries = series.Properties().FirstOrDefault();
+                observations = firstSeries?.Value?["observations"] as JObject;
+            }
 
-            var firstSeries = series.Properties().FirstOrDefault();
-            var observations = firstSeries?.Value?["observations"] as JObject;
+            // Fallback defensivo para payloads SDMX con observations a nivel dataSet.
+            if (observations == null || !observations.Properties().Any())
+                observations = root["dataSets"]?[0]?["observations"] as JObject;
+
             if (observations == null || !observations.Properties().Any())
                 return false;
 
             var firstObservation = observations.Properties()
-                .OrderBy(p => ParseNonNegativeInteger(p.Name))
+                .OrderBy(p => ResolveObservationIndex(p.Name))
                 .FirstOrDefault();
             if (firstObservation == null)
                 return false;
@@ -188,7 +213,7 @@ namespace IND_CRM_API.Services
             if (rate <= 0m)
                 return false;
 
-            var observationIndex = ParseNonNegativeInteger(firstObservation.Name);
+            var observationIndex = ResolveObservationIndex(firstObservation.Name);
             var observationDate = TryResolveObservationDate(root, observationIndex);
             if (!observationDate.HasValue)
                 return false;
@@ -206,6 +231,9 @@ namespace IND_CRM_API.Services
         private static DateTime? TryResolveObservationDate(JObject root, int observationIndex)
         {
             var values = root["structure"]?["dimensions"]?["observation"]?[0]?["values"] as JArray;
+            if (values == null || values.Count == 0)
+                values = TryResolveObservationValuesFromSeries(root);
+
             if (values == null || values.Count == 0)
                 return null;
 
@@ -230,6 +258,30 @@ namespace IND_CRM_API.Services
             return null;
         }
 
+        private static JArray TryResolveObservationValuesFromSeries(JObject root)
+        {
+            var seriesDimensions = root["structure"]?["dimensions"]?["series"] as JArray;
+            if (seriesDimensions == null || seriesDimensions.Count == 0)
+                return null;
+
+            foreach (var token in seriesDimensions)
+            {
+                var dimension = token as JObject;
+                if (dimension == null)
+                    continue;
+
+                var id = dimension["id"]?.ToString();
+                var role = dimension["role"]?.ToString();
+                if (string.Equals(id, "TIME_PERIOD", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(role, "time", StringComparison.OrdinalIgnoreCase))
+                {
+                    return dimension["values"] as JArray;
+                }
+            }
+
+            return null;
+        }
+
         private static bool TryParseDecimal(JToken token, out decimal value)
         {
             value = 0m;
@@ -249,6 +301,43 @@ namespace IND_CRM_API.Services
                 return parsed;
 
             return int.MaxValue;
+        }
+
+        private static int ResolveObservationIndex(string observationKey)
+        {
+            var direct = ParseNonNegativeInteger(observationKey);
+            if (direct != int.MaxValue)
+                return direct;
+
+            if (string.IsNullOrWhiteSpace(observationKey))
+                return int.MaxValue;
+
+            var parts = observationKey.Split(':');
+            for (int i = parts.Length - 1; i >= 0; i--)
+            {
+                var parsed = ParseNonNegativeInteger(parts[i]);
+                if (parsed != int.MaxValue)
+                    return parsed;
+            }
+
+            return int.MaxValue;
+        }
+
+        private static string BuildPayloadPreview(string payload)
+        {
+            if (string.IsNullOrWhiteSpace(payload))
+                return "<empty>";
+
+            var normalized = payload
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Trim();
+
+            const int maxLength = 220;
+            if (normalized.Length <= maxLength)
+                return normalized;
+
+            return normalized.Substring(0, maxLength) + "...";
         }
     }
 }
