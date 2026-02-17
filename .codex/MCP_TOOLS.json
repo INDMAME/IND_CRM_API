@@ -1434,6 +1434,54 @@
       ]
     },
     {
+      "name": "crm_expensesheets_currencies",
+      "description": "Lista monedas disponibles para hojas de gastos.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Authorization": {
+                "type": "string",
+                "description": "Bearer token. Format: Bearer <token>"
+              },
+              "X-IND-Company": {
+                "type": "string",
+                "description": "CompanyId header for CRM endpoints."
+              }
+            },
+            "required": [
+              "Authorization",
+              "X-IND-Company"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "x-http": {
+        "method": "GET",
+        "path": "/api/crm/expensesheets/currencies",
+        "auth": "bearer",
+        "requiredHeaders": [
+          "Authorization",
+          "X-IND-Company"
+        ]
+      },
+      "examples": [
+        {
+          "headers": {
+            "Authorization": "Bearer <token>",
+            "X-IND-Company": "<companyId>"
+          }
+        }
+      ]
+    },
+    {
       "name": "crm_expensesheets_create",
       "description": "Crea hoja de gastos.",
       "inputSchema": {

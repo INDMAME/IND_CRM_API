@@ -1,4 +1,4 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-16)
+# IND_CRM_API MCP Endpoints (actualizado 2026-02-17)
 
 Fuentes: `.codex/ENDPOINTS.md` + Postman V14 (`.codex/Postman/IND_CRM_API V14.postman_collection.json`).
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
@@ -281,6 +281,13 @@ Endpoints
 - Respuesta: `IndApiResponse<object>`
 
 ## Expense Sheets
+
+### Tool: crm_expensesheets_currencies
+- HTTP: GET `/api/crm/expensesheets/currencies`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`
+- Respuesta: `IndPagedResponse<ExpenseSheetCurrencyDto>`
+- Campos por item: `CurrencyCode`, `CurrencyCodeISO`.
 
 ### Tool: crm_expensesheets_create
 - HTTP: POST `/api/crm/expensesheets`

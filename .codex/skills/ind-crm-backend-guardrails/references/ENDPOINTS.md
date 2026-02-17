@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-16)
+# IND_CRM_API Endpoints (actualizado 2026-02-17)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -86,6 +86,8 @@ Endpoints
   Respuesta 200 OK con mensaje en body (IndApiResponse). 404/422 si aplica.
 
 ## Expense Sheets
+- GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
+  Response items: CurrencyCode, CurrencyCodeISO
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode, lines[]
   Optional: projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket

@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Lunes 2/16/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 2/17/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -751,7 +751,7 @@ Formatversion: 1
         #    CRMUserId        crmUserId;
         #    UserId           axUserId;
         #    CRMHojaGastosId  hojaId;
-        #    RecId lineRecId;
+        #    RecId            lineRecId;
         #    int              deleteWholeSheet;
         #
         #    CRMHojaGastosTable header;

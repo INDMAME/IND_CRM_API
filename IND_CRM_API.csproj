@@ -169,6 +169,7 @@
     <Compile Include="Contracts\Requests\UpdateExpenseSheetLineRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />

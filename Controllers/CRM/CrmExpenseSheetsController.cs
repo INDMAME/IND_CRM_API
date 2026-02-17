@@ -218,6 +218,89 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
+        /// Lists available currencies for expense sheet capture.
+        /// </summary>
+        [HttpGet, Route("currencies")]
+        [ResponseType(typeof(IndPagedResponse<ExpenseSheetCurrencyDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Listado de monedas", typeof(IndPagedResponse<ExpenseSheetCurrencyDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult GetExpenseSheetCurrencies()
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+
+            // Validate company header.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            // Logs the HTTP status for this action.
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] GetExpenseSheetCurrencies {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log($"[API-IN] GetExpenseSheetCurrencies user={username} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "getCurrencyList",
+                    con
+                );
+
+                var root = resultObj as IAxaptaContainer;
+                if (root == null)
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                var items = MapCurrencyList(root, out var message);
+
+                var okResponse = new IndPagedResponse<ExpenseSheetCurrencyDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    Total = items.Count,
+                    Items = items,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] GetExpenseSheetCurrencies: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
         /// Gets an expense sheet by id with its lines.
         /// </summary>
         [HttpGet, Route("{hojaGastosId}")]
@@ -1146,6 +1229,35 @@ namespace IND_CRM_API.Controllers.CRM
                 Data = null,
                 TraceId = traceId
             };
+        }
+
+        // Maps AX currency rows to typed currency DTOs.
+        private static List<ExpenseSheetCurrencyDto> MapCurrencyList(IAxaptaContainer root, out string message)
+        {
+            message = string.Empty;
+            var items = new List<ExpenseSheetCurrencyDto>();
+
+            if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
+                return items;
+
+            if (AxContainerReadHelper.IsSinDatos(root, out message))
+                return items;
+
+            var len = AxContainerReadHelper.SafeLength(root);
+            for (int i = 1; i <= len; i++)
+            {
+                var row = AxContainerReadHelper.SafePeekContainer(root, i);
+                if (row == null || AxContainerReadHelper.SafeLength(row) < 2)
+                    continue;
+
+                items.Add(new ExpenseSheetCurrencyDto
+                {
+                    CurrencyCode = AxContainerReadHelper.SafeString(row, 1),
+                    CurrencyCodeISO = AxContainerReadHelper.SafeString(row, 2)
+                });
+            }
+
+            return items;
         }
 
         // Maps header extras and lines to a typed DTO.
