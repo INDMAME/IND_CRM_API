@@ -94,7 +94,7 @@ Endpoints
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional)
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: transDate (yyyymmdd), typeValue, description, qty, amount
+  Body required: transDate (yyyymmdd), typeValue, description, qty, Amount
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company + X-IND-AxUserId)
   Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)

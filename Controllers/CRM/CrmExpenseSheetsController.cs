@@ -70,6 +70,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (userError != null)
                 return userError;
 
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
@@ -109,7 +112,10 @@ namespace IND_CRM_API.Controllers.CRM
                     Logger.Log($"[WARN] CreateExpenseSheet userId mismatch body={body.userId} header={axUserId} token={username}");
                 }
 
-                Logger.Log($"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} mode={modeValue} existingHojaGastosId={existingHojaGastosId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} mode={modeValue} " +
+                    $"existingHojaGastosId={existingHojaGastosId} expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} " +
+                    $"exchangeRateMode={ToLogValue(body.exchangeRateMode)} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var rootCon = ax.CreateContainer();
@@ -122,12 +128,7 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body.currencyCode?.Trim() ?? string.Empty);
                 headerCon.Append(body.exchRate ?? 0m);
                 headerCon.Append(body.projId?.Trim() ?? string.Empty);
-                if (body.expenseSheetStatus.HasValue)
-                {
-                    headerCon.Append(body.expenseSheetStatus.Value);
-                    if (body.exchangeRateMode.HasValue)
-                        headerCon.Append(body.exchangeRateMode.Value);
-                }
+                AppendHeaderEnumFields(headerCon, body.expenseSheetStatus, body.exchangeRateMode);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -365,6 +366,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (userError != null)
                 return userError;
 
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
+
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
 
@@ -409,7 +413,9 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
+                    $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -420,12 +426,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
-                if (body.expenseSheetStatus.HasValue)
-                {
-                    con.Append(body.expenseSheetStatus.Value);
-                    if (body.exchangeRateMode.HasValue)
-                        con.Append(body.exchangeRateMode.Value);
-                }
+                AppendHeaderEnumFields(con, body.expenseSheetStatus, body.exchangeRateMode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -525,8 +526,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (!body.qty.HasValue || body.qty.Value <= 0)
                     validationErrors.Add(new IndValidationError { Field = "qty", Message = "qty debe ser mayor que cero." });
-                if (!body.amount.HasValue)
-                    validationErrors.Add(new IndValidationError { Field = "amount", Message = "amount es obligatorio." });
+                if (!body.Amount.HasValue)
+                    validationErrors.Add(new IndValidationError { Field = "Amount", Message = "Amount es obligatorio." });
             }
 
             if (validationErrors.Any())
@@ -568,7 +569,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(ToAxBool(body.internacional));
                 con.Append(ToAxBool(body.ticket));
                 con.Append(body.qty ?? 0m);
-                con.Append(body.amount ?? 0m);
+                con.Append(body.Amount ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
                 con.Append(body.indAttachFiles ?? string.Empty);
 
@@ -1021,6 +1022,56 @@ namespace IND_CRM_API.Controllers.CRM
             return false;
         }
 
+        // Appends optional enum fields to AX container using stable positions.
+        private static void AppendHeaderEnumFields(IAxaptaContainer container, int? expenseSheetStatus, int? exchangeRateMode)
+        {
+            if (container == null || !expenseSheetStatus.HasValue)
+                return;
+
+            container.Append(expenseSheetStatus.Value);
+
+            if (exchangeRateMode.HasValue)
+                container.Append(exchangeRateMode.Value);
+        }
+
+        // Adds model binding/deserialization errors to standard validation list.
+        private void AddModelStateErrors(List<IndValidationError> validationErrors)
+        {
+            if (validationErrors == null || ModelState == null || ModelState.IsValid)
+                return;
+
+            foreach (var entry in ModelState)
+            {
+                var field = string.IsNullOrWhiteSpace(entry.Key) ? "body" : entry.Key;
+                var state = entry.Value;
+                if (state == null || state.Errors == null || state.Errors.Count == 0)
+                    continue;
+
+                foreach (var modelError in state.Errors)
+                {
+                    var message = modelError?.ErrorMessage;
+                    if (string.IsNullOrWhiteSpace(message))
+                        message = modelError?.Exception?.Message;
+                    if (string.IsNullOrWhiteSpace(message))
+                        message = "Valor invalido.";
+
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = field,
+                        Message = message
+                    });
+                }
+            }
+        }
+
+        // Formats nullable ints for logs.
+        private static string ToLogValue(int? value)
+        {
+            return value.HasValue
+                ? value.Value.ToString(CultureInfo.InvariantCulture)
+                : "null";
+        }
+
         // Converts bool to AX int (1/0).
         private static int ToAxBool(bool? value)
         {
@@ -1120,7 +1171,7 @@ namespace IND_CRM_API.Controllers.CRM
                 ExpenseSheetStatus = hasCurrentHeaderShape ? ToInt(headerExtras[2]) : null,
                 UserId = hasCurrentHeaderShape ? headerExtras[3] : (hasPreviousHeaderShape ? headerExtras[2] : headerExtras[1]),
                 CurrencyCode = hasCurrentHeaderShape ? headerExtras[4] : headerExtras[3],
-                TotalAmountMST = hasCurrentHeaderShape ? ToDecimal(headerExtras[5]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[4]) : null),
+                TotalAmount = hasCurrentHeaderShape ? ToDecimal(headerExtras[5]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[4]) : null),
                 ExchRate = hasCurrentHeaderShape ? ToDecimal(headerExtras[6]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4])),
                 ExchangeRateMode = hasCurrentHeaderShape ? ToInt(headerExtras[7]) : null,
                 ProjId = hasCurrentHeaderShape ? headerExtras[8] : (hasPreviousHeaderShape ? headerExtras[6] : headerExtras[5]),
@@ -1193,7 +1244,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
                         ProjId = AxContainerReadHelper.SafeString(row, 9),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
-                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
                         CreatedDate = AxContainerReadHelper.SafeString(row, 11)
@@ -1212,7 +1263,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
                         ProjId = AxContainerReadHelper.SafeString(row, 9),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
-                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
                         CreatedDate = null
@@ -1231,7 +1282,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 9)),
                         ProjId = AxContainerReadHelper.SafeString(row, 8),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
-                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 7)),
                         CreatedDate = null
@@ -1250,7 +1301,7 @@ namespace IND_CRM_API.Controllers.CRM
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 3)),
                         ProjId = AxContainerReadHelper.SafeString(row, 4),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
-                        TotalAmountMST = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchRate = null,
                         ExchangeRateMode = null,
                         CreatedDate = AxContainerReadHelper.SafeString(row, 7)
@@ -1269,7 +1320,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Voucher = string.Empty,
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
-                    TotalAmountMST = amountAndDate.TotalAmountMST,
+                    TotalAmount = amountAndDate.TotalAmount,
                     ExchRate = null,
                     ExchangeRateMode = null,
                     CreatedDate = amountAndDate.CreatedDate
@@ -1280,7 +1331,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.
-        private static (decimal? TotalAmountMST, string CreatedDate) ResolveAmountAndDate(IAxaptaContainer row, int rowLen)
+        private static (decimal? TotalAmount, string CreatedDate) ResolveAmountAndDate(IAxaptaContainer row, int rowLen)
         {
             var value5 = rowLen >= 5 ? AxContainerReadHelper.SafeString(row, 5) : string.Empty;
             var value6 = rowLen >= 6 ? AxContainerReadHelper.SafeString(row, 6) : string.Empty;

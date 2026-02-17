@@ -341,7 +341,7 @@ Endpoints
   - `typeValue` (int)
   - `description` (string)
   - `qty` (number)
-  - `amount` (number)
+  - `Amount` (number)
   - `internacional` (bool, opcional)
   - `ticket` (bool, opcional)
   - `projId` (string, opcional)

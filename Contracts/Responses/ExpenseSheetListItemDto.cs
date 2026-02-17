@@ -14,7 +14,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string ProjId { get; set; }
         public string CurrencyCode { get; set; }
         // Total amount in company currency returned by AX.
-        public decimal? TotalAmountMST { get; set; }
+        public decimal? TotalAmount { get; set; }
         public decimal? ExchRate { get; set; }
         // Exchange rate mode enum value returned by AX.
         public int? ExchangeRateMode { get; set; }

@@ -1087,7 +1087,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"transDate\": \"20260115\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"ticket\": true,\n  \"qty\": 1,\n  \"amount\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"indAttachFiles\": \"\"\n}"
+                                      "raw":  "{\n  \"transDate\": \"20260115\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"ticket\": true,\n  \"qty\": 1,\n  \"Amount\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"indAttachFiles\": \"\"\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",

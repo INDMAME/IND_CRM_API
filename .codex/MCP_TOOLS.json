@@ -1855,7 +1855,7 @@
               "qty": {
                 "type": "number"
               },
-              "amount": {
+              "Amount": {
                 "type": "number"
               },
               "internacional": {
@@ -1876,7 +1876,7 @@
               "typeValue",
               "description",
               "qty",
-              "amount"
+              "Amount"
             ],
             "additionalProperties": false
           }
@@ -1917,7 +1917,7 @@
             "typeValue": 5,
             "description": "Comida",
             "qty": 1,
-            "amount": 30.0,
+            "Amount": 30.0,
             "internacional": false,
             "ticket": true,
             "projId": "",
