@@ -101,7 +101,7 @@ Endpoints
   Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode
+  Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
   Response list fields include: expenseSheetStatus, exchangeRateMode, userId, exchRate, createdDate
   Nota: Si no hay filtro, AX devuelve lista vacia.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).

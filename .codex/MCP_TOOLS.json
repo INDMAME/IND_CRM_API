@@ -2140,6 +2140,17 @@
               },
               "currencyCode": {
                 "type": "string"
+              },
+              "expenseSheetStatus": {
+                "type": "integer",
+                "description": "Filtro por estado de hoja de gastos.",
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ]
               }
             },
             "required": [
@@ -2183,7 +2194,8 @@
             "createdDateFrom": "20260101",
             "createdDateTo": "20260131",
             "projId": "PROJ-001",
-            "currencyCode": "USD"
+            "currencyCode": "USD",
+            "expenseSheetStatus": 1
           }
         }
       ]

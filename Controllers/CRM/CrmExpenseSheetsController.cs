@@ -28,6 +28,8 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
+        private const int ExpenseSheetStatusDraft = 0;
+        private const int ExpenseSheetStatusPaid = 4;
 
         private readonly IAxaptaSessionManager _sessionManager;
 
@@ -836,6 +838,10 @@ namespace IND_CRM_API.Controllers.CRM
         /// Lists expense sheets filtered by search text.
         /// </summary>
         /// <param name="body">Filtros y paginacion del listado.</param>
+        /// <remarks>
+        /// Filtro opcional por estado: expenseSheetStatus.
+        /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -874,6 +880,15 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
                     validationErrors.Add(new IndValidationError { Field = "createdDateTo", Message = "createdDateTo debe ser yyyyMMdd o yyyy-MM-dd." });
+
+                if (body.expenseSheetStatus.HasValue && !IsValidExpenseSheetStatus(body.expenseSheetStatus.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "expenseSheetStatus",
+                        Message = "expenseSheetStatus invalido. Valores permitidos: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid."
+                    });
+                }
 
                 if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
                 {
@@ -922,11 +937,12 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var projIdValue = body.projId?.Trim() ?? string.Empty;
                 var currencyCodeValue = body.currencyCode?.Trim() ?? string.Empty;
+                var expenseSheetStatusValue = body.expenseSheetStatus;
 
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetsList filter={filterValue} billedMode={billedModeValue} page={pageValue} pageSize={pageSizeValue} " +
                     $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} projId={projIdValue} currencyCode={currencyCodeValue} " +
-                    $"user={username} axUserId={axUserId} traceId={traceId}");
+                    $"expenseSheetStatus={ToLogValue(expenseSheetStatusValue)} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -938,6 +954,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(createdDateToYmd);
                 con.Append(projIdValue);
                 con.Append(currencyCodeValue);
+                if (expenseSheetStatusValue.HasValue)
+                    con.Append(expenseSheetStatusValue.Value);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1103,6 +1121,13 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return false;
+        }
+
+        // Validates allowed values for AX INDExpenseSheetStatus.
+        private static bool IsValidExpenseSheetStatus(int expenseSheetStatus)
+        {
+            return expenseSheetStatus >= ExpenseSheetStatusDraft &&
+                   expenseSheetStatus <= ExpenseSheetStatusPaid;
         }
 
         // Appends optional enum fields to AX container using stable positions.

@@ -33,7 +33,7 @@ Notas
 - Los endpoints CRM ya incluyen el header X-IND-Company apuntando a {{companyId}}.
 - Los endpoints que requieren usuario incluyen X-IND-AxUserId apuntando a {{axUserId}}.
 - El listado de proyectos usa page y pageSize en query.
-- El listado de hojas de gastos usa POST con body y soporta filtros opcionales: createdDateFrom, createdDateTo, projId, currencyCode.
+- El listado de hojas de gastos usa POST con body y soporta filtros opcionales: createdDateFrom, createdDateTo, projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid).
 - Create/Update de hojas de gastos ahora incluyen los campos opcionales: expenseSheetStatus y exchangeRateMode.
 - Get de hoja de gastos incluye expenseSheetStatus, exchangeRateMode y createdDate.
 - List de hojas de gastos incluye expenseSheetStatus, exchangeRateMode, userId, exchRate y createdDate.

@@ -13,5 +13,11 @@ namespace IND_CRM_API.Contracts.Requests
         public string createdDateTo { get; set; }
         public string projId { get; set; }
         public string currencyCode { get; set; }
+
+        /// <summary>
+        /// Estado de la hoja de gastos para filtrar (enum AX INDExpenseSheetStatus).
+        /// Valores permitidos: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// </summary>
+        public int? expenseSheetStatus { get; set; }
     }
 }

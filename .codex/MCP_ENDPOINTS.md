@@ -380,6 +380,7 @@ Endpoints
   - `createdDateTo` (string date, opcional; `yyyyMMdd` o `yyyy-MM-dd`)
   - `projId` (string, opcional)
   - `currencyCode` (string, opcional)
+  - `expenseSheetStatus` (int, opcional; valores: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
 - Respuesta: `IndPagedResponse<ExpenseSheetListItemDto>`
 - Campos de salida relevantes por item: `expenseSheetStatus`, `exchangeRateMode`, `userId`, `exchRate`, `createdDate`.
 - Nota: si no hay filtro, AX devuelve lista vacia.

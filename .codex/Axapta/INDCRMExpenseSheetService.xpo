@@ -1018,7 +1018,8 @@ Formatversion: 1
         #    str 1000             filterTxt;
         #    str 1000             likePattern;
         #
-        #    int                  billedMode,expenseSheetStatus,exchangeRateMode;
+        #    int                  billedMode,expenseSheetStatus,expenseSheetStatusFilter,exchangeRateMode;
+        #    boolean              hasExpenseSheetStatusFilter;
         #    Amount               monto;
         #    // Filtros nuevos
         #    date                 createdDateFrom;
@@ -1053,9 +1054,22 @@ Formatversion: 1
         #    if (conLen(_data) >= 8)
         #        currencyCode = conPeek(_data, 8);
         #
+        #    if (conLen(_data) >= 9)
+        #    {
+        #        expenseSheetStatusFilter = conPeek(_data, 9);
+        #        hasExpenseSheetStatusFilter = true;
+        #    }
+        #
         #    // billedMode permitido
         #    if (billedMode != 0 && billedMode != 1 && billedMode != 2)
         #        billedMode = 0;
+        #
+        #    // INDExpenseSheetStatus permitido: 0=Draft, 1=InReview, 2=Approved, 3=Rejected, 4=Paid
+        #    if (hasExpenseSheetStatusFilter
+        #        && (expenseSheetStatusFilter < 0 || expenseSheetStatusFilter > 4))
+        #    {
+        #        hasExpenseSheetStatusFilter = false;
+        #    }
         #
         #    if (filterTxt)
         #        likePattern = strFmt("*%1*", filterTxt);
@@ -1096,6 +1110,9 @@ Formatversion: 1
         #
         #               // Moneda opcional
         #               && ( !currencyCode || hoja.CurrencyCode == currencyCode )
+        #
+        #               // Estado opcional
+        #               && ( !hasExpenseSheetStatusFilter || hoja.ExpenseSheetStatus == expenseSheetStatusFilter )
         #        {
         #            monto               = hoja.TotalAmount();
         #            exchangeRateMode    = hoja.ExchangeRateMode;
