@@ -655,7 +655,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
-                con.Append(lineRecId);
+                // Axapta COM container is sensitive to Int64 values; send RecId as numeric text.
+                con.Append(lineRecId.ToString(CultureInfo.InvariantCulture));
 
                 var normalizedDate = NormalizeYmdDate(body.transDate);
                 con.Append(normalizedDate);
@@ -803,7 +804,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var hojaGastosIdTrimmed = hojaGastosId.Trim();
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 object resultObj;
-                if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly)
+                if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly ||
+                    effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet)
                 {
                     var headerCon = ax.CreateContainer();
                     headerCon.Append(company);
@@ -822,9 +824,10 @@ namespace IND_CRM_API.Controllers.CRM
                     lineCon.Append(company);
                     lineCon.Append(axUserId);
                     lineCon.Append(hojaGastosIdTrimmed);
-                    var lineRecIdValue = effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet ? 0 : lineRecId;
+                    // Axapta COM container is sensitive to Int64 values; send RecId as numeric text.
+                    var lineRecIdValue = lineRecId.ToString(CultureInfo.InvariantCulture);
                     lineCon.Append(lineRecIdValue);
-                    lineCon.Append(effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet ? 1 : 0);
+                    lineCon.Append(0);
 
                     resultObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",
