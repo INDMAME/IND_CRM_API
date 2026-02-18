@@ -1,7 +1,7 @@
 ﻿{
     "info":  {
-                 "_postman_id":  "c5e38426-ef9f-48cf-98bb-7e1e76948ee1",
-                 "name":  "IND_CRM_API V16",
+                 "_postman_id":  "6b05540f-0909-4a90-aff5-b96bd2b40753",
+                 "name":  "IND_CRM_API V17",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
                  "_exporter_id":  "12158298"
              },
@@ -429,6 +429,45 @@
                                                                                 }
                                                                             ]
                                                               }
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Exchange Rate Public Direct",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/system/exchange-rate/public-direct?baseCurrency=USD\u0026targetCurrency=EUR\u0026date=2026-02-18",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "system",
+                                                                               "exchange-rate",
+                                                                               "public-direct"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "baseCurrency",
+                                                                                    "value":  "USD"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "targetCurrency",
+                                                                                    "value":  "EUR"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "date",
+                                                                                    "value":  "2026-02-18"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Prueba publica directa del endpoint de tipo de cambio sin Authorization."
                                                   },
                                       "response":  [
 

@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-17)
+# IND_CRM_API Endpoints (actualizado 2026-02-18)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -40,6 +40,10 @@ Endpoints
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
   Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source=ECB
   ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404), INTERNAL_ERROR (500)
+- GET /api/system/exchange-rate/public-direct?baseCurrency=USD&targetCurrency=EUR&date=2026-02-18 (AllowAnonymous)
+  Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
+  Query optional: date (yyyy-MM-dd; si no se envia usa latest)
+  Response: IndApiResponse<ExchangeRateDto> con el mismo contrato que /api/system/exchange-rate
 
 ## MCP
 - GET /api/mcp/tools (Authorize)
@@ -97,8 +101,10 @@ Endpoints
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional)
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (yyyymmdd), typeValue, description, qty, Amount
-- DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteWholeSheet=0|1 (Authorize + X-IND-Company + X-IND-AxUserId)
-  Nota: si deleteWholeSheet=1, lineRecId puede ser 0 y se elimina cabecera + lineas.
+- DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
+  deleteMode: 0=LineOnly, 1=HeaderOnly, 2=WholeSheet.
+  Legacy: deleteWholeSheet=0|1 sigue soportado si no se envia deleteMode.
+  Nota: si deleteMode es HeaderOnly o WholeSheet, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)

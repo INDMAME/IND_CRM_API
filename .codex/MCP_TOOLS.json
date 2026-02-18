@@ -2025,9 +2025,14 @@
           "query": {
             "type": "object",
             "properties": {
+              "deleteMode": {
+                "type": "string",
+                "description": "0=LineOnly, 1=HeaderOnly, 2=WholeSheet",
+                "pattern": "^(0|1|2|LineOnly|HeaderOnly|WholeSheet)$"
+              },
               "deleteWholeSheet": {
                 "type": "string",
-                "description": "0|1 or true|false",
+                "description": "Legacy flag. 0|1 or true|false",
                 "pattern": "^(0|1|true|false)$"
               }
             },
@@ -2064,7 +2069,7 @@
             "lineRecId": 12345
           },
           "query": {
-            "deleteWholeSheet": "false"
+            "deleteMode": "0"
           }
         }
       ]

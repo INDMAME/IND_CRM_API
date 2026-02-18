@@ -202,5 +202,31 @@ namespace IND_CRM_API.Controllers.System
                 return Content(HttpStatusCode.InternalServerError, errorResponse);
             }
         }
+
+        /// <summary>
+        /// Endpoint publico de diagnostico para probar el tipo de cambio sin token.
+        /// </summary>
+        /// <remarks>
+        /// Reutiliza la misma logica y contrato de /api/system/exchange-rate para comparar resultados.
+        /// </remarks>
+        /// <param name="baseCurrency">Moneda base ISO 4217 (3 letras).</param>
+        /// <param name="targetCurrency">Moneda destino ISO 4217 (3 letras).</param>
+        /// <param name="date">Fecha opcional yyyy-MM-dd; si no se envia se usa latest.</param>
+        [AllowAnonymous]
+        [HttpGet, Route("exchange-rate/public-direct")]
+        [SwaggerOperation(Tags = new[] { "Sistema" })]
+        [ResponseType(typeof(IndApiResponse<ExchangeRateDto>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Tipo de cambio obtenido", typeof(IndApiResponse<ExchangeRateDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Error de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Tipo de cambio no disponible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public Task<IHttpActionResult> GetExchangeRatePublicDirect(
+            [FromUri] string baseCurrency,
+            [FromUri] string targetCurrency,
+            [FromUri] string date = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return GetExchangeRate(baseCurrency, targetCurrency, date, cancellationToken);
+        }
     }
 }

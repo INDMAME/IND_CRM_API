@@ -1,6 +1,6 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-17)
+# IND_CRM_API MCP Endpoints (actualizado 2026-02-18)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V14 (`.codex/Postman/IND_CRM_API V14.postman_collection.json`).
+Fuentes: `.codex/ENDPOINTS.md` + Postman V17 (`.codex/Postman/IND_CRM_API V17.postman_collection.json`).
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Notas MCP (Context7 MCP)
@@ -134,6 +134,20 @@ Endpoints
   "additionalProperties": false
 }
 ```
+
+### Tool: system_exchange_rate_public_direct
+- HTTP: GET `/api/system/exchange-rate/public-direct`
+- Auth: AllowAnonymous
+- Query (requerido):
+  - `baseCurrency` (string, ISO 4217, 3 letras)
+  - `targetCurrency` (string, ISO 4217, 3 letras)
+- Query (opcional):
+  - `date` (string, `yyyy-MM-dd`; si no se envia usa latest)
+- Respuesta: `IndApiResponse<ExchangeRateDto>`
+- Error codes:
+  - `VALIDATION_ERROR` (422)
+  - `EXCHANGE_RATE_NOT_FOUND` (404)
+  - `INTERNAL_ERROR` (500)
 
 ## MCP
 
@@ -363,9 +377,11 @@ Endpoints
   - `hojaGastosId` (string)
   - `lineRecId` (int64)
 - Query:
-  - `deleteWholeSheet` (bool; 0|1)
+  - `deleteMode` (int; 0=LineOnly, 1=HeaderOnly, 2=WholeSheet)
+  - `deleteWholeSheet` (bool legacy; 0|1)
 - Respuesta: `IndApiResponse<object>`
-- Nota: si `deleteWholeSheet=1`, `lineRecId` puede ser 0 y se elimina cabecera + lineas.
+- Nota: si `deleteMode` es `HeaderOnly` o `WholeSheet`, `lineRecId` puede ser 0.
+- Nota legacy: si no se envia `deleteMode`, aplica `deleteWholeSheet`.
 
 ### Tool: crm_expensesheets_list
 - HTTP: POST `/api/crm/expensesheets/list`

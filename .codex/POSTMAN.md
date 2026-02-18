@@ -1,8 +1,8 @@
-# Postman project (actualizado 2026-02-17)
+# Postman project (actualizado 2026-02-18)
 
 Archivos
-- Collection: .codex/Postman/IND_CRM_API V16.postman_collection.json
-- Collection exportable (versionable): Notes/IND_CRM_API V16.postman_collection.json
+- Collection: .codex/Postman/IND_CRM_API V17.postman_collection.json
+- Collection exportable (versionable): Notes/IND_CRM_API V17.postman_collection.json
 
 Variables globales (collection variables)
 - baseUrl: URL base compartida (por defecto https://crm.insertec.biz:7776)
@@ -37,6 +37,8 @@ Notas
 - Create/Update de hojas de gastos ahora incluyen los campos opcionales: expenseSheetStatus y exchangeRateMode.
 - Get de hoja de gastos incluye expenseSheetStatus, exchangeRateMode y createdDate.
 - List de hojas de gastos incluye expenseSheetStatus, exchangeRateMode, userId, exchRate y createdDate.
+- Delete de linea soporta deleteMode (0 LineOnly, 1 HeaderOnly, 2 WholeSheet) y mantiene deleteWholeSheet como legado.
 - Expense Sheets incluye GET /api/crm/expensesheets/currencies para obtener CurrencyCode y CurrencyCodeISO.
 - System incluye GET /api/system/exchange-rate con query baseCurrency, targetCurrency y date opcional.
+- System incluye GET /api/system/exchange-rate/public-direct para prueba publica directa (sin Authorization).
 - Los endpoints protegidos usan Authorization: Bearer {{tokenId}}.

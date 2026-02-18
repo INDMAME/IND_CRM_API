@@ -25,6 +25,16 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/expensesheets")]
     public class CrmExpenseSheetsController : BaseCrmController
     {
+        /// <summary>
+        /// Supported modes for DELETE /expensesheets/{hojaGastosId}/lines/{lineRecId}.
+        /// </summary>
+        public enum ExpenseSheetDeleteMode
+        {
+            LineOnly = 0,
+            HeaderOnly = 1,
+            WholeSheet = 2
+        }
+
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
@@ -714,21 +724,31 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Deletes one expense sheet line or the whole sheet when requested.
+        /// Deletes expense sheet data using line, header, or whole-sheet mode.
         /// </summary>
+        /// <remarks>
+        /// Preferred mode selector: deleteMode (0 LineOnly, 1 HeaderOnly, 2 WholeSheet).
+        /// Legacy selector: deleteWholeSheet (bool). When deleteMode is provided, deleteWholeSheet is ignored.
+        /// </remarks>
         /// <param name="hojaGastosId">Identificador de la hoja de gastos.</param>
-        /// <param name="lineRecId">Identificador de la linea (puede ser 0 si deleteWholeSheet es true).</param>
-        /// <param name="deleteWholeSheet">Cuando es true, elimina cabecera y lineas.</param>
+        /// <param name="lineRecId">Identificador de la linea (puede ser 0 cuando deleteMode no es LineOnly).</param>
+        /// <param name="deleteWholeSheet">Parametro legacy. Cuando es true, elimina cabecera y lineas.</param>
+        /// <param name="deleteMode">Modo recomendado: LineOnly, HeaderOnly o WholeSheet.</param>
         [HttpDelete, Route("{hojaGastosId}/lines/{lineRecId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Linea eliminada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Eliminacion aplicada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Linea o hoja no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult DeleteExpenseSheetLine(string hojaGastosId, long lineRecId, [FromUri] bool deleteWholeSheet = false)
+        public IHttpActionResult DeleteExpenseSheetLine(
+            string hojaGastosId,
+            long lineRecId,
+            [FromUri] bool deleteWholeSheet = false,
+            [FromUri] ExpenseSheetDeleteMode? deleteMode = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
+            var effectiveDeleteMode = deleteMode ?? (deleteWholeSheet ? ExpenseSheetDeleteMode.WholeSheet : ExpenseSheetDeleteMode.LineOnly);
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
@@ -742,8 +762,16 @@ namespace IND_CRM_API.Controllers.CRM
             var validationErrors = new List<IndValidationError>();
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
-            if (!deleteWholeSheet && lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio cuando deleteWholeSheet es false." });
+            if (deleteMode.HasValue && !IsValidDeleteMode(deleteMode.Value))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "deleteMode",
+                    Message = "deleteMode invalido. Valores permitidos: 0 LineOnly, 1 HeaderOnly, 2 WholeSheet."
+                });
+            }
+            if (effectiveDeleteMode == ExpenseSheetDeleteMode.LineOnly && lineRecId <= 0)
+                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio cuando deleteMode es LineOnly." });
 
             if (validationErrors.Count > 0)
             {
@@ -768,25 +796,49 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] DeleteExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} deleteWholeSheet={deleteWholeSheet} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] DeleteExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} deleteWholeSheet={deleteWholeSheet} " +
+                    $"deleteMode={effectiveDeleteMode} user={username} axUserId={axUserId} traceId={traceId}");
 
+                var hojaGastosIdTrimmed = hojaGastosId.Trim();
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                var con = ax.CreateContainer();
-                con.Append(company);
-                con.Append(axUserId);
-                con.Append(hojaGastosId.Trim());
-                var lineRecIdValue = deleteWholeSheet ? 0 : lineRecId;
-                con.Append(lineRecIdValue);
-                con.Append(deleteWholeSheet ? 1 : 0);
+                object resultObj;
+                if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly)
+                {
+                    var headerCon = ax.CreateContainer();
+                    headerCon.Append(company);
+                    headerCon.Append(axUserId);
+                    headerCon.Append(hojaGastosIdTrimmed);
 
-                object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMExpenseSheetService",
-                    "deleteExpenseSheetLine",
-                    con
-                );
+                    resultObj = ax.CallStaticClassMethod(
+                        "INDCRMExpenseSheetService",
+                        "deleteExpenseSheet",
+                        headerCon
+                    );
+                }
+                else
+                {
+                    var lineCon = ax.CreateContainer();
+                    lineCon.Append(company);
+                    lineCon.Append(axUserId);
+                    lineCon.Append(hojaGastosIdTrimmed);
+                    var lineRecIdValue = effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet ? 0 : lineRecId;
+                    lineCon.Append(lineRecIdValue);
+                    lineCon.Append(effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet ? 1 : 0);
+
+                    resultObj = ax.CallStaticClassMethod(
+                        "INDCRMExpenseSheetService",
+                        "deleteExpenseSheetLine",
+                        lineCon
+                    );
+                }
 
                 if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out _, out _))
                 {
+                    Logger.Log(
+                        $"[WARN] DeleteExpenseSheetLine invalid AX response type={resultObj?.GetType().FullName ?? "null"} " +
+                        $"deleteMode={effectiveDeleteMode} traceId={traceId}");
+
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -1128,6 +1180,14 @@ namespace IND_CRM_API.Controllers.CRM
         {
             return expenseSheetStatus >= ExpenseSheetStatusDraft &&
                    expenseSheetStatus <= ExpenseSheetStatusPaid;
+        }
+
+        // Validates supported delete modes for expense sheet DELETE endpoint.
+        private static bool IsValidDeleteMode(ExpenseSheetDeleteMode mode)
+        {
+            return mode == ExpenseSheetDeleteMode.LineOnly ||
+                   mode == ExpenseSheetDeleteMode.HeaderOnly ||
+                   mode == ExpenseSheetDeleteMode.WholeSheet;
         }
 
         // Appends optional enum fields to AX container using stable positions.

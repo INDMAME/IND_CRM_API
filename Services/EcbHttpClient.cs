@@ -69,13 +69,13 @@ namespace IND_CRM_API.Services
                             continue;
                         }
 
-                        if (TryParseObservation(payload, out var parsed))
+                        if (TryParseObservation(payload, out var parsed, out var parseError))
                             return parsed;
 
                         var contentType = response.Content?.Headers?.ContentType?.ToString() ?? "unknown";
                         var preview = BuildPayloadPreview(payload);
                         _logger.Log(
-                            $"[ECB-HTTP] Invalid ECB payload for {requestUrl} contentType={contentType} preview={preview}",
+                            $"[ECB-HTTP] Invalid ECB payload for {requestUrl} contentType={contentType} reason={parseError} preview={preview}",
                             AxaptaSessionManager.LogLevel.Warning);
                     }
                 }
@@ -168,17 +168,19 @@ namespace IND_CRM_API.Services
             return $"{host}/service/data/EXR/{seriesKey}?{string.Join("&", parameters)}";
         }
 
-        private static bool TryParseObservation(string payload, out EcbObservationResult observation)
+        private static bool TryParseObservation(string payload, out EcbObservationResult observation, out string reason)
         {
             observation = EcbObservationResult.NotFound();
+            reason = "Unknown parse error.";
 
             JObject root;
             try
             {
                 root = JObject.Parse(payload);
             }
-            catch
+            catch (Exception ex)
             {
+                reason = $"Invalid JSON: {ex.Message}";
                 return false;
             }
 
@@ -195,28 +197,45 @@ namespace IND_CRM_API.Services
                 observations = root["dataSets"]?[0]?["observations"] as JObject;
 
             if (observations == null || !observations.Properties().Any())
+            {
+                reason = "No observations found in payload.";
                 return false;
+            }
 
             var firstObservation = observations.Properties()
                 .OrderBy(p => ResolveObservationIndex(p.Name))
                 .FirstOrDefault();
             if (firstObservation == null)
+            {
+                reason = "Observation list is empty.";
                 return false;
+            }
 
-            var observationValues = firstObservation.Value as JArray;
-            if (observationValues == null || observationValues.Count == 0)
+            if (!TryResolveObservationRateToken(firstObservation.Value, out var rateToken))
+            {
+                reason = "Observation value token was not found.";
                 return false;
+            }
 
-            if (!TryParseDecimal(observationValues[0], out var rate))
+            if (!TryParseDecimal(rateToken, out var rate))
+            {
+                reason = "Observation rate is not numeric.";
                 return false;
+            }
 
             if (rate <= 0m)
+            {
+                reason = "Observation rate must be greater than zero.";
                 return false;
+            }
 
             var observationIndex = ResolveObservationIndex(firstObservation.Name);
             var observationDate = TryResolveObservationDate(root, observationIndex);
             if (!observationDate.HasValue)
+            {
+                reason = "Observation date was not resolved.";
                 return false;
+            }
 
             observation = new EcbObservationResult
             {
@@ -225,14 +244,13 @@ namespace IND_CRM_API.Services
                 ObservationDate = observationDate.Value.Date
             };
 
+            reason = null;
             return true;
         }
 
         private static DateTime? TryResolveObservationDate(JObject root, int observationIndex)
         {
-            var values = root["structure"]?["dimensions"]?["observation"]?[0]?["values"] as JArray;
-            if (values == null || values.Count == 0)
-                values = TryResolveObservationValuesFromSeries(root);
+            var values = TryResolveObservationValues(root);
 
             if (values == null || values.Count == 0)
                 return null;
@@ -245,12 +263,31 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(dateText))
                 return null;
 
+            var dateFormats = new[]
+            {
+                "yyyy-MM-dd",
+                "yyyyMMdd",
+                "yyyy-MM-ddTHH:mm:ss",
+                "yyyy-MM-ddTHH:mm:ss.FFF",
+                "yyyy-MM-ddTHH:mm:ssK",
+                "yyyy-MM-ddTHH:mm:ss.FFFK"
+            };
+
             if (DateTime.TryParseExact(
                 dateText,
-                "yyyy-MM-dd",
+                dateFormats,
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
                 out var parsedDate))
+            {
+                return parsedDate.Date;
+            }
+
+            if (DateTime.TryParse(
+                dateText,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+                out parsedDate))
             {
                 return parsedDate.Date;
             }
@@ -258,28 +295,130 @@ namespace IND_CRM_API.Services
             return null;
         }
 
-        private static JArray TryResolveObservationValuesFromSeries(JObject root)
+        private static JArray TryResolveObservationValues(JObject root)
         {
-            var seriesDimensions = root["structure"]?["dimensions"]?["series"] as JArray;
-            if (seriesDimensions == null || seriesDimensions.Count == 0)
+            var dimensions = root["structure"]?["dimensions"] as JObject;
+            if (dimensions == null)
                 return null;
 
-            foreach (var token in seriesDimensions)
+            var observationValues = TryResolveTimeDimensionValues(dimensions["observation"]);
+            if (observationValues != null && observationValues.Count > 0)
+                return observationValues;
+
+            var seriesValues = TryResolveTimeDimensionValues(dimensions["series"]);
+            if (seriesValues != null && seriesValues.Count > 0)
+                return seriesValues;
+
+            var dataSetValues = TryResolveTimeDimensionValues(dimensions["dataSet"]);
+            if (dataSetValues != null && dataSetValues.Count > 0)
+                return dataSetValues;
+
+            return null;
+        }
+
+        private static JArray TryResolveTimeDimensionValues(JToken dimensionToken)
+        {
+            if (dimensionToken == null)
+                return null;
+
+            var arrayToken = dimensionToken as JArray;
+            if (arrayToken != null)
             {
-                var dimension = token as JObject;
-                if (dimension == null)
+                foreach (var token in arrayToken)
+                {
+                    var dimension = token as JObject;
+                    if (!IsTimeDimension(dimension))
+                        continue;
+
+                    var values = dimension["values"] as JArray;
+                    if (values != null && values.Count > 0)
+                        return values;
+                }
+
+                return null;
+            }
+
+            var objectToken = dimensionToken as JObject;
+            if (objectToken == null)
+                return null;
+
+            if (IsTimeDimension(objectToken))
+            {
+                var directValues = objectToken["values"] as JArray;
+                if (directValues != null && directValues.Count > 0)
+                    return directValues;
+            }
+
+            foreach (var property in objectToken.Properties())
+            {
+                var nestedDimension = property.Value as JObject;
+                if (!IsTimeDimension(nestedDimension))
                     continue;
 
-                var id = dimension["id"]?.ToString();
-                var role = dimension["role"]?.ToString();
-                if (string.Equals(id, "TIME_PERIOD", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(role, "time", StringComparison.OrdinalIgnoreCase))
-                {
-                    return dimension["values"] as JArray;
-                }
+                var values = nestedDimension["values"] as JArray;
+                if (values != null && values.Count > 0)
+                    return values;
             }
 
             return null;
+        }
+
+        private static bool IsTimeDimension(JObject dimension)
+        {
+            if (dimension == null)
+                return false;
+
+            var id = dimension["id"]?.ToString();
+            var role = dimension["role"]?.ToString();
+            return string.Equals(id, "TIME_PERIOD", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(role, "time", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryResolveObservationRateToken(JToken observationToken, out JToken rateToken)
+        {
+            rateToken = null;
+            if (observationToken == null)
+                return false;
+
+            var arrayValue = observationToken as JArray;
+            if (arrayValue != null)
+            {
+                if (arrayValue.Count == 0)
+                    return false;
+
+                rateToken = arrayValue[0];
+                return rateToken != null && rateToken.Type != JTokenType.Null;
+            }
+
+            var objectValue = observationToken as JObject;
+            if (objectValue != null)
+            {
+                var directValue = objectValue["value"];
+                if (directValue != null && directValue.Type != JTokenType.Null)
+                {
+                    rateToken = directValue;
+                    return true;
+                }
+
+                var firstProperty = objectValue.Properties()
+                    .OrderBy(p => ResolveObservationIndex(p.Name))
+                    .FirstOrDefault();
+                if (firstProperty == null || firstProperty.Value == null || firstProperty.Value.Type == JTokenType.Null)
+                    return false;
+
+                rateToken = firstProperty.Value;
+                return true;
+            }
+
+            if (observationToken.Type == JTokenType.Float ||
+                observationToken.Type == JTokenType.Integer ||
+                observationToken.Type == JTokenType.String)
+            {
+                rateToken = observationToken;
+                return true;
+            }
+
+            return false;
         }
 
         private static bool TryParseDecimal(JToken token, out decimal value)
@@ -288,11 +427,21 @@ namespace IND_CRM_API.Services
             if (token == null)
                 return false;
 
-            return decimal.TryParse(
-                token.ToString(),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out value);
+            var raw = token.ToString()?.Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+                return false;
+
+            if (decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                return true;
+
+            var normalized = raw.Replace(',', '.');
+            if (!string.Equals(normalized, raw, StringComparison.Ordinal) &&
+                decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+
+            return decimal.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
         }
 
         private static int ParseNonNegativeInteger(string value)

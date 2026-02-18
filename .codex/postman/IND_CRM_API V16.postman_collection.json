@@ -1206,7 +1206,7 @@
                                                                      }
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345?deleteWholeSheet=false",
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345?deleteMode=0",
                                                                   "host":  [
                                                                                "{{baseUrl}}"
                                                                            ],
@@ -1220,8 +1220,8 @@
                                                                            ],
                                                                   "query":  [
                                                                                 {
-                                                                                    "key":  "deleteWholeSheet",
-                                                                                    "value":  "false"
+                                                                                    "key":  "deleteMode",
+                                                                                    "value":  "0"
                                                                                 }
                                                                             ]
                                                               }
@@ -1249,7 +1249,7 @@
                                                                      }
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/0?deleteWholeSheet=true",
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/0?deleteMode=2",
                                                                   "host":  [
                                                                                "{{baseUrl}}"
                                                                            ],
@@ -1263,8 +1263,8 @@
                                                                            ],
                                                                   "query":  [
                                                                                 {
-                                                                                    "key":  "deleteWholeSheet",
-                                                                                    "value":  "true"
+                                                                                    "key":  "deleteMode",
+                                                                                    "value":  "2"
                                                                                 }
                                                                             ]
                                                               }
