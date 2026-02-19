@@ -276,7 +276,7 @@ namespace IND_CRM_API.Services
   - 14: Taxi
 - typeValue debe ser siempre un entero exacto de la lista anterior (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
 - Si no hay evidencia clara de tipo, usa 8.
-- amount debe representar el total pagado (no subtotales). Si no esta claro usa null y agrega advertencia.
+- price debe representar el precio unitario de la linea. Si solo detectas un total y qty=1, usa ese valor como price.
 - transDate en formato yyyyMMdd o null si no se puede inferir.
 - ticket debe ser true y qty por defecto 1 salvo evidencia fuerte.
 - internacional true solo si hay evidencia de gasto internacional.
@@ -437,9 +437,11 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(transDate))
                 warnings = EnsureWarnings(warnings, "No se pudo inferir fecha de gasto. Se deja transDate null.");
 
-            var amount = TryParseDecimal(lineToken["amount"]);
-            if (!amount.HasValue)
-                warnings = EnsureWarnings(warnings, "No se detecto el monto total. Revisar manualmente.");
+            var qty = ParseQty(lineToken["qty"]);
+            var price = TryParseDecimal(lineToken["price"]);
+
+            if (!price.HasValue)
+                warnings = EnsureWarnings(warnings, "No se detecto el price de la linea. Revisar manualmente.");
 
             var line = new CreateExpenseSheetLineRequest
             {
@@ -448,8 +450,8 @@ namespace IND_CRM_API.Services
                 description = NormalizeText(lineToken["description"]?.ToString(), "Ticket"),
                 internacional = TryParseBool(lineToken["internacional"]),
                 ticket = TryParseBool(lineToken["ticket"], true),
-                qty = ParseQty(lineToken["qty"]),
-                amount = amount,
+                qty = qty,
+                price = price,
                 projId = NormalizeText(lineToken["projId"]?.ToString(), request?.projId),
                 indAttachFiles = NormalizeText(lineToken["indAttachFiles"]?.ToString(), string.Empty)
             };
@@ -468,7 +470,7 @@ namespace IND_CRM_API.Services
                 internacional = false,
                 ticket = true,
                 qty = 1m,
-                amount = null,
+                price = null,
                 projId = request?.projId,
                 indAttachFiles = string.Empty
             };
@@ -711,7 +713,7 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = "number"
                     },
-                    ["amount"] = new JObject
+                    ["price"] = new JObject
                     {
                         ["type"] = new JArray("number", "null")
                     },
@@ -731,7 +733,7 @@ namespace IND_CRM_API.Services
                     "internacional",
                     "ticket",
                     "qty",
-                    "amount",
+                    "price",
                     "projId",
                     "indAttachFiles")
             };
