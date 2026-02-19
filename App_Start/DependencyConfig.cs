@@ -21,6 +21,7 @@ namespace IND_CRM_API.App_Start
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
             var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
+            var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbHttpClient = new EcbHttpClient(axLogger);
             var exchangeRateProvider = new EcbExchangeRateProvider(ecbHttpClient, axLogger);
 
@@ -42,6 +43,9 @@ namespace IND_CRM_API.App_Start
             // Per-request Axapta session scope
             var scopeHandler = new IND_AxSessionScopeHandler(sessionManager);
             config.MessageHandlers.Add(scopeHandler);
+
+            // OpenAI endpoint protection: per-user throttling and concurrency cap.
+            config.MessageHandlers.Add(openAiRateLimitHandler);
 
             // Register message handler to refresh tokens automatically
             var refreshThresholdMinutes = 5; // renovar cuando queden 5 minutos o menos

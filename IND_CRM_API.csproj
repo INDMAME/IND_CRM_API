@@ -155,6 +155,7 @@
     <Compile Include="App_Start\DependencyConfig.cs" />
     <Compile Include="App_Start\CompanyHeaderOperationFilter.cs" />
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
+    <Compile Include="App_Start\IND_OpenAiRateLimitHandler.cs" />
     <Compile Include="App_Start\McpToolsDocumentFilter.cs" />
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />

@@ -52,5 +52,11 @@ namespace IND_CRM_API.Models.Responses
 
         /// <summary>Error en llamada COM o contenedor de Axapta.</summary>
         public const string AxComError = "AX_COM_ERROR";
+
+        /// <summary>OpenAI rate limit exceeded for the current user and endpoint.</summary>
+        public const string AiRateLimitExceeded = "AI_RATE_LIMIT_EXCEEDED";
+
+        /// <summary>OpenAI concurrency limit exceeded for the current user.</summary>
+        public const string AiConcurrencyLimitExceeded = "AI_CONCURRENCY_LIMIT_EXCEEDED";
     }
 }
