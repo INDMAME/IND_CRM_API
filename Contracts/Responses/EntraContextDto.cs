@@ -37,6 +37,8 @@ namespace IND_CRM_API.Contracts.Responses
         public bool IsDefault { get; set; }
         public string CompanyName { get; set; }
         public string CurrencyCode { get; set; }
+        // Flag from CRM persona settings that allows user self-management features.
+        public bool AllowSelfManagement { get; set; }
         public List<EntraModuleDto> Modules { get; set; }
     }
 

@@ -31,6 +31,7 @@ namespace IND_CRM_API.Controllers.CRM
         public enum ExpenseSheetDeleteMode
         {
             LineOnly = 0,
+            // AX does not expose a separate header-only delete; this mode is mapped to WholeSheet.
             HeaderOnly = 1,
             WholeSheet = 2
         }
@@ -157,7 +158,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(ToAxBool(line.internacional));
                         lineCon.Append(ToAxBool(line.ticket));
                         lineCon.Append(line.qty ?? 0m);
-                        lineCon.Append(line.amount ?? 0m);
+                        lineCon.Append(line.price ?? 0m);
                         lineCon.Append(line.projId?.Trim() ?? string.Empty);
                         lineCon.Append(line.indAttachFiles ?? string.Empty);
 
@@ -308,6 +309,132 @@ namespace IND_CRM_API.Controllers.CRM
                     TraceId = traceId
                 };
                 LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
+        /// Gets fuel price per kilometer for the current user and date.
+        /// </summary>
+        /// <param name="transDate">Fecha de consulta en formato yyyyMMdd o yyyy-MM-dd. Si no se envia, usa hoy.</param>
+        [HttpGet, Route("fuel-price-km")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetFuelPriceKmDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Precio por kilometro", typeof(IndApiResponse<ExpenseSheetFuelPriceKmDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult GetFuelPriceKm([FromUri] string transDate = null)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+
+            // Validate company header.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
+            string transDateYmd;
+            if (string.IsNullOrWhiteSpace(transDate))
+            {
+                transDateYmd = DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            }
+            else if (!TryNormalizeYmdDate(transDate, out transDateYmd))
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
+                    Errors = new List<IndValidationError>
+                    {
+                        new IndValidationError
+                        {
+                            Field = "transDate",
+                            Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd."
+                        }
+                    },
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
+            // Logs the HTTP status for this action.
+            Action<HttpStatusCode> logOut = statusCode =>
+                Logger.Log($"[API-OUT] GetFuelPriceKm {(int)statusCode} traceId={traceId}");
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log($"[API-IN] GetFuelPriceKm transDate={transDateYmd} user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(transDateYmd);
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "getFuelPriceKm",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    logOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                if (!success)
+                {
+                    var errorResponse = BuildActionError(message, traceId, out var status);
+                    logOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = new ExpenseSheetFuelPriceKmDto
+                {
+                    PriceKm = extras.Count >= 1 ? ToDecimal(extras[0]) : null,
+                    Source = extras.Count >= 2 ? extras[1] : string.Empty,
+                    TransDate = transDateYmd
+                };
+
+                var okResponse = new IndApiResponse<ExpenseSheetFuelPriceKmDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                logOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] GetFuelPriceKm: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                logOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, response);
             }
         }
@@ -621,8 +748,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (!body.qty.HasValue || body.qty.Value <= 0)
                     validationErrors.Add(new IndValidationError { Field = "qty", Message = "qty debe ser mayor que cero." });
-                if (!body.Amount.HasValue)
-                    validationErrors.Add(new IndValidationError { Field = "Amount", Message = "Amount es obligatorio." });
+                if (!body.price.HasValue)
+                    validationErrors.Add(new IndValidationError { Field = "price", Message = "price es obligatorio." });
             }
 
             if (validationErrors.Any())
@@ -665,7 +792,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(ToAxBool(body.internacional));
                 con.Append(ToAxBool(body.ticket));
                 con.Append(body.qty ?? 0m);
-                con.Append(body.Amount ?? 0m);
+                con.Append(body.price ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
                 con.Append(body.indAttachFiles ?? string.Empty);
 
@@ -729,6 +856,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         /// <remarks>
         /// Preferred mode selector: deleteMode (0 LineOnly, 1 HeaderOnly, 2 WholeSheet).
+        /// In AX, HeaderOnly (1) is handled as WholeSheet (deleteWholeSheet=1).
         /// Legacy selector: deleteWholeSheet (bool). When deleteMode is provided, deleteWholeSheet is ignored.
         /// </remarks>
         /// <param name="hojaGastosId">Identificador de la hoja de gastos.</param>
@@ -803,38 +931,29 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var hojaGastosIdTrimmed = hojaGastosId.Trim();
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                object resultObj;
-                if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly ||
-                    effectiveDeleteMode == ExpenseSheetDeleteMode.WholeSheet)
-                {
-                    var headerCon = ax.CreateContainer();
-                    headerCon.Append(company);
-                    headerCon.Append(axUserId);
-                    headerCon.Append(hojaGastosIdTrimmed);
+                var deleteWholeSheetFlag = effectiveDeleteMode == ExpenseSheetDeleteMode.LineOnly ? 0 : 1;
+                var lineCon = ax.CreateContainer();
+                lineCon.Append(company);
+                lineCon.Append(axUserId);
+                lineCon.Append(hojaGastosIdTrimmed);
+                // AX expects lineRecId as numeric text. For whole-sheet modes the value can be 0.
+                var lineRecIdValue = deleteWholeSheetFlag == 1
+                    ? "0"
+                    : lineRecId.ToString(CultureInfo.InvariantCulture);
+                lineCon.Append(lineRecIdValue);
+                lineCon.Append(deleteWholeSheetFlag);
 
-                    resultObj = ax.CallStaticClassMethod(
-                        "INDCRMExpenseSheetService",
-                        "deleteExpenseSheet",
-                        headerCon
-                    );
-                }
-                else
+                if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly)
                 {
-                    var lineCon = ax.CreateContainer();
-                    lineCon.Append(company);
-                    lineCon.Append(axUserId);
-                    lineCon.Append(hojaGastosIdTrimmed);
-                    // Axapta COM container is sensitive to Int64 values; send RecId as numeric text.
-                    var lineRecIdValue = lineRecId.ToString(CultureInfo.InvariantCulture);
-                    lineCon.Append(lineRecIdValue);
-                    lineCon.Append(0);
-
-                    resultObj = ax.CallStaticClassMethod(
-                        "INDCRMExpenseSheetService",
-                        "deleteExpenseSheetLine",
-                        lineCon
-                    );
+                    Logger.Log(
+                        $"[WARN] DeleteExpenseSheetLine deleteMode=HeaderOnly mapped to WholeSheet for AX contract traceId={traceId}");
                 }
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "deleteExpenseSheetLine",
+                    lineCon
+                );
 
                 if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out _, out _))
                 {
@@ -1144,8 +1263,8 @@ namespace IND_CRM_API.Controllers.CRM
                     errors.Add(new IndValidationError { Field = prefix + ".description", Message = "description es obligatorio." });
                 if (!line.qty.HasValue || line.qty.Value <= 0)
                     errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty debe ser mayor que cero." });
-                if (!line.amount.HasValue)
-                    errors.Add(new IndValidationError { Field = prefix + ".amount", Message = "amount es obligatorio." });
+                if (!line.price.HasValue || line.price.Value <= 0)
+                    errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
             }
         }
 
@@ -1384,9 +1503,13 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = 1; i <= lineCount; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(linesCon, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 10)
+                var rowLen = AxContainerReadHelper.SafeLength(row);
+                if (row == null || rowLen < 10)
                     continue;
 
+                // New shape (11): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]Ticket [7]Price [8]Qty [9]Amount [10]ProjId [11]Attach
+                // Previous shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]Ticket [7]Qty [8]Amount [9]ProjId [10]Attach
+                var hasPriceColumn = rowLen >= 11;
                 var line = new ExpenseSheetLineDto
                 {
                     RecId = AxContainerReadHelper.SafeString(row, 1),
@@ -1395,10 +1518,11 @@ namespace IND_CRM_API.Controllers.CRM
                     Description = AxContainerReadHelper.SafeString(row, 4),
                     Internacional = ToBool(AxContainerReadHelper.SafeString(row, 5)),
                     Ticket = ToBool(AxContainerReadHelper.SafeString(row, 6)),
-                    Qty = SafeDecimal(row, 7),
-                    Amount = SafeDecimal(row, 8),
-                    ProjId = AxContainerReadHelper.SafeString(row, 9),
-                    IndAttachFiles = AxContainerReadHelper.SafeString(row, 10)
+                    Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
+                    Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
+                    Amount = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8),
+                    ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9),
+                    IndAttachFiles = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 11) : AxContainerReadHelper.SafeString(row, 10)
                 };
 
                 detail.Lines.Add(line);

@@ -446,16 +446,26 @@ namespace IND_CRM_API.Controllers.System
                 if (companyCon == null)
                     continue;
 
-                // Nuevo contrato AX: CompanyItem = [companyId, isDefault, companyName, currencyCode, modulesCon].
-                var modulesCon = SafePeekContainer(companyCon, 5);
+                // Nuevo contrato AX: CompanyItem = [companyId, isDefault, companyName, currencyCode, allowSelfManagement, modulesCon].
+                var modulesCon = SafePeekContainer(companyCon, 6);
                 var currencyCode = SafeString(companyCon, 4);
+                var allowSelfManagement = ToBool(SafeString(companyCon, 5));
 
                 // Compatibilidad defensiva con formato anterior:
+                // [companyId, isDefault, companyName, currencyCode, modulesCon].
+                if (modulesCon == null)
+                {
+                    modulesCon = SafePeekContainer(companyCon, 5);
+                    allowSelfManagement = false;
+                }
+
+                // Compatibilidad defensiva con formato legacy:
                 // [companyId, isDefault, companyName, modulesCon].
                 if (modulesCon == null)
                 {
                     modulesCon = SafePeekContainer(companyCon, 4);
                     currencyCode = string.Empty;
+                    allowSelfManagement = false;
                 }
 
                 companies.Add(new EntraCompanyDto
@@ -464,6 +474,7 @@ namespace IND_CRM_API.Controllers.System
                     IsDefault = ToBool(SafeString(companyCon, 2)),
                     CompanyName = SafeString(companyCon, 3),
                     CurrencyCode = currencyCode,
+                    AllowSelfManagement = allowSelfManagement,
                     Modules = MapEntraModules(modulesCon)
                 });
             }

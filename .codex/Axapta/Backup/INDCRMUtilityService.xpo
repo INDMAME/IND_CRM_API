@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMUtilityService descargados en Jueves 2/19/2026
+; Navision Axapta Class: INDCRMUtilityService descargados en Martes 2/17/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -159,7 +159,7 @@ Formatversion: 1
         #// Salida: [ Header, Companies ]
         #// Header = [[ success, message, axUserId, userActive, appActive, defaultCompany, defaultCurrencyCode ]]
         #// Companies = lista de CompanyItem
-        #// CompanyItem = [ companyId, isDefault, companyName, currencyCode, allowSelfManagement, modulesCon ]
+        #// CompanyItem = [ companyId, isDefault, companyName, currencyCode, isSubordinate, modulesCon ]
         #// modulesCon = lista de ModuleItem
         #// ModuleItem = [ moduleCode, description, isActive, accessRightsInt ]
         #//
@@ -208,7 +208,7 @@ Formatversion: 1
         #    int                         accessInt;
         #    CRMUserId                   companyCrmUserId;
         #    CRMUsuarioTable             crmUsuarioTable;
-        #    boolean                     allowSelfManagement;
+        #    boolean                     isSubordinate;
         #
         #    int                         i;
         #    DataAreaId                  tmpCompanyId;
@@ -304,7 +304,7 @@ Formatversion: 1
         #        // Nombre de compania (solo aqui usamos changecompany)
         #        companyName = "";
         #        companyCurrencyCode = "";
-        #        allowSelfManagement = false;
+        #        isSubordinate = false;
         #        try
         #        {
         #            changecompany (ciasPerm.CiaId)
@@ -317,7 +317,7 @@ Formatversion: 1
         #                {
         #                    crmUsuarioTable = CRMUsuarioTable::Find(companyCrmUserId);
         #                    if (crmUsuarioTable.RecId)
-        #                        allowSelfManagement = INDPersonaTable::findByCRM(crmUsuarioTable.RecId).AllowSelfManagement;
+        #                        isSubordinate = crmUsuarioTable.EsSubordinado();
         #                }
         #            }
         #        }
@@ -325,16 +325,16 @@ Formatversion: 1
         #        {
         #            companyName = "";
         #            companyCurrencyCode = "";
-        #            allowSelfManagement = false;
+        #            isSubordinate = false;
         #        }
-        #        // Item compania: [CiaId, IsDefault (temporal), CompanyName, CurrencyCode, allowSelfManagement, ModulesCon]
+        #        // Item compania: [CiaId, IsDefault (temporal), CompanyName, CurrencyCode, IsSubordinate, ModulesCon]
         #        // Nota: IsDefault se recalcula al final segun defaultCompany final
         #        companyItem = [
         #                        strFmt("%1", ciasPerm.CiaId),
         #                        "0",
         #                        strFmt("%1", companyName),
         #                        strFmt("%1", companyCurrencyCode),
-        #                        strFmt("%1", allowSelfManagement),
+        #                        strFmt("%1", isSubordinate),
         #                        modulesCon
         #                      ];
         #

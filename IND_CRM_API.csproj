@@ -172,6 +172,7 @@
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetFuelPriceKmDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />
     <Compile Include="Contracts\Responses\ExchangeRateDto.cs" />
@@ -183,12 +184,8 @@
     <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Requests\LoginRequest.cs" />
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
-    <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
-    <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetsController.cs" />
     <Compile Include="Controllers\CRM\CrmProjectsController.cs" />
-    <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
-    <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
     <Compile Include="Controllers\System\AuthController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
     <Compile Include="Controllers\System\McpToolsController.cs" />
