@@ -1,6 +1,6 @@
 # IND_CRM_API MCP Endpoints (actualizado 2026-02-19)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V18.
+Fuentes: `.codex/ENDPOINTS.md` + Postman V19.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
@@ -127,12 +127,14 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional)
+- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional)
+- Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 
 ### Tool: crm_expensesheets_update_line
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -154,6 +156,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (opcional), `createdDateTo` (opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional)
+- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `exchRate`, `createdDate`.
 
 ## Projects
 

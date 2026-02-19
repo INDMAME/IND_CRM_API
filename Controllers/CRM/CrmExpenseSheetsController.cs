@@ -141,7 +141,7 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body.currencyCode?.Trim() ?? string.Empty);
                 headerCon.Append(body.exchRate ?? 0m);
                 headerCon.Append(body.projId?.Trim() ?? string.Empty);
-                AppendHeaderEnumFields(headerCon, body.expenseSheetStatus, body.exchangeRateMode);
+                AppendHeaderEnumFields(headerCon, body.expenseSheetStatus, body.exchangeRateMode, null);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -530,6 +530,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Gets an expense sheet by id with its lines.
         /// </summary>
+        /// <remarks>
+        /// Header fields include expenseSheetStatus, estadoComentarios, exchangeRateMode, and createdDate.
+        /// </remarks>
         [HttpGet, Route("{hojaGastosId}")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -653,7 +656,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// Updates the header data of an expense sheet.
         /// </summary>
         /// <remarks>
-        /// Optional header enums: expenseSheetStatus and exchangeRateMode.
+        /// Optional header fields: expenseSheetStatus, exchangeRateMode, and estadoComentarios.
+        /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
         [HttpPut, Route("{hojaGastosId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
@@ -698,6 +702,15 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
                 if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
+                if (!string.IsNullOrWhiteSpace(body.estadoComentarios) &&
+                    (!body.expenseSheetStatus.HasValue || !body.exchangeRateMode.HasValue))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "estadoComentarios",
+                        Message = "expenseSheetStatus y exchangeRateMode son obligatorios cuando se envia estadoComentarios."
+                    });
+                }
             }
 
             if (validationErrors.Any())
@@ -725,7 +738,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
-                    $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} traceId={traceId}");
+                    $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
+                    $"estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -736,7 +750,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
-                AppendHeaderEnumFields(con, body.expenseSheetStatus, body.exchangeRateMode);
+                AppendHeaderEnumFields(con, body.expenseSheetStatus, body.exchangeRateMode, body.estadoComentarios);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1103,6 +1117,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// Filtro opcional por estado: expenseSheetStatus.
         /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// Response items include estadoComentarios.
         /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
@@ -1400,8 +1415,8 @@ namespace IND_CRM_API.Controllers.CRM
                    mode == ExpenseSheetDeleteMode.WholeSheet;
         }
 
-        // Appends optional enum fields to AX container using stable positions.
-        private static void AppendHeaderEnumFields(IAxaptaContainer container, int? expenseSheetStatus, int? exchangeRateMode)
+        // Appends optional header fields to AX container using stable positions.
+        private static void AppendHeaderEnumFields(IAxaptaContainer container, int? expenseSheetStatus, int? exchangeRateMode, string estadoComentarios)
         {
             if (container == null || !expenseSheetStatus.HasValue)
                 return;
@@ -1409,7 +1424,13 @@ namespace IND_CRM_API.Controllers.CRM
             container.Append(expenseSheetStatus.Value);
 
             if (exchangeRateMode.HasValue)
+            {
                 container.Append(exchangeRateMode.Value);
+
+                // _data[10] in AX updateExpenseSheetHeader: EstadoComentarios (optional).
+                if (estadoComentarios != null)
+                    container.Append(estadoComentarios.Trim());
+            }
         }
 
         // Adds model binding/deserialization errors to standard validation list.
@@ -1596,30 +1617,105 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
-            // Current (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
+            // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
+            // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
+            // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
+            // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
             // Previous (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
             // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
-            var hasCurrentShapeWithCreatedDate = headerExtras.Count >= 11;
-            var hasCurrentShapeWithoutCreatedDate = !hasCurrentShapeWithCreatedDate && headerExtras.Count >= 10;
-            var hasCurrentHeaderShape = hasCurrentShapeWithCreatedDate || hasCurrentShapeWithoutCreatedDate;
-            var hasPreviousHeaderShape = !hasCurrentHeaderShape && headerExtras.Count >= 8;
-
             var detail = new ExpenseSheetDetailDto
             {
                 HojaGastosId = headerExtras[0],
-                Description = hasCurrentHeaderShape ? headerExtras[1] : (hasPreviousHeaderShape ? headerExtras[1] : headerExtras[2]),
-                ExpenseSheetStatus = hasCurrentHeaderShape ? ToInt(headerExtras[2]) : null,
-                UserId = hasCurrentHeaderShape ? headerExtras[3] : (hasPreviousHeaderShape ? headerExtras[2] : headerExtras[1]),
-                CurrencyCode = hasCurrentHeaderShape ? headerExtras[4] : headerExtras[3],
-                TotalAmount = hasCurrentHeaderShape ? ToDecimal(headerExtras[5]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[4]) : null),
-                ExchRate = hasCurrentHeaderShape ? ToDecimal(headerExtras[6]) : (hasPreviousHeaderShape ? ToDecimal(headerExtras[5]) : ToDecimal(headerExtras[4])),
-                ExchangeRateMode = hasCurrentHeaderShape ? ToInt(headerExtras[7]) : null,
-                ProjId = hasCurrentHeaderShape ? headerExtras[8] : (hasPreviousHeaderShape ? headerExtras[6] : headerExtras[5]),
-                Voucher = NormalizeVoucher(hasCurrentHeaderShape ? headerExtras[9] : (hasPreviousHeaderShape ? headerExtras[7] : headerExtras[6])),
-                CreatedDate = hasCurrentShapeWithCreatedDate ? headerExtras[10] : null,
                 Lines = new List<ExpenseSheetLineDto>()
             };
+
+            if (headerExtras.Count >= 12)
+            {
+                detail.Description = headerExtras[1];
+                detail.ExpenseSheetStatus = ToInt(headerExtras[2]);
+                detail.EstadoComentarios = headerExtras[3];
+                detail.UserId = headerExtras[4];
+                detail.CurrencyCode = headerExtras[5];
+                detail.TotalAmount = ToDecimal(headerExtras[6]);
+                detail.ExchRate = ToDecimal(headerExtras[7]);
+                detail.ExchangeRateMode = ToInt(headerExtras[8]);
+                detail.ProjId = headerExtras[9];
+                detail.Voucher = NormalizeVoucher(headerExtras[10]);
+                detail.CreatedDate = headerExtras[11];
+            }
+            else if (headerExtras.Count == 11)
+            {
+                if (IsLikelyDateValue(headerExtras[10]))
+                {
+                    detail.Description = headerExtras[1];
+                    detail.ExpenseSheetStatus = ToInt(headerExtras[2]);
+                    detail.EstadoComentarios = null;
+                    detail.UserId = headerExtras[3];
+                    detail.CurrencyCode = headerExtras[4];
+                    detail.TotalAmount = ToDecimal(headerExtras[5]);
+                    detail.ExchRate = ToDecimal(headerExtras[6]);
+                    detail.ExchangeRateMode = ToInt(headerExtras[7]);
+                    detail.ProjId = headerExtras[8];
+                    detail.Voucher = NormalizeVoucher(headerExtras[9]);
+                    detail.CreatedDate = headerExtras[10];
+                }
+                else
+                {
+                    detail.Description = headerExtras[1];
+                    detail.ExpenseSheetStatus = ToInt(headerExtras[2]);
+                    detail.EstadoComentarios = headerExtras[3];
+                    detail.UserId = headerExtras[4];
+                    detail.CurrencyCode = headerExtras[5];
+                    detail.TotalAmount = ToDecimal(headerExtras[6]);
+                    detail.ExchRate = ToDecimal(headerExtras[7]);
+                    detail.ExchangeRateMode = ToInt(headerExtras[8]);
+                    detail.ProjId = headerExtras[9];
+                    detail.Voucher = NormalizeVoucher(headerExtras[10]);
+                    detail.CreatedDate = null;
+                }
+            }
+            else if (headerExtras.Count == 10)
+            {
+                detail.Description = headerExtras[1];
+                detail.ExpenseSheetStatus = ToInt(headerExtras[2]);
+                detail.EstadoComentarios = null;
+                detail.UserId = headerExtras[3];
+                detail.CurrencyCode = headerExtras[4];
+                detail.TotalAmount = ToDecimal(headerExtras[5]);
+                detail.ExchRate = ToDecimal(headerExtras[6]);
+                detail.ExchangeRateMode = ToInt(headerExtras[7]);
+                detail.ProjId = headerExtras[8];
+                detail.Voucher = NormalizeVoucher(headerExtras[9]);
+                detail.CreatedDate = null;
+            }
+            else if (headerExtras.Count >= 8)
+            {
+                detail.Description = headerExtras[1];
+                detail.ExpenseSheetStatus = null;
+                detail.EstadoComentarios = null;
+                detail.UserId = headerExtras[2];
+                detail.CurrencyCode = headerExtras[3];
+                detail.TotalAmount = ToDecimal(headerExtras[4]);
+                detail.ExchRate = ToDecimal(headerExtras[5]);
+                detail.ExchangeRateMode = null;
+                detail.ProjId = headerExtras[6];
+                detail.Voucher = NormalizeVoucher(headerExtras[7]);
+                detail.CreatedDate = null;
+            }
+            else
+            {
+                detail.Description = headerExtras[2];
+                detail.ExpenseSheetStatus = null;
+                detail.EstadoComentarios = null;
+                detail.UserId = headerExtras[1];
+                detail.CurrencyCode = headerExtras[3];
+                detail.TotalAmount = null;
+                detail.ExchRate = ToDecimal(headerExtras[4]);
+                detail.ExchangeRateMode = null;
+                detail.ProjId = headerExtras[5];
+                detail.Voucher = NormalizeVoucher(headerExtras[6]);
+                detail.CreatedDate = null;
+            }
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)
@@ -1674,26 +1770,70 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
-                // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
-                // Current (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
+                // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
+                // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
+                // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
+                // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
                 // Current (9): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ExchangeRateMode [8]ProjId [9]Voucher
                 // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
-                if (rowLen >= 11)
+                if (rowLen >= 12)
                 {
                     items.Add(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
-                        UserId = AxContainerReadHelper.SafeString(row, 4),
-                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
-                        ProjId = AxContainerReadHelper.SafeString(row, 9),
-                        CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
-                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
-                        ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
-                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
-                        CreatedDate = AxContainerReadHelper.SafeString(row, 11)
+                        EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
+                        UserId = AxContainerReadHelper.SafeString(row, 5),
+                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 11)),
+                        ProjId = AxContainerReadHelper.SafeString(row, 10),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 6),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
+                        ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 9)),
+                        CreatedDate = AxContainerReadHelper.SafeString(row, 12)
+                    });
+                    continue;
+                }
+
+                if (rowLen == 11)
+                {
+                    var column11 = AxContainerReadHelper.SafeString(row, 11);
+                    if (IsLikelyDateValue(column11))
+                    {
+                        items.Add(new ExpenseSheetListItemDto
+                        {
+                            HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                            Description = AxContainerReadHelper.SafeString(row, 2),
+                            ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                            EstadoComentarios = null,
+                            UserId = AxContainerReadHelper.SafeString(row, 4),
+                            Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
+                            ProjId = AxContainerReadHelper.SafeString(row, 9),
+                            CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
+                            TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                            ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
+                            ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
+                            CreatedDate = column11
+                        });
+                        continue;
+                    }
+
+                    items.Add(new ExpenseSheetListItemDto
+                    {
+                        HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                        Description = AxContainerReadHelper.SafeString(row, 2),
+                        ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
+                        UserId = AxContainerReadHelper.SafeString(row, 5),
+                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 11)),
+                        ProjId = AxContainerReadHelper.SafeString(row, 10),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 6),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
+                        ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 9)),
+                        CreatedDate = null
                     });
                     continue;
                 }
@@ -1705,6 +1845,7 @@ namespace IND_CRM_API.Controllers.CRM
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        EstadoComentarios = null,
                         UserId = AxContainerReadHelper.SafeString(row, 4),
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
                         ProjId = AxContainerReadHelper.SafeString(row, 9),
@@ -1724,6 +1865,7 @@ namespace IND_CRM_API.Controllers.CRM
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        EstadoComentarios = null,
                         UserId = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 9)),
                         ProjId = AxContainerReadHelper.SafeString(row, 8),
@@ -1743,6 +1885,7 @@ namespace IND_CRM_API.Controllers.CRM
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
                         ExpenseSheetStatus = null,
+                        EstadoComentarios = null,
                         UserId = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 3)),
                         ProjId = AxContainerReadHelper.SafeString(row, 4),
@@ -1762,6 +1905,7 @@ namespace IND_CRM_API.Controllers.CRM
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     ExpenseSheetStatus = null,
+                    EstadoComentarios = null,
                     UserId = null,
                     Voucher = string.Empty,
                     ProjId = AxContainerReadHelper.SafeString(row, 3),

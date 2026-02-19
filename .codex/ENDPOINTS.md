@@ -70,10 +70,11 @@ Endpoints
   Query optional: transDate (yyyyMMdd o yyyy-MM-dd; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: expenseSheetStatus, exchangeRateMode, createdDate
+  Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate
   Response line fields include: price, qty, amount
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional)
+  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional)
+  Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (yyyymmdd), typeValue, description, qty, price
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -83,7 +84,7 @@ Endpoints
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
-  Response list fields include: expenseSheetStatus, exchangeRateMode, userId, exchRate y createdDate
+  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, exchRate y createdDate
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
 ## Projects

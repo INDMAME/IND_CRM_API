@@ -19,5 +19,6 @@ namespace IND_CRM_API.Contracts.Responses
         // Exchange rate mode enum value returned by AX.
         public int? ExchangeRateMode { get; set; }
         public string CreatedDate { get; set; }
+        public string EstadoComentarios { get; set; }
     }
 }

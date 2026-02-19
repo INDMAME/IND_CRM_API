@@ -21,6 +21,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string ProjId { get; set; }
         public string Voucher { get; set; }
         public string CreatedDate { get; set; }
+        public string EstadoComentarios { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
     }
 

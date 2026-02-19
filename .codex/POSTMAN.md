@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/postman/IND_CRM_API V18.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V18.postman_collection.json`
+- Principal: `.codex/postman/IND_CRM_API V19.postman_collection.json`
+- Soporte: `Notes/IND_CRM_API V19.postman_collection.json`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://crm.insertec.biz:7776`
@@ -16,6 +16,8 @@ Notas
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets crea/actualiza lineas con `price` y AX calcula `amount` internamente.
+- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`), y cuando se envia requiere `expenseSheetStatus` + `exchangeRateMode`.
+- `GET /api/crm/expensesheets/{hojaGastosId}` y `POST /api/crm/expensesheets/list` retornan `estadoComentarios` en cabecera/listado.
 - Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.
-- Se excluyeron de V18 los modulos no alineados con `INDCRMExpenseSheetService` y `INDCRMUtilityService`.
-- Se mantienen endpoints externos de IA y currency.
+- V19 recupera modulos CRM de cuentas, actividades, visitas y template.
+- V19 agrega `GET /api/crm/expensesheets/subordinates`.

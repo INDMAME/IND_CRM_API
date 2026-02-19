@@ -796,7 +796,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_get",
-                      "description":  "Obtiene hoja de gastos por id.",
+                      "description":  "Obtiene hoja de gastos por id. La cabecera incluye estadoComentarios.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -940,7 +940,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_header",
-                      "description":  "Actualiza cabecera de hoja de gastos.",
+                      "description":  "Actualiza cabecera de hoja de gastos. Soporta estadoComentarios en _data[10] de AX.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1007,6 +1007,10 @@
                                                                                                                       "type":  "integer",
                                                                                                                       "description":  "Requiere expenseSheetStatus cuando se envia.",
                                                                                                                       "minimum":  0
+                                                                                                                  },
+                                                                                              "estadoComentarios":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "Comentario de estado. Requiere expenseSheetStatus y exchangeRateMode cuando se envia."
                                                                                                                   }
                                                                                          },
                                                                           "required":  [
@@ -1049,11 +1053,12 @@
                                            "body":  {
                                                         "description":  "Gastos",
                                                         "currencyCode":  "EUR",
-                                                        "projId":  "",
-                                                        "exchRate":  1,
-                                                        "expenseSheetStatus":  0,
-                                                        "exchangeRateMode":  0
-                                                    }
+                                                         "projId":  "",
+                                                         "exchRate":  1,
+                                                         "expenseSheetStatus":  0,
+                                                         "exchangeRateMode":  0,
+                                                         "estadoComentarios":  "Pendiente de revision"
+                                                     }
                                        }
                                    ]
                   },
@@ -1302,7 +1307,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_list",
-                      "description":  "Lista hojas de gastos con paginacion.",
+                      "description":  "Lista hojas de gastos con paginacion. Cada item incluye estadoComentarios.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {

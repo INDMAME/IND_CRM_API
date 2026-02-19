@@ -21,5 +21,10 @@ namespace IND_CRM_API.Contracts.Requests
         /// Exchange rate mode enum value from AX.
         /// </summary>
         public int? exchangeRateMode { get; set; }
+
+        /// <summary>
+        /// Comentario de estado de la hoja de gastos.
+        /// </summary>
+        public string estadoComentarios { get; set; }
     }
 }

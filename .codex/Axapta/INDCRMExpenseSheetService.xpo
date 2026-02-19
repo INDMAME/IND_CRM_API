@@ -668,6 +668,7 @@ Formatversion: 1
         #                                                      strFmt("%1", header.HojaGastosId),
         #                                                      strFmt("%1", header.Description),
         #                                                      strFmt("%1", expenseSheetStatus),
+        #                                                      strFmt("%1", header.EstadoComentarios),
         #                                                      strFmt("%1", header.UserId),
         #                                                      strFmt("%1", header.CurrencyCode),
         #                                                      strFmt("%1", monto),
@@ -825,6 +826,7 @@ Formatversion: 1
         #                         strFmt("%1", hoja.HojaGastosId),
         #                         strFmt("%1", hoja.Description),
         #                         strFmt("%1", expenseSheetStatus),
+        #                         strFmt("%1", hoja.EstadoComentarios),
         #                         strFmt("%1", hoja.UserId),
         #                         strFmt("%1", hoja.CurrencyCode),
         #                         strFmt("%1", monto),
@@ -1091,20 +1093,23 @@ Formatversion: 1
         #//  - _data[7] = ProjId
         #//  - _data[8] = ExpenseSheetStatus (opcional)
         #//  - _data[9] = ExchangeRateMode (opcional)
+        #//  - _data[10] = estadoComentarios (opcional)
         #static server container updateExpenseSheetHeader(container _data)
         #{
-        #    DataAreaId          companyId;
-        #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
-        #    CRMHojaGastosId     hojaId;
-        #    str                 descr;
-        #    str                 currencyCode;
-        #    real                exchRate;
-        #    str                 projId;
-        #    int                 startLine;
-        #    str                 msg;
-        #    boolean             hasExpenseSheetStatus;
-        #    boolean             hasExchangeRateMode;
+        #    DataAreaId            companyId;
+        #    CRMUserId             crmUserId;
+        #    UserId                axUserId;
+        #    CRMHojaGastosId       hojaId;
+        #    str                   descr;
+        #    str                   currencyCode;
+        #    real                  exchRate;
+        #    str                   projId;
+        #    int                   startLine;
+        #    str                   msg;
+        #    boolean               hasExpenseSheetStatus;
+        #    boolean               hasExchangeRateMode;
+        #    boolean               hasEstadoComentarios;
+        #    CRMComentarios        estadoComentarios;
         #    INDExpenseSheetStatus expenseSheetStatus;
         #    INDExchangeRateMode   exchangeRateMode;
         #    CRMHojaGastosTable    header;
@@ -1126,6 +1131,7 @@ Formatversion: 1
         #
         #    hasExpenseSheetStatus = false;
         #    hasExchangeRateMode   = false;
+        #    hasEstadoComentarios  = false;
         #
         #    if (conLen(_data) >= 8)
         #    {
@@ -1138,6 +1144,13 @@ Formatversion: 1
         #        exchangeRateMode   = conPeek(_data, 9);
         #        hasExchangeRateMode = true;
         #    }
+        #
+        #    if (conLen(_data) >= 10)
+        #    {
+        #        estadoComentarios   = conPeek(_data, 10);
+        #        hasEstadoComentarios = true;
+        #    }
+        #
         #
         #    try
         #    {
@@ -1190,6 +1203,8 @@ Formatversion: 1
         #            if (hasExchangeRateMode)
         #                header.ExchangeRateMode = exchangeRateMode;
         #
+        #            if (hasEstadoComentarios)
+        #                header.EstadoComentarios = estadoComentarios;
         #            header.update();
         #
         #            ttscommit;
