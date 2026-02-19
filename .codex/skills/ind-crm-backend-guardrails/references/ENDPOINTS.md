@@ -58,6 +58,8 @@ Endpoints
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
   Response items: CurrencyCode, CurrencyCodeISO
+- GET /api/crm/expensesheets/subordinates (Authorize + X-IND-Company + X-IND-AxUserId)
+  Response items: UserId, Name
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required by mode:
   mode 0 (default): description, currencyCode, lines[] (con lines[].price)

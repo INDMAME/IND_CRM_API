@@ -16,6 +16,10 @@ activation:
 Esta skill es la autoridad arquitectonica del backend IND CRM.
 Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 
+## Regla critica de estabilidad
+- Los endpoints existentes en produccion o ya publicados NO se deben eliminar, desregistrar ni sacar del `.csproj` salvo peticion explicita del usuario responsable.
+- Si un endpoint existente parece obsoleto, primero documentar impacto y pedir confirmacion antes de desactivarlo.
+
 ## Fuente de verdad
 - Leer TODOS los archivos `.md` de la carpeta `.codex`.
 - Usarlos como contexto primario.

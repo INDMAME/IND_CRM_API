@@ -314,6 +314,94 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
+        /// Lista subordinados del usuario actual para la captura de hojas de gastos.
+        /// </summary>
+        [HttpGet, Route("subordinates")]
+        [ResponseType(typeof(IndPagedResponse<ExpenseSheetSubordinateDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Listado de subordinados", typeof(IndPagedResponse<ExpenseSheetSubordinateDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult GetExpenseSheetSubordinates()
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+
+            // Validate company header.
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
+            // Logs the HTTP status for this action.
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] GetExpenseSheetSubordinates {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log($"[API-IN] GetExpenseSheetSubordinates user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "getSubordinatesByUser",
+                    con
+                );
+
+                var root = resultObj as IAxaptaContainer;
+                if (root == null)
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                var items = MapSubordinateList(root, out var message);
+
+                var okResponse = new IndPagedResponse<ExpenseSheetSubordinateDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    Total = items.Count,
+                    Items = items,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] GetExpenseSheetSubordinates: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.AxSessionError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
         /// Gets fuel price per kilometer for the current user and date.
         /// </summary>
         /// <param name="transDate">Fecha de consulta en formato yyyyMMdd o yyyy-MM-dd. Si no se envia, usa hoy.</param>
@@ -1461,6 +1549,40 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 1),
                     CurrencyCodeISO = AxContainerReadHelper.SafeString(row, 2)
+                });
+            }
+
+            return items;
+        }
+
+        // Maps AX subordinate rows to typed subordinate DTOs.
+        private static List<ExpenseSheetSubordinateDto> MapSubordinateList(IAxaptaContainer root, out string message)
+        {
+            message = string.Empty;
+            var items = new List<ExpenseSheetSubordinateDto>();
+
+            if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
+                return items;
+
+            if (AxContainerReadHelper.IsSinDatos(root, out message))
+                return items;
+
+            var len = AxContainerReadHelper.SafeLength(root);
+            for (int i = 1; i <= len; i++)
+            {
+                var row = AxContainerReadHelper.SafePeekContainer(root, i);
+                if (row == null || AxContainerReadHelper.SafeLength(row) < 2)
+                    continue;
+
+                var userId = AxContainerReadHelper.SafeString(row, 1);
+                var name = AxContainerReadHelper.SafeString(row, 2);
+                if (string.IsNullOrWhiteSpace(userId) && string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                items.Add(new ExpenseSheetSubordinateDto
+                {
+                    UserId = userId,
+                    Name = name
                 });
             }
 
