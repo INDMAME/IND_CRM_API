@@ -1,9 +1,11 @@
 using IND_CRM_API.Services;
 using System;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
+using System.Web.Http.Routing;
 
 namespace IND_CRM_API.App_Start
 {
@@ -41,13 +43,20 @@ namespace IND_CRM_API.App_Start
             {
                 var response = await base.SendAsync(request, cancellationToken);
                 var statusCode = response == null ? "null" : ((int)response.StatusCode).ToString();
-                _logger.Log($"[API-PIPE-OUT] correlationId={correlationId} endpoint={endpoint} status={statusCode}");
+                var routeTemplate = request?.GetRouteData()?.Route?.RouteTemplate ?? "unresolved";
+                var routeValues = FormatRouteValues(request?.GetRouteData());
+                _logger.Log(
+                    $"[API-PIPE-OUT] correlationId={correlationId} endpoint={endpoint} status={statusCode} " +
+                    $"routeTemplate={routeTemplate} routeValues={routeValues}");
                 return response;
             }
             catch (Exception ex)
             {
+                var routeTemplate = request?.GetRouteData()?.Route?.RouteTemplate ?? "unresolved";
+                var routeValues = FormatRouteValues(request?.GetRouteData());
                 _logger.Log(
-                    $"[API-PIPE-EX] correlationId={correlationId} endpoint={endpoint} ex={ex.GetType().Name} {ex.Message}",
+                    $"[API-PIPE-EX] correlationId={correlationId} endpoint={endpoint} routeTemplate={routeTemplate} " +
+                    $"routeValues={routeValues} ex={ex.GetType().Name} {ex.Message}",
                     AxaptaSessionManager.LogLevel.Error);
                 throw;
             }
@@ -73,6 +82,19 @@ namespace IND_CRM_API.App_Start
             }
 
             return null;
+        }
+
+        private static string FormatRouteValues(IHttpRouteData routeData)
+        {
+            if (routeData?.Values == null || routeData.Values.Count == 0)
+                return "-";
+
+            return string.Join(
+                ",",
+                routeData.Values
+                    .Where(kvp => kvp.Key != null)
+                    .Select(kvp => kvp.Key + "=" + (kvp.Value == null ? "null" : kvp.Value.ToString()))
+                    .ToArray());
         }
     }
 }

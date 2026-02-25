@@ -21,7 +21,7 @@ namespace IND_CRM_API.Services
         private const string PrefixSettingKey = "AzureBlob:BasePrefix";
         private const string PrefixEnvVar = "AZURE_BLOB_BASE_PREFIX";
         private const string DefaultContainer = "tickets";
-        private const string DefaultPrefix = "tickets";
+        private const string DefaultPrefix = "crmtickets";
 
         private readonly IAxLogger _logger;
 
@@ -51,7 +51,7 @@ namespace IND_CRM_API.Services
                 throw new ArgumentException("fileName es obligatorio.", nameof(fileName));
 
             var context = ResolveStorageContext();
-            var blobName = BuildBlobName(context.BasePrefix, companyId, axUserId, fileName);
+            var blobName = BuildBlobName(context.BasePrefix, companyId, fileName);
             var blob = context.Container.GetBlockBlobReference(blobName);
 
             blob.Properties.ContentType = ResolveContentType(contentType, fileName);
@@ -266,23 +266,15 @@ namespace IND_CRM_API.Services
             return string.Join(",", keys);
         }
 
-        private static string BuildBlobName(string basePrefix, string companyId, string axUserId, string fileName)
+        private static string BuildBlobName(string basePrefix, string companyId, string fileName)
         {
             var safeCompany = NormalizePathSegment(companyId, "company");
-            var safeUser = NormalizePathSegment(axUserId, "user");
             var safeFileName = NormalizeFileName(fileName);
-            var nowUtc = DateTime.UtcNow;
 
             return string.Concat(
                 basePrefix,
                 "/",
                 safeCompany,
-                "/",
-                safeUser,
-                "/",
-                nowUtc.ToString("yyyy"),
-                "/",
-                nowUtc.ToString("MM"),
                 "/",
                 safeFileName);
         }

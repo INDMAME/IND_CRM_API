@@ -198,7 +198,10 @@ Input:
 10. Configuracion de Blob en API:
    - `AZURE_BLOB_CONNECTION_STRING` (obligatoria)
    - `AzureBlob:Container` (default `tickets`)
-   - `AzureBlob:BasePrefix` (default `tickets`)
+   - `AzureBlob:BasePrefix` (default `crmtickets`)
+11. Ruta de blob simplificada para tickets:
+   - Formato final: `crmtickets/{companyId}/{yyyyMMddHHmmss_axUserId_fileId.ext}`
+   - Se elimina segmentacion adicional por usuario y fecha en carpetas.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.

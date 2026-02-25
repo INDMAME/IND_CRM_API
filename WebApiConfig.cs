@@ -28,6 +28,7 @@ namespace IND_CRM_API
             // Global error filter (standard 500 response envelope).
             config.Filters.Add(new IndGlobalExceptionFilter());
             config.Filters.Add(new IndRouteDiagnosticsActionFilter());
+            config.Services.Add(typeof(System.Web.Http.ExceptionHandling.IExceptionLogger), new IndGlobalExceptionLogger());
 
             // Do not expose detailed errors in responses.
             config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Never;

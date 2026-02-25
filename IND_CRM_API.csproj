@@ -166,6 +166,7 @@
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
+    <Compile Include="App_Start\IndGlobalExceptionLogger.cs" />
     <Compile Include="App_Start\IndRouteDiagnosticsActionFilter.cs" />
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
