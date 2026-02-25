@@ -278,7 +278,8 @@ namespace IND_CRM_API.Services
 - Si no hay evidencia clara de tipo, usa 8.
 - price debe representar el precio unitario de la linea. Si solo detectas un total y qty=1, usa ese valor como price.
 - transDate en formato yyyyMMdd o null si no se puede inferir.
-- ticket debe ser true y qty por defecto 1 salvo evidencia fuerte.
+- fileId debe ser null en todas las lineas (se asigna despues en backend).
+- qty por defecto 1 salvo evidencia fuerte.
 - internacional true solo si hay evidencia de gasto internacional.
 - description corto y util para una linea de gasto.
 - currencyCode en cabecera si se detecta; si no, deja null.
@@ -449,7 +450,7 @@ namespace IND_CRM_API.Services
                 typeValue = NormalizeTypeValue(lineToken["typeValue"]),
                 description = NormalizeText(lineToken["description"]?.ToString(), "Ticket"),
                 internacional = TryParseBool(lineToken["internacional"]),
-                ticket = TryParseBool(lineToken["ticket"], true),
+                fileId = NormalizeText(lineToken["fileId"]?.ToString(), null),
                 qty = qty,
                 price = price,
                 projId = NormalizeText(lineToken["projId"]?.ToString(), request?.projId),
@@ -468,7 +469,7 @@ namespace IND_CRM_API.Services
                 typeValue = 8,
                 description = NormalizeText(request?.description, "Ticket"),
                 internacional = false,
-                ticket = true,
+                fileId = null,
                 qty = 1m,
                 price = null,
                 projId = request?.projId,
@@ -705,9 +706,9 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = new JArray("boolean", "null")
                     },
-                    ["ticket"] = new JObject
+                    ["fileId"] = new JObject
                     {
-                        ["type"] = "boolean"
+                        ["type"] = new JArray("string", "null")
                     },
                     ["qty"] = new JObject
                     {
@@ -731,7 +732,7 @@ namespace IND_CRM_API.Services
                     "typeValue",
                     "description",
                     "internacional",
-                    "ticket",
+                    "fileId",
                     "qty",
                     "price",
                     "projId",

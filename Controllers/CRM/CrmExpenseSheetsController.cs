@@ -156,7 +156,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.typeValue ?? 0);
                         lineCon.Append(line.description?.Trim() ?? string.Empty);
                         lineCon.Append(ToAxBool(line.internacional));
-                        lineCon.Append(ToAxBool(line.ticket));
+                        lineCon.Append(line.fileId?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(line.projId?.Trim() ?? string.Empty);
@@ -892,7 +892,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.typeValue ?? 0);
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(ToAxBool(body.internacional));
-                con.Append(ToAxBool(body.ticket));
+                con.Append(body.fileId?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
@@ -1510,7 +1510,7 @@ namespace IND_CRM_API.Controllers.CRM
         private IndApiResponse<object> BuildActionError(string message, string traceId, out HttpStatusCode status)
         {
             var lower = (message ?? string.Empty).ToLowerInvariant();
-            if (lower.Contains("no encontrada") || lower.Contains("no encontrado"))
+            if (lower.Contains("no encontrada") || lower.Contains("no encontrado") || lower.Contains("no existe"))
             {
                 status = HttpStatusCode.NotFound;
                 return new IndApiResponse<object>
@@ -1725,8 +1725,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 10)
                     continue;
 
-                // New shape (11): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]Ticket [7]Price [8]Qty [9]Amount [10]ProjId [11]Attach
-                // Previous shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]Ticket [7]Qty [8]Amount [9]ProjId [10]Attach
+                // New shape (11): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]Attach
+                // Previous shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId [10]Attach
                 var hasPriceColumn = rowLen >= 11;
                 var line = new ExpenseSheetLineDto
                 {
@@ -1735,7 +1735,7 @@ namespace IND_CRM_API.Controllers.CRM
                     TypeValue = SafeInt(row, 3),
                     Description = AxContainerReadHelper.SafeString(row, 4),
                     Internacional = ToBool(AxContainerReadHelper.SafeString(row, 5)),
-                    Ticket = ToBool(AxContainerReadHelper.SafeString(row, 6)),
+                    FileId = AxContainerReadHelper.SafeString(row, 6),
                     Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
                     Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
                     Amount = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8),

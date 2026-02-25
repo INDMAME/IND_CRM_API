@@ -1,5 +1,8 @@
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Controllers;
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using Swashbuckle.Swagger.Annotations;
@@ -12,10 +15,12 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
+using AxaptaCOMConnector;
 
 namespace IND_CRM_API.Controllers.System
 {
@@ -25,7 +30,7 @@ namespace IND_CRM_API.Controllers.System
     /// </summary>
     [Authorize]
     [RoutePrefix("api/ia/service")]
-    public class INDSpeechController : ApiController
+    public class INDSpeechController : BaseCrmController
     {
         private const int MaxAudioBytes = 25 * 1024 * 1024; // 25 MB (limite interno alineado con OpenAI)
         private const int DefaultMaxPromptWords = 500; // limite local por defecto para mantener el prompt acotado
@@ -81,17 +86,20 @@ namespace IND_CRM_API.Controllers.System
             "image/webp"
         };
 
+        private readonly IAxaptaSessionManager _sessionManager;
         private readonly IND_IAudioTranscriptionService _transcription;
         private readonly IND_ITextModerationService _moderation;
         private readonly IND_IExpenseTicketDraftService _ticketDraft;
         private readonly IAxLogger _logger;
 
         public INDSpeechController(
+            IAxaptaSessionManager sessionManager,
             IND_IAudioTranscriptionService transcription,
             IND_ITextModerationService moderation,
             IND_IExpenseTicketDraftService ticketDraft,
-            IAxLogger logger)
+            IAxLogger logger) : base(sessionManager, logger)
         {
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _transcription = transcription ?? throw new ArgumentNullException(nameof(transcription));
             _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
             _ticketDraft = ticketDraft ?? throw new ArgumentNullException(nameof(ticketDraft));
@@ -302,6 +310,8 @@ namespace IND_CRM_API.Controllers.System
         /// <remarks>
         /// Entrada: multipart/form-data con campos:
         /// - ticketImage: archivo .jpg/.jpeg/.png/.webp (max 50 MB)
+        /// - persistTicket (opcional): true/false. Si true, persiste ticket en AX.
+        /// - ticketUrlFile (opcional): URL del archivo en blob. Si no viene y persistTicket=true, se usa URL temporal.
         /// </remarks>
         [HttpPost, Route("expensefromticket")]
         [SwaggerResponse(HttpStatusCode.OK, "Borrador de hoja de gastos generado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
@@ -331,6 +341,11 @@ namespace IND_CRM_API.Controllers.System
 
                 var provider = new MultipartMemoryStreamProvider();
                 await Request.Content.ReadAsMultipartAsync(provider, cancellationToken);
+
+                var persistTicket = ParseBooleanFlag(await ReadFormFieldAsync(provider, "persistTicket"));
+                var ticketUrlFile = await ReadFormFieldAsync(provider, "ticketUrlFile");
+                if (string.IsNullOrWhiteSpace(ticketUrlFile))
+                    ticketUrlFile = await ReadFormFieldAsync(provider, "urlFile");
 
                 var filePart = FindFilePart(provider, "ticketImage");
                 if (filePart == null)
@@ -397,6 +412,55 @@ namespace IND_CRM_API.Controllers.System
                     return ReturnError(HttpStatusCode.InternalServerError, traceId, "No se pudo generar el borrador desde el ticket.", IndErrorCodes.InternalError, null);
                 }
 
+                if (persistTicket)
+                {
+                    var company = RequireCompanyOrReturn422(out var companyError, traceId);
+                    if (companyError != null)
+                        return companyError;
+
+                    var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+                    if (userError != null)
+                        return userError;
+
+                    if (!TryPersistTicketFromDraft(
+                        username,
+                        company,
+                        axUserId,
+                        draft,
+                        extension,
+                        ticketUrlFile,
+                        traceId,
+                        out var ticketCreation,
+                        out var persistMessage,
+                        out var persistErrorCode,
+                        out var persistStatus))
+                    {
+                        LogApiOut(persistStatus, traceId, AxaptaSessionManager.LogLevel.Warning);
+                        return Content(persistStatus, new IndApiResponse<ExpenseSheetDraftResponse>
+                        {
+                            Success = false,
+                            Message = persistMessage,
+                            ErrorCode = persistErrorCode,
+                            Data = draft,
+                            Errors = null,
+                            TraceId = traceId
+                        });
+                    }
+
+                    draft.TicketCreation = ticketCreation;
+                    if (ticketCreation != null &&
+                        ticketCreation.Persisted &&
+                        !string.IsNullOrWhiteSpace(ticketCreation.FileId) &&
+                        draft.lines != null)
+                    {
+                        foreach (var line in draft.lines)
+                        {
+                            if (line != null && string.IsNullOrWhiteSpace(line.fileId))
+                                line.fileId = ticketCreation.FileId;
+                        }
+                    }
+                }
+
                 totalSw.Stop();
                 _logger.Log($"[IA-DRAFT] Total ms={totalSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
                 LogApiOut(HttpStatusCode.OK, traceId, AxaptaSessionManager.LogLevel.Info);
@@ -428,6 +492,421 @@ namespace IND_CRM_API.Controllers.System
                 LogApiOut(HttpStatusCode.InternalServerError, traceId, AxaptaSessionManager.LogLevel.Error);
                 return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error de extraccion de borrador.", IndErrorCodes.InternalError, null);
             }
+        }
+
+        // Persiste ticket en AX usando el draft extraido por IA.
+        private bool TryPersistTicketFromDraft(
+            string username,
+            string company,
+            string axUserId,
+            ExpenseSheetDraftResponse draft,
+            string imageExtension,
+            string ticketUrlFile,
+            string traceId,
+            out ExpenseSheetDraftTicketCreationResult ticketCreation,
+            out string errorMessage,
+            out string errorCode,
+            out HttpStatusCode errorStatus)
+        {
+            ticketCreation = null;
+            errorMessage = null;
+            errorCode = null;
+            errorStatus = HttpStatusCode.OK;
+
+            if (draft == null)
+            {
+                errorMessage = "No existe draft para persistir.";
+                errorCode = IndErrorCodes.ValidationError;
+                errorStatus = (HttpStatusCode)422;
+                return false;
+            }
+
+            try
+            {
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var extension = NormalizeFileExtension(imageExtension, "jpg");
+                var effectiveUrl = string.IsNullOrWhiteSpace(ticketUrlFile)
+                    ? $"pending://expense-ticket/{traceId}"
+                    : ticketUrlFile.Trim();
+
+                if (string.IsNullOrWhiteSpace(ticketUrlFile))
+                    EnsureDraftWarning(draft, "ticketUrlFile no fue enviado. Se uso URL temporal pendiente de blob.");
+
+                var validLines = new List<ExpenseSheetTicketLineRequest>();
+                if (draft.lines != null)
+                {
+                    foreach (var line in draft.lines)
+                    {
+                        if (line == null)
+                            continue;
+
+                        var qty = line.qty ?? 0m;
+                        var price = line.price ?? 0m;
+                        var description = (line.description ?? string.Empty).Trim();
+                        if (qty <= 0m || price <= 0m || string.IsNullOrWhiteSpace(description))
+                            continue;
+
+                        validLines.Add(new ExpenseSheetTicketLineRequest
+                        {
+                            description = description,
+                            qty = qty,
+                            price = price,
+                            totalAmount = qty * price
+                        });
+                    }
+                }
+
+                var mode = validLines.Count > 0 ? 0 : 1;
+                if (mode == 1)
+                    EnsureDraftWarning(draft, "No se detectaron lineas validas para ticket; se persistio solo cabecera.");
+
+                var descriptionValue = string.IsNullOrWhiteSpace(draft.description) ? "Ticket" : draft.description.Trim();
+                var currencyCodeValue = (draft.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(currencyCodeValue))
+                {
+                    currencyCodeValue = "EUR";
+                    EnsureDraftWarning(draft, "No se detecto currencyCode. Se uso EUR por defecto para persistencia.");
+                }
+
+                var comentarioValue = string.IsNullOrWhiteSpace(draft.Merchant) ? "Ticket IA" : draft.Merchant.Trim();
+                var transDateValue = ResolveDraftTransDate(draft);
+                var totalAmountValue = CalculateTicketLinesTotal(validLines);
+                var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
+
+                var rootCon = ax.CreateContainer();
+                rootCon.Append(company);
+
+                var headerCon = ax.CreateContainer();
+                headerCon.Append(axUserId);
+                headerCon.Append(descriptionValue);
+                headerCon.Append(currencyCodeValue);
+                headerCon.Append(totalAmountValue);
+                headerCon.Append(transDateValue);
+                headerCon.Append(comentarioValue);
+                headerCon.Append(effectiveUrl);
+                headerCon.Append(provisionalFileName);
+                rootCon.Append(headerCon);
+
+                var linesCon = ax.CreateContainer();
+                if (mode == 0)
+                {
+                    foreach (var ticketLine in validLines)
+                    {
+                        var lineCon = ax.CreateContainer();
+                        lineCon.Append(ticketLine.description ?? string.Empty);
+                        lineCon.Append(ticketLine.qty ?? 0m);
+                        lineCon.Append(ticketLine.price ?? 0m);
+                        lineCon.Append(ticketLine.totalAmount ?? 0m);
+                        linesCon.Append(lineCon);
+                    }
+                }
+                rootCon.Append(linesCon);
+
+                var optionsCon = ax.CreateContainer();
+                optionsCon.Append(mode);
+                optionsCon.Append(string.Empty);
+                rootCon.Append(optionsCon);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "createExpenseSheetTicket",
+                    rootCon);
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out var linesOut))
+                {
+                    errorMessage = "Error al procesar la respuesta de AX al crear ticket.";
+                    errorCode = IndErrorCodes.AxComError;
+                    errorStatus = HttpStatusCode.InternalServerError;
+                    return false;
+                }
+
+                if (!success)
+                {
+                    ResolveTicketPersistError(message, out errorStatus, out errorCode);
+                    errorMessage = string.IsNullOrWhiteSpace(message) ? "No se pudo crear el ticket en AX." : message;
+                    return false;
+                }
+
+                var fileId = extras.Count > 0 ? extras[0] : string.Empty;
+                var ticketRecId = extras.Count > 1 ? extras[1] : string.Empty;
+                var lineRecIds = MapRecIdList(linesOut);
+
+                var finalFileName = BuildTicketFileName(axUserId, fileId, extension);
+                var fileNameFinalized = false;
+                var finalizeMessage = string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(fileId))
+                {
+                    var updateCon = ax.CreateContainer();
+                    updateCon.Append(company);
+                    updateCon.Append(axUserId);
+                    updateCon.Append(fileId);
+                    updateCon.Append(descriptionValue);
+                    updateCon.Append(currencyCodeValue);
+                    updateCon.Append(totalAmountValue);
+                    updateCon.Append(0);
+                    updateCon.Append(transDateValue);
+                    updateCon.Append(comentarioValue);
+                    updateCon.Append(effectiveUrl);
+                    updateCon.Append(finalFileName);
+
+                    var updateObj = ax.CallStaticClassMethod(
+                        "INDCRMExpenseSheetService",
+                        "updateExpenseSheetTicket",
+                        updateCon);
+
+                    if (TryReadHeader(updateObj as IAxaptaContainer, out var updateSuccess, out var updateMessage, out _, out _))
+                    {
+                        fileNameFinalized = updateSuccess;
+                        finalizeMessage = updateMessage ?? string.Empty;
+                    }
+                }
+
+                if (!fileNameFinalized)
+                {
+                    EnsureDraftWarning(draft, "No se pudo aplicar el nombre final del archivo en AX; quedo nombre provisional.");
+                }
+
+                ticketCreation = new ExpenseSheetDraftTicketCreationResult
+                {
+                    Persisted = true,
+                    FileId = fileId,
+                    TicketRecId = ticketRecId,
+                    LineRecIds = lineRecIds,
+                    UrlFile = effectiveUrl,
+                    FileName = fileNameFinalized ? finalFileName : provisionalFileName,
+                    FileNameFinalized = fileNameFinalized,
+                    Message = string.IsNullOrWhiteSpace(finalizeMessage) ? message : finalizeMessage
+                };
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Log("[IA-DRAFT] Error persistiendo ticket en AX: " + ex.Message, AxaptaSessionManager.LogLevel.Error);
+                errorMessage = "Error interno al persistir ticket en AX.";
+                errorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError;
+                errorStatus = HttpStatusCode.InternalServerError;
+                return false;
+            }
+        }
+
+        // Parsea bool desde texto de formulario.
+        private static bool ParseBooleanFlag(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            if (bool.TryParse(value.Trim(), out var parsed))
+                return parsed;
+
+            if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var asInt))
+                return asInt != 0;
+
+            return string.Equals(value.Trim(), "yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Agrega warning al draft si no existe.
+        private static void EnsureDraftWarning(ExpenseSheetDraftResponse draft, string warning)
+        {
+            if (draft == null || string.IsNullOrWhiteSpace(warning))
+                return;
+
+            if (draft.Warnings == null)
+                draft.Warnings = new List<string>();
+
+            draft.Warnings.Add(warning.Trim());
+        }
+
+        // Resuelve fecha cabecera del ticket a partir de lineas o fecha actual.
+        private static string ResolveDraftTransDate(ExpenseSheetDraftResponse draft)
+        {
+            if (draft?.lines != null)
+            {
+                foreach (var line in draft.lines)
+                {
+                    if (line == null || string.IsNullOrWhiteSpace(line.transDate))
+                        continue;
+
+                    if (TryNormalizeYmdDate(line.transDate, out var normalized))
+                        return normalized;
+                }
+            }
+
+            return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        // Total de lineas de ticket.
+        private static decimal CalculateTicketLinesTotal(List<ExpenseSheetTicketLineRequest> lines)
+        {
+            if (lines == null || lines.Count == 0)
+                return 0m;
+
+            decimal total = 0m;
+            foreach (var line in lines)
+            {
+                if (line == null)
+                    continue;
+
+                var qty = line.qty ?? 0m;
+                var price = line.price ?? 0m;
+                if (qty <= 0m || price <= 0m)
+                    continue;
+
+                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
+                    ? line.totalAmount.Value
+                    : qty * price;
+
+                total += lineTotal;
+            }
+
+            return total;
+        }
+
+        // Construye nombre temporal previo a obtener FileId.
+        private static string BuildProvisionalTicketFileName(string axUserId, string extension)
+        {
+            var safeUser = string.IsNullOrWhiteSpace(axUserId) ? "axuser" : axUserId.Trim();
+            var ext = NormalizeFileExtension(extension, "jpg");
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}_{1}_pending.{2}",
+                DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture),
+                safeUser,
+                ext);
+        }
+
+        // Construye nombre final yyyymmddhhmmss_axUserId_fileId.ext.
+        private static string BuildTicketFileName(string axUserId, string fileId, string extension)
+        {
+            var safeUser = string.IsNullOrWhiteSpace(axUserId) ? "axuser" : axUserId.Trim();
+            var safeFileId = string.IsNullOrWhiteSpace(fileId) ? "nofileid" : fileId.Trim();
+            var ext = NormalizeFileExtension(extension, "jpg");
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}_{1}_{2}.{3}",
+                DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture),
+                safeUser,
+                safeFileId,
+                ext);
+        }
+
+        // Normaliza extension para filename.
+        private static string NormalizeFileExtension(string extension, string defaultExtension)
+        {
+            var fallback = string.IsNullOrWhiteSpace(defaultExtension) ? "jpg" : defaultExtension.Trim().TrimStart('.').ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(extension))
+                return fallback;
+
+            var normalized = extension.Trim().TrimStart('.').ToLowerInvariant();
+            return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
+        }
+
+        // Normaliza fechas yyyyMMdd o yyyy-MM-dd a yyyyMMdd.
+        private static bool TryNormalizeYmdDate(string input, out string normalized)
+        {
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            if (DateTime.TryParseExact(trimmed, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            {
+                normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                return true;
+            }
+
+            if (DateTime.TryParseExact(trimmed, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+            {
+                normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                return true;
+            }
+
+            return false;
+        }
+
+        // Lee header AX [success, message, extras...] y container de lineas opcional.
+        private static bool TryReadHeader(IAxaptaContainer root, out bool success, out string message, out List<string> extras, out IAxaptaContainer linesCon)
+        {
+            success = false;
+            message = string.Empty;
+            extras = new List<string>();
+            linesCon = null;
+
+            if (root == null)
+                return false;
+
+            var rootLen = AxContainerReadHelper.SafeLength(root);
+            IAxaptaContainer headerCon = rootLen >= 2 ? AxContainerReadHelper.SafePeekContainer(root, 1) : root;
+            linesCon = rootLen >= 2 ? AxContainerReadHelper.SafePeekContainer(root, 2) : null;
+
+            var rowCon = AxContainerReadHelper.SafePeekContainer(headerCon, 1) ?? headerCon;
+            if (rowCon == null || AxContainerReadHelper.SafeLength(rowCon) < 2)
+                return false;
+
+            success = ToBool(AxContainerReadHelper.SafeString(rowCon, 1));
+            message = AxContainerReadHelper.SafeString(rowCon, 2);
+
+            var len = AxContainerReadHelper.SafeLength(rowCon);
+            for (int i = 3; i <= len; i++)
+                extras.Add(AxContainerReadHelper.SafeString(rowCon, i));
+
+            return true;
+        }
+
+        // Convierte header de AX success string a bool.
+        private static bool ToBool(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            if (bool.TryParse(value, out var parsed))
+                return parsed;
+
+            return value == "1";
+        }
+
+        // Extrae RecIds (lineas) desde container AX.
+        private static List<long> MapRecIdList(IAxaptaContainer linesCon)
+        {
+            var list = new List<long>();
+            var len = AxContainerReadHelper.SafeLength(linesCon);
+            for (int i = 1; i <= len; i++)
+            {
+                var value = AxContainerReadHelper.SafeValue(linesCon, i);
+                if (value == null)
+                    continue;
+
+                if (long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var recId))
+                    list.Add(recId);
+            }
+
+            return list;
+        }
+
+        // Mapea mensaje AX de ticket a HTTP status + errorCode.
+        private static void ResolveTicketPersistError(string message, out HttpStatusCode status, out string errorCode)
+        {
+            var lower = (message ?? string.Empty).ToLowerInvariant();
+
+            if (lower.Contains("no encontrada") || lower.Contains("no encontrado"))
+            {
+                status = HttpStatusCode.NotFound;
+                errorCode = lower.Contains("linea")
+                    ? IndErrorCodes.CrmExpenseSheetTicketLineNotFound
+                    : IndErrorCodes.CrmExpenseSheetTicketNotFound;
+                return;
+            }
+
+            if (lower.Contains("asignado"))
+            {
+                status = (HttpStatusCode)422;
+                errorCode = IndErrorCodes.CrmExpenseSheetTicketAssigned;
+                return;
+            }
+
+            status = (HttpStatusCode)422;
+            errorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields;
         }
 
         private IHttpActionResult ReturnError(HttpStatusCode statusCode, string traceId, string message, string errorCode, string field)

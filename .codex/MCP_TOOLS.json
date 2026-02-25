@@ -529,7 +529,15 @@
                                                                                                 "Authorization":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
-                                                                                                                  }
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Required only when persistTicket=true."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "Required only when persistTicket=true."
+                                                                                                                   }
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization"
@@ -542,7 +550,15 @@
                                                                                              "ticketImage":  {
                                                                                                                  "type":  "string",
                                                                                                                  "format":  "binary"
-                                                                                                             }
+                                                                                                             },
+                                                                                             "persistTicket":  {
+                                                                                                                   "type":  "boolean",
+                                                                                                                   "description":  "If true, persists ticket in AX."
+                                                                                                               },
+                                                                                             "ticketUrlFile":  {
+                                                                                                                   "type":  "string",
+                                                                                                                   "description":  "Blob URL for ticket file. Optional."
+                                                                                                               }
                                                                                          },
                                                                           "required":  [
                                                                                            "ticketImage"
@@ -571,7 +587,9 @@
                                                            "Authorization":  "Bearer \u003ctoken\u003e"
                                                        },
                                            "body":  {
-                                                        "ticketImage":  "\u003cbinary\u003e"
+                                                        "ticketImage":  "\u003cbinary\u003e",
+                                                        "persistTicket":  false,
+                                                        "ticketUrlFile":  "https://\u003cblob-url\u003e"
                                                     }
                                        }
                                    ]
@@ -717,15 +735,15 @@
                                                                                                                                             "internacional":  {
                                                                                                                                                                   "type":  "boolean"
                                                                                                                                                               },
-                                                                                                                                            "ticket":  {
-                                                                                                                                                           "type":  "boolean"
-                                                                                                                                                       },
                                                                                                                                             "projId":  {
                                                                                                                                                            "type":  "string"
                                                                                                                                                        },
                                                                                                                                             "indAttachFiles":  {
                                                                                                                                                                    "type":  "string"
-                                                                                                                                                               }
+                                                                                                                                                               },
+                                                                                                                                            "fileId":  {
+                                                                                                                                                           "type":  "string"
+                                                                                                                                                       }
                                                                                                                                         },
                                                                                                                          "required":  [
                                                                                                                                           "transDate",
@@ -785,9 +803,9 @@
                                                                           "qty":  1,
                                                                           "price":  25.5,
                                                                           "internacional":  false,
-                                                                          "ticket":  true,
                                                                           "projId":  "",
-                                                                          "indAttachFiles":  ""
+                                                                          "indAttachFiles":  "",
+                                                                          "fileId":  ""
                                                                       }
                                                                   ]
                                                     }
@@ -1008,10 +1026,10 @@
                                                                                                                       "description":  "Requiere expenseSheetStatus cuando se envia.",
                                                                                                                       "minimum":  0
                                                                                                                   },
-                                                                                              "estadoComentarios":  {
+                                                                                             "estadoComentarios":  {
                                                                                                                        "type":  "string",
                                                                                                                        "description":  "Comentario de estado. Requiere expenseSheetStatus y exchangeRateMode cuando se envia."
-                                                                                                                  }
+                                                                                                                   }
                                                                                          },
                                                                           "required":  [
                                                                                            "description",
@@ -1053,12 +1071,12 @@
                                            "body":  {
                                                         "description":  "Gastos",
                                                         "currencyCode":  "EUR",
-                                                         "projId":  "",
-                                                         "exchRate":  1,
-                                                         "expenseSheetStatus":  0,
-                                                         "exchangeRateMode":  0,
-                                                         "estadoComentarios":  "Pendiente de revision"
-                                                     }
+                                                        "projId":  "",
+                                                        "exchRate":  1,
+                                                        "expenseSheetStatus":  0,
+                                                        "exchangeRateMode":  0,
+                                                        "estadoComentarios":  "Pendiente de revision"
+                                                    }
                                        }
                                    ]
                   },
@@ -1138,15 +1156,15 @@
                                                                                              "internacional":  {
                                                                                                                    "type":  "boolean"
                                                                                                                },
-                                                                                             "ticket":  {
-                                                                                                            "type":  "boolean"
-                                                                                                        },
                                                                                              "projId":  {
                                                                                                             "type":  "string"
                                                                                                         },
                                                                                              "indAttachFiles":  {
                                                                                                                     "type":  "string"
-                                                                                                                }
+                                                                                                                },
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
                                                                                          },
                                                                           "required":  [
                                                                                            "transDate",
@@ -1196,9 +1214,9 @@
                                                         "qty":  1,
                                                         "price":  30.0,
                                                         "internacional":  false,
-                                                        "ticket":  true,
                                                         "projId":  "",
-                                                        "indAttachFiles":  ""
+                                                        "indAttachFiles":  "",
+                                                        "fileId":  ""
                                                     }
                                        }
                                    ]
@@ -1558,6 +1576,1019 @@
                                                          "targetCurrency":  "EUR",
                                                          "date":  "2026-02-18"
                                                      }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_create",
+                      "description":  "Crea ticket de gastos.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Content type for body."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "mode":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "minimum":  0,
+                                                                                                          "maximum":  2
+                                                                                                      },
+                                                                                             "existingFileId":  {
+                                                                                                                    "type":  "string",
+                                                                                                                    "description":  "Required when mode=2."
+                                                                                                                },
+                                                                                             "description":  {
+                                                                                                                 "type":  "string"
+                                                                                                             },
+                                                                                             "currencyCode":  {
+                                                                                                                  "type":  "string"
+                                                                                                              },
+                                                                                             "totalAmount":  {
+                                                                                                                 "type":  "number"
+                                                                                                             },
+                                                                                             "transDate":  {
+                                                                                                               "type":  "string",
+                                                                                                               "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                           },
+                                                                                             "comentario":  {
+                                                                                                                "type":  "string"
+                                                                                                            },
+                                                                                             "urlFile":  {
+                                                                                                             "type":  "string"
+                                                                                                         },
+                                                                                             "fileExtension":  {
+                                                                                                                   "type":  "string"
+                                                                                                               },
+                                                                                             "lines":  {
+                                                                                                           "type":  "array",
+                                                                                                           "items":  {
+                                                                                                                         "type":  "object",
+                                                                                                                         "properties":  {
+                                                                                                                                            "description":  {
+                                                                                                                                                                "type":  "string"
+                                                                                                                                                            },
+                                                                                                                                            "qty":  {
+                                                                                                                                                        "type":  "number"
+                                                                                                                                                    },
+                                                                                                                                            "price":  {
+                                                                                                                                                          "type":  "number"
+                                                                                                                                                      },
+                                                                                                                                            "totalAmount":  {
+                                                                                                                                                                "type":  "number"
+                                                                                                                                                            }
+                                                                                                                                        },
+                                                                                                                         "required":  [
+                                                                                                                                          "description",
+                                                                                                                                          "qty",
+                                                                                                                                          "price"
+                                                                                                                                      ],
+                                                                                                                         "additionalProperties":  false
+                                                                                                                     }
+                                                                                                       }
+                                                                                         },
+                                                                          "required":  [
+
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/tickets",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "application/json"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
+                                                       },
+                                           "body":  {
+                                                        "mode":  0,
+                                                        "description":  "Ticket restaurante",
+                                                        "currencyCode":  "EUR",
+                                                        "transDate":  "20260224",
+                                                        "comentario":  "Gasto viaje",
+                                                        "urlFile":  "https://\u003cblob-url\u003e",
+                                                        "fileExtension":  "jpg",
+                                                        "lines":  [
+                                                                      {
+                                                                          "description":  "Comida",
+                                                                          "qty":  1,
+                                                                          "price":  25.5,
+                                                                          "totalAmount":  25.5
+                                                                      }
+                                                                  ]
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_get",
+                      "description":  "Obtiene detalle de ticket por FileId.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "GET",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_list",
+                      "description":  "Lista tickets de gastos con paginacion.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Content type for body."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "page":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "minimum":  1
+                                                                                                      },
+                                                                                             "pageSize":  {
+                                                                                                              "type":  "integer",
+                                                                                                              "minimum":  1
+                                                                                                          },
+                                                                                             "filter":  {
+                                                                                                            "type":  "string"
+                                                                                                        },
+                                                                                             "status":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "minimum":  0,
+                                                                                                            "maximum":  1
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "page",
+                                                                                           "pageSize"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/tickets/list",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "application/json"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
+                                                       },
+                                           "body":  {
+                                                        "page":  1,
+                                                        "pageSize":  20,
+                                                        "filter":  "",
+                                                        "status":  0
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_update",
+                      "description":  "Actualiza cabecera y metadatos de ticket.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Content type for body."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "description":  {
+                                                                                                                 "type":  "string"
+                                                                                                             },
+                                                                                             "currencyCode":  {
+                                                                                                                  "type":  "string"
+                                                                                                              },
+                                                                                             "totalAmount":  {
+                                                                                                                 "type":  "number"
+                                                                                                             },
+                                                                                             "status":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "minimum":  0,
+                                                                                                            "maximum":  1
+                                                                                                        },
+                                                                                             "transDate":  {
+                                                                                                               "type":  "string",
+                                                                                                               "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                           },
+                                                                                             "comentario":  {
+                                                                                                                "type":  "string"
+                                                                                                            },
+                                                                                             "urlFile":  {
+                                                                                                             "type":  "string"
+                                                                                                         },
+                                                                                             "fileName":  {
+                                                                                                              "type":  "string"
+                                                                                                          },
+                                                                                             "fileExtension":  {
+                                                                                                                   "type":  "string"
+                                                                                                               }
+                                                                                         },
+                                                                          "required":  [
+
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "PUT",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "application/json"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    },
+                                           "body":  {
+                                                        "comentario":  "Actualizado",
+                                                        "fileExtension":  "jpg"
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_upload_file",
+                      "description":  "Sube/reemplaza archivo de ticket en Azure Blob y sincroniza AX.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer <token>"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Debe ser multipart/form-data."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "query":  {
+                                                                           "type":  "object",
+                                                                           "properties":  {
+                                                                                              "extension":  {
+                                                                                                                "type":  "string"
+                                                                                                            }
+                                                                                          },
+                                                                           "required":  [
+
+                                                                                        ],
+                                                                           "additionalProperties":  false
+                                                                       },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "file":  {
+                                                                                                          "type":  "string",
+                                                                                                          "format":  "binary"
+                                                                                                      }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "file"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}/file",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "multipart/form-data"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer <token>",
+                                                           "X-IND-Company":  "<companyId>",
+                                                           "X-IND-AxUserId":  "<axUserId>",
+                                                           "Content-Type":  "multipart/form-data"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    },
+                                           "query":  {
+                                                         "extension":  "jpg"
+                                                     },
+                                           "body":  {
+                                                        "file":  "<binary>"
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_delete_file",
+                      "description":  "Elimina archivo asociado al ticket y limpia metadatos en AX.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer <token>"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "DELETE",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}/file",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer <token>",
+                                                           "X-IND-Company":  "<companyId>",
+                                                           "X-IND-AxUserId":  "<axUserId>"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_delete",
+                      "description":  "Elimina ticket completo o linea granular por query lineRecId.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "query":  {
+                                                                           "type":  "object",
+                                                                           "properties":  {
+                                                                                              "lineRecId":  {
+                                                                                                                "type":  [
+                                                                                                                             "integer",
+                                                                                                                             "string"
+                                                                                                                         ]
+                                                                                                            }
+                                                                                          },
+                                                                           "required":  [
+
+                                                                                        ],
+                                                                           "additionalProperties":  false
+                                                                       }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "DELETE",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    },
+                                           "query":  {
+
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_create_line",
+                      "description":  "Crea una linea de ticket.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Content type for body."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "description":  {
+                                                                                                                 "type":  "string"
+                                                                                                             },
+                                                                                             "qty":  {
+                                                                                                         "type":  "number"
+                                                                                                     },
+                                                                                             "price":  {
+                                                                                                           "type":  "number"
+                                                                                                       },
+                                                                                             "totalAmount":  {
+                                                                                                                 "type":  "number"
+                                                                                                             }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "description",
+                                                                                           "qty",
+                                                                                           "price"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}/lines",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "application/json"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123"
+                                                    },
+                                           "body":  {
+                                                        "description":  "Comida",
+                                                        "qty":  1,
+                                                        "price":  20.5,
+                                                        "totalAmount":  20.5
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_update_line",
+                      "description":  "Actualiza una linea de ticket.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   },
+                                                                                                "Content-Type":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "description":  "Content type for body."
+                                                                                                                 }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        },
+                                                                                             "lineRecId":  {
+                                                                                                               "type":  [
+                                                                                                                            "integer",
+                                                                                                                            "string"
+                                                                                                                        ]
+                                                                                                           }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId",
+                                                                                           "lineRecId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "description":  {
+                                                                                                                 "type":  "string"
+                                                                                                             },
+                                                                                             "qty":  {
+                                                                                                         "type":  "number"
+                                                                                                     },
+                                                                                             "price":  {
+                                                                                                           "type":  "number"
+                                                                                                       },
+                                                                                             "totalAmount":  {
+                                                                                                                 "type":  "number"
+                                                                                                             }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "description",
+                                                                                           "qty",
+                                                                                           "price"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path",
+                                                           "body"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "PUT",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId",
+                                                             "Content-Type"
+                                                         ],
+                                     "contentType":  "application/json"
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123",
+                                                        "lineRecId":  12345
+                                                    },
+                                           "body":  {
+                                                        "description":  "Comida",
+                                                        "qty":  1,
+                                                        "price":  21,
+                                                        "totalAmount":  21
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_tickets_delete_line",
+                      "description":  "Elimina una linea de ticket.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "fileId":  {
+                                                                                                            "type":  "string"
+                                                                                                        },
+                                                                                             "lineRecId":  {
+                                                                                                               "type":  [
+                                                                                                                            "integer",
+                                                                                                                            "string"
+                                                                                                                        ]
+                                                                                                           }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "fileId",
+                                                                                           "lineRecId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "DELETE",
+                                     "path":  "/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "fileId":  "FILE000123",
+                                                        "lineRecId":  12345
+                                                    }
                                        }
                                    ]
                   }

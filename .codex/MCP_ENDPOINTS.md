@@ -1,6 +1,6 @@
 # IND_CRM_API MCP Endpoints (actualizado 2026-02-19)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V19.
+Fuentes: `.codex/ENDPOINTS.md` + Postman V21.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
@@ -96,7 +96,8 @@ Endpoints
 - HTTP: POST `/api/ia/service/expensefromticket`
 - Auth: Bearer token
 - Headers: `Authorization`
-- Body (multipart): `ticketImage`
+- Headers opcionales cuando `persistTicket=true`: `X-IND-Company`, `X-IND-AxUserId`
+- Body (multipart): `ticketImage`, `persistTicket` (opcional), `ticketUrlFile` (opcional; si no viene se usa URL temporal)
 
 ## Expense Sheets
 
@@ -115,7 +116,7 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate`, `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `ticket`, `indAttachFiles`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`, `indAttachFiles`
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -140,7 +141,7 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate`, `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `ticket` (opcional), `projId` (opcional), `indAttachFiles` (opcional)
+- Body: `transDate`, `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `indAttachFiles` (opcional)
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -157,6 +158,72 @@ Endpoints
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (opcional), `createdDateTo` (opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional)
 - Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `exchRate`, `createdDate`.
+
+## Expense Sheet Tickets
+
+### Tool: crm_expensesheets_tickets_create
+- HTTP: POST `/api/crm/expensesheets/tickets`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body:
+  - `mode` (0|1|2)
+  - `existingFileId` (requerido cuando `mode=2`)
+  - `description`, `currencyCode`, `transDate`, `urlFile` (requeridos cuando `mode=0|1`)
+  - `totalAmount`, `comentario`, `fileExtension` (opcionales)
+  - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
+
+### Tool: crm_expensesheets_tickets_get
+- HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+
+### Tool: crm_expensesheets_tickets_list
+- HTTP: POST `/api/crm/expensesheets/tickets/list`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `page`, `pageSize`, `filter` (opcional), `status` (opcional 0|1)
+
+### Tool: crm_expensesheets_tickets_update
+- HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body opcional: `description`, `currencyCode`, `totalAmount`, `status` (0|1), `transDate`, `comentario`, `urlFile`, `fileName`, `fileExtension`
+
+### Tool: crm_expensesheets_tickets_upload_file
+- HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/file`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: multipart/form-data`
+- Query opcional: `extension` (si no viene, usa extension del archivo y fallback `jpg`)
+- Body multipart: un archivo (primer archivo del payload)
+- Regla: nombre final `yyyyMMddHHmmss_{axUserId}_{fileId}.{ext}`
+
+### Tool: crm_expensesheets_tickets_delete_file
+- HTTP: DELETE `/api/crm/expensesheets/tickets/{fileId}/file`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+
+### Tool: crm_expensesheets_tickets_delete
+- HTTP: DELETE `/api/crm/expensesheets/tickets/{fileId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Query opcional: `lineRecId` (si se envia, elimina solo esa linea mediante metodo unificado)
+
+### Tool: crm_expensesheets_tickets_create_line
+- HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/lines`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `description`, `qty`, `price`, `totalAmount` (opcional)
+
+### Tool: crm_expensesheets_tickets_update_line
+- HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `description`, `qty`, `price`, `totalAmount` (opcional)
+
+### Tool: crm_expensesheets_tickets_delete_line
+- HTTP: DELETE `/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 
 ## Projects
 

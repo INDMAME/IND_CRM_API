@@ -12,5 +12,21 @@ namespace IND_CRM_API.Contracts.Responses
         public List<string> Warnings { get; set; }
         public string RawCurrency { get; set; }
         public string Merchant { get; set; }
+        public ExpenseSheetDraftTicketCreationResult TicketCreation { get; set; }
+    }
+
+    /// <summary>
+    /// Resultado de persistencia opcional de ticket durante la extraccion IA.
+    /// </summary>
+    public class ExpenseSheetDraftTicketCreationResult
+    {
+        public bool Persisted { get; set; }
+        public string FileId { get; set; }
+        public string TicketRecId { get; set; }
+        public List<long> LineRecIds { get; set; }
+        public string UrlFile { get; set; }
+        public string FileName { get; set; }
+        public bool FileNameFinalized { get; set; }
+        public string Message { get; set; }
     }
 }

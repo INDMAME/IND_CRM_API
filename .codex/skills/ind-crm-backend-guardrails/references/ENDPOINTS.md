@@ -53,7 +53,8 @@ Endpoints
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)
 - POST /api/ia/service/expensefromticket (Authorize)
   Content-Type: multipart/form-data
-  Fields: ticketImage (required)
+  Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
+  Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId.
 
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
@@ -65,7 +66,7 @@ Endpoints
   mode 0 (default): description, currencyCode, lines[] (con lines[].price)
   mode 1: description, currencyCode (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].ticket
+  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].fileId
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (yyyyMMdd o yyyy-MM-dd; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
@@ -77,6 +78,7 @@ Endpoints
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (yyyymmdd), typeValue, description, qty, price
+  Optional: fileId (INDFileId), internacional, projId, indAttachFiles
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
   Legacy: deleteWholeSheet=0|1 sigue soportado si no se envia deleteMode. AX procesa 1 y 2 como deleteWholeSheet.
@@ -86,6 +88,37 @@ Endpoints
   Body optional: filter, billedMode, createdDateFrom, createdDateTo, projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, exchRate y createdDate
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
+
+## Expense Sheet Tickets
+- POST /api/crm/expensesheets/tickets (Authorize + X-IND-Company + X-IND-AxUserId)
+  mode 0: crea cabecera + lineas + DocuRef.
+  mode 1: crea solo cabecera + DocuRef.
+  mode 2: agrega lineas a `existingFileId`.
+  Body mode 0|1: description, currencyCode, transDate, urlFile.
+  Body mode 0|2: lines[] con description, qty, price (totalAmount opcional).
+  Optional: totalAmount, comentario, fileExtension, existingFileId.
+- GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Devuelve cabecera + lineas del ticket.
+- POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: page, pageSize.
+  Body optional: filter, status (0 Pending, 1 Assigned).
+- PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Actualiza cabecera y DocuRef (description, currencyCode, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension).
+- POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
+  Content-Type: multipart/form-data (primer archivo del payload).
+  Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.
+  Formato de nombre aplicado: `yyyyMMddHHmmss_{axUserId}_{fileId}.{ext}`.
+- DELETE /api/crm/expensesheets/tickets/{fileId}/file (Authorize + X-IND-Company + X-IND-AxUserId)
+  Elimina blob asociado y limpia `INDURLFile` + `INDFilename` del ticket en AX.
+- DELETE /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Elimina ticket completo.
+  Query opcional: lineRecId (si se envia, elimina solo esa linea granular usando el metodo unificado de AX).
+- POST /api/crm/expensesheets/tickets/{fileId}/lines (Authorize + X-IND-Company + X-IND-AxUserId)
+  Crea una linea granular en `INDTicketInfoLine`.
+- PUT /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Actualiza una linea granular de `INDTicketInfoLine`.
+- DELETE /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Elimina una linea granular de `INDTicketInfoLine`.
 
 ## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

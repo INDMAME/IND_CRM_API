@@ -60,6 +60,12 @@
     <Reference Include="Microsoft.AspNet.WebApi.Extensions.Compression.Server, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.AspNet.WebApi.Extensions.Compression.Server.2.0.1\lib\net45\Microsoft.AspNet.WebApi.Extensions.Compression.Server.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Azure.Storage.Blob, Version=11.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Azure.Storage.Blob.11.2.3\lib\net452\Microsoft.Azure.Storage.Blob.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Azure.Storage.Common, Version=11.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Azure.Storage.Common.11.2.3\lib\net452\Microsoft.Azure.Storage.Common.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.IdentityModel.JsonWebTokens, Version=5.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.IdentityModel.JsonWebTokens.5.3.0\lib\net461\Microsoft.IdentityModel.JsonWebTokens.dll</HintPath>
     </Reference>
@@ -163,11 +169,14 @@
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
+    <Compile Include="Contracts\Requests\CreateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetsListRequest.cs" />
+    <Compile Include="Contracts\Requests\GetExpenseSheetTicketsListRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetHeaderRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetLineRequest.cs" />
+    <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
@@ -175,6 +184,7 @@
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetFuelPriceKmDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetTicketDtos.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetSubordinateDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />
     <Compile Include="Contracts\Responses\ExchangeRateDto.cs" />
@@ -189,6 +199,7 @@
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetsController.cs" />
+    <Compile Include="Controllers\CRM\CrmExpenseSheetTicketsController.cs" />
     <Compile Include="Controllers\CRM\CrmProjectsController.cs" />
     <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
@@ -212,6 +223,7 @@
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
+    <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\ExchangeRateProviderResult.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
     <Compile Include="Services\IND_AxRequestContext.cs" />
@@ -221,6 +233,7 @@
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IAxLogger.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
+    <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />

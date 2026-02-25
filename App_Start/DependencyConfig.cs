@@ -21,6 +21,7 @@ namespace IND_CRM_API.App_Start
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
             var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
+            var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbHttpClient = new EcbHttpClient(axLogger);
             var exchangeRateProvider = new EcbExchangeRateProvider(ecbHttpClient, axLogger);
@@ -36,6 +37,7 @@ namespace IND_CRM_API.App_Start
                 { typeof(IND_IAudioTranscriptionService), speechService },
                 { typeof(IND_ITextModerationService), moderationService },
                 { typeof(IND_IExpenseTicketDraftService), expenseDraftService },
+                { typeof(IExpenseTicketBlobStorageService), expenseTicketBlobStorageService },
                 { typeof(IEcbHttpClient), ecbHttpClient },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };

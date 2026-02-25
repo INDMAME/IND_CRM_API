@@ -35,7 +35,7 @@ namespace IND_CRM_API.Contracts.Responses
         public int? TypeValue { get; set; }
         public string Description { get; set; }
         public bool? Internacional { get; set; }
-        public bool? Ticket { get; set; }
+        public string FileId { get; set; }
         // Unit price returned by AX.
         public decimal? Price { get; set; }
         public decimal? Qty { get; set; }

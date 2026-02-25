@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 2/19/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 2/24/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -16,13 +16,648 @@ Formatversion: 1
     
     METHODS
       Version: 3
+      SOURCE #createExpenseSheetTicket
+        #/*
+        #    Method: indExpenseSheetTicketCreate (createExpenseSheetTicket)
+        #    Purpose:
+        #      - Mode 0 (default): Create ticket header + lines + DocuRef metadata.
+        #      - Mode 1: Create ticket header + DocuRef metadata only.
+        #      - Mode 2: Add line(s) to an existing ticket (by FileId).
+        #    Input _data (container):
+        #      1) companyId
+        #      2) headerIn
+        #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName]
+        #         - Mode 2  : at least [axUserId]
+        #      3) linesIn (container of line containers)
+        #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
+        #      4) optionsIn (optional): [mode, existingFileId]
+        #*/
+        #static server container createExpenseSheetTicket(container _data)
+        #{
+        #    #define.ModeCreateHeaderAndLines(0)
+        #    #define.ModeCreateHeaderOnly(1)
+        #    #define.ModeAddLinesToExisting(2)
+        #
+        #    DataAreaId         companyId;
+        #    container          headerIn;
+        #    container          linesIn;
+        #    container          optionsIn;
+        #    container          lineIn;
+        #
+        #    int                mode;
+        #    int                i;
+        #    int                lineCount;
+        #    int                startLine;
+        #
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          existingFileId;
+        #
+        #    str                descr;
+        #    str                currencyCode;
+        #    real               totalAmount;
+        #    str                transDateStr;
+        #    date               transDate;
+        #    str                comentario;
+        #    str                urlFile;
+        #    str                fileName;
+        #
+        #    str                lineDescr;
+        #    real               qty;
+        #    real               price;
+        #    real               lineTotal;
+        #    boolean            hasHeaderTotalAmount;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    INDTicketInfoLine  ticketLine;
+        #    DocuRef            docuRef;
+        #
+        #    container          linesOut = conNull();
+        #    str                message;
+        #    str                msg;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
+        #
+        #    if (conLen(_data) < 3)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan al menos 3 elementos.', conNull()), conNull()];
+        #
+        #    headerIn = conPeek(_data, 2);
+        #    linesIn  = conPeek(_data, 3);
+        #
+        #    optionsIn = conNull();
+        #    if (conLen(_data) >= 4)
+        #        optionsIn = conPeek(_data, 4);
+        #
+        #    mode                 = #ModeCreateHeaderAndLines;
+        #    existingFileId       = '';
+        #    hasHeaderTotalAmount = false;
+        #
+        #    if (conLen(optionsIn) >= 1)
+        #        mode = conPeek(optionsIn, 1);
+        #
+        #    if (conLen(optionsIn) >= 2)
+        #        existingFileId = conPeek(optionsIn, 2);
+        #
+        #    if (mode != #ModeCreateHeaderAndLines &&
+        #        mode != #ModeCreateHeaderOnly &&
+        #        mode != #ModeAddLinesToExisting)
+        #    {
+        #        return [INDCRMUtilityService::buildHeader(false, strFmt('Mode invalido: %1 (valores: 0|1|2).', mode), conNull()), conNull()];
+        #    }
+        #
+        #    if (mode == #ModeAddLinesToExisting)
+        #    {
+        #        if (conLen(headerIn) < 1)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Header input invalido para modo AddLines. Se espera al menos AxUserId.', conNull()), conNull()];
+        #
+        #        axUserId = conPeek(headerIn, 1);
+        #
+        #        if (!existingFileId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'existingFileId es obligatorio en modo AddLines (options[2]).', conNull()), conNull()];
+        #
+        #        if (conLen(linesIn) <= 0)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Se espera al menos 1 linea en modo AddLines.', conNull()), conNull()];
+        #    }
+        #    else
+        #    {
+        #        if (conLen(headerIn) < 8)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Header input invalido. Se esperan 8 campos.', conNull()), conNull()];
+        #
+        #        axUserId     = conPeek(headerIn, 1);
+        #        descr        = conPeek(headerIn, 2);
+        #        currencyCode = conPeek(headerIn, 3);
+        #        totalAmount  = conPeek(headerIn, 4);
+        #        transDateStr = conPeek(headerIn, 5);
+        #        comentario   = conPeek(headerIn, 6);
+        #        urlFile      = conPeek(headerIn, 7);
+        #        fileName     = conPeek(headerIn, 8);
+        #
+        #        hasHeaderTotalAmount = true;
+        #
+        #        if (!descr)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!currencyCode)
+        #            return [INDCRMUtilityService::buildHeader(false, 'CurrencyCode es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!urlFile)
+        #            return [INDCRMUtilityService::buildHeader(false, 'INDURLFile es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!fileName)
+        #            return [INDCRMUtilityService::buildHeader(false, 'INDFilename es obligatorio.', conNull()), conNull()];
+        #
+        #        transDate = INDCRMUtilityService::parseYmdDate(transDateStr);
+        #        if (!transDate)
+        #            return [INDCRMUtilityService::buildHeader(false, strFmt('TransDate invalida (yyyymmdd): %1', transDateStr), conNull()), conNull()];
+        #
+        #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
+        #
+        #        if (mode == #ModeCreateHeaderOnly && conLen(linesIn) > 0)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Modo CreateHeaderOnly: no se deben enviar lineas.', conNull()), conNull()];
+        #    }
+        #
+        #    if (!axUserId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull()), conNull()];
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            ttsbegin;
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return [INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
+        #            if (mode == #ModeAddLinesToExisting)
+        #            {
+        #                select firstonly forupdate ticketHeader
+        #                    where ticketHeader.FileId          == existingFileId
+        #                       && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #                if (!ticketHeader.RecId)
+        #                {
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('No existe el ticket: %1', existingFileId), conNull()), conNull()];
+        #                }
+        #            }
+        #            else
+        #            {
+        #                docuRef.clear();
+        #                docuRef.initValue();
+        #                docuRef.RefCompanyId          = companyId;
+        #                docuRef.RefTableId            = tableNum(INDTicketInfoTable);
+        #                docuRef.TypeId                = 'Imagen';
+        #                docuRef.Name                  = fileName;
+        #                docuRef.Notes                 = comentario;
+        #                docuRef.INDDescription        = descr;
+        #                docuRef.INDComentario         = comentario;
+        #                docuRef.INDTransDate          = transDate;
+        #                docuRef.INDFileAllocationType = INDFileAllocationType::ExpenseSheet;
+        #                docuRef.INDFileLocationType   = INDFileLocationType::Cloud;
+        #                docuRef.INDURLFile            = urlFile;
+        #                docuRef.INDFilename           = fileName;
+        #                docuRef.INDCreatedByUserId    = axUserId;
+        #                docuRef.insert();
+        #
+        #                ticketHeader.clear();
+        #                ticketHeader.initValue();
+        #                ticketHeader.FileId          = docuRef.INDFileId;
+        #                ticketHeader.Description     = descr;
+        #                ticketHeader.Status          = INDTicketStatus::Pending;
+        #                ticketHeader.CurrencyCode    = currencyCode;
+        #                ticketHeader.TotalAmount     = totalAmount;
+        #                ticketHeader.CreatedByUserId = axUserId;
+        #                ticketHeader.insert();
+        #
+        #                //Actualizo referencia en DocuRef
+        #                docuRef             = DocuRef::findRecId(docuRef.RecId,true);
+        #                docuRef.RefRecId    = ticketHeader.RecId;
+        #                docuRef.update();
+        #
+        #                if (!ticketHeader.FileId)
+        #                {
+        #                    ttsabort;
+        #                    return [INDCRMUtilityService::buildHeader(false, 'No se pudo generar FileId para el ticket.', conNull()), conNull()];
+        #                }
+        #            }
+        #
+        #            if (mode != #ModeCreateHeaderOnly)
+        #            {
+        #                lineCount = conLen(linesIn);
+        #
+        #                for (i = 1; i <= lineCount; i++)
+        #                {
+        #                    lineIn = conPeek(linesIn, i);
+        #
+        #                    if (conLen(lineIn) < 3)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, 'Linea de ticket invalida. Se esperan al menos 3 campos.', conNull()), conNull()];
+        #                    }
+        #
+        #                    lineDescr = conPeek(lineIn, 1);
+        #                    qty       = conPeek(lineIn, 2);
+        #                    price     = conPeek(lineIn, 3);
+        #
+        #                    lineTotal = qty * price;
+        #                    if (conLen(lineIn) >= 4)
+        #                        lineTotal = conPeek(lineIn, 4);
+        #
+        #                    if (!lineDescr)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Description es obligatorio en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if (qty <= 0)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if (price <= 0)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if(lineTotal <= 0)
+        #                        lineTotal = qty * price;
+        #
+        #                    ticketLine.clear();
+        #                    ticketLine.initValue();
+        #
+        #                    ticketLine.FileId          = ticketHeader.FileId;
+        #                    ticketLine.RefRecIdTable   = ticketHeader.RecId;
+        #                    ticketLine.Description     = lineDescr;
+        #                    ticketLine.Qty             = qty;
+        #                    ticketLine.Price           = price;
+        #                    ticketLine.TotalAmount     = lineTotal;
+        #                    ticketLine.CreatedByUserId = axUserId;
+        #
+        #                    ticketLine.insert();
+        #                    linesOut += ticketLine.RecId;
+        #                }
+        #            }
+        #
+        #            ticketHeader = INDTicketInfoTable::findByFileId(ticketHeader.FileId,true);
+        #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            if (mode == #ModeCreateHeaderOnly && hasHeaderTotalAmount)
+        #                ticketHeader.TotalAmount = totalAmount;
+        #
+        #            ticketHeader.update();
+        #
+        #            ttscommit;
+        #
+        #            if (mode == #ModeCreateHeaderOnly)
+        #                message = 'Ticket creado correctamente (solo cabecera).';
+        #            else if (mode == #ModeAddLinesToExisting)
+        #                message = strFmt('Lineas de ticket creadas correctamente para FileId %1.', ticketHeader.FileId);
+        #            else
+        #                message = 'Ticket creado correctamente.';
+        #
+        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId)]), linesOut];
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #        ttsabort;
+        #        return [INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull()), conNull()];
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #        ttsabort;
+        #        return [INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull()), conNull()];
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #        ttsabort;
+        #        return [INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull()), conNull()];
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #    }
+        #
+        #    return [INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull()), conNull()];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #createExpenseSheetTicketLine
+        #// Method: createExpenseSheetTicketLine
+        #// Purpose: Creates one granular line for an existing ticket by FileId.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = fileId
+        #//  - _data[4] = lineDescription
+        #//  - _data[5] = qty
+        #//  - _data[6] = price
+        #//  - _data[7] = lineTotal (optional)
+        #static server container createExpenseSheetTicketLine(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          fileId;
+        #    str                lineDescr;
+        #    real               qty;
+        #    real               price;
+        #    real               lineTotal;
+        #    int                startLine;
+        #    str                msg;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    INDTicketInfoLine  ticketLine;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 6)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 6 campos obligatorios.', conNull());
+        #
+        #    axUserId  = conPeek(_data, 2);
+        #    fileId    = conPeek(_data, 3);
+        #    lineDescr = conPeek(_data, 4);
+        #    qty       = conPeek(_data, 5);
+        #    price     = conPeek(_data, 6);
+        #    lineTotal = qty * price;
+        #
+        #    if (conLen(_data) >= 7)
+        #        lineTotal = conPeek(_data, 7);
+        #
+        #    if (!axUserId)
+        #        return INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull());
+        #
+        #    if (!fileId)
+        #        return INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull());
+        #
+        #    if (!lineDescr)
+        #        return INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull());
+        #
+        #    if (qty <= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty debe ser mayor que 0.', conNull());
+        #
+        #    if (price <= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Price debe ser mayor que 0.', conNull());
+        #
+        #    if (lineTotal <= 0)
+        #        lineTotal = qty * price;
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
+        #
+        #            ttsbegin;
+        #
+        #            select firstonly forupdate ticketHeader
+        #                where ticketHeader.FileId          == fileId
+        #                   && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketHeader.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
+        #            }
+        #
+        #            ticketLine.clear();
+        #            ticketLine.initValue();
+        #            ticketLine.FileId          = ticketHeader.FileId;
+        #            ticketLine.RefRecIdTable   = ticketHeader.RecId;
+        #            ticketLine.Description     = lineDescr;
+        #            ticketLine.Qty             = qty;
+        #            ticketLine.Price           = price;
+        #            ticketLine.TotalAmount     = lineTotal;
+        #            ticketLine.CreatedByUserId = axUserId;
+        #            ticketLine.insert();
+        #
+        #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #            ticketHeader.update();
+        #
+        #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
+        #
+        #            ttscommit;
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket creada correctamente.',
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #updateExpenseSheetTicketLine
+        #// Method: updateExpenseSheetTicketLine
+        #// Purpose: Updates one granular line for an existing ticket by FileId + LineRecId.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = fileId
+        #//  - _data[4] = lineRecId
+        #//  - _data[5] = lineDescription
+        #//  - _data[6] = qty
+        #//  - _data[7] = price
+        #//  - _data[8] = lineTotal (optional)
+        #static server container updateExpenseSheetTicketLine(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          fileId;
+        #    RecId              lineRecId;
+        #    str                lineDescr;
+        #    real               qty;
+        #    real               price;
+        #    real               lineTotal;
+        #    int                startLine;
+        #    str                msg;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    INDTicketInfoLine  ticketLine;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 7)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 7 campos obligatorios.', conNull());
+        #
+        #    axUserId   = conPeek(_data, 2);
+        #    fileId     = conPeek(_data, 3);
+        #    lineRecId  = conPeek(_data, 4);
+        #    lineDescr  = conPeek(_data, 5);
+        #    qty        = conPeek(_data, 6);
+        #    price      = conPeek(_data, 7);
+        #    lineTotal  = qty * price;
+        #
+        #    if (conLen(_data) >= 8)
+        #        lineTotal = conPeek(_data, 8);
+        #
+        #    if (!axUserId)
+        #        return INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull());
+        #
+        #    if (!fileId)
+        #        return INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull());
+        #
+        #    if (!lineRecId)
+        #        return INDCRMUtilityService::buildHeader(false, 'LineRecId es obligatorio.', conNull());
+        #
+        #    if (!lineDescr)
+        #        return INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull());
+        #
+        #    if (qty <= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty debe ser mayor que 0.', conNull());
+        #
+        #    if (price <= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Price debe ser mayor que 0.', conNull());
+        #
+        #    if (lineTotal <= 0)
+        #        lineTotal = qty * price;
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
+        #
+        #            ttsbegin;
+        #
+        #            select firstonly forupdate ticketHeader
+        #                where ticketHeader.FileId          == fileId
+        #                   && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketHeader.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
+        #            }
+        #
+        #            select firstonly forupdate ticketLine
+        #                where ticketLine.RecId           == lineRecId
+        #                   && ticketLine.FileId          == ticketHeader.FileId
+        #                   && ticketLine.RefRecIdTable   == ticketHeader.RecId
+        #                   && ticketLine.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketLine.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Linea de ticket no encontrada para el FileId indicado.', conNull());
+        #            }
+        #
+        #            ticketLine.Description = lineDescr;
+        #            ticketLine.Qty         = qty;
+        #            ticketLine.Price       = price;
+        #            ticketLine.TotalAmount = lineTotal;
+        #            ticketLine.update();
+        #
+        #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #            ticketHeader.update();
+        #
+        #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
+        #
+        #            ttscommit;
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket actualizada correctamente.',
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
       SOURCE #classDeclaration
-        #// Purpose: Metodos COM para crear, consultar, actualizar y eliminar hojas de gastos.
-        #// Notes: Todos los metodos devuelven containers con un formato estable para la API.
+        #// Purpose: COM methods for expense sheets and ticket metadata management.
+        #// Notes: All methods return containers with a stable shape for the API layer.
         #public class INDCRMExpenseSheetService
         #{
         #
         #}
+      ENDSOURCE
+      SOURCE #calculateTicketTotalAmount
+        #// Method: calculateTicketTotalAmount
+        #// Purpose: Returns sum(TotalAmount) for ticket lines.
+        #static server real calculateTicketTotalAmount(INDFileId _fileId, RecId _ticketRecId)
+        #{
+        #    INDTicketInfoLine ticketLine;
+        #    real              totalAmount;
+        #    ;
+        #
+        #    while select ticketLine
+        #        where ticketLine.FileId        == _fileId
+        #           && ticketLine.RefRecIdTable == _ticketRecId
+        #    {
+        #        totalAmount += ticketLine.TotalAmount;
+        #    }
+        #
+        #    return totalAmount;
+        #}
+        #
       ENDSOURCE
       SOURCE #createExpenseSheet
         #/*
@@ -37,7 +672,7 @@ Formatversion: 1
         #         - Mode 0/1: [axUserId, descr, currencyCode, exchRate, projId, expenseSheetStatus, exchangeRateMode]
         #         - Mode 2  : at least [axUserId] (other fields ignored)
         #      3) linesIn (container of line containers)
-        #         - Each line: [transDateStr, typeValue, lineDescr, internacional, ticket, qty, price, lineProjId, attachFiles]
+        #         - Each line: [transDateStr, typeValue, lineDescr, internacional, fileId, qty, price, lineProjId, attachFiles]
         #         - amount se calcula internamente como qty * price
         #      4) optionsIn (optional container): [mode, existingHojaGastosId]
         #         - mode: 0|1|2
@@ -79,11 +714,14 @@ Formatversion: 1
         #    int       typeValue;
         #    str       lineDescr;
         #    int       internacional;
-        #    int       ticket;
+        #    INDFileId fileId;
         #    real      qty;
         #    real      price;
         #    str       lineProjId;
         #    str       attachFiles;
+        #
+        #    CRMHojaGastosLine  existingFileLine;
+        #    INDTicketInfoTable ticketHeader;
         #
         #    container linesOut = conNull();
         #    str       message;
@@ -288,7 +926,7 @@ Formatversion: 1
         #                    typeValue     = conPeek(lineIn, 2);
         #                    lineDescr     = conPeek(lineIn, 3);
         #                    internacional = conPeek(lineIn, 4);
-        #                    ticket        = conPeek(lineIn, 5);
+        #                    fileId        = conPeek(lineIn, 5);
         #                    qty           = conPeek(lineIn, 6);
         #                    price         = conPeek(lineIn, 7);
         #                    lineProjId    = conPeek(lineIn, 8);
@@ -336,6 +974,36 @@ Formatversion: 1
         #                    }
         #
         #
+        #                    if (fileId)
+        #                    {
+        #                        select firstonly forupdate ticketHeader
+        #                            where ticketHeader.FileId == fileId
+        #                               && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #                        if (!ticketHeader.RecId)
+        #                        {
+        #                            if (appl.ttsLevel() > 0)
+        #                                ttsabort;
+        #                            if (numberSeq)
+        #                                numberSeq.abort();
+        #
+        #                            return [INDCRMUtilityService::buildHeader(false, strFmt('FileId no existe o no pertenece al usuario: %1', fileId), conNull()), conNull()];
+        #                        }
+        #
+        #                        select firstonly existingFileLine
+        #                            where existingFileLine.FileId == fileId;
+        #
+        #                        if (existingFileLine.RecId)
+        #                        {
+        #                            if (appl.ttsLevel() > 0)
+        #                                ttsabort;
+        #                            if (numberSeq)
+        #                                numberSeq.abort();
+        #
+        #                            return [INDCRMUtilityService::buildHeader(false, strFmt('FileId ya esta asignado a otra linea: %1', fileId), conNull()), conNull()];
+        #                        }
+        #                    }
+        #
         #                    line.clear();
         #                    line.initValue();
         #
@@ -351,7 +1019,7 @@ Formatversion: 1
         #
         #                    line.Description   = lineDescr;
         #                    line.Internacional = internacional ? NoYes::Yes : NoYes::No;
-        #                    line.Ticket        = ticket ? NoYes::Yes : NoYes::No;
+        #                    line.FileId        = fileId;
         #                    line.Price         = price;
         #                    line.Qty           = qty;
         #                    line.Amount        = line.CalcAmount();
@@ -367,6 +1035,9 @@ Formatversion: 1
         #                    line.INDAttachFiles     = attachFiles;
         #
         #                    line.insert();
+        #
+        #                    if (fileId)
+        #                        INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, fileId);
         #
         #                    // Append at end (avoids conLen + conIns each iteration)
         #                    linesOut += line.RecId;
@@ -435,6 +1106,341 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #createExpenseSheetTicket_backup
+        #/*
+        #    Method: indExpenseSheetTicketCreate (createExpenseSheetTicket)
+        #    Purpose:
+        #      - Mode 0 (default): Create ticket header + lines + DocuRef metadata.
+        #      - Mode 1: Create ticket header + DocuRef metadata only.
+        #      - Mode 2: Add line(s) to an existing ticket (by FileId).
+        #    Input _data (container):
+        #      1) companyId
+        #      2) headerIn
+        #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName]
+        #         - Mode 2  : at least [axUserId]
+        #      3) linesIn (container of line containers)
+        #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
+        #      4) optionsIn (optional): [mode, existingFileId]
+        #*/
+        #static server container createExpenseSheetTicket_backup(container _data)
+        #{
+        #    #define.ModeCreateHeaderAndLines(0)
+        #    #define.ModeCreateHeaderOnly(1)
+        #    #define.ModeAddLinesToExisting(2)
+        #
+        #    DataAreaId         companyId;
+        #    container          headerIn;
+        #    container          linesIn;
+        #    container          optionsIn;
+        #    container          lineIn;
+        #
+        #    int                mode;
+        #    int                i;
+        #    int                lineCount;
+        #    int                startLine;
+        #
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          existingFileId;
+        #
+        #    str                descr;
+        #    str                currencyCode;
+        #    real               totalAmount;
+        #    str                transDateStr;
+        #    date               transDate;
+        #    str                comentario;
+        #    str                urlFile;
+        #    str                fileName;
+        #
+        #    str                lineDescr;
+        #    real               qty;
+        #    real               price;
+        #    real               lineTotal;
+        #    boolean            hasHeaderTotalAmount;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    INDTicketInfoLine  ticketLine;
+        #    DocuRef            docuRef;
+        #
+        #    container          linesOut = conNull();
+        #    str                message;
+        #    str                msg;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
+        #
+        #    if (conLen(_data) < 3)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan al menos 3 elementos.', conNull()), conNull()];
+        #
+        #    headerIn = conPeek(_data, 2);
+        #    linesIn  = conPeek(_data, 3);
+        #
+        #    optionsIn = conNull();
+        #    if (conLen(_data) >= 4)
+        #        optionsIn = conPeek(_data, 4);
+        #
+        #    mode                 = #ModeCreateHeaderAndLines;
+        #    existingFileId       = '';
+        #    hasHeaderTotalAmount = false;
+        #
+        #    if (conLen(optionsIn) >= 1)
+        #        mode = conPeek(optionsIn, 1);
+        #
+        #    if (conLen(optionsIn) >= 2)
+        #        existingFileId = conPeek(optionsIn, 2);
+        #
+        #    if (mode != #ModeCreateHeaderAndLines &&
+        #        mode != #ModeCreateHeaderOnly &&
+        #        mode != #ModeAddLinesToExisting)
+        #    {
+        #        return [INDCRMUtilityService::buildHeader(false, strFmt('Mode invalido: %1 (valores: 0|1|2).', mode), conNull()), conNull()];
+        #    }
+        #
+        #    if (mode == #ModeAddLinesToExisting)
+        #    {
+        #        if (conLen(headerIn) < 1)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Header input invalido para modo AddLines. Se espera al menos AxUserId.', conNull()), conNull()];
+        #
+        #        axUserId = conPeek(headerIn, 1);
+        #
+        #        if (!existingFileId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'existingFileId es obligatorio en modo AddLines (options[2]).', conNull()), conNull()];
+        #
+        #        if (conLen(linesIn) <= 0)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Se espera al menos 1 linea en modo AddLines.', conNull()), conNull()];
+        #    }
+        #    else
+        #    {
+        #        if (conLen(headerIn) < 8)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Header input invalido. Se esperan 8 campos.', conNull()), conNull()];
+        #
+        #        axUserId     = conPeek(headerIn, 1);
+        #        descr        = conPeek(headerIn, 2);
+        #        currencyCode = conPeek(headerIn, 3);
+        #        totalAmount  = conPeek(headerIn, 4);
+        #        transDateStr = conPeek(headerIn, 5);
+        #        comentario   = conPeek(headerIn, 6);
+        #        urlFile      = conPeek(headerIn, 7);
+        #        fileName     = conPeek(headerIn, 8);
+        #
+        #        hasHeaderTotalAmount = true;
+        #
+        #        if (!descr)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!currencyCode)
+        #            return [INDCRMUtilityService::buildHeader(false, 'CurrencyCode es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!urlFile)
+        #            return [INDCRMUtilityService::buildHeader(false, 'INDURLFile es obligatorio.', conNull()), conNull()];
+        #
+        #        if (!fileName)
+        #            return [INDCRMUtilityService::buildHeader(false, 'INDFilename es obligatorio.', conNull()), conNull()];
+        #
+        #        transDate = INDCRMUtilityService::parseYmdDate(transDateStr);
+        #        if (!transDate)
+        #            return [INDCRMUtilityService::buildHeader(false, strFmt('TransDate invalida (yyyymmdd): %1', transDateStr), conNull()), conNull()];
+        #
+        #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
+        #
+        #        if (mode == #ModeCreateHeaderOnly && conLen(linesIn) > 0)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Modo CreateHeaderOnly: no se deben enviar lineas.', conNull()), conNull()];
+        #    }
+        #
+        #    if (!axUserId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull()), conNull()];
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return [INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
+        #            if (mode == #ModeAddLinesToExisting)
+        #            {
+        #                select firstonly forupdate ticketHeader
+        #                    where ticketHeader.FileId          == existingFileId
+        #                       && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #                if (!ticketHeader.RecId)
+        #                {
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('No existe el ticket: %1', existingFileId), conNull()), conNull()];
+        #                }
+        #            }
+        #            else
+        #            {
+        #                ttsbegin;
+        #                docuRef.clear();
+        #                docuRef.initValue();
+        #                docuRef.RefCompanyId          = companyId;
+        #                docuRef.RefTableId            = tableNum(INDTicketInfoTable);
+        #                docuRef.TypeId                = 'Imagen';
+        #                docuRef.Name                  = fileName;
+        #                docuRef.Notes                 = comentario;
+        #                docuRef.INDDescription        = descr;
+        #                docuRef.INDComentario         = comentario;
+        #                docuRef.INDTransDate          = transDate;
+        #                docuRef.INDFileAllocationType = INDFileAllocationType::ExpenseSheet;
+        #                docuRef.INDFileLocationType   = INDFileLocationType::Cloud;
+        #                docuRef.INDURLFile            = urlFile;
+        #                docuRef.INDFilename           = fileName;
+        #                docuRef.INDCreatedByUserId    = axUserId;
+        #                docuRef.insert();
+        #                ttscommit;
+        #
+        #                ttsbegin;
+        #                ticketHeader.clear();
+        #                ticketHeader.initValue();
+        #                ticketHeader.FileId          = docuRef.INDFileId;
+        #                ticketHeader.Description     = descr;
+        #                ticketHeader.Status          = INDTicketStatus::Pending;
+        #                ticketHeader.CurrencyCode    = currencyCode;
+        #                ticketHeader.TotalAmount     = totalAmount;
+        #                ticketHeader.CreatedByUserId = axUserId;
+        #                ticketHeader.insert();
+        #                ttscommit;
+        #
+        #                ttsbegin;
+        #                //Actualizo referencia en DocuRef
+        #                docuRef             = DocuRef::findRecId(docuRef.RecId,true);
+        #                docuRef.RefRecId    = ticketHeader.RecId;
+        #                docuRef.update();
+        #                ttscommit;
+        #
+        #                if (!ticketHeader.FileId)
+        #                {
+        #
+        #                    return [INDCRMUtilityService::buildHeader(false, 'No se pudo generar FileId para el ticket.', conNull()), conNull()];
+        #                }
+        #
+        #            }
+        #
+        #            ttsbegin;
+        #            if (mode != #ModeCreateHeaderOnly)
+        #            {
+        #                lineCount = conLen(linesIn);
+        #
+        #                for (i = 1; i <= lineCount; i++)
+        #                {
+        #                    lineIn = conPeek(linesIn, i);
+        #
+        #                    if (conLen(lineIn) < 3)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, 'Linea de ticket invalida. Se esperan al menos 3 campos.', conNull()), conNull()];
+        #                    }
+        #
+        #                    lineDescr = conPeek(lineIn, 1);
+        #                    qty       = conPeek(lineIn, 2);
+        #                    price     = conPeek(lineIn, 3);
+        #
+        #                    lineTotal = qty * price;
+        #                    if (conLen(lineIn) >= 4)
+        #                        lineTotal = conPeek(lineIn, 4);
+        #
+        #                    if (!lineDescr)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Description es obligatorio en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if (qty <= 0)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if (price <= 0)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if(lineTotal <= 0)
+        #                        lineTotal = qty * price;
+        #
+        #                    ticketLine.clear();
+        #                    ticketLine.initValue();
+        #
+        #                    ticketLine.FileId          = ticketHeader.FileId;
+        #                    ticketLine.RefRecIdTable   = ticketHeader.RecId;
+        #                    ticketLine.Description     = lineDescr;
+        #                    ticketLine.Qty             = qty;
+        #                    ticketLine.Price           = price;
+        #                    ticketLine.TotalAmount     = lineTotal;
+        #                    ticketLine.CreatedByUserId = axUserId;
+        #
+        #                    ticketLine.insert();
+        #                    linesOut += ticketLine.RecId;
+        #                }
+        #            }
+        #            ttscommit;
+        #
+        #            ttsbegin;
+        #            ticketHeader = INDTicketInfoTable::findByFileId(ticketHeader.FileId,true);
+        #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            if (mode == #ModeCreateHeaderOnly && hasHeaderTotalAmount)
+        #                ticketHeader.TotalAmount = totalAmount;
+        #
+        #            ticketHeader.update();
+        #
+        #            ttscommit;
+        #
+        #            if (mode == #ModeCreateHeaderOnly)
+        #                message = 'Ticket creado correctamente (solo cabecera).';
+        #            else if (mode == #ModeAddLinesToExisting)
+        #                message = strFmt('Lineas de ticket creadas correctamente para FileId %1.', ticketHeader.FileId);
+        #            else
+        #                message = 'Ticket creado correctamente.';
+        #
+        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId)]), linesOut];
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #
+        #        return [INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull()), conNull()];
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #
+        #        return [INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull()), conNull()];
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #
+        #        return [INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull()), conNull()];
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        if (appl.ttsLevel() > 0)
+        #
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #    }
+        #
+        #    return [INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull()), conNull()];
+        #}
+        #
+      ENDSOURCE
       SOURCE #deleteExpenseSheetLine
         #// Method: deleteExpenseSheetLine
         #// Purpose: Delete one line or delete whole expense sheet (header + lines) depending on flag.
@@ -456,6 +1462,7 @@ Formatversion: 1
         #
         #    CRMHojaGastosTable header;
         #    CRMHojaGastosLine  line;
+        #    INDFileId        fileIdToRelease;
         #
         #    int startLine;
         #    str msg;
@@ -515,7 +1522,11 @@ Formatversion: 1
         #                    where line.UserId       == crmUserId
         #                       && line.HojaGastosId == hojaId
         #                {
+        #                    fileIdToRelease = line.FileId;
         #                    line.delete();
+        #
+        #                    if (fileIdToRelease)
+        #                        INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, fileIdToRelease);
         #                }
         #
         #                header.delete();
@@ -537,7 +1548,11 @@ Formatversion: 1
         #                return INDCRMUtilityService::buildHeader(false, 'Linea no encontrada para la hoja indicada.', conNull());
         #            }
         #
+        #            fileIdToRelease = line.FileId;
         #            line.delete();
+        #
+        #            if (fileIdToRelease)
+        #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, fileIdToRelease);
         #
         #            ttscommit;
         #
@@ -556,6 +1571,274 @@ Formatversion: 1
         #        if (!msg)
         #            msg = 'Error de base de datos. Revisar infolog.';
         #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #deleteExpenseSheetTicket
+        #// Method: deleteExpenseSheetTicket
+        #// Purpose: Deletes one ticket line by LineRecId (granular) or full ticket by FileId.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = fileId
+        #//  - _data[4] = lineRecId (optional; if informed deletes only one ticket line)
+        #static server container deleteExpenseSheetTicket(container _data)
+        #{
+        #    DataAreaId          companyId;
+        #    UserId              axUserId;
+        #    CRMUserId           crmUserId;
+        #    INDFileId           fileId;
+        #    RecId               lineRecId;
+        #    int                 startLine;
+        #    str                 msg;
+        #
+        #    INDTicketInfoTable  ticketHeader;
+        #    INDTicketInfoLine   ticketLine;
+        #    CRMHojaGastosLine   expenseLine;
+        #    DocuRef             docuRef;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 3)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
+        #
+        #    axUserId = conPeek(_data, 2);
+        #    fileId   = conPeek(_data, 3);
+        #    lineRecId = 0;
+        #
+        #    if (conLen(_data) >= 4)
+        #        lineRecId = conPeek(_data, 4);
+        #
+        #    if (!fileId)
+        #        return INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull());
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
+        #
+        #            ttsbegin;
+        #
+        #            select firstonly forupdate ticketHeader
+        #                where ticketHeader.FileId          == fileId
+        #                   && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketHeader.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
+        #            }
+        #
+        #            if (lineRecId)
+        #            {
+        #                select firstonly forupdate ticketLine
+        #                    where ticketLine.RecId          == lineRecId
+        #                       && ticketLine.FileId         == ticketHeader.FileId
+        #                       && ticketLine.RefRecIdTable  == ticketHeader.RecId
+        #                       && ticketLine.CreatedByUserId == axUserId;
+        #
+        #                if (!ticketLine.RecId)
+        #                {
+        #                    ttsabort;
+        #                    return INDCRMUtilityService::buildHeader(false, 'Linea de ticket no encontrada para el FileId indicado.', conNull());
+        #                }
+        #
+        #                ticketLine.delete();
+        #
+        #                ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #                ticketHeader.update();
+        #
+        #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
+        #
+        #                ttscommit;
+        #
+        #                return INDCRMUtilityService::buildHeader(true, 'Linea de ticket eliminada correctamente.',
+        #                                                         [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #            }
+        #
+        #            select firstonly expenseLine
+        #                where expenseLine.FileId == fileId;
+        #
+        #            if (expenseLine.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'FileId esta asignado a una linea de gastos. Debe desasignarse antes de eliminar.', conNull());
+        #            }
+        #
+        #            while select forupdate ticketLine
+        #                where ticketLine.FileId        == ticketHeader.FileId
+        #                   && ticketLine.RefRecIdTable == ticketHeader.RecId
+        #            {
+        #                ticketLine.delete();
+        #            }
+        #
+        #            while select forupdate docuRef
+        #                where docuRef.RefTableId == tableNum(INDTicketInfoTable)
+        #                   && docuRef.RefRecId   == ticketHeader.RecId
+        #            {
+        #                docuRef.delete();
+        #            }
+        #
+        #            ticketHeader.delete();
+        #
+        #            ttscommit;
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Ticket eliminado correctamente.', conNull());
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #deleteExpenseSheetTicketLine
+        #// Method: deleteExpenseSheetTicketLine
+        #// Purpose: Deletes one granular line from ticket detail by FileId + LineRecId.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = fileId
+        #//  - _data[4] = lineRecId
+        #static server container deleteExpenseSheetTicketLine(container _data)
+        #{
+        #    DataAreaId          companyId;
+        #    UserId              axUserId;
+        #    CRMUserId           crmUserId;
+        #    INDFileId           fileId;
+        #    RecId               lineRecId;
+        #    int                 startLine;
+        #    str                 msg;
+        #
+        #    INDTicketInfoTable  ticketHeader;
+        #    INDTicketInfoLine   ticketLine;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 4)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 4 campos.', conNull());
+        #
+        #    axUserId  = conPeek(_data, 2);
+        #    fileId    = conPeek(_data, 3);
+        #    lineRecId = conPeek(_data, 4);
+        #
+        #    if (!fileId)
+        #        return INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull());
+        #
+        #    if (!lineRecId)
+        #        return INDCRMUtilityService::buildHeader(false, 'LineRecId es obligatorio.', conNull());
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
+        #
+        #            ttsbegin;
+        #
+        #            select firstonly forupdate ticketHeader
+        #                where ticketHeader.FileId          == fileId
+        #                   && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketHeader.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
+        #            }
+        #
+        #            select firstonly forupdate ticketLine
+        #                where ticketLine.RecId           == lineRecId
+        #                   && ticketLine.FileId          == ticketHeader.FileId
+        #                   && ticketLine.RefRecIdTable   == ticketHeader.RecId
+        #                   && ticketLine.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketLine.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Linea de ticket no encontrada para el FileId indicado.', conNull());
+        #            }
+        #
+        #            ticketLine.delete();
+        #
+        #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #            ticketHeader.update();
+        #
+        #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
+        #
+        #            ttscommit;
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket eliminada correctamente.',
+        #                                                     [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
         #    }
         #    catch (Exception::Internal)
         #    {
@@ -693,7 +1976,7 @@ Formatversion: 1
         #                         strFmt("%1", gastoTypeInt),
         #                         strFmt("%1", line.Description),
         #                         strFmt("%1", line.Internacional),
-        #                         strFmt("%1", line.Ticket),
+        #                         strFmt("%1", line.FileId),
         #                         strFmt("%1", line.Price),
         #                         strFmt("%1", line.Qty),
         #                         strFmt("%1", monto),
@@ -793,14 +2076,14 @@ Formatversion: 1
         #               // Texto opcional
         #               && ( !filterTxt || hoja.INDSearchKey like likePattern )
         #
-        #               // Facturación
+        #               // Facturacion
         #               && (
         #                      (billedMode == 2)
         #                   || (billedMode == 0 && hoja.Voucher == '')
         #                   || (billedMode == 1 && hoja.Voucher != '')
         #                  )
         #
-        #               // Fecha creación opcional
+        #               // Fecha creacion opcional
         #               && (
         #                      (!createdDateFrom && !createdDateTo)
         #                   || ( createdDateFrom && !createdDateTo && hoja.CreatedDate >= createdDateFrom)
@@ -842,6 +2125,191 @@ Formatversion: 1
         #    }
         #
         #    return conResult ? conResult : [["Sin datos."]];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getExpenseSheetTicket
+        #// Method: getExpenseSheetTicket
+        #// Purpose: Get one ticket header and lines by FileId.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = fileId
+        #static server container getExpenseSheetTicket(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          fileId;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    INDTicketInfoLine  ticketLine;
+        #    DocuRef            docuRef;
+        #
+        #    container          headerOut;
+        #    container          linesOut = conNull();
+        #    container          lineRow;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
+        #
+        #    if (conLen(_data) < 3)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull()), conNull()];
+        #
+        #    axUserId = conPeek(_data, 2);
+        #    fileId   = conPeek(_data, 3);
+        #
+        #    if (!fileId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull()), conNull()];
+        #
+        #    changecompany(companyId)
+        #    {
+        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #        if (!crmUserId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull()), conNull()];
+        #
+        #        select firstonly ticketHeader
+        #            where ticketHeader.FileId          == fileId
+        #               && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #        if (!ticketHeader.RecId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull()), conNull()];
+        #
+        #        select firstonly docuRef
+        #            where docuRef.RefTableId == tableNum(INDTicketInfoTable)
+        #               && docuRef.RefRecId   == ticketHeader.RecId
+        #               && docuRef.INDFileId  == ticketHeader.FileId;
+        #
+        #        headerOut = INDCRMUtilityService::buildHeader(true, 'OK',
+        #                                                     [
+        #                                                      strFmt('%1', ticketHeader.FileId),
+        #                                                      strFmt('%1', ticketHeader.Description),
+        #                                                      strFmt('%1', ticketHeader.Status),
+        #                                                      strFmt('%1', ticketHeader.CurrencyCode),
+        #                                                      strFmt('%1', ticketHeader.TotalAmount),
+        #                                                      strFmt('%1', ticketHeader.CreatedByUserId),
+        #                                                      strFmt('%1', date2Str(docuRef.INDTransDate, 123, 2,2,2,2,4)),
+        #                                                      strFmt('%1', docuRef.INDComentario),
+        #                                                      strFmt('%1', docuRef.INDURLFile),
+        #                                                      strFmt('%1', docuRef.INDFilename)
+        #                                                     ]);
+        #
+        #        while select ticketLine
+        #            where ticketLine.FileId        == ticketHeader.FileId
+        #               && ticketLine.RefRecIdTable == ticketHeader.RecId
+        #        {
+        #            lineRow = [
+        #                        strFmt('%1', ticketLine.RecId),
+        #                        strFmt('%1', ticketLine.Description),
+        #                        strFmt('%1', ticketLine.Qty),
+        #                        strFmt('%1', ticketLine.Price),
+        #                        strFmt('%1', ticketLine.TotalAmount),
+        #                        strFmt('%1', ticketLine.RefRecIdTable),
+        #                        strFmt('%1', ticketLine.CreatedByUserId)
+        #                      ];
+        #
+        #            linesOut = conIns(linesOut, conLen(linesOut) + 1, lineRow);
+        #        }
+        #
+        #        return [headerOut, linesOut];
+        #    }
+        #
+        #    return [INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull()), conNull()];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getExpenseSheetTicketsList
+        #// Method: getExpenseSheetTicketsList
+        #// Purpose: Returns ticket list for one user.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = filterTxt (optional)
+        #//  - _data[4] = statusFilter (optional, 0|1)
+        #// Output rows:
+        #//  - [[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName], ...]
+        #static server container getExpenseSheetTicketsList(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    str 1000           filterTxt;
+        #    str 1000           likePattern;
+        #    int                statusFilter;
+        #    boolean            hasStatusFilter;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    DocuRef            docuRef;
+        #    container          conResult, conItem;
+        #
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return conNull();
+        #
+        #    if (conLen(_data) < 2)
+        #        return conResult;
+        #
+        #    axUserId = conPeek(_data, 2);
+        #
+        #    if (conLen(_data) >= 3)
+        #        filterTxt = conPeek(_data, 3);
+        #
+        #    if (conLen(_data) >= 4)
+        #    {
+        #        statusFilter = conPeek(_data, 4);
+        #        hasStatusFilter = true;
+        #    }
+        #
+        #    if (hasStatusFilter &&
+        #        (statusFilter < 0
+        #      || statusFilter > 1))
+        #    {
+        #        hasStatusFilter = false;
+        #    }
+        #
+        #    if (filterTxt)
+        #        likePattern = strFmt('*%1*', filterTxt);
+        #
+        #    changecompany(companyId)
+        #    {
+        #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #        if (!crmUserId)
+        #            return conResult;
+        #
+        #        while select ticketHeader
+        #            order by RecId desc
+        #            where ticketHeader.CreatedByUserId == axUserId
+        #               && (!hasStatusFilter || ticketHeader.Status == statusFilter)
+        #               && (!filterTxt || ticketHeader.Description like likePattern || ticketHeader.FileId like likePattern)
+        #        {
+        #            select firstonly docuRef
+        #                where docuRef.RefTableId == tableNum(INDTicketInfoTable)
+        #                   && docuRef.RefRecId   == ticketHeader.RecId
+        #                   && docuRef.INDFileId  == ticketHeader.FileId;
+        #
+        #            conItem = [[
+        #                        strFmt('%1', ticketHeader.FileId),
+        #                        strFmt('%1', ticketHeader.Description),
+        #                        strFmt('%1', ticketHeader.Status),
+        #                        strFmt('%1', ticketHeader.CurrencyCode),
+        #                        strFmt('%1', ticketHeader.TotalAmount),
+        #                        strFmt('%1', ticketHeader.CreatedByUserId),
+        #                        strFmt('%1', date2Str(docuRef.INDTransDate, 123, 2,2,2,2,4)),
+        #                        strFmt('%1', docuRef.INDURLFile),
+        #                        strFmt('%1', docuRef.INDFilename)
+        #                      ]];
+        #
+        #            conResult += conItem;
+        #        }
+        #    }
+        #
+        #    return conResult ? conResult : [['Sin datos.']];
         #}
         #
       ENDSOURCE
@@ -1080,6 +2548,46 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #refreshTicketStatusByFileId
+        #// Method: refreshTicketStatusByFileId
+        #// Purpose: Keeps INDTicketInfoTable.Status in sync with expense-sheet line assignment.
+        #static server void refreshTicketStatusByFileId(UserId _axUserId, INDFileId _fileId)
+        #{
+        #    CRMHojaGastosLine  assignedLine;
+        #    INDTicketInfoTable ticketHeader;
+        #    boolean            hasAssignedLine;
+        #    ;
+        #
+        #    if (!_fileId)
+        #        return;
+        #
+        #    select firstonly forupdate ticketHeader
+        #        where ticketHeader.FileId == _fileId;
+        #
+        #    if (!ticketHeader.RecId)
+        #        return;
+        #
+        #    if (_axUserId && ticketHeader.CreatedByUserId != _axUserId)
+        #        return;
+        #
+        #    select firstonly assignedLine
+        #        where assignedLine.FileId == _fileId;
+        #
+        #    hasAssignedLine = assignedLine.RecId ? true : false;
+        #
+        #    if (hasAssignedLine && ticketHeader.Status != INDTicketStatus::Assigned)
+        #    {
+        #        ticketHeader.Status = INDTicketStatus::Assigned;
+        #        ticketHeader.update();
+        #    }
+        #    else if (!hasAssignedLine && ticketHeader.Status != INDTicketStatus::Pending)
+        #    {
+        #        ticketHeader.Status = INDTicketStatus::Pending;
+        #        ticketHeader.update();
+        #    }
+        #}
+        #
+      ENDSOURCE
       SOURCE #updateExpenseSheetHeader
         #// Method: indExpenseSheetUpdateHeader
         #// Purpose: Update header fields. Block if Voucher is set.
@@ -1262,7 +2770,7 @@ Formatversion: 1
         #    int   typeValue;
         #    str   descr;
         #    int   internacional;
-        #    int   ticket;
+        #    INDFileId fileId;
         #    real  qty;
         #    real  price;
         #    str   projId;
@@ -1272,6 +2780,9 @@ Formatversion: 1
         #
         #    CRMHojaGastosTable header;
         #    CRMHojaGastosLine  line;
+        #    CRMHojaGastosLine  existingFileLine;
+        #    INDTicketInfoTable ticketHeader;
+        #    INDFileId          previousFileId;
         #    ;
         #    companyId = INDCRMUtilityService::getCompany(_data);
         #
@@ -1288,7 +2799,7 @@ Formatversion: 1
         #    typeValue     = conPeek(_data, 6);
         #    descr         = conPeek(_data, 7);
         #    internacional = conPeek(_data, 8);
-        #    ticket        = conPeek(_data, 9);
+        #    fileId        = conPeek(_data, 9);
         #    qty           = conPeek(_data, 10);
         #    price         = conPeek(_data, 11);
         #    projId        = conPeek(_data, 12);
@@ -1306,6 +2817,8 @@ Formatversion: 1
         #
         #    if (qty <= 0)
         #        return INDCRMUtilityService::buildHeader(false, 'Qty debe ser mayor que 0.', conNull());
+        #
+        #    startLine = infolog.line();
         #
         #    try
         #    {
@@ -1342,11 +2855,36 @@ Formatversion: 1
         #                return INDCRMUtilityService::buildHeader(false, 'Linea no encontrada para la hoja indicada.', conNull());
         #            }
         #
+        #            previousFileId = line.FileId;
+        #
+        #            if (fileId)
+        #            {
+        #                select firstonly forupdate ticketHeader
+        #                    where ticketHeader.FileId == fileId
+        #                       && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #                if (!ticketHeader.RecId)
+        #                {
+        #                    ttsabort;
+        #                    return INDCRMUtilityService::buildHeader(false, strFmt('FileId no existe o no pertenece al usuario: %1', fileId), conNull());
+        #                }
+        #
+        #                select firstonly existingFileLine
+        #                    where existingFileLine.FileId == fileId
+        #                       && existingFileLine.RecId  != line.RecId;
+        #
+        #                if (existingFileLine.RecId)
+        #                {
+        #                    ttsabort;
+        #                    return INDCRMUtilityService::buildHeader(false, strFmt('FileId ya esta asignado a otra linea: %1', fileId), conNull());
+        #                }
+        #            }
+        #
         #            line.TransDate     = transDate;
         #            line.Type          = typeValue;
         #            line.Description   = descr;
         #            line.Internacional = internacional ? NoYes::Yes : NoYes::No;
-        #            line.Ticket        = ticket        ? NoYes::Yes : NoYes::No;
+        #            line.FileId        = fileId;
         #            line.Qty           = qty;
         #            line.Price         = price;
         #            line.Amount        = line.CalcAmount();
@@ -1357,6 +2895,12 @@ Formatversion: 1
         #            line.INDAttachFiles = attachFiles;
         #
         #            line.update();
+        #
+        #            if (previousFileId && previousFileId != line.FileId)
+        #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, previousFileId);
+        #
+        #            if (line.FileId)
+        #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, line.FileId);
         #
         #            ttscommit;
         #
@@ -1371,7 +2915,6 @@ Formatversion: 1
         #    catch (Exception::DDEerror)
         #    {
         #        ttsabort;
-        #        startLine = infolog.line();
         #        // Mensaje desde infolog desde el inicio del try
         #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
         #    }
@@ -1385,6 +2928,245 @@ Formatversion: 1
         #        ttsabort;
         #
         #        // Mensaje desde infolog desde el inicio del try
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #updateExpenseSheetTicket
+        #// Method: updateExpenseSheetTicket
+        #// Purpose: Updates ticket header and DocuRef metadata by FileId.
+        #// Input:
+        #//  - _data[1]  = CompanyId
+        #//  - _data[2]  = axUserId
+        #//  - _data[3]  = fileId
+        #//  - _data[4]  = description (optional)
+        #//  - _data[5]  = currencyCode (optional)
+        #//  - _data[6]  = totalAmount (optional)
+        #//  - _data[7]  = status (optional: 0 Pending, 1 Assigned)
+        #//  - _data[8]  = transDateStr (optional, yyyymmdd)
+        #//  - _data[9]  = comentario (optional)
+        #//  - _data[10] = urlFile (optional)
+        #//  - _data[11] = fileName (optional)
+        #static server container updateExpenseSheetTicket(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    UserId             axUserId;
+        #    CRMUserId          crmUserId;
+        #    INDFileId          fileId;
+        #
+        #    str                descr;
+        #    str                currencyCode;
+        #    real               totalAmount;
+        #    int                status;
+        #    str                transDateStr;
+        #    date               transDate;
+        #    str                comentario;
+        #    str                urlFile;
+        #    str                fileName;
+        #
+        #    boolean            hasTotalAmount;
+        #    boolean            hasStatus;
+        #    boolean            hasTransDate;
+        #    boolean            hasComentario;
+        #    boolean            hasUrlFile;
+        #    boolean            hasFileName;
+        #
+        #    int                startLine;
+        #    str                msg;
+        #    boolean            createDocuRef;
+        #
+        #    INDTicketInfoTable ticketHeader;
+        #    DocuRef            docuRef;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 3)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan al menos 3 campos.', conNull());
+        #
+        #    axUserId = conPeek(_data, 2);
+        #    fileId   = conPeek(_data, 3);
+        #
+        #    if (!fileId)
+        #        return INDCRMUtilityService::buildHeader(false, 'FileId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) >= 4)
+        #        descr = conPeek(_data, 4);
+        #
+        #    if (conLen(_data) >= 5)
+        #        currencyCode = conPeek(_data, 5);
+        #
+        #    if (conLen(_data) >= 6)
+        #    {
+        #        totalAmount = conPeek(_data, 6);
+        #        hasTotalAmount = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 7)
+        #    {
+        #        status = conPeek(_data, 7);
+        #        hasStatus = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 8)
+        #    {
+        #        transDateStr = conPeek(_data, 8);
+        #        hasTransDate = true;
+        #
+        #        if (transDateStr)
+        #        {
+        #            transDate = INDCRMUtilityService::parseYmdDate(transDateStr);
+        #            if (!transDate)
+        #                return INDCRMUtilityService::buildHeader(false, strFmt('TransDate invalida (yyyymmdd): %1', transDateStr), conNull());
+        #        }
+        #    }
+        #
+        #    if (conLen(_data) >= 9)
+        #    {
+        #        comentario = conPeek(_data, 9);
+        #        hasComentario = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 10)
+        #    {
+        #        urlFile = conPeek(_data, 10);
+        #        hasUrlFile = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 11)
+        #    {
+        #        fileName = conPeek(_data, 11);
+        #        hasFileName = true;
+        #    }
+        #
+        #    if (currencyCode)
+        #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
+        #
+        #    if (hasStatus &&
+        #        (status < 0
+        #      || status > 1))
+        #    {
+        #        return INDCRMUtilityService::buildHeader(false, strFmt('Status invalido: %1 (valores: 0|1).', status), conNull());
+        #    }
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
+        #
+        #            ttsbegin;
+        #
+        #            select firstonly forupdate ticketHeader
+        #                where ticketHeader.FileId          == fileId
+        #                   && ticketHeader.CreatedByUserId == axUserId;
+        #
+        #            if (!ticketHeader.RecId)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
+        #            }
+        #
+        #            if (descr)
+        #                ticketHeader.Description = descr;
+        #
+        #            if (currencyCode)
+        #                ticketHeader.CurrencyCode = currencyCode;
+        #
+        #            if (hasTotalAmount)
+        #                ticketHeader.TotalAmount = totalAmount;
+        #
+        #            if (hasStatus)
+        #                ticketHeader.Status = status;
+        #
+        #            ticketHeader.update();
+        #
+        #            select firstonly forupdate docuRef
+        #                where docuRef.RefTableId == tableNum(INDTicketInfoTable)
+        #                   && docuRef.RefRecId   == ticketHeader.RecId
+        #                   && docuRef.INDFileId  == ticketHeader.FileId;
+        #
+        #            createDocuRef = false;
+        #            if (!docuRef.RecId)
+        #            {
+        #                createDocuRef = true;
+        #                docuRef.clear();
+        #                docuRef.initValue();
+        #                docuRef.RefCompanyId = companyId;
+        #                docuRef.RefTableId   = tableNum(INDTicketInfoTable);
+        #                docuRef.RefRecId     = ticketHeader.RecId;
+        #            }
+        #
+        #            docuRef.TypeId                = 'Imagen';
+        #            docuRef.INDFileAllocationType = INDFileAllocationType::ExpenseSheet;
+        #            docuRef.INDFileLocationType   = INDFileLocationType::Cloud;
+        #            docuRef.INDFileId             = ticketHeader.FileId;
+        #            docuRef.INDCreatedByUserId    = axUserId;
+        #
+        #            if (descr)
+        #                docuRef.INDDescription = descr;
+        #
+        #            if (hasTransDate)
+        #                docuRef.INDTransDate = transDate;
+        #
+        #            if (hasComentario)
+        #            {
+        #                docuRef.INDComentario = comentario;
+        #                docuRef.Notes         = comentario;
+        #            }
+        #
+        #            if (hasUrlFile)
+        #                docuRef.INDURLFile = urlFile;
+        #
+        #            if (hasFileName)
+        #            {
+        #                docuRef.INDFilename = fileName;
+        #                docuRef.Name       = fileName;
+        #            }
+        #
+        #            if (createDocuRef)
+        #                docuRef.insert();
+        #            else
+        #                docuRef.update();
+        #
+        #            ttscommit;
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Ticket actualizado correctamente.', [ticketHeader.FileId]);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
         #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
         #        if (!msg)
         #            msg = 'Error en el proceso. Revisar infolog.';

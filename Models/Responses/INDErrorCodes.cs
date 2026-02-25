@@ -44,6 +44,30 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Expense sheet is locked by voucher.</summary>
         public const string CrmExpenseSheetLocked = "CRM_EXPENSESHEET_LOCKED";
 
+        /// <summary>Campos obligatorios faltantes en operaciones de ticket de gasto.</summary>
+        public const string CrmExpenseSheetTicketMissingFields = "CRM_EXPENSESHEET_TICKET_MISSING_FIELDS";
+
+        /// <summary>Ticket de gasto no encontrado.</summary>
+        public const string CrmExpenseSheetTicketNotFound = "CRM_EXPENSESHEET_TICKET_NOT_FOUND";
+
+        /// <summary>Linea de ticket de gasto no encontrada.</summary>
+        public const string CrmExpenseSheetTicketLineNotFound = "CRM_EXPENSESHEET_TICKET_LINE_NOT_FOUND";
+
+        /// <summary>Ticket asignado a linea de gasto y no eliminable.</summary>
+        public const string CrmExpenseSheetTicketAssigned = "CRM_EXPENSESHEET_TICKET_ASSIGNED";
+
+        /// <summary>No hay archivo asociado al ticket de gasto.</summary>
+        public const string CrmExpenseSheetTicketFileNotFound = "CRM_EXPENSESHEET_TICKET_FILE_NOT_FOUND";
+
+        /// <summary>Configuracion de Azure Blob no valida o no disponible.</summary>
+        public const string CrmExpenseSheetTicketFileStorageNotConfigured = "CRM_EXPENSESHEET_TICKET_FILE_STORAGE_NOT_CONFIGURED";
+
+        /// <summary>Error al cargar archivo del ticket en Azure Blob.</summary>
+        public const string CrmExpenseSheetTicketFileUploadFailed = "CRM_EXPENSESHEET_TICKET_FILE_UPLOAD_FAILED";
+
+        /// <summary>Error al eliminar archivo del ticket en Azure Blob.</summary>
+        public const string CrmExpenseSheetTicketFileDeleteFailed = "CRM_EXPENSESHEET_TICKET_FILE_DELETE_FAILED";
+
         /// <summary>Exchange rate not available for requested currencies/date.</summary>
         public const string ExchangeRateNotFound = "EXCHANGE_RATE_NOT_FOUND";
 
