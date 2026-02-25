@@ -533,7 +533,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// Header fields include expenseSheetStatus, estadoComentarios, exchangeRateMode, and createdDate.
         /// </remarks>
-        [HttpGet, Route("{hojaGastosId}")]
+        // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
+        [HttpGet, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Hoja de gastos encontrada", typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
@@ -659,7 +660,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// Optional header fields: expenseSheetStatus, exchangeRateMode, and estadoComentarios.
         /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
-        [HttpPut, Route("{hojaGastosId}")]
+        // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
+        [HttpPut, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Hoja de gastos actualizada", typeof(IndApiResponse<object>))]

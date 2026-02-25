@@ -209,6 +209,9 @@ Input:
    - Nuevo log `[API-PIPE-MATCH]` con pre-resolucion de ruta.
    - `[API-PIPE-OUT]` ahora registra preRoute y postRoute.
    - Nuevo log `[API-PIPE-500]` con reason/contentType/contentLength para aislar errores previos al action.
+14. Fix de enrutamiento entre hojas de gasto y tickets:
+   - Se detecto colision de rutas para `POST /api/crm/expensesheets/tickets` por coincidencia con `api/crm/expensesheets/{hojaGastosId}`.
+   - Se agrego constraint regex en `CrmExpenseSheetsController` para excluir el literal `tickets` en las rutas de detalle/actualizacion por `hojaGastosId`.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.
