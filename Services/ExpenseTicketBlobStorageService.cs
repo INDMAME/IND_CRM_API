@@ -100,7 +100,7 @@ namespace IND_CRM_API.Services
                 throw new InvalidOperationException(
                     "No se encontro configuracion de Azure Blob Storage. Defina AZURE_BLOB_CONNECTION_STRING.");
 
-            if (!CloudStorageAccount.TryParse(connectionString, out var account))
+            if (!TryParseStorageConnectionString(connectionString, out var account))
                 throw new InvalidOperationException("La cadena de conexion de Azure Blob Storage no es valida.");
 
             var containerNameRaw = AppSettingsHelper.GetSetting(ContainerSettingKey, ContainerEnvVar);
@@ -123,6 +123,67 @@ namespace IND_CRM_API.Services
                 BasePrefix = basePrefix,
                 Container = container
             };
+        }
+
+        // Tries to parse and auto-sanitize common copy/paste artifacts in the connection string.
+        private bool TryParseStorageConnectionString(string rawConnectionString, out CloudStorageAccount account)
+        {
+            account = null;
+
+            if (string.IsNullOrWhiteSpace(rawConnectionString))
+                return false;
+
+            if (CloudStorageAccount.TryParse(rawConnectionString, out account))
+                return true;
+
+            var sanitized = SanitizeConnectionString(rawConnectionString);
+            if (string.Equals(sanitized, rawConnectionString, StringComparison.Ordinal))
+                return false;
+
+            if (!CloudStorageAccount.TryParse(sanitized, out account))
+                return false;
+
+            _logger?.Log("[BLOB] Connection string sanitized before parsing.", AxaptaSessionManager.LogLevel.Warning);
+            return true;
+        }
+
+        // Normalizes key/value segments and removes accidental brackets around key names.
+        private static string SanitizeConnectionString(string rawConnectionString)
+        {
+            if (string.IsNullOrWhiteSpace(rawConnectionString))
+                return string.Empty;
+
+            var segments = rawConnectionString
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(segment => SanitizeConnectionSegment(segment))
+                .Where(segment => !string.IsNullOrWhiteSpace(segment))
+                .ToArray();
+
+            return string.Join(";", segments);
+        }
+
+        private static string SanitizeConnectionSegment(string segment)
+        {
+            if (string.IsNullOrWhiteSpace(segment))
+                return string.Empty;
+
+            var trimmed = segment.Trim();
+            var separatorIndex = trimmed.IndexOf('=');
+            if (separatorIndex < 0)
+                return trimmed.Trim('[', ']');
+
+            var key = trimmed.Substring(0, separatorIndex).Trim().Trim('[', ']');
+            var value = trimmed.Substring(separatorIndex + 1).Trim();
+
+            if (value.Length >= 2)
+            {
+                var first = value[0];
+                var last = value[value.Length - 1];
+                if ((first == '"' && last == '"') || (first == '\'' && last == '\''))
+                    value = value.Substring(1, value.Length - 2);
+            }
+
+            return string.Concat(key, "=", value);
         }
 
         private static string BuildBlobName(string basePrefix, string companyId, string axUserId, string fileName)

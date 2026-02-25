@@ -75,40 +75,9 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
-            var modeValue = ResolveCreateTicketMode(body);
-
-            var company = RequireCompanyOrReturn422(out var companyError, traceId);
-            if (companyError != null)
-                return companyError;
-
-            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
-            if (userError != null)
-                return userError;
-
-            if (!ModelState.IsValid)
-                AddModelStateErrors(validationErrors);
-
-            if (body == null)
-            {
-                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
-            }
-            else
-            {
-                ValidateCreateTicketBody(body, modeValue, validationErrors);
-            }
-
-            if (validationErrors.Any())
-            {
-                return Content((HttpStatusCode)422, new IndApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error de validacion.",
-                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
-                    Errors = validationErrors,
-                    Data = null,
-                    TraceId = traceId
-                });
-            }
+            var modeValue = ModeCreateHeaderAndLines;
+            string company;
+            string axUserId;
 
             void LogOut(HttpStatusCode statusCode)
             {
@@ -117,6 +86,50 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                modeValue = ResolveCreateTicketMode(body);
+                Logger.Log(
+                    $"[API-IN] CreateExpenseSheetTicket(entry) mode={ToLogValue(body?.mode)} bodyNull={(body == null)} traceId={traceId}");
+
+                company = RequireCompanyOrReturn422(out var companyError, traceId);
+                if (companyError != null)
+                {
+                    LogOut((HttpStatusCode)422);
+                    return companyError;
+                }
+
+                axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+                if (userError != null)
+                {
+                    LogOut((HttpStatusCode)422);
+                    return userError;
+                }
+
+                if (!ModelState.IsValid)
+                    AddModelStateErrors(validationErrors);
+
+                if (body == null)
+                {
+                    validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                }
+                else
+                {
+                    ValidateCreateTicketBody(body, modeValue, validationErrors);
+                }
+
+                if (validationErrors.Any())
+                {
+                    LogOut((HttpStatusCode)422);
+                    return Content((HttpStatusCode)422, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error de validacion.",
+                        ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                        Errors = validationErrors,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
                 var username = GetAuthenticatedUsername();
                 var extension = NormalizeFileExtension(body.fileExtension, "jpg");
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
