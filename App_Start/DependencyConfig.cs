@@ -43,7 +43,7 @@ namespace IND_CRM_API.App_Start
             };
 
             // Per-request Axapta session scope
-            var scopeHandler = new IND_AxSessionScopeHandler(sessionManager);
+            var scopeHandler = new IND_AxSessionScopeHandler(sessionManager, axLogger);
             config.MessageHandlers.Add(scopeHandler);
 
             // OpenAI endpoint protection: per-user throttling and concurrency cap.
