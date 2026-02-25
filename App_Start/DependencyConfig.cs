@@ -78,18 +78,36 @@ namespace IND_CRM_API.App_Start
 
                 if (typeof(ApiController).IsAssignableFrom(serviceType))
                 {
-                    var ctor = serviceType.GetConstructors()
+                    var ctors = serviceType.GetConstructors()
                         .OrderByDescending(c => c.GetParameters().Length)
-                        .FirstOrDefault();
-                    if (ctor == null) return null;
+                        .ToList();
 
-                    var args = ctor.GetParameters()
-                        .Select(p => _instances.TryGetValue(p.ParameterType, out var dep) ? dep : null)
-                        .ToArray();
+                    foreach (var ctor in ctors)
+                    {
+                        var parameters = ctor.GetParameters();
+                        if (parameters.Length == 0)
+                            return Activator.CreateInstance(serviceType);
 
-                    if (args.Any(a => a == null)) return null;
+                        var args = new object[parameters.Length];
+                        var canResolve = true;
 
-                    return Activator.CreateInstance(serviceType, args);
+                        for (int i = 0; i < parameters.Length; i++)
+                        {
+                            if (_instances.TryGetValue(parameters[i].ParameterType, out var dep) && dep != null)
+                            {
+                                args[i] = dep;
+                                continue;
+                            }
+
+                            canResolve = false;
+                            break;
+                        }
+
+                        if (canResolve)
+                            return Activator.CreateInstance(serviceType, args);
+                    }
+
+                    return null;
                 }
 
                 return null;

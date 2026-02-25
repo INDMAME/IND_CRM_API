@@ -37,6 +37,15 @@ namespace IND_CRM_API.Controllers.CRM
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
 
         /// <summary>
+        /// Compatibility constructor when DI does not provide blob service explicitly.
+        /// </summary>
+        public CrmExpenseSheetTicketsController(
+            IAxaptaSessionManager sessionManager,
+            IAxLogger logger) : this(sessionManager, null, logger)
+        {
+        }
+
+        /// <summary>
         /// Creates the controller with its dependencies.
         /// </summary>
         public CrmExpenseSheetTicketsController(
@@ -45,7 +54,7 @@ namespace IND_CRM_API.Controllers.CRM
             IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
-            _ticketBlobStorage = ticketBlobStorage;
+            _ticketBlobStorage = ticketBlobStorage ?? new ExpenseTicketBlobStorageService(logger);
         }
         /// <summary>
         /// Crea ticket de gasto (cabecera/lineas) en AX.
