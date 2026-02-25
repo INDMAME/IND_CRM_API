@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using IND_CRM_API.Helpers;
 using IND_CRM_API.Services.Interfaces;
 using Microsoft.Azure.Storage;
@@ -138,10 +139,21 @@ namespace IND_CRM_API.Services
 
             var sanitized = SanitizeConnectionString(rawConnectionString);
             if (string.Equals(sanitized, rawConnectionString, StringComparison.Ordinal))
+            {
+                _logger?.Log(
+                    "[BLOB] Connection string parse failed without sanitation changes. keys=" + GetConnectionKeys(rawConnectionString),
+                    AxaptaSessionManager.LogLevel.Warning);
                 return false;
+            }
 
             if (!CloudStorageAccount.TryParse(sanitized, out account))
+            {
+                _logger?.Log(
+                    "[BLOB] Connection string parse failed after sanitation. rawKeys=" + GetConnectionKeys(rawConnectionString) +
+                    " sanitizedKeys=" + GetConnectionKeys(sanitized),
+                    AxaptaSessionManager.LogLevel.Warning);
                 return false;
+            }
 
             _logger?.Log("[BLOB] Connection string sanitized before parsing.", AxaptaSessionManager.LogLevel.Warning);
             return true;
@@ -183,7 +195,75 @@ namespace IND_CRM_API.Services
                     value = value.Substring(1, value.Length - 2);
             }
 
+            value = NormalizeConnectionValueByKey(key, value);
             return string.Concat(key, "=", value);
+        }
+
+        private static string NormalizeConnectionValueByKey(string key, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var clean = value.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+                return clean;
+
+            if (string.Equals(key, "DefaultEndpointsProtocol", StringComparison.OrdinalIgnoreCase))
+            {
+                if (clean.IndexOf("https", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return "https";
+
+                if (clean.IndexOf("http", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return "http";
+
+                return clean;
+            }
+
+            if (string.Equals(key, "EndpointSuffix", StringComparison.OrdinalIgnoreCase))
+                return TakeAllowedPrefix(clean, c => char.IsLetterOrDigit(c) || c == '.' || c == '-');
+
+            if (string.Equals(key, "AccountName", StringComparison.OrdinalIgnoreCase))
+                return TakeAllowedPrefix(clean, c => char.IsLetterOrDigit(c) || c == '-');
+
+            if (string.Equals(key, "AccountKey", StringComparison.OrdinalIgnoreCase))
+            {
+                var match = Regex.Match(clean, @"[A-Za-z0-9+/=]+");
+                return match.Success ? match.Value : clean;
+            }
+
+            return clean;
+        }
+
+        private static string TakeAllowedPrefix(string value, Func<char, bool> isAllowed)
+        {
+            if (string.IsNullOrWhiteSpace(value) || isAllowed == null)
+                return string.Empty;
+
+            var chars = value.Trim().TakeWhile(isAllowed).ToArray();
+            return chars.Length == 0 ? string.Empty : new string(chars);
+        }
+
+        private static string GetConnectionKeys(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+                return string.Empty;
+
+            var keys = connectionString
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(segment =>
+                {
+                    var trimmed = segment.Trim();
+                    var separatorIndex = trimmed.IndexOf('=');
+                    if (separatorIndex <= 0)
+                        return trimmed.Trim('[', ']', '"', '\'');
+
+                    return trimmed.Substring(0, separatorIndex).Trim().Trim('[', ']', '"', '\'');
+                })
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            return string.Join(",", keys);
         }
 
         private static string BuildBlobName(string basePrefix, string companyId, string axUserId, string fileName)
