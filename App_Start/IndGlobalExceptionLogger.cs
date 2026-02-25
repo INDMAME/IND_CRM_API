@@ -24,8 +24,9 @@ namespace IND_CRM_API.App_Start
                 var request = exceptionContext?.Request;
                 var method = request?.Method?.Method ?? "UNKNOWN";
                 var path = request?.RequestUri?.PathAndQuery ?? "unknown";
-                var routeTemplate = request?.GetRouteData()?.Route?.RouteTemplate ?? "unresolved";
-                var routeValues = FormatRouteValues(request?.GetRouteData());
+                var routeData = request?.GetRequestContext()?.RouteData;
+                var routeTemplate = routeData?.Route?.RouteTemplate ?? "unresolved";
+                var routeValues = FormatRouteValues(routeData);
                 var catchBlock = context.CatchBlock?.Name ?? "unknown";
                 var ex = exceptionContext?.Exception;
                 var exText = ex == null ? "Excepcion no especificada" : ex.GetType().FullName + " " + ex.Message;

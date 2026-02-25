@@ -49,7 +49,7 @@ namespace IND_CRM_API.App_Start
             {
                 var response = await base.SendAsync(request, cancellationToken);
                 var statusCode = response == null ? "null" : ((int)response.StatusCode).ToString();
-                var postRouteData = request?.GetRouteData() ?? preRouteData;
+                var postRouteData = request?.GetRequestContext()?.RouteData ?? preRouteData;
                 var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
                 var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
@@ -73,7 +73,7 @@ namespace IND_CRM_API.App_Start
             }
             catch (Exception ex)
             {
-                var postRouteData = request?.GetRouteData() ?? preRouteData;
+                var postRouteData = request?.GetRequestContext()?.RouteData ?? preRouteData;
                 var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
                 var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
@@ -115,11 +115,11 @@ namespace IND_CRM_API.App_Start
             {
                 var config = request.GetConfiguration();
                 var routeData = config?.Routes?.GetRouteData(request);
-                return routeData ?? request.GetRouteData();
+                return routeData ?? request.GetRequestContext()?.RouteData;
             }
             catch
             {
-                return request.GetRouteData();
+                return request.GetRequestContext()?.RouteData;
             }
         }
 
