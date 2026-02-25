@@ -37,23 +37,45 @@ namespace IND_CRM_API.App_Start
             _logger.Log(
                 $"[API-PIPE-IN] correlationId={correlationId} endpoint={endpoint} company={company} user={user} contentType={contentType} contentLength={contentLength}");
 
+            var preRouteData = TryResolveRouteData(request);
+            var preRouteTemplate = preRouteData?.Route?.RouteTemplate ?? "unresolved";
+            var preRouteValues = FormatRouteValues(preRouteData);
+            _logger.Log(
+                $"[API-PIPE-MATCH] correlationId={correlationId} endpoint={endpoint} routeTemplate={preRouteTemplate} routeValues={preRouteValues}");
+
             _sessionManager.BeginRequestScope(correlationId, endpoint, company);
 
             try
             {
                 var response = await base.SendAsync(request, cancellationToken);
                 var statusCode = response == null ? "null" : ((int)response.StatusCode).ToString();
-                var routeTemplate = request?.GetRouteData()?.Route?.RouteTemplate ?? "unresolved";
-                var routeValues = FormatRouteValues(request?.GetRouteData());
+                var postRouteData = request?.GetRouteData() ?? preRouteData;
+                var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
+                var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
                     $"[API-PIPE-OUT] correlationId={correlationId} endpoint={endpoint} status={statusCode} " +
+                    $"preRouteTemplate={preRouteTemplate} preRouteValues={preRouteValues} " +
                     $"routeTemplate={routeTemplate} routeValues={routeValues}");
+
+                if (response != null && (int)response.StatusCode >= 500)
+                {
+                    var responseType = response.Content?.Headers?.ContentType?.MediaType ?? string.Empty;
+                    var responseLength = response.Content?.Headers?.ContentLength?.ToString() ?? "unknown";
+                    var reasonPhrase = response.ReasonPhrase ?? string.Empty;
+                    _logger.Log(
+                        $"[API-PIPE-500] correlationId={correlationId} endpoint={endpoint} status={statusCode} " +
+                        $"reason={reasonPhrase} responseType={responseType} responseLength={responseLength} " +
+                        $"preRouteTemplate={preRouteTemplate} preRouteValues={preRouteValues} " +
+                        $"routeTemplate={routeTemplate} routeValues={routeValues}",
+                        AxaptaSessionManager.LogLevel.Error);
+                }
                 return response;
             }
             catch (Exception ex)
             {
-                var routeTemplate = request?.GetRouteData()?.Route?.RouteTemplate ?? "unresolved";
-                var routeValues = FormatRouteValues(request?.GetRouteData());
+                var postRouteData = request?.GetRouteData() ?? preRouteData;
+                var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
+                var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
                     $"[API-PIPE-EX] correlationId={correlationId} endpoint={endpoint} routeTemplate={routeTemplate} " +
                     $"routeValues={routeValues} ex={ex.GetType().Name} {ex.Message}",
@@ -82,6 +104,23 @@ namespace IND_CRM_API.App_Start
             }
 
             return null;
+        }
+
+        private static IHttpRouteData TryResolveRouteData(HttpRequestMessage request)
+        {
+            if (request == null)
+                return null;
+
+            try
+            {
+                var config = request.GetConfiguration();
+                var routeData = config?.Routes?.GetRouteData(request);
+                return routeData ?? request.GetRouteData();
+            }
+            catch
+            {
+                return request.GetRouteData();
+            }
         }
 
         private static string FormatRouteValues(IHttpRouteData routeData)

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 using AxaptaCOMConnector;
@@ -16,6 +17,7 @@ using IND_CRM_API.Helpers;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
+using Newtonsoft.Json;
 using Swashbuckle.Swagger.Annotations;
 
 namespace IND_CRM_API.Controllers.CRM
@@ -71,13 +73,16 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.Created, "Ticket creado", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult CreateExpenseSheetTicket([FromBody] CreateExpenseSheetTicketRequest body)
+        public async Task<IHttpActionResult> CreateExpenseSheetTicket()
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
             var modeValue = ModeCreateHeaderAndLines;
             string company;
             string axUserId;
+            CreateExpenseSheetTicketRequest body = null;
+            var bodyParseFailed = false;
+            var rawBodyLength = 0;
 
             void LogOut(HttpStatusCode statusCode)
             {
@@ -86,9 +91,35 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var rawBody = string.Empty;
+                if (Request?.Content != null)
+                {
+                    rawBody = await Request.Content.ReadAsStringAsync();
+                    rawBodyLength = rawBody?.Length ?? 0;
+                }
+
+                // Deserialize manually to avoid pre-action binder failures hiding diagnostics in this endpoint.
+                if (!string.IsNullOrWhiteSpace(rawBody))
+                {
+                    try
+                    {
+                        body = JsonConvert.DeserializeObject<CreateExpenseSheetTicketRequest>(rawBody);
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        bodyParseFailed = true;
+                        validationErrors.Add(new IndValidationError
+                        {
+                            Field = "body",
+                            Message = "El JSON del body no es valido."
+                        });
+                        Logger.Log($"[WARN] CreateExpenseSheetTicket invalid-json msg={jsonEx.Message} traceId={traceId}");
+                    }
+                }
+
                 modeValue = ResolveCreateTicketMode(body);
                 Logger.Log(
-                    $"[API-IN] CreateExpenseSheetTicket(entry) mode={ToLogValue(body?.mode)} bodyNull={(body == null)} traceId={traceId}");
+                    $"[API-IN] CreateExpenseSheetTicket(entry) mode={ToLogValue(body?.mode)} bodyNull={(body == null)} bodyLength={rawBodyLength} traceId={traceId}");
 
                 company = RequireCompanyOrReturn422(out var companyError, traceId);
                 if (companyError != null)
@@ -107,11 +138,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!ModelState.IsValid)
                     AddModelStateErrors(validationErrors);
 
-                if (body == null)
+                if (body == null && !bodyParseFailed)
                 {
                     validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
                 }
-                else
+                else if (body != null)
                 {
                     ValidateCreateTicketBody(body, modeValue, validationErrors);
                 }

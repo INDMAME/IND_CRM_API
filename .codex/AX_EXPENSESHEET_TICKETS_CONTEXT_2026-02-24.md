@@ -202,6 +202,13 @@ Input:
 11. Ruta de blob simplificada para tickets:
    - Formato final: `crmtickets/{companyId}/{yyyyMMddHHmmss_axUserId_fileId.ext}`
    - Se elimina segmentacion adicional por usuario y fecha en carpetas.
+12. Hardening de `POST /api/crm/expensesheets/tickets`:
+   - Se cambio parseo del body a deserializacion manual dentro del action para evitar fallos previos al action por binder.
+   - Cuando el JSON es invalido se devuelve 422 con error de validacion (`body`), en lugar de 500 generico.
+13. Diagnostico de pipeline reforzado:
+   - Nuevo log `[API-PIPE-MATCH]` con pre-resolucion de ruta.
+   - `[API-PIPE-OUT]` ahora registra preRoute y postRoute.
+   - Nuevo log `[API-PIPE-500]` con reason/contentType/contentLength para aislar errores previos al action.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.
