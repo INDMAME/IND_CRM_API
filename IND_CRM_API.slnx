@@ -9,5 +9,4 @@
   <Project Path="IND_CRM_API.csproj" Id="9f1dcd6b-416d-4b4f-bef6-16cd04d2c6fc">
     <Platform Solution="*|x86" Project="x86" />
   </Project>
-  <Project Path="IND_CRM_API.Tests.csproj" Id="8d84b2f1-2b53-4e47-9c8c-cc8a7e46e2b4" />
 </Solution>
