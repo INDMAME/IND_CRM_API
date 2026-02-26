@@ -69,6 +69,5 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
-        public string indAttachFiles { get; set; }
     }
 }

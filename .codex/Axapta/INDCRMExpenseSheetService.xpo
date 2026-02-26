@@ -57,7 +57,7 @@ Formatversion: 1
         #         - Mode 0/1: [axUserId, descr, currencyCode, exchRate, projId, expenseSheetStatus, exchangeRateMode]
         #         - Mode 2  : at least [axUserId] (other fields ignored)
         #      3) linesIn (container of line containers)
-        #         - Each line: [transDateStr, typeValue, lineDescr, internacional, fileId, qty, price, lineProjId, attachFiles]
+        #         - Each line: [transDateStr, typeValue, lineDescr, internacional, fileId, qty, price, lineProjId]
         #         - amount se calcula internamente como qty * price
         #      4) optionsIn (optional container): [mode, existingHojaGastosId]
         #         - mode: 0|1|2
@@ -103,7 +103,6 @@ Formatversion: 1
         #    real      qty;
         #    real      price;
         #    str       lineProjId;
-        #    str       attachFiles;
         #
         #    CRMHojaGastosLine  existingFileLine;
         #    INDTicketInfoTable ticketHeader;
@@ -297,14 +296,14 @@ Formatversion: 1
         #                {
         #                    lineIn = conPeek(linesIn, i);
         #
-        #                    if (conLen(lineIn) < 9)
+        #                    if (conLen(lineIn) < 8)
         #                    {
         #                        if (appl.ttsLevel() > 0)
         #                            ttsabort;
         #                        if (numberSeq)
         #                            numberSeq.abort();
         #
-        #                        return [INDCRMUtilityService::buildHeader(false, 'Linea invalida. Se esperan 9 campos por linea.', conNull()), conNull()];
+        #                        return [INDCRMUtilityService::buildHeader(false, 'Linea invalida. Se esperan 8 campos por linea.', conNull()), conNull()];
         #                    }
         #
         #                    transDateStr  = conPeek(lineIn, 1);
@@ -315,7 +314,6 @@ Formatversion: 1
         #                    qty           = conPeek(lineIn, 6);
         #                    price         = conPeek(lineIn, 7);
         #                    lineProjId    = conPeek(lineIn, 8);
-        #                    attachFiles   = conPeek(lineIn, 9);
         #
         #                    if (!INDCRMExpenseSheetService::isValidGastoType(typeValue))
         #                    {
@@ -415,9 +413,8 @@ Formatversion: 1
         #                    else
         #                        line.ProjId = header.ProjId;
         #
-        #                    // Audit and attachments
+        #                    // Audit
         #                    line.INDCreatedByUserId = axUserId;
-        #                    line.INDAttachFiles     = attachFiles;
         #
         #                    line.insert();
         #
@@ -505,7 +502,7 @@ Formatversion: 1
         #         - Mode 2  : at least [axUserId]
         #      3) linesIn (container of line containers)
         #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
-        #      4) optionsIn (optional): [mode, existingFileId]
+        #      4) optionsIn (optional): [mode, existingFileId, processedByAI]
         #*/
         #static server container createExpenseSheetTicket(container _data)
         #{
@@ -541,7 +538,9 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    int                processedByAI;
         #    boolean            hasHeaderTotalAmount;
+        #    boolean            hasProcessedByAI;
         #
         #    INDTicketInfoTable ticketHeader;
         #    INDTicketInfoLine  ticketLine;
@@ -569,7 +568,9 @@ Formatversion: 1
         #
         #    mode                 = #ModeCreateHeaderAndLines;
         #    existingFileId       = '';
+        #    processedByAI        = NoYes::No;
         #    hasHeaderTotalAmount = false;
+        #    hasProcessedByAI     = false;
         #
         #    if (conLen(optionsIn) >= 1)
         #        mode = conPeek(optionsIn, 1);
@@ -577,11 +578,24 @@ Formatversion: 1
         #    if (conLen(optionsIn) >= 2)
         #        existingFileId = conPeek(optionsIn, 2);
         #
+        #    if (conLen(optionsIn) >= 3)
+        #    {
+        #        processedByAI = conPeek(optionsIn, 3);
+        #        hasProcessedByAI = true;
+        #    }
+        #
         #    if (mode != #ModeCreateHeaderAndLines &&
         #        mode != #ModeCreateHeaderOnly &&
         #        mode != #ModeAddLinesToExisting)
         #    {
         #        return [INDCRMUtilityService::buildHeader(false, strFmt('Mode invalido: %1 (valores: 0|1|2).', mode), conNull()), conNull()];
+        #    }
+        #
+        #    if (hasProcessedByAI &&
+        #        (processedByAI < NoYes::No
+        #      || processedByAI > NoYes::Yes))
+        #    {
+        #        return [INDCRMUtilityService::buildHeader(false, strFmt('ProcessedByAI invalido: %1 (valores: 0|1).', processedByAI), conNull()), conNull()];
         #    }
         #
         #    if (mode == #ModeAddLinesToExisting)
@@ -686,6 +700,7 @@ Formatversion: 1
         #                ticketHeader.Status          = INDTicketStatus::Pending;
         #                ticketHeader.CurrencyCode    = currencyCode;
         #                ticketHeader.TotalAmount     = totalAmount;
+        #                ticketHeader.ProcessedByAI   = processedByAI;
         #                ticketHeader.CreatedByUserId = axUserId;
         #                ticketHeader.insert();
         #
@@ -762,6 +777,9 @@ Formatversion: 1
         #
         #            ticketHeader = INDTicketInfoTable::findByFileId(ticketHeader.FileId,true);
         #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            if (hasProcessedByAI)
+        #                ticketHeader.ProcessedByAI = processedByAI;
         #
         #            if (mode == #ModeCreateHeaderOnly && hasHeaderTotalAmount)
         #                ticketHeader.TotalAmount = totalAmount;
@@ -1825,8 +1843,7 @@ Formatversion: 1
         #                         strFmt("%1", line.Price),
         #                         strFmt("%1", line.Qty),
         #                         strFmt("%1", monto),
-        #                         strFmt("%1", line.ProjId),
-        #                         strFmt("%1", line.INDAttachFiles)
+        #                         strFmt("%1", line.ProjId)
         #                       ];
         #
         #            linesOut = conIns(linesOut, conLen(linesOut) + 1, lineRow);
@@ -2621,7 +2638,6 @@ Formatversion: 1
         #    real  qty;
         #    real  price;
         #    str   projId;
-        #    str   attachFiles;
         #    int   startLine;
         #    str   msg;
         #
@@ -2636,8 +2652,8 @@ Formatversion: 1
         #    if (!companyId)
         #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
         #
-        #    if (conLen(_data) < 13)
-        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 13 campos.', conNull());
+        #    if (conLen(_data) < 12)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 12 campos.', conNull());
         #
         #    axUserId      = conPeek(_data, 2);
         #    hojaId        = conPeek(_data, 3);
@@ -2650,7 +2666,6 @@ Formatversion: 1
         #    qty           = conPeek(_data, 10);
         #    price         = conPeek(_data, 11);
         #    projId        = conPeek(_data, 12);
-        #    attachFiles   = conPeek(_data, 13);
         #
         #    if (!lineRecId)
         #        return INDCRMUtilityService::buildHeader(false, 'LineRecId es obligatorio.', conNull());
@@ -2738,8 +2753,6 @@ Formatversion: 1
         #
         #            if (projId)
         #                line.ProjId = projId;
-        #
-        #            line.INDAttachFiles = attachFiles;
         #
         #            line.update();
         #

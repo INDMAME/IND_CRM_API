@@ -453,8 +453,7 @@ namespace IND_CRM_API.Services
                 fileId = NormalizeText(lineToken["fileId"]?.ToString(), null),
                 qty = qty,
                 price = price,
-                projId = NormalizeText(lineToken["projId"]?.ToString(), request?.projId),
-                indAttachFiles = NormalizeText(lineToken["indAttachFiles"]?.ToString(), string.Empty)
+                projId = NormalizeText(lineToken["projId"]?.ToString(), request?.projId)
             };
 
             request.Warnings = warnings;
@@ -472,8 +471,7 @@ namespace IND_CRM_API.Services
                 fileId = null,
                 qty = 1m,
                 price = null,
-                projId = request?.projId,
-                indAttachFiles = string.Empty
+                projId = request?.projId
             };
         }
 
@@ -721,10 +719,6 @@ namespace IND_CRM_API.Services
                     ["projId"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
-                    },
-                    ["indAttachFiles"] = new JObject
-                    {
-                        ["type"] = "string"
                     }
                 },
                 ["required"] = new JArray(
@@ -735,8 +729,7 @@ namespace IND_CRM_API.Services
                     "fileId",
                     "qty",
                     "price",
-                    "projId",
-                    "indAttachFiles")
+                    "projId")
             };
         }
     }

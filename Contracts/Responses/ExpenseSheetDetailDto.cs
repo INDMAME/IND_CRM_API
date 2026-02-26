@@ -41,6 +41,5 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
-        public string IndAttachFiles { get; set; }
     }
 }

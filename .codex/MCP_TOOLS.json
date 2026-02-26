@@ -519,7 +519,7 @@
                   },
                   {
                       "name":  "expensefromticket_draft",
-                      "description":  "Extrae un borrador de hoja de gastos desde imagen de ticket.",
+                      "description":  "Extrae un borrador de hoja de gastos desde imagen de ticket. Con persistTicket=true marca ProcessedByAI en AX.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -738,9 +738,6 @@
                                                                                                                                             "projId":  {
                                                                                                                                                            "type":  "string"
                                                                                                                                                        },
-                                                                                                                                            "indAttachFiles":  {
-                                                                                                                                                                   "type":  "string"
-                                                                                                                                                               },
                                                                                                                                             "fileId":  {
                                                                                                                                                            "type":  "string"
                                                                                                                                                        }
@@ -804,7 +801,6 @@
                                                                           "price":  25.5,
                                                                           "internacional":  false,
                                                                           "projId":  "",
-                                                                          "indAttachFiles":  "",
                                                                           "fileId":  ""
                                                                       }
                                                                   ]
@@ -1159,9 +1155,6 @@
                                                                                              "projId":  {
                                                                                                             "type":  "string"
                                                                                                         },
-                                                                                             "indAttachFiles":  {
-                                                                                                                    "type":  "string"
-                                                                                                                },
                                                                                              "fileId":  {
                                                                                                             "type":  "string"
                                                                                                         }
@@ -1215,7 +1208,6 @@
                                                         "price":  30.0,
                                                         "internacional":  false,
                                                         "projId":  "",
-                                                        "indAttachFiles":  "",
                                                         "fileId":  ""
                                                     }
                                        }
@@ -2027,7 +2019,7 @@
                                                                              "properties":  {
                                                                                                 "Authorization":  {
                                                                                                                       "type":  "string",
-                                                                                                                      "description":  "Bearer token. Format: Bearer <token>"
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
@@ -2110,9 +2102,9 @@
                       "examples":  [
                                        {
                                            "headers":  {
-                                                           "Authorization":  "Bearer <token>",
-                                                           "X-IND-Company":  "<companyId>",
-                                                           "X-IND-AxUserId":  "<axUserId>",
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "multipart/form-data"
                                                        },
                                            "path":  {
@@ -2122,7 +2114,7 @@
                                                          "extension":  "jpg"
                                                      },
                                            "body":  {
-                                                        "file":  "<binary>"
+                                                        "file":  "\u003cbinary\u003e"
                                                     }
                                        }
                                    ]
@@ -2138,7 +2130,7 @@
                                                                              "properties":  {
                                                                                                 "Authorization":  {
                                                                                                                       "type":  "string",
-                                                                                                                      "description":  "Bearer token. Format: Bearer <token>"
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
@@ -2188,9 +2180,9 @@
                       "examples":  [
                                        {
                                            "headers":  {
-                                                           "Authorization":  "Bearer <token>",
-                                                           "X-IND-Company":  "<companyId>",
-                                                           "X-IND-AxUserId":  "<axUserId>"
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
                                            "path":  {
                                                         "fileId":  "FILE000123"

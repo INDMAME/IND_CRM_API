@@ -160,7 +160,6 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(line.projId?.Trim() ?? string.Empty);
-                        lineCon.Append(line.indAttachFiles ?? string.Empty);
 
                         linesCon.Append(lineCon);
                     }
@@ -898,7 +897,6 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
-                con.Append(body.indAttachFiles ?? string.Empty);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1724,12 +1722,12 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var row = AxContainerReadHelper.SafePeekContainer(linesCon, i);
                 var rowLen = AxContainerReadHelper.SafeLength(row);
-                if (row == null || rowLen < 10)
+                if (row == null || rowLen < 9)
                     continue;
 
-                // New shape (11): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]Attach
-                // Previous shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId [10]Attach
-                var hasPriceColumn = rowLen >= 11;
+                // Current shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId
+                // Previous shape (9): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId
+                var hasPriceColumn = rowLen >= 10;
                 var line = new ExpenseSheetLineDto
                 {
                     RecId = AxContainerReadHelper.SafeString(row, 1),
@@ -1741,8 +1739,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
                     Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
                     Amount = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8),
-                    ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9),
-                    IndAttachFiles = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 11) : AxContainerReadHelper.SafeString(row, 10)
+                    ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9)
                 };
 
                 detail.Lines.Add(line);

@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/Postman/IND_CRM_API V22.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V22.postman_collection.json`
+- Principal: `.codex/Postman/IND_CRM_API V24.postman_collection.json`
+- Soporte: `Notes/IND_CRM_API V24.postman_collection.json`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://crm.insertec.biz:7776`
@@ -12,6 +12,10 @@ Ambiente (variables sugeridas)
 - `fileId` = se autocompleta desde respuestas de tickets
 - `lineRecId` = se autocompleta desde respuestas de lineas de tickets
 - `ticketImagePath` = ruta local para pruebas de upload en multipart (opcional)
+- `ticketUrlFile` = URL del blob cargado (se autocompleta desde upload)
+- `ticketFileName` = nombre final del archivo del ticket (autocompletado)
+- `persistedTicketFileId` = fileId de ticket creado por `expensefromticket` cuando `persistTicket=true`
+- `lastTraceId` = ultimo traceId retornado por API (autocompletado)
 
 Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
@@ -29,3 +33,11 @@ Notas
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
+- V23 agrega tests automatizados para:
+- V24 agrega tests automatizados para:
+  - `IA Services / ExpenseFromTicket` (persistencia desactivada).
+  - `IA Services / ExpenseFromTicket (persist=true)` (requiere `X-IND-Company` + `X-IND-AxUserId`) y valida `ticketCreation.processedByAI=true`.
+  - `Create Ticket - Header Only (mode 1)`.
+  - `Upload Ticket File (multipart)`.
+  - `Apply IA to Ticket (replace lines)`.
+  - `Get Ticket by FileId`.

@@ -55,6 +55,7 @@ Endpoints
   Content-Type: multipart/form-data
   Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
   Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId.
+  Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
 
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
@@ -66,7 +67,7 @@ Endpoints
   mode 0 (default): description, currencyCode, lines[] (con lines[].price)
   mode 1: description, currencyCode (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].indAttachFiles, lines[].internacional, lines[].fileId
+  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].internacional, lines[].fileId
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (yyyyMMdd o yyyy-MM-dd; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
@@ -79,7 +80,7 @@ Endpoints
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (yyyymmdd), typeValue, description, qty, price
-  Optional: fileId (INDFileId), internacional, projId, indAttachFiles
+  Optional: fileId (INDFileId), internacional, projId
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
   Legacy: deleteWholeSheet=0|1 sigue soportado si no se envia deleteMode. AX procesa 1 y 2 como deleteWholeSheet.

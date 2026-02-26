@@ -226,6 +226,9 @@ Input:
 15. Nuevo endpoint para aplicar datos IA sobre ticket existente:
    - `POST /api/crm/expensesheets/tickets/{fileId}/ia`
    - Invoca metodo AX atomico `updateExpenseSheetTicketFromIA` para reemplazo total de lineas y actualizacion de cabecera.
+16. Persistencia IA con bandera de procesamiento:
+   - `POST /api/ia/service/expensefromticket` con `persistTicket=true` ahora fuerza `ProcessedByAI=Yes` al crear ticket en AX.
+   - La respuesta expone `Data.TicketCreation.ProcessedByAI=true` para validacion en frontend/Postman.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.

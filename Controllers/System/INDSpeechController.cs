@@ -605,6 +605,8 @@ namespace IND_CRM_API.Controllers.System
                 var optionsCon = ax.CreateContainer();
                 optionsCon.Append(mode);
                 optionsCon.Append(string.Empty);
+                // Flag IA processing at creation time (0/1) to keep ProcessedByAI consistent.
+                optionsCon.Append(1);
                 rootCon.Append(optionsCon);
 
                 var resultObj = ax.CallStaticClassMethod(
@@ -633,6 +635,7 @@ namespace IND_CRM_API.Controllers.System
 
                 var finalFileName = BuildTicketFileName(axUserId, fileId, extension);
                 var fileNameFinalized = false;
+                var processedByAI = true;
                 var finalizeMessage = string.Empty;
 
                 if (!string.IsNullOrWhiteSpace(fileId))
@@ -649,6 +652,8 @@ namespace IND_CRM_API.Controllers.System
                     updateCon.Append(comentarioValue);
                     updateCon.Append(effectiveUrl);
                     updateCon.Append(finalFileName);
+                    // updateExpenseSheetTicket supports optional _data[12] = processedByAI (0/1)
+                    updateCon.Append(1);
 
                     var updateObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",
@@ -670,6 +675,7 @@ namespace IND_CRM_API.Controllers.System
                 ticketCreation = new ExpenseSheetDraftTicketCreationResult
                 {
                     Persisted = true,
+                    ProcessedByAI = processedByAI,
                     FileId = fileId,
                     TicketRecId = ticketRecId,
                     LineRecIds = lineRecIds,

@@ -21,6 +21,7 @@ namespace IND_CRM_API.Contracts.Responses
     public class ExpenseSheetDraftTicketCreationResult
     {
         public bool Persisted { get; set; }
+        public bool? ProcessedByAI { get; set; }
         public string FileId { get; set; }
         public string TicketRecId { get; set; }
         public List<long> LineRecIds { get; set; }

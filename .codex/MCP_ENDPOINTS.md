@@ -98,6 +98,7 @@ Endpoints
 - Headers: `Authorization`
 - Headers opcionales cuando `persistTicket=true`: `X-IND-Company`, `X-IND-AxUserId`
 - Body (multipart): `ticketImage`, `persistTicket` (opcional), `ticketUrlFile` (opcional; si no viene se usa URL temporal)
+- Respuesta: con `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` debe ser `true`.
 
 ## Expense Sheets
 
@@ -116,7 +117,7 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate`, `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`, `indAttachFiles`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -142,7 +143,7 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate`, `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `indAttachFiles` (opcional)
+- Body: `transDate`, `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional)
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
