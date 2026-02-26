@@ -114,6 +114,7 @@ Endpoints
   - Reemplazo total de lineas (delete + insert).
   - Marca `processedByAI=true`.
   - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
+  - Compatibilidad de entrada: si llega envelope tipo `expensefromticket` (`{ Success, Message, Data, TraceId }`), el backend adapta automaticamente `Data` al contrato esperado.
   Body: `description`, `currencyCode`, `totalAmount` (opcional), `transDate`, `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).

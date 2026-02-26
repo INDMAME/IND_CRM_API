@@ -229,6 +229,10 @@ Input:
 16. Persistencia IA con bandera de procesamiento:
    - `POST /api/ia/service/expensefromticket` con `persistTicket=true` ahora fuerza `ProcessedByAI=Yes` al crear ticket en AX.
    - La respuesta expone `Data.TicketCreation.ProcessedByAI=true` para validacion en frontend/Postman.
+17. Compatibilidad de payload IA en endpoint de aplicacion:
+   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` ahora parsea body manualmente.
+   - Si no llega el contrato directo esperado, detecta envelope tipo `expensefromticket` y adapta `Data` al contrato de actualizacion IA.
+   - Mantiene validaciones existentes de lineas, montos y fechas antes de invocar AX.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.

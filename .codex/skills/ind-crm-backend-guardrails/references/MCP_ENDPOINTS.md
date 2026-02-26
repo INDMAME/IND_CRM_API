@@ -202,6 +202,7 @@ Endpoints
   - `fileName` (opcional), `fileExtension` (opcional si no hay `fileName`)
   - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional)
 - Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
+- Compatibilidad: acepta body directo del contrato IA o envelope de `expensefromticket` (`Success/Message/Data/TraceId`) y mapea `Data` de forma interna.
 
 ### Tool: crm_expensesheets_tickets_upload_file
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/file`

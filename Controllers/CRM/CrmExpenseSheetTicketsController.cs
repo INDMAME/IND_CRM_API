@@ -18,6 +18,7 @@ using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Swashbuckle.Swagger.Annotations;
 
 namespace IND_CRM_API.Controllers.CRM
@@ -778,10 +779,13 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult UpdateExpenseSheetTicketFromIA(string fileId, [FromBody] UpdateExpenseSheetTicketFromIARequest body)
+        public async Task<IHttpActionResult> UpdateExpenseSheetTicketFromIA(string fileId)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            UpdateExpenseSheetTicketFromIARequest body = null;
+            var compatibilityMode = false;
+            var rawBodyLength = 0;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -791,12 +795,29 @@ namespace IND_CRM_API.Controllers.CRM
             if (userError != null)
                 return userError;
 
+            var rawBody = string.Empty;
+            if (Request?.Content != null)
+            {
+                rawBody = await Request.Content.ReadAsStringAsync();
+                rawBodyLength = rawBody?.Length ?? 0;
+            }
+
+            if (!TryBuildUpdateTicketFromIARequest(rawBody, out body, out var parseError, out compatibilityMode))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "body",
+                    Message = parseError
+                });
+            }
+
             if (string.IsNullOrWhiteSpace(fileId))
                 validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
 
             if (body == null)
             {
-                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                if (!validationErrors.Any(e => string.Equals(e.Field, "body", StringComparison.OrdinalIgnoreCase)))
+                    validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
             }
             else
             {
@@ -837,7 +858,9 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetTicketFromIA fileId={fileId} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] UpdateExpenseSheetTicketFromIA fileId={fileId} user={username} axUserId={axUserId} " +
+                    $"compatMode={compatibilityMode} bodyLength={rawBodyLength} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 if (!TryGetTicketDetailFromAx(ax, company, axUserId, fileId.Trim(), traceId, out var existing, out var getError, out var getStatus))
@@ -1886,6 +1909,240 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (!body.price.HasValue || body.price.Value <= 0)
                 errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
+        }
+
+        // Builds the IA update request and applies compatibility mapping when body comes wrapped in { Success, Message, Data }.
+        private static bool TryBuildUpdateTicketFromIARequest(
+            string rawBody,
+            out UpdateExpenseSheetTicketFromIARequest request,
+            out string errorMessage,
+            out bool compatibilityMode)
+        {
+            request = null;
+            errorMessage = string.Empty;
+            compatibilityMode = false;
+
+            if (string.IsNullOrWhiteSpace(rawBody))
+                return true;
+
+            try
+            {
+                var root = JsonConvert.DeserializeObject<JObject>(rawBody);
+                if (root == null)
+                {
+                    errorMessage = "El JSON del body no es valido.";
+                    return false;
+                }
+
+                var directRequest = root.ToObject<UpdateExpenseSheetTicketFromIARequest>();
+                if (HasAnyUpdateTicketFromIAField(directRequest))
+                {
+                    request = directRequest;
+                    return true;
+                }
+
+                var dataObject = GetJsonObjectIgnoreCase(root, "data");
+                if (dataObject == null)
+                {
+                    request = directRequest;
+                    return true;
+                }
+
+                request = BuildCompatibilityUpdateTicketFromIARequest(dataObject);
+                compatibilityMode = true;
+                return true;
+            }
+            catch (JsonException)
+            {
+                errorMessage = "El JSON del body no es valido.";
+                return false;
+            }
+        }
+
+        // Checks if the payload already matches the expected IA update contract.
+        private static bool HasAnyUpdateTicketFromIAField(UpdateExpenseSheetTicketFromIARequest request)
+        {
+            if (request == null)
+                return false;
+
+            if (!string.IsNullOrWhiteSpace(request.description) ||
+                !string.IsNullOrWhiteSpace(request.currencyCode) ||
+                request.totalAmount.HasValue ||
+                !string.IsNullOrWhiteSpace(request.transDate) ||
+                !string.IsNullOrWhiteSpace(request.comentario) ||
+                !string.IsNullOrWhiteSpace(request.urlFile) ||
+                !string.IsNullOrWhiteSpace(request.fileName) ||
+                !string.IsNullOrWhiteSpace(request.fileExtension))
+            {
+                return true;
+            }
+
+            return request.lines != null && request.lines.Count > 0;
+        }
+
+        // Maps expensefromticket Data payload to the IA update contract.
+        private static UpdateExpenseSheetTicketFromIARequest BuildCompatibilityUpdateTicketFromIARequest(JObject dataObject)
+        {
+            var mapped = new UpdateExpenseSheetTicketFromIARequest
+            {
+                description = GetJsonStringIgnoreCase(dataObject, "description"),
+                currencyCode = NormalizeDraftCurrencyCode(
+                    GetJsonStringIgnoreCase(dataObject, "currencyCode"),
+                    GetJsonStringIgnoreCase(dataObject, "rawCurrency")),
+                totalAmount = GetJsonDecimalIgnoreCase(dataObject, "totalAmount"),
+                transDate = GetJsonStringIgnoreCase(dataObject, "transDate"),
+                comentario = GetJsonStringIgnoreCase(dataObject, "comentario"),
+                urlFile = GetJsonStringIgnoreCase(dataObject, "urlFile"),
+                fileName = GetJsonStringIgnoreCase(dataObject, "fileName"),
+                fileExtension = GetJsonStringIgnoreCase(dataObject, "fileExtension"),
+                lines = new List<ExpenseSheetTicketLineRequest>()
+            };
+
+            if (string.IsNullOrWhiteSpace(mapped.comentario))
+                mapped.comentario = GetJsonStringIgnoreCase(dataObject, "merchant");
+
+            var linesArray = GetJsonArrayIgnoreCase(dataObject, "lines");
+            if (linesArray != null)
+            {
+                foreach (var lineToken in linesArray.OfType<JObject>())
+                {
+                    var lineDescription = GetJsonStringIgnoreCase(lineToken, "description");
+                    var lineQty = GetJsonDecimalIgnoreCase(lineToken, "qty");
+                    var linePrice = GetJsonDecimalIgnoreCase(lineToken, "price");
+                    var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount");
+                    if (!lineTotal.HasValue && lineQty.HasValue && linePrice.HasValue)
+                        lineTotal = lineQty.Value * linePrice.Value;
+
+                    if (string.IsNullOrWhiteSpace(mapped.transDate))
+                    {
+                        var lineTransDate = GetJsonStringIgnoreCase(lineToken, "transDate");
+                        if (TryNormalizeYmdDate(lineTransDate, out var normalizedDate))
+                            mapped.transDate = normalizedDate;
+                    }
+
+                    mapped.lines.Add(new ExpenseSheetTicketLineRequest
+                    {
+                        description = lineDescription,
+                        qty = lineQty,
+                        price = linePrice,
+                        totalAmount = lineTotal
+                    });
+                }
+            }
+
+            if (mapped.lines.Count == 0)
+                mapped.lines = null;
+
+            if (!mapped.totalAmount.HasValue || mapped.totalAmount.Value <= 0m)
+                mapped.totalAmount = CalculateTicketLinesTotal(mapped.lines);
+
+            var ticketCreation = GetJsonObjectIgnoreCase(dataObject, "ticketCreation");
+            if (ticketCreation != null)
+            {
+                if (string.IsNullOrWhiteSpace(mapped.urlFile))
+                    mapped.urlFile = GetJsonStringIgnoreCase(ticketCreation, "urlFile");
+
+                if (string.IsNullOrWhiteSpace(mapped.fileName))
+                    mapped.fileName = GetJsonStringIgnoreCase(ticketCreation, "fileName");
+            }
+
+            if (string.IsNullOrWhiteSpace(mapped.fileExtension))
+            {
+                mapped.fileExtension = TryExtractFileExtension(mapped.fileName);
+                if (string.IsNullOrWhiteSpace(mapped.fileExtension))
+                    mapped.fileExtension = TryExtractFileExtension(mapped.urlFile);
+            }
+
+            return mapped;
+        }
+
+        // Normalizes currency code from IA draft metadata.
+        private static string NormalizeDraftCurrencyCode(string currencyCode, string rawCurrency)
+        {
+            var normalizedCode = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (!string.IsNullOrWhiteSpace(normalizedCode))
+                return normalizedCode;
+
+            var raw = (rawCurrency ?? string.Empty).Trim().ToLowerInvariant();
+            switch (raw)
+            {
+                case "eur":
+                case "euro":
+                    return "EUR";
+                case "usd":
+                case "dolar":
+                case "dollar":
+                    return "USD";
+                case "gbp":
+                case "libra":
+                case "pound":
+                    return "GBP";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        // Gets a string value from JObject using case-insensitive key lookup.
+        private static string GetJsonStringIgnoreCase(JObject source, string propertyName)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(propertyName))
+                return string.Empty;
+
+            var token = source.GetValue(propertyName, StringComparison.OrdinalIgnoreCase);
+            return token == null || token.Type == JTokenType.Null
+                ? string.Empty
+                : token.ToString().Trim();
+        }
+
+        // Gets a decimal value from JObject using case-insensitive key lookup.
+        private static decimal? GetJsonDecimalIgnoreCase(JObject source, string propertyName)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(propertyName))
+                return null;
+
+            var token = source.GetValue(propertyName, StringComparison.OrdinalIgnoreCase);
+            if (token == null || token.Type == JTokenType.Null)
+                return null;
+
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+                return token.Value<decimal>();
+
+            return ToDecimal(token.ToString());
+        }
+
+        // Gets an object value from JObject using case-insensitive key lookup.
+        private static JObject GetJsonObjectIgnoreCase(JObject source, string propertyName)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(propertyName))
+                return null;
+
+            return source.GetValue(propertyName, StringComparison.OrdinalIgnoreCase) as JObject;
+        }
+
+        // Gets an array value from JObject using case-insensitive key lookup.
+        private static JArray GetJsonArrayIgnoreCase(JObject source, string propertyName)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(propertyName))
+                return null;
+
+            return source.GetValue(propertyName, StringComparison.OrdinalIgnoreCase) as JArray;
+        }
+
+        // Extracts extension without dot from filename or URL.
+        private static string TryExtractFileExtension(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            var source = text.Trim();
+            if (Uri.TryCreate(source, UriKind.Absolute, out var uri))
+                source = uri.AbsolutePath;
+
+            var extension = Path.GetExtension(source);
+            if (string.IsNullOrWhiteSpace(extension))
+                return string.Empty;
+
+            return extension.Trim().TrimStart('.').ToLowerInvariant();
         }
 
         // Normalizes yyyymmdd and yyyy-MM-dd into yyyymmdd.
