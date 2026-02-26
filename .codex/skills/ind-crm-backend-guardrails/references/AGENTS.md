@@ -319,10 +319,10 @@ Regla breve para nuevos endpoints de consulta
 Detalle o lista sin mutar datos → IndPagedResponse<T> con items.
 Comandos (crear/actualizar/borrar) → IndApiResponse<T> con data.
 Nunca serialices manualmente; deja que el formatter JSON entregue el objeto tipado.
-ACTUALIZACION 2026-01-12
+ACTUALIZACION 2026-02-26
 - Lista de endpoints actualizada en .codex/ENDPOINTS.md.
 - Documentacion Postman en .codex/POSTMAN.md.
-- Collection Postman en .codex/Postman/IND_CRM_API V13.postman_collection.json.
+- Collection Postman en .codex/Postman/IND_CRM_API V21.postman_collection.json.
 - Regla de versionado Postman en .codex/Postman/POSTMAN_VERSIONING.md.
 - Nueva directriz: todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
 - Nueva directriz: listas de proyectos y hojas de gastos deben usar paginacion con page y pageSize (>= 1).

@@ -178,6 +178,7 @@
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetHeaderRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetLineRequest.cs" />
+    <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketFromIARequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />

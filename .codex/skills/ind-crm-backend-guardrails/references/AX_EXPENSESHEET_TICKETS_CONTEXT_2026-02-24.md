@@ -81,7 +81,7 @@ Input:
 
 Output:
 - `[headerOut, linesOut]`
-- Header includes ticket + docuref core metadata.
+- Header includes ticket + docuref core metadata, including `ProcessedByAI`.
 
 ### 3) `getExpenseSheetTicketsList(container _data)`
 - Returns ticket list for a user.
@@ -107,6 +107,7 @@ Input:
 - `_data[9]` comentario (optional)
 - `_data[10]` urlFile (optional)
 - `_data[11]` fileName (optional)
+- `_data[12]` processedByAI (optional: 0|1)
 
 ### 5) `deleteExpenseSheetTicket(container _data)`
 - Supports two modes with same method:
@@ -164,6 +165,16 @@ Input:
 - `_data[3]` fileId
 - `_data[4]` lineRecId (`RecId`)
 
+### 9) `updateExpenseSheetTicketFromIA(container _data)`
+- New atomic method for IA processing over an existing ticket.
+- Updates header + DocuRef, deletes all existing detail lines, inserts IA lines, and marks `ProcessedByAI = 1`.
+- Recalculates header total amount from input/lines and preserves transaction integrity in one `ttsbegin/ttscommit`.
+
+Input:
+- `_data[1]` companyId
+- `_data[2]` headerIn = `[axUserId, fileId, description, currencyCode, totalAmount, transDate, comentario, urlFile, fileName]`
+- `_data[3]` linesIn = `[[description, qty, price, lineTotal(optional)], ...]`
+
 ## New Helper Methods Added
 - `calculateTicketTotalAmount(INDFileId _fileId, RecId _ticketRecId)`
 - `refreshTicketStatusByFileId(UserId _axUserId, INDFileId _fileId)`
@@ -212,6 +223,9 @@ Input:
 14. Fix de enrutamiento entre hojas de gasto y tickets:
    - Se detecto colision de rutas para `POST /api/crm/expensesheets/tickets` por coincidencia con `api/crm/expensesheets/{hojaGastosId}`.
    - Se agrego constraint regex en `CrmExpenseSheetsController` para excluir el literal `tickets` en las rutas de detalle/actualizacion por `hojaGastosId`.
+15. Nuevo endpoint para aplicar datos IA sobre ticket existente:
+   - `POST /api/crm/expensesheets/tickets/{fileId}/ia`
+   - Invoca metodo AX atomico `updateExpenseSheetTicketFromIA` para reemplazo total de lineas y actualizacion de cabecera.
 
 ## Notes for Next Iteration
 - Evolucionar upload directo a SAS (frontend->blob) para evitar paso binario por API.

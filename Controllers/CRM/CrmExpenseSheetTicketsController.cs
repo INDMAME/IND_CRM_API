@@ -584,6 +584,7 @@ namespace IND_CRM_API.Controllers.CRM
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
                     !body.totalAmount.HasValue &&
                     !body.status.HasValue &&
+                    !body.processedByAI.HasValue &&
                     string.IsNullOrWhiteSpace(body.transDate) &&
                     body.comentario == null &&
                     body.urlFile == null &&
@@ -671,6 +672,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
+                var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedTransDateRaw = body.transDate ?? existing.TransDate;
                 var mergedTransDate = TryNormalizeYmdDate(mergedTransDateRaw, out var normalizedTransDate)
                     ? normalizedTransDate
@@ -704,6 +706,7 @@ namespace IND_CRM_API.Controllers.CRM
                 updateCon.Append(mergedComentario);
                 updateCon.Append(mergedUrlFile);
                 updateCon.Append(mergedFileName);
+                updateCon.Append(mergedProcessedByAI ? 1 : 0);
 
                 var updateResultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -738,13 +741,247 @@ namespace IND_CRM_API.Controllers.CRM
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
                     ErrorCode = null,
                     Errors = null,
-                    Data = new { FileId = fileId.Trim(), FileName = mergedFileName },
+                    Data = new
+                    {
+                        FileId = fileId.Trim(),
+                        FileName = mergedFileName,
+                        ProcessedByAI = mergedProcessedByAI
+                    },
                     TraceId = traceId
                 });
             }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] UpdateExpenseSheetTicket: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+        }
+
+        /// <summary>
+        /// Reemplaza cabecera y lineas del ticket con los datos analizados por IA.
+        /// </summary>
+        /// <remarks>
+        /// Aplica reemplazo total del detalle de lineas (delete + insert) mediante metodo atomico de AX.
+        /// </remarks>
+        [HttpPost, Route("{fileId}/ia")]
+        [ResponseType(typeof(IndApiResponse<object>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Ticket actualizado desde IA", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult UpdateExpenseSheetTicketFromIA(string fileId, [FromBody] UpdateExpenseSheetTicketFromIARequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(fileId))
+                validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeYmdDate(body.transDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+
+                if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+
+                if (body.lines == null || body.lines.Count == 0)
+                {
+                    validationErrors.Add(new IndValidationError { Field = "lines", Message = "lines debe incluir al menos una linea." });
+                }
+                else
+                {
+                    ValidateTicketLines(body.lines, validationErrors);
+                }
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] UpdateExpenseSheetTicketFromIA {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log($"[API-IN] UpdateExpenseSheetTicketFromIA fileId={fileId} user={username} axUserId={axUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                if (!TryGetTicketDetailFromAx(ax, company, axUserId, fileId.Trim(), traceId, out var existing, out var getError, out var getStatus))
+                {
+                    LogOut(getStatus);
+                    return Content(getStatus, getError);
+                }
+
+                var mergedDescription = (body.description ?? existing.Description ?? string.Empty).Trim();
+                var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
+                var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
+                    ? body.totalAmount.Value
+                    : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+                var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
+                var mergedTransDate = TryNormalizeYmdDate(mergedTransDateRaw, out var normalizedTransDate)
+                    ? normalizedTransDate
+                    : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
+                var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
+                var mergedFileName = (body.fileName ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(mergedFileName))
+                {
+                    if (!string.IsNullOrWhiteSpace(body.fileExtension))
+                    {
+                        var extension = NormalizeFileExtension(body.fileExtension, "jpg");
+                        mergedFileName = BuildTicketFileName(axUserId, fileId.Trim(), extension);
+                    }
+                    else
+                    {
+                        mergedFileName = (existing.FileName ?? string.Empty).Trim();
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(mergedDescription))
+                    validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio para aplicar IA." });
+
+                if (string.IsNullOrWhiteSpace(mergedCurrencyCode))
+                    validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio para aplicar IA." });
+
+                if (string.IsNullOrWhiteSpace(mergedUrlFile))
+                    validationErrors.Add(new IndValidationError { Field = "urlFile", Message = "urlFile es obligatorio para aplicar IA." });
+
+                if (string.IsNullOrWhiteSpace(mergedFileName))
+                    validationErrors.Add(new IndValidationError { Field = "fileName", Message = "fileName o fileExtension es obligatorio para aplicar IA." });
+
+                if (validationErrors.Any())
+                {
+                    LogOut((HttpStatusCode)422);
+                    return Content((HttpStatusCode)422, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error de validacion.",
+                        ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                        Errors = validationErrors,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
+                var rootCon = ax.CreateContainer();
+                rootCon.Append(company);
+
+                var headerCon = ax.CreateContainer();
+                headerCon.Append(axUserId);
+                headerCon.Append(fileId.Trim());
+                headerCon.Append(mergedDescription);
+                headerCon.Append(mergedCurrencyCode);
+                headerCon.Append(mergedTotalAmount);
+                headerCon.Append(mergedTransDate);
+                headerCon.Append(mergedComentario);
+                headerCon.Append(mergedUrlFile);
+                headerCon.Append(mergedFileName);
+                rootCon.Append(headerCon);
+
+                var linesCon = ax.CreateContainer();
+                foreach (var line in body.lines)
+                {
+                    var qty = line.qty ?? 0m;
+                    var price = line.price ?? 0m;
+                    var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
+                        ? line.totalAmount.Value
+                        : qty * price;
+
+                    var lineCon = ax.CreateContainer();
+                    lineCon.Append(line.description?.Trim() ?? string.Empty);
+                    lineCon.Append(qty);
+                    lineCon.Append(price);
+                    lineCon.Append(lineTotal);
+                    linesCon.Append(lineCon);
+                }
+                rootCon.Append(linesCon);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "updateExpenseSheetTicketFromIA",
+                    rootCon
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out var linesOut))
+                {
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
+                if (!success)
+                {
+                    var error = BuildTicketActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, error);
+                }
+
+                var responseData = new
+                {
+                    FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
+                    TicketRecId = extras.Count > 1 ? extras[1] : string.Empty,
+                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount,
+                    ProcessedByAI = extras.Count > 3 ? (ToNullableBool(extras[3]) ?? true) : true,
+                    FileName = mergedFileName,
+                    LineRecIds = MapRecIdList(linesOut)
+                };
+
+                LogOut(HttpStatusCode.OK);
+                return Ok(new IndApiResponse<object>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = responseData,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] UpdateExpenseSheetTicketFromIA: {ex}");
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
                 {
@@ -2093,6 +2330,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
+                ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -2147,7 +2385,8 @@ namespace IND_CRM_API.Controllers.CRM
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
-                    FileName = AxContainerReadHelper.SafeString(row, 9)
+                    FileName = AxContainerReadHelper.SafeString(row, 9),
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10))
                 });
             }
 
@@ -2281,6 +2520,24 @@ namespace IND_CRM_API.Controllers.CRM
                 return parsed;
 
             return value == "1";
+        }
+
+        private static bool? ToNullableBool(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var trimmed = value.Trim();
+            if (bool.TryParse(trimmed, out var parsed))
+                return parsed;
+
+            if (trimmed == "1")
+                return true;
+
+            if (trimmed == "0")
+                return false;
+
+            return null;
         }
 
 

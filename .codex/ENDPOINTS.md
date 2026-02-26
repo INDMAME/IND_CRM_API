@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-19)
+# IND_CRM_API Endpoints (actualizado 2026-02-26)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -73,6 +73,7 @@ Endpoints
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate
   Response line fields include: price, qty, amount
+  Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
@@ -99,11 +100,20 @@ Endpoints
   Optional: totalAmount, comentario, fileExtension, existingFileId.
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
+  Cabecera incluye `processedByAI` (bool) para indicar si el ticket fue procesado por IA.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: filter, status (0 Pending, 1 Assigned).
+  Response items incluyen `processedByAI` (bool).
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Actualiza cabecera y DocuRef (description, currencyCode, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension).
+  Actualiza cabecera y DocuRef (description, currencyCode, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension, processedByAI).
+- POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
+  Reemplaza cabecera + lineas del ticket con datos de IA.
+  Reglas:
+  - Reemplazo total de lineas (delete + insert).
+  - Marca `processedByAI=true`.
+  - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
+  Body: `description`, `currencyCode`, `totalAmount` (opcional), `transDate`, `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.

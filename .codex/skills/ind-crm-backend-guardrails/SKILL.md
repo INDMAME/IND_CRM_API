@@ -20,6 +20,19 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 - Los endpoints existentes en produccion o ya publicados NO se deben eliminar, desregistrar ni sacar del `.csproj` salvo peticion explicita del usuario responsable.
 - Si un endpoint existente parece obsoleto, primero documentar impacto y pedir confirmacion antes de desactivarlo.
 
+## Regla critica de enrutamiento (OBLIGATORIA)
+- En CADA creacion o modificacion de endpoints se debe revisar el enrutamiento de forma minuciosa antes de cerrar el trabajo.
+- Esta revision es gate de salida: no se da por terminado un cambio de API sin validacion de rutas.
+- Checklist obligatorio de routing:
+  - Verificar colisiones entre rutas literales y parametrizadas (ej: `tickets` vs `{id}`).
+  - Verificar unicidad por combinacion `HTTP method + route template`.
+  - Aplicar constraints en parametros de ruta cuando exista riesgo de ambiguedad (`int`, `guid`, `regex`, etc.).
+  - Revisar impacto de `RoutePrefix` y rutas hermanas del mismo recurso.
+  - Revisar compatibilidad con rutas legacy y convencionales (`MapHttpRoute`).
+  - Probar explicitamente los endpoints potencialmente conflictivos en Postman.
+  - Confirmar en logs de diagnostico que el request llega al controlador/accion esperado (`API-PIPE-MATCH`, `API-ROUTE-IN`).
+- Si se detecta ambiguedad de rutas, se debe corregir antes de continuar (no diferir).
+
 ## Fuente de verdad
 - Leer TODOS los archivos `.md` de la carpeta `.codex`.
 - Usarlos como contexto primario.
@@ -70,6 +83,10 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 - Calidad de codigo.
 - Consistencia REST.
 - Cumplimiento de reglas `.codex`.
+
+9) Validacion de enrutamiento (obligatoria en cambios API)
+- Ejecutar checklist de `Regla critica de enrutamiento`.
+- Documentar en el resumen final que la revision de rutas fue realizada.
 
 ## Enlace con skills aptas
 Esta skill local es la autoridad de decision para el repositorio.

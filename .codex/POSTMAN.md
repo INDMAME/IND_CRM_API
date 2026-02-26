@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/postman/IND_CRM_API V21.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V21.postman_collection.json`
+- Principal: `.codex/Postman/IND_CRM_API V22.postman_collection.json`
+- Soporte: `Notes/IND_CRM_API V22.postman_collection.json`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://crm.insertec.biz:7776`
@@ -24,4 +24,8 @@ Notas
 - La coleccion V21 incluye CRUD completo de tickets + endpoints de archivo:
   - `POST /api/crm/expensesheets/tickets/{fileId}/file`
   - `DELETE /api/crm/expensesheets/tickets/{fileId}/file`
+- Tickets:
+  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `processedByAI`.
+  - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
+  - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.

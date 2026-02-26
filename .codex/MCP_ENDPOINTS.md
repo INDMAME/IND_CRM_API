@@ -1,6 +1,6 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-19)
+# IND_CRM_API MCP Endpoints (actualizado 2026-02-26)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V21.
+Fuentes: `.codex/ENDPOINTS.md` + Postman V22.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
@@ -129,6 +129,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 - Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`
+- Nota de routing: `hojaGastosId` excluye el literal `tickets` para evitar colision con `/api/crm/expensesheets/tickets`.
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
@@ -187,7 +188,19 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `totalAmount`, `status` (0|1), `transDate`, `comentario`, `urlFile`, `fileName`, `fileExtension`
+- Body opcional: `description`, `currencyCode`, `totalAmount`, `status` (0|1), `transDate`, `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
+
+### Tool: crm_expensesheets_tickets_apply_ia
+- HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body:
+  - `description`, `currencyCode`, `transDate`, `urlFile` (se completan desde ticket actual si no se envian)
+  - `totalAmount` (opcional)
+  - `comentario` (opcional)
+  - `fileName` (opcional), `fileExtension` (opcional si no hay `fileName`)
+  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional)
+- Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
 
 ### Tool: crm_expensesheets_tickets_upload_file
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/file`
