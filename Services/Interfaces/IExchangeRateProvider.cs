@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using IND_CRM_API.Services;
 
 namespace IND_CRM_API.Services.Interfaces
@@ -13,10 +11,9 @@ namespace IND_CRM_API.Services.Interfaces
         /// <summary>
         /// Obtiene el tipo de cambio base -> destino para la fecha solicitada.
         /// </summary>
-        Task<ExchangeRateProviderResult> GetExchangeRateAsync(
+        ExchangeRateResult GetRate(
             string baseCurrency,
             string targetCurrency,
-            DateTime? requestedDate,
-            CancellationToken cancellationToken);
+            DateTime date);
     }
 }

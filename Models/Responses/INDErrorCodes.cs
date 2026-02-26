@@ -71,6 +71,9 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Exchange rate not available for requested currencies/date.</summary>
         public const string ExchangeRateNotFound = "EXCHANGE_RATE_NOT_FOUND";
 
+        /// <summary>No rate available after exhausting all providers.</summary>
+        public const string RateUnavailable = "RATE_UNAVAILABLE";
+
         /// <summary>Error de sesion de Axapta.</summary>
         public const string AxSessionError = "AX_SESSION_ERROR";
 

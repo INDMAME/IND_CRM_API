@@ -1,225 +1,248 @@
 using IND_CRM_API.Services.Interfaces;
 using System;
+using System.Collections.Generic;
+using System.Configuration;
 using System.Globalization;
-using System.Runtime.Caching;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace IND_CRM_API.Services
 {
     /// <summary>
-    /// Proveedor que orquesta cache y conversiones de tipos de cambio via ECB.
+    /// Proveedor primario que consume el XML oficial diario del ECB.
     /// </summary>
-    public class EcbExchangeRateProvider : IExchangeRateProvider
+    public class EcbExchangeRateProvider : IRawExchangeRateProvider
     {
+        private const string DailyFeedUrl = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml";
         private const string EurCurrencyCode = "EUR";
-        private const string SourceName = "ECB";
-        private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Z]{3}$", RegexOptions.Compiled);
+        private static readonly HttpClient SharedHttpClient = CreateSharedHttpClient();
 
-        private readonly IEcbHttpClient _ecbHttpClient;
         private readonly IAxLogger _logger;
-        private readonly MemoryCache _cache;
 
-        public EcbExchangeRateProvider(IEcbHttpClient ecbHttpClient, IAxLogger logger)
+        public EcbExchangeRateProvider(IAxLogger logger)
         {
-            _ecbHttpClient = ecbHttpClient ?? throw new ArgumentNullException(nameof(ecbHttpClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = MemoryCache.Default;
         }
 
-        /// <summary>
-        /// Obtiene tipo de cambio base -> destino aplicando conversion via EUR cuando corresponde.
-        /// </summary>
-        public async Task<ExchangeRateProviderResult> GetExchangeRateAsync(
-            string baseCurrency,
-            string targetCurrency,
-            DateTime? requestedDate,
-            CancellationToken cancellationToken)
+        public string ProviderName => "ECB";
+
+        public ExchangeRateResult GetRate(string baseCurrency, string targetCurrency, DateTime date)
         {
             var normalizedBase = NormalizeCurrency(baseCurrency);
             var normalizedTarget = NormalizeCurrency(targetCurrency);
-            var normalizedDate = requestedDate?.Date;
-            var dateToken = normalizedDate.HasValue
-                ? normalizedDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : "latest";
-            var cacheKey = BuildCacheKey(normalizedBase, normalizedTarget, dateToken);
-
-            if (TryGetFromCache(cacheKey, out var cachedResult))
-                return cachedResult;
 
             if (!IsIsoCurrency(normalizedBase) || !IsIsoCurrency(normalizedTarget))
-                return ExchangeRateProviderResult.NotFound(normalizedBase, normalizedTarget);
+            {
+                return BuildFailure(ExchangeRateProviderErrorCodes.CurrencyNotFound, date.Date);
+            }
 
             if (normalizedBase == normalizedTarget)
             {
-                var sameCurrencyResult = new ExchangeRateProviderResult
+                return BuildSuccess(1m, date.Date);
+            }
+
+            try
+            {
+                using (var request = new HttpRequestMessage(HttpMethod.Get, DailyFeedUrl))
+                using (var response = SharedHttpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead).GetAwaiter().GetResult())
                 {
-                    Found = true,
-                    BaseCurrency = normalizedBase,
-                    TargetCurrency = normalizedTarget,
-                    Rate = 1m,
-                    Date = normalizedDate ?? DateTime.UtcNow.Date,
-                    Source = SourceName
-                };
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.Log($"[EXCHANGE-ECB] GET {DailyFeedUrl} -> {(int)response.StatusCode}", AxaptaSessionManager.LogLevel.Warning);
+                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                    }
 
-                SetInCache(cacheKey, sameCurrencyResult);
-                return sameCurrencyResult;
+                    var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    if (!TryParseDailyFeed(payload, out var feedDate, out var eurRates, out var parseError))
+                    {
+                        _logger.Log($"[EXCHANGE-ECB] Parse error reason={parseError}", AxaptaSessionManager.LogLevel.Warning);
+                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                    }
+
+                    if (!eurRates.ContainsKey(EurCurrencyCode))
+                        eurRates[EurCurrencyCode] = 1m;
+
+                    if (!eurRates.TryGetValue(normalizedBase, out var basePerEur) ||
+                        !eurRates.TryGetValue(normalizedTarget, out var targetPerEur) ||
+                        basePerEur <= 0m ||
+                        targetPerEur <= 0m)
+                    {
+                        return BuildFailure(ExchangeRateProviderErrorCodes.CurrencyNotFound, feedDate);
+                    }
+
+                    var computedRate = normalizedBase == EurCurrencyCode
+                        ? targetPerEur
+                        : (normalizedTarget == EurCurrencyCode
+                            ? SafeDivide(1m, basePerEur)
+                            : SafeDivide(targetPerEur, basePerEur));
+
+                    if (computedRate <= 0m)
+                    {
+                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, feedDate);
+                    }
+
+                    return BuildSuccess(computedRate, feedDate);
+                }
             }
-
-            ExchangeRateProviderResult resolvedResult;
-
-            if (normalizedBase == EurCurrencyCode)
+            catch (TaskCanceledException ex)
             {
-                resolvedResult = await ResolveDirectRateAsync(normalizedBase, normalizedTarget, normalizedDate, cancellationToken)
-                    .ConfigureAwait(false);
+                _logger.Log($"[EXCHANGE-ECB] Timeout {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
             }
-            else if (normalizedTarget == EurCurrencyCode)
+            catch (HttpRequestException ex)
             {
-                resolvedResult = await ResolveInverseRateAsync(normalizedBase, normalizedTarget, normalizedDate, cancellationToken)
-                    .ConfigureAwait(false);
+                _logger.Log($"[EXCHANGE-ECB] Request error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
             }
-            else
+            catch (Exception ex)
             {
-                resolvedResult = await ResolveCrossRateAsync(normalizedBase, normalizedTarget, normalizedDate, cancellationToken)
-                    .ConfigureAwait(false);
+                _logger.Log($"[EXCHANGE-ECB] Unexpected error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
             }
-
-            if (!resolvedResult.Found)
-                return resolvedResult;
-
-            SetInCache(cacheKey, resolvedResult);
-            return resolvedResult;
         }
 
-        private async Task<ExchangeRateProviderResult> ResolveDirectRateAsync(
-            string baseCurrency,
-            string targetCurrency,
-            DateTime? requestedDate,
-            CancellationToken cancellationToken)
+        private ExchangeRateResult BuildSuccess(decimal rate, DateTime date)
         {
-            var observation = await _ecbHttpClient
-                .GetObservationAsync(targetCurrency, baseCurrency, requestedDate, true, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!observation.Found || observation.Rate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            return new ExchangeRateProviderResult
+            return new ExchangeRateResult
             {
-                Found = true,
-                BaseCurrency = baseCurrency,
-                TargetCurrency = targetCurrency,
-                Rate = observation.Rate,
-                Date = observation.ObservationDate.Date,
-                Source = SourceName
+                Success = true,
+                Rate = rate,
+                Source = ProviderName,
+                ErrorCode = null,
+                Date = date.Date,
+                ProviderUsed = ProviderName,
+                FallbackActivated = false
             };
         }
 
-        private async Task<ExchangeRateProviderResult> ResolveInverseRateAsync(
-            string baseCurrency,
-            string targetCurrency,
-            DateTime? requestedDate,
-            CancellationToken cancellationToken)
+        private ExchangeRateResult BuildFailure(string errorCode, DateTime date)
         {
-            var basePerEurObservation = await _ecbHttpClient
-                .GetObservationAsync(baseCurrency, EurCurrencyCode, requestedDate, true, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!basePerEurObservation.Found || basePerEurObservation.Rate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            var computedRate = SafeDivide(1m, basePerEurObservation.Rate);
-            if (computedRate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            return new ExchangeRateProviderResult
+            return new ExchangeRateResult
             {
-                Found = true,
-                BaseCurrency = baseCurrency,
-                TargetCurrency = targetCurrency,
-                Rate = computedRate,
-                Date = basePerEurObservation.ObservationDate.Date,
-                Source = SourceName
+                Success = false,
+                Rate = 0m,
+                Source = ProviderName,
+                ErrorCode = errorCode,
+                Date = date.Date,
+                ProviderUsed = ProviderName,
+                FallbackActivated = false
             };
         }
 
-        private async Task<ExchangeRateProviderResult> ResolveCrossRateAsync(
-            string baseCurrency,
-            string targetCurrency,
-            DateTime? requestedDate,
-            CancellationToken cancellationToken)
+        private static HttpClient CreateSharedHttpClient()
         {
-            var basePerEurObservation = await _ecbHttpClient
-                .GetObservationAsync(baseCurrency, EurCurrencyCode, requestedDate, true, cancellationToken)
-                .ConfigureAwait(false);
-            if (!basePerEurObservation.Found || basePerEurObservation.Rate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
-            var targetPerEurObservation = await _ecbHttpClient
-                .GetObservationAsync(targetCurrency, EurCurrencyCode, requestedDate, true, cancellationToken)
-                .ConfigureAwait(false);
-            if (!targetPerEurObservation.Found || targetPerEurObservation.Rate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            var eurPerBase = SafeDivide(1m, basePerEurObservation.Rate);
-            if (eurPerBase <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            var computedRate = eurPerBase * targetPerEurObservation.Rate;
-            if (computedRate <= 0m)
-                return ExchangeRateProviderResult.NotFound(baseCurrency, targetCurrency);
-
-            // La fecha efectiva mas conservadora es la menor entre ambas observaciones.
-            var effectiveDate = basePerEurObservation.ObservationDate <= targetPerEurObservation.ObservationDate
-                ? basePerEurObservation.ObservationDate.Date
-                : targetPerEurObservation.ObservationDate.Date;
-
-            return new ExchangeRateProviderResult
+            var timeoutSeconds = ReadTimeoutSeconds("ExchangeRate:EcbTimeoutSeconds", 5);
+            var handler = new HttpClientHandler
             {
-                Found = true,
-                BaseCurrency = baseCurrency,
-                TargetCurrency = targetCurrency,
-                Rate = computedRate,
-                Date = effectiveDate,
-                Source = SourceName
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
+
+            var client = new HttpClient(handler)
+            {
+                Timeout = TimeSpan.FromSeconds(timeoutSeconds)
+            };
+
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml"));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("IND_CRM_API/1.0");
+            return client;
         }
 
-        private bool TryGetFromCache(string cacheKey, out ExchangeRateProviderResult result)
+        private static int ReadTimeoutSeconds(string key, int fallback)
         {
-            var cached = _cache.Get(cacheKey) as ExchangeRateProviderResult;
-            if (cached == null || !cached.Found)
+            try
             {
-                result = null;
+                var value = ConfigurationManager.AppSettings[key];
+                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
+                    return seconds;
+            }
+            catch
+            {
+                // Ignorar lectura de config y usar fallback defensivo.
+            }
+
+            return fallback;
+        }
+
+        private static bool TryParseDailyFeed(
+            string payload,
+            out DateTime feedDate,
+            out IDictionary<string, decimal> eurRates,
+            out string reason)
+        {
+            feedDate = DateTime.UtcNow.Date;
+            eurRates = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            reason = null;
+
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                reason = "Empty payload.";
                 return false;
             }
 
-            result = CloneResult(cached);
-            _logger.Log($"[EXCHANGE-CACHE] HIT {cacheKey}");
-            return true;
-        }
+            XDocument document;
+            try
+            {
+                document = XDocument.Parse(payload, LoadOptions.None);
+            }
+            catch (Exception ex)
+            {
+                reason = $"Invalid XML: {ex.Message}";
+                return false;
+            }
 
-        private void SetInCache(string cacheKey, ExchangeRateProviderResult result)
-        {
-            if (result == null || !result.Found)
-                return;
+            var dayNode = document
+                .Descendants()
+                .FirstOrDefault(node => string.Equals(node.Name.LocalName, "Cube", StringComparison.OrdinalIgnoreCase) &&
+                                        node.Attribute("time") != null);
+            if (dayNode == null)
+            {
+                reason = "Missing day node.";
+                return false;
+            }
 
-            _cache.Set(
-                cacheKey,
-                CloneResult(result),
-                new CacheItemPolicy
-                {
-                    AbsoluteExpiration = DateTimeOffset.UtcNow.Add(CacheTtl)
-                });
+            var dateRaw = dayNode.Attribute("time")?.Value;
+            if (!DateTime.TryParseExact(
+                dateRaw,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDate))
+            {
+                reason = "Invalid date in ECB payload.";
+                return false;
+            }
 
-            _logger.Log($"[EXCHANGE-CACHE] SET {cacheKey}");
-        }
+            feedDate = parsedDate.Date;
+            foreach (var rateNode in dayNode.Elements())
+            {
+                if (!string.Equals(rateNode.Name.LocalName, "Cube", StringComparison.OrdinalIgnoreCase))
+                    continue;
 
-        private static string BuildCacheKey(string baseCurrency, string targetCurrency, string dateToken)
-        {
-            return $"exchange:{baseCurrency}:{targetCurrency}:{dateToken}";
+                var currency = NormalizeCurrency(rateNode.Attribute("currency")?.Value);
+                var rateRaw = (rateNode.Attribute("rate")?.Value ?? string.Empty).Trim();
+                if (!IsIsoCurrency(currency))
+                    continue;
+
+                if (!decimal.TryParse(rateRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedRate))
+                    continue;
+
+                if (parsedRate <= 0m)
+                    continue;
+
+                eurRates[currency] = parsedRate;
+            }
+
+            return eurRates.Count > 0;
         }
 
         private static string NormalizeCurrency(string value)
@@ -240,19 +263,6 @@ namespace IND_CRM_API.Services
                 return 0m;
 
             return numerator / denominator;
-        }
-
-        private static ExchangeRateProviderResult CloneResult(ExchangeRateProviderResult source)
-        {
-            return new ExchangeRateProviderResult
-            {
-                Found = source.Found,
-                BaseCurrency = source.BaseCurrency,
-                TargetCurrency = source.TargetCurrency,
-                Rate = source.Rate,
-                Date = source.Date,
-                Source = source.Source
-            };
         }
     }
 }

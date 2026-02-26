@@ -23,8 +23,9 @@ namespace IND_CRM_API.App_Start
             var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
             var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
-            var ecbHttpClient = new EcbHttpClient(axLogger);
-            var exchangeRateProvider = new EcbExchangeRateProvider(ecbHttpClient, axLogger);
+            var ecbExchangeRateProvider = new EcbExchangeRateProvider(axLogger);
+            var exchangeRateHostProvider = new ExchangeRateHostProvider(axLogger);
+            var exchangeRateProvider = new ExchangeRateService(ecbExchangeRateProvider, exchangeRateHostProvider, axLogger);
 
             // Compartir la misma instancia en todo el proceso.
             AxSession.Initialize(sessionManager);
@@ -38,7 +39,6 @@ namespace IND_CRM_API.App_Start
                 { typeof(IND_ITextModerationService), moderationService },
                 { typeof(IND_IExpenseTicketDraftService), expenseDraftService },
                 { typeof(IExpenseTicketBlobStorageService), expenseTicketBlobStorageService },
-                { typeof(IEcbHttpClient), ecbHttpClient },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };
 

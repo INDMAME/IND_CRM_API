@@ -69,13 +69,18 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`
 - Query: `baseCurrency`, `targetCurrency`, `date` (opcional)
-- Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND`, `INTERNAL_ERROR`
+- Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND` (legacy), `RATE_UNAVAILABLE`, `INTERNAL_ERROR`
+- Notas internas:
+  - Proveedor primario: ECB.
+  - Fallback interno: ExchangeRate.host cuando ECB no encuentra divisa o falla llamada externa.
+  - Contrato MCP/publico sin cambios: se mantiene el mismo envelope y shape de respuesta.
+  - Cache: MemoryCache 24h por `base|target|date` (solo resultados exitosos).
 
 ### Tool: system_exchange_rate_public_direct
 - HTTP: GET `/api/system/exchange-rate/public-direct`
 - Auth: AllowAnonymous
 - Query: `baseCurrency`, `targetCurrency`, `date` (opcional)
-- Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND`, `INTERNAL_ERROR`
+- Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND` (legacy), `RATE_UNAVAILABLE`, `INTERNAL_ERROR`
 
 ## MCP
 

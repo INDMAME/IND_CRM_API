@@ -227,7 +227,11 @@
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
+    <Compile Include="Services\ExchangeRateHostProvider.cs" />
+    <Compile Include="Services\ExchangeRateProviderErrorCodes.cs" />
     <Compile Include="Services\ExchangeRateProviderResult.cs" />
+    <Compile Include="Services\ExchangeRateResult.cs" />
+    <Compile Include="Services\ExchangeRateService.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
     <Compile Include="Services\IND_AxRequestContext.cs" />
     <Compile Include="Services\IND_AxSessionGuard.cs" />
@@ -242,6 +246,7 @@
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
+    <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
     <Compile Include="Startup.cs" />

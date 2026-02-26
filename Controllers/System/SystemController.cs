@@ -9,7 +9,6 @@ using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 
@@ -38,7 +37,7 @@ namespace IND_CRM_API.Controllers.System
         /// </summary>
         /// <remarks>
         /// Si una moneda no es EUR, la conversion se resuelve via EUR.
-        /// ErrorCode posibles: VALIDATION_ERROR, EXCHANGE_RATE_NOT_FOUND, INTERNAL_ERROR.
+        /// ErrorCode posibles: VALIDATION_ERROR, EXCHANGE_RATE_NOT_FOUND, RATE_UNAVAILABLE, INTERNAL_ERROR.
         /// </remarks>
         /// <param name="baseCurrency">Moneda base ISO 4217 (3 letras).</param>
         /// <param name="targetCurrency">Moneda destino ISO 4217 (3 letras).</param>
@@ -50,7 +49,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse((HttpStatusCode)422, "Error de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Tipo de cambio no disponible", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public async Task<IHttpActionResult> GetExchangeRate(
+        public IHttpActionResult GetExchangeRate(
             [FromUri] string baseCurrency,
             [FromUri] string targetCurrency,
             [FromUri] string date = null,
@@ -144,17 +143,20 @@ namespace IND_CRM_API.Controllers.System
                 var normalizedBase = baseCurrency.Trim().ToUpperInvariant();
                 var normalizedTarget = targetCurrency.Trim().ToUpperInvariant();
 
-                var providerResult = await _exchangeRateProvider
-                    .GetExchangeRateAsync(normalizedBase, normalizedTarget, requestedDate, cancellationToken)
-                    .ConfigureAwait(false);
+                var requestedDateValue = requestedDate ?? DateTime.UtcNow.Date;
+                var providerResult = _exchangeRateProvider.GetRate(normalizedBase, normalizedTarget, requestedDateValue);
+                _logger.Log(
+                    $"[EXCHANGE-PROVIDER] GET {routePath} provider={providerResult?.ProviderUsed ?? "UNKNOWN"} fallback={(providerResult?.FallbackActivated == true ? 1 : 0)} success={(providerResult?.Success == true ? 1 : 0)} traceId={traceId}");
 
-                if (providerResult == null || !providerResult.Found)
+                if (providerResult == null || !providerResult.Success)
                 {
                     var notFoundResponse = new IndApiResponse<object>
                     {
                         Success = false,
                         Message = "Exchange rate not available",
-                        ErrorCode = IndErrorCodes.ExchangeRateNotFound,
+                        ErrorCode = string.IsNullOrWhiteSpace(providerResult?.ErrorCode)
+                            ? IndErrorCodes.ExchangeRateNotFound
+                            : providerResult.ErrorCode,
                         Errors = null,
                         Data = null,
                         TraceId = traceId
@@ -172,8 +174,8 @@ namespace IND_CRM_API.Controllers.System
                     Errors = null,
                     Data = new ExchangeRateDto
                     {
-                        BaseCurrency = providerResult.BaseCurrency,
-                        TargetCurrency = providerResult.TargetCurrency,
+                        BaseCurrency = normalizedBase,
+                        TargetCurrency = normalizedTarget,
                         Rate = providerResult.Rate,
                         Date = providerResult.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                         Source = providerResult.Source
@@ -220,7 +222,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse((HttpStatusCode)422, "Error de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Tipo de cambio no disponible", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public Task<IHttpActionResult> GetExchangeRatePublicDirect(
+        public IHttpActionResult GetExchangeRatePublicDirect(
             [FromUri] string baseCurrency,
             [FromUri] string targetCurrency,
             [FromUri] string date = null,

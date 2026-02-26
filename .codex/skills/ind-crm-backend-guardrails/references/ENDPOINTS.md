@@ -37,11 +37,15 @@ Endpoints
   Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
   Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source=ECB
-  ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404), INTERNAL_ERROR (500)
+  Comportamiento interno: ECB es proveedor primario; si ECB no encuentra la divisa o falla la llamada externa, se activa fallback a ExchangeRate.host.
+  Contrato externo: sin cambios en ruta, envelope ni estructura publica (no se expone el fallback).
+  Cache: MemoryCache 24h por clave base|target|date (solo resultados exitosos).
+  ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404, legacy), RATE_UNAVAILABLE (404), INTERNAL_ERROR (500)
 - GET /api/system/exchange-rate/public-direct?baseCurrency=USD&targetCurrency=EUR&date=2026-02-18 (AllowAnonymous)
   Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
   Response: IndApiResponse<ExchangeRateDto> con el mismo contrato que /api/system/exchange-rate
+  ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404, legacy), RATE_UNAVAILABLE (404), INTERNAL_ERROR (500)
 
 ## MCP
 - GET /api/mcp/tools (Authorize)
