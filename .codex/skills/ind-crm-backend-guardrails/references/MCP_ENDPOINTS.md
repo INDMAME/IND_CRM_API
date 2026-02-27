@@ -110,6 +110,7 @@ Endpoints
 - Headers: `Authorization`
 - Headers opcionales cuando `persistTicket=true`: `X-IND-Company`, `X-IND-AxUserId`
 - Body (multipart): `ticketImage`, `persistTicket` (opcional), `ticketUrlFile` (opcional; si no viene se usa URL temporal)
+- Respuesta: `Data` incluye `gastoType` (cabecera) y `lines[].typeValue` por linea.
 - Respuesta: con `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` debe ser `true`.
 
 ## Expense Sheets

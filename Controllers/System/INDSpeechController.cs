@@ -86,6 +86,8 @@ namespace IND_CRM_API.Controllers.System
             "image/webp"
         };
 
+        private static readonly HashSet<int> AllowedTicketGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IND_IAudioTranscriptionService _transcription;
         private readonly IND_ITextModerationService _moderation;
@@ -571,6 +573,7 @@ namespace IND_CRM_API.Controllers.System
                 var comentarioValue = string.IsNullOrWhiteSpace(draft.Merchant) ? "Ticket IA" : draft.Merchant.Trim();
                 var transDateValue = ResolveDraftTransDate(draft);
                 var totalAmountValue = CalculateTicketLinesTotal(validLines);
+                var gastoTypeValue = ResolveDraftGastoType(draft);
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
 
                 var rootCon = ax.CreateContainer();
@@ -585,6 +588,7 @@ namespace IND_CRM_API.Controllers.System
                 headerCon.Append(comentarioValue);
                 headerCon.Append(effectiveUrl);
                 headerCon.Append(provisionalFileName);
+                headerCon.Append(gastoTypeValue);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -654,6 +658,7 @@ namespace IND_CRM_API.Controllers.System
                     updateCon.Append(finalFileName);
                     // updateExpenseSheetTicket supports optional _data[12] = processedByAI (0/1)
                     updateCon.Append(1);
+                    updateCon.Append(gastoTypeValue);
 
                     var updateObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",
@@ -676,6 +681,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     Persisted = true,
                     ProcessedByAI = processedByAI,
+                    GastoType = gastoTypeValue,
                     FileId = fileId,
                     TicketRecId = ticketRecId,
                     LineRecIds = lineRecIds,
@@ -740,6 +746,45 @@ namespace IND_CRM_API.Controllers.System
             }
 
             return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        // Resolves ticket header gastoType from draft value or dominant line type.
+        private static int ResolveDraftGastoType(ExpenseSheetDraftResponse draft)
+        {
+            if (draft != null && draft.gastoType.HasValue && AllowedTicketGastoTypes.Contains(draft.gastoType.Value))
+                return draft.gastoType.Value;
+
+            if (draft?.lines != null && draft.lines.Count > 0)
+            {
+                var firstByType = new Dictionary<int, int>();
+                for (int i = 0; i < draft.lines.Count; i++)
+                {
+                    var typeValue = draft.lines[i]?.typeValue;
+                    if (!typeValue.HasValue || !AllowedTicketGastoTypes.Contains(typeValue.Value))
+                        continue;
+
+                    if (!firstByType.ContainsKey(typeValue.Value))
+                        firstByType[typeValue.Value] = i;
+                }
+
+                var dominant = draft.lines
+                    .Where(l => l != null && l.typeValue.HasValue && AllowedTicketGastoTypes.Contains(l.typeValue.Value))
+                    .GroupBy(l => l.typeValue.Value)
+                    .Select(g => new
+                    {
+                        TypeValue = g.Key,
+                        Count = g.Count(),
+                        FirstIndex = firstByType.ContainsKey(g.Key) ? firstByType[g.Key] : int.MaxValue
+                    })
+                    .OrderByDescending(g => g.Count)
+                    .ThenBy(g => g.FirstIndex)
+                    .FirstOrDefault();
+
+                if (dominant != null)
+                    return dominant.TypeValue;
+            }
+
+            return 8;
         }
 
         // Total de lineas de ticket.

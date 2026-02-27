@@ -67,6 +67,7 @@ Endpoints
   Content-Type: multipart/form-data
   Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
   Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId.
+  Draft IA incluye `gastoType` (tipo de gasto de cabecera) y mantiene `lines[].typeValue`.
   Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
 
 ## Expense Sheets

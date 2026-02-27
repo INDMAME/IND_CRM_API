@@ -2144,6 +2144,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (mapped.lines.Count == 0)
                 mapped.lines = null;
 
+            if (!mapped.gastoType.HasValue)
+                mapped.gastoType = ResolveGastoTypeFromDraftLines(linesArray);
+
             if (!mapped.totalAmount.HasValue || mapped.totalAmount.Value <= 0m)
                 mapped.totalAmount = CalculateTicketLinesTotal(mapped.lines);
 
@@ -2165,6 +2168,45 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return mapped;
+        }
+
+        // Infers header gastoType from IA draft lines when top-level gastoType is missing.
+        private static int? ResolveGastoTypeFromDraftLines(JArray linesArray)
+        {
+            if (linesArray == null || linesArray.Count == 0)
+                return null;
+
+            var firstByType = new Dictionary<int, int>();
+            for (int i = 0; i < linesArray.Count; i++)
+            {
+                var lineObject = linesArray[i] as JObject;
+                var typeValue = GetJsonIntIgnoreCase(lineObject, "typeValue");
+                if (!typeValue.HasValue || !AllowedGastoTypes.Contains(typeValue.Value))
+                    continue;
+
+                if (!firstByType.ContainsKey(typeValue.Value))
+                    firstByType[typeValue.Value] = i;
+            }
+
+            var dominant = linesArray
+                .OfType<JObject>()
+                .Select(line => GetJsonIntIgnoreCase(line, "typeValue"))
+                .Where(typeValue => typeValue.HasValue && AllowedGastoTypes.Contains(typeValue.Value))
+                .GroupBy(typeValue => typeValue.Value)
+                .Select(group => new
+                {
+                    TypeValue = group.Key,
+                    Count = group.Count(),
+                    FirstIndex = firstByType.ContainsKey(group.Key) ? firstByType[group.Key] : int.MaxValue
+                })
+                .OrderByDescending(group => group.Count)
+                .ThenBy(group => group.FirstIndex)
+                .FirstOrDefault();
+
+            if (dominant != null)
+                return dominant.TypeValue;
+
+            return null;
         }
 
         // Normalizes currency code from IA draft metadata.

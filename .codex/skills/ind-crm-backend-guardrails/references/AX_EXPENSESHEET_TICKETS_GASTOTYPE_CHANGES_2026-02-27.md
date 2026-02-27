@@ -115,6 +115,19 @@ Archivos actualizados:
 - Se mantiene compatibilidad de `tickets/list` aceptando `filter` como alias de `searchKey`.
 - No se detectaron colisiones nuevas entre rutas literales y parametrizadas.
 
+## Ajuste IA draft para rellenar `gastoType` (2026-02-27)
+Archivos actualizados:
+- `Services/IND_OpenAiExpenseTicketDraftService.cs`
+- `Contracts/Responses/ExpenseSheetDraftResponse.cs`
+- `Controllers/System/INDSpeechController.cs`
+- `Controllers/CRM/CrmExpenseSheetTicketsController.cs`
+
+Cambios aplicados:
+- Prompt y JSON schema de `expensefromticket` ahora incluyen `gastoType` en cabecera (mismo enum fijo: 0,1,2,3,4,5,6,7,8,14).
+- Si la IA no retorna `gastoType`, backend lo infiere por tipo dominante en `lines[].typeValue` (fallback final `8`).
+- En `persistTicket=true`, se envia `gastoType` al crear ticket y al update de finalizacion de nombre de archivo.
+- En `POST /api/crm/expensesheets/tickets/{fileId}/ia`, si el envelope IA no trae `gastoType`, se infiere desde `lines[].typeValue`.
+
 ## Cambio adicional aplicado en endpoint de tipo de cambio
 Archivo actualizado:
 - `Controllers/System/SystemController.cs`

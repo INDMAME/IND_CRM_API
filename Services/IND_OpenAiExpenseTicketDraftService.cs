@@ -273,8 +273,11 @@ namespace IND_CRM_API.Services
   - 6: Cena
   - 7: Hotel
   - 8: Varios (solo si no coincide con ningun tipo anterior)
-  - 14: Taxi
+- 14: Taxi
 - typeValue debe ser siempre un entero exacto de la lista anterior (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
+- gastoType en cabecera debe usar el mismo enum fijo (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
+- gastoType representa el tipo de gasto dominante del ticket.
+- Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
 - price debe representar el precio unitario de la linea. Si solo detectas un total y qty=1, usa ese valor como price.
 - transDate en formato yyyyMMdd o null si no se puede inferir.
@@ -326,6 +329,7 @@ namespace IND_CRM_API.Services
                 userId = string.Empty,
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
                 currencyCode = NormalizeText(root["currencyCode"]?.ToString(), null),
+                gastoType = NormalizeTypeValue(root["gastoType"]),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -358,6 +362,8 @@ namespace IND_CRM_API.Services
                 request.Warnings = EnsureWarnings(warnings, "No se detecto ninguna linea valida. Se genera una linea de respaldo para revision manual.");
                 request.Confidence = request.Confidence.HasValue ? request.Confidence : 0m;
             }
+
+            request.gastoType = ResolveDraftGastoType(request.gastoType, request.lines);
 
             if (request.Warnings == null || request.Warnings.Count == 0)
                 request.Warnings = null;
@@ -565,6 +571,44 @@ namespace IND_CRM_API.Services
             return AllowedTypeValues.Contains(parsed) ? parsed : 8;
         }
 
+        private static int ResolveDraftGastoType(int? headerGastoType, List<CreateExpenseSheetLineRequest> lines)
+        {
+            if (headerGastoType.HasValue && AllowedTypeValues.Contains(headerGastoType.Value))
+                return headerGastoType.Value;
+
+            if (lines != null && lines.Count > 0)
+            {
+                var firstByType = new Dictionary<int, int>();
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    var typeValue = lines[i]?.typeValue;
+                    if (!typeValue.HasValue || !AllowedTypeValues.Contains(typeValue.Value))
+                        continue;
+
+                    if (!firstByType.ContainsKey(typeValue.Value))
+                        firstByType[typeValue.Value] = i;
+                }
+
+                var dominant = lines
+                    .Where(l => l != null && l.typeValue.HasValue && AllowedTypeValues.Contains(l.typeValue.Value))
+                    .GroupBy(l => l.typeValue.Value)
+                    .Select(g => new
+                    {
+                        TypeValue = g.Key,
+                        Count = g.Count(),
+                        FirstIndex = firstByType.ContainsKey(g.Key) ? firstByType[g.Key] : int.MaxValue
+                    })
+                    .OrderByDescending(g => g.Count)
+                    .ThenBy(g => g.FirstIndex)
+                    .FirstOrDefault();
+
+                if (dominant != null)
+                    return dominant.TypeValue;
+            }
+
+            return 8;
+        }
+
         private static bool TryParseBool(JToken token, bool defaultValue = false)
         {
             if (token == null)
@@ -627,6 +671,11 @@ namespace IND_CRM_API.Services
                     ["currencyCode"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
+                    },
+                    ["gastoType"] = new JObject
+                    {
+                        ["type"] = new JArray("integer", "null"),
+                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14, null)
                     },
                     ["exchRate"] = new JObject
                     {
