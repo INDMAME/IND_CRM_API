@@ -18,7 +18,7 @@ namespace IND_CRM_API.Services
         public decimal Rate { get; set; }
 
         /// <summary>
-        /// Fuente normalizada expuesta por la API.
+        /// Internal provider source (ECB, FRANKFURTER, OPEN_ER_API).
         /// </summary>
         public string Source { get; set; }
 
@@ -41,5 +41,15 @@ namespace IND_CRM_API.Services
         /// Indica si se utilizo proveedor de fallback.
         /// </summary>
         public bool FallbackActivated { get; set; }
+
+        /// <summary>
+        /// Indicates whether fallback level 2 (Frankfurter) was activated.
+        /// </summary>
+        public bool FallbackLevel2Activated { get; set; }
+
+        /// <summary>
+        /// Indicates whether fallback level 3 (OpenErApi) was activated.
+        /// </summary>
+        public bool FallbackLevel3Activated { get; set; }
     }
 }

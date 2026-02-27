@@ -21,6 +21,7 @@ namespace IND_CRM_API.Controllers.System
     [RoutePrefix("api/system")]
     public class SystemController : ApiController
     {
+        private const string PublicExchangeRateSource = "ECB";
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Za-z]{3}$", RegexOptions.Compiled);
 
         private readonly IExchangeRateProvider _exchangeRateProvider;
@@ -146,7 +147,7 @@ namespace IND_CRM_API.Controllers.System
                 var requestedDateValue = requestedDate ?? DateTime.UtcNow.Date;
                 var providerResult = _exchangeRateProvider.GetRate(normalizedBase, normalizedTarget, requestedDateValue);
                 _logger.Log(
-                    $"[EXCHANGE-PROVIDER] GET {routePath} provider={providerResult?.ProviderUsed ?? "UNKNOWN"} fallback={(providerResult?.FallbackActivated == true ? 1 : 0)} success={(providerResult?.Success == true ? 1 : 0)} traceId={traceId}");
+                    $"[EXCHANGE-PROVIDER] GET {routePath} provider={providerResult?.ProviderUsed ?? "UNKNOWN"} l2={(providerResult?.FallbackLevel2Activated == true ? 1 : 0)} l3={(providerResult?.FallbackLevel3Activated == true ? 1 : 0)} fallback={(providerResult?.FallbackActivated == true ? 1 : 0)} success={(providerResult?.Success == true ? 1 : 0)} traceId={traceId}");
 
                 if (providerResult == null || !providerResult.Success)
                 {
@@ -178,7 +179,7 @@ namespace IND_CRM_API.Controllers.System
                         TargetCurrency = normalizedTarget,
                         Rate = providerResult.Rate,
                         Date = providerResult.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                        Source = providerResult.Source
+                        Source = PublicExchangeRateSource
                     },
                     TraceId = traceId
                 };

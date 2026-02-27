@@ -12,35 +12,44 @@ using System.Threading.Tasks;
 namespace IND_CRM_API.Services
 {
     /// <summary>
-    /// Proveedor secundario de tipos de cambio usando ExchangeRate.host.
+    /// Third exchange-rate provider backed by open.er-api latest endpoint.
     /// </summary>
-    public class ExchangeRateHostProvider : IRawExchangeRateProvider
+    public class OpenErApiExchangeRateProvider : IRawExchangeRateProvider
     {
-        private const string Endpoint = "https://api.exchangerate.host/latest";
+        private const string Endpoint = "https://open.er-api.com/v6/latest";
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Z]{3}$", RegexOptions.Compiled);
         private static readonly HttpClient SharedHttpClient = CreateSharedHttpClient();
 
         private readonly IAxLogger _logger;
 
-        public ExchangeRateHostProvider(IAxLogger logger)
+        public OpenErApiExchangeRateProvider(IAxLogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public string ProviderName => "EXR_HOST";
+        public string ProviderName => "OPEN_ER_API";
 
         public ExchangeRateResult GetRate(string baseCurrency, string targetCurrency, DateTime date)
         {
             var normalizedBase = NormalizeCurrency(baseCurrency);
             var normalizedTarget = NormalizeCurrency(targetCurrency);
+
             if (!IsIsoCurrency(normalizedBase) || !IsIsoCurrency(normalizedTarget))
                 return BuildFailure(ExchangeRateProviderErrorCodes.CurrencyNotFound, date.Date);
 
             if (normalizedBase == normalizedTarget)
                 return BuildSuccess(1m, date.Date);
 
-            var requestUrl = $"{Endpoint}?base={Uri.EscapeDataString(normalizedBase)}&symbols={Uri.EscapeDataString(normalizedTarget)}";
+            var requestDate = date.Date;
+            var utcToday = DateTime.UtcNow.Date;
+            if (requestDate != utcToday)
+            {
+                _logger.Log(
+                    $"[EXCHANGE-OPEN-ER-API] latest-only provider requestDate={requestDate:yyyy-MM-dd} usingLatestDate={utcToday:yyyy-MM-dd}",
+                    AxaptaSessionManager.LogLevel.Info);
+            }
 
+            var requestUrl = BuildRequestUrl(normalizedBase);
             try
             {
                 using (var request = new HttpRequestMessage(HttpMethod.Get, requestUrl))
@@ -48,35 +57,40 @@ namespace IND_CRM_API.Services
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        _logger.Log($"[EXCHANGE-EXRHOST] GET {requestUrl} -> {(int)response.StatusCode}", AxaptaSessionManager.LogLevel.Warning);
-                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                        _logger.Log($"[EXCHANGE-OPEN-ER-API] GET {requestUrl} -> {(int)response.StatusCode}", AxaptaSessionManager.LogLevel.Warning);
+                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, requestDate);
                     }
 
                     var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                    if (!TryParsePayload(payload, normalizedTarget, out var rate, out var rateDate, out var errorCode, out var parseError))
+                    if (!TryParsePayload(payload, normalizedBase, normalizedTarget, out var rate, out var providerDate, out var errorCode, out var parseError))
                     {
-                        _logger.Log($"[EXCHANGE-EXRHOST] Parse error reason={parseError}", AxaptaSessionManager.LogLevel.Warning);
-                        return BuildFailure(errorCode, date.Date);
+                        _logger.Log($"[EXCHANGE-OPEN-ER-API] Parse error reason={parseError}", AxaptaSessionManager.LogLevel.Warning);
+                        return BuildFailure(errorCode, requestDate);
                     }
 
-                    return BuildSuccess(rate, rateDate);
+                    return BuildSuccess(rate, providerDate);
                 }
             }
             catch (TaskCanceledException ex)
             {
-                _logger.Log($"[EXCHANGE-EXRHOST] Timeout {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
-                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                _logger.Log($"[EXCHANGE-OPEN-ER-API] Timeout {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, requestDate);
             }
             catch (HttpRequestException ex)
             {
-                _logger.Log($"[EXCHANGE-EXRHOST] Request error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
-                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                _logger.Log($"[EXCHANGE-OPEN-ER-API] Request error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, requestDate);
             }
             catch (Exception ex)
             {
-                _logger.Log($"[EXCHANGE-EXRHOST] Unexpected error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
-                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+                _logger.Log($"[EXCHANGE-OPEN-ER-API] Unexpected error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, requestDate);
             }
+        }
+
+        private static string BuildRequestUrl(string baseCurrency)
+        {
+            return $"{Endpoint}/{Uri.EscapeDataString(baseCurrency)}";
         }
 
         private ExchangeRateResult BuildSuccess(decimal rate, DateTime date)
@@ -109,14 +123,15 @@ namespace IND_CRM_API.Services
 
         private static bool TryParsePayload(
             string payload,
+            string baseCurrency,
             string targetCurrency,
             out decimal rate,
-            out DateTime date,
+            out DateTime providerDate,
             out string errorCode,
             out string reason)
         {
             rate = 0m;
-            date = DateTime.UtcNow.Date;
+            providerDate = DateTime.UtcNow.Date;
             errorCode = ExchangeRateProviderErrorCodes.ProviderError;
             reason = null;
 
@@ -137,10 +152,17 @@ namespace IND_CRM_API.Services
                 return false;
             }
 
-            var successToken = root["success"];
-            if (successToken != null && successToken.Type == JTokenType.Boolean && !successToken.Value<bool>())
+            var result = (root["result"]?.ToString() ?? string.Empty).Trim();
+            if (!string.Equals(result, "success", StringComparison.OrdinalIgnoreCase))
             {
-                reason = "Provider returned success=false.";
+                reason = "Provider result is not success.";
+                return false;
+            }
+
+            var payloadBase = NormalizeCurrency(root["base_code"]?.ToString());
+            if (!string.IsNullOrWhiteSpace(payloadBase) && !string.Equals(payloadBase, baseCurrency, StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "Provider base_code mismatch.";
                 return false;
             }
 
@@ -158,15 +180,11 @@ namespace IND_CRM_API.Services
                 return false;
             }
 
-            var dateRaw = (root["date"]?.ToString() ?? string.Empty).Trim();
-            if (DateTime.TryParseExact(
-                dateRaw,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var parsedDate))
+            var lastUpdate = (root["time_last_update_utc"]?.ToString() ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(lastUpdate) &&
+                DateTime.TryParse(lastUpdate, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsedDate))
             {
-                date = parsedDate.Date;
+                providerDate = parsedDate.Date;
             }
 
             errorCode = null;
@@ -177,7 +195,7 @@ namespace IND_CRM_API.Services
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
-            var timeoutSeconds = ReadTimeoutSeconds("ExchangeRate:HostTimeoutSeconds", 5);
+            var timeoutSeconds = ReadTimeoutSeconds("ExchangeRate:OpenErApiTimeoutSeconds", 5);
             var handler = new HttpClientHandler
             {
                 AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
@@ -204,7 +222,7 @@ namespace IND_CRM_API.Services
             }
             catch
             {
-                // Ignorar lectura de config y usar fallback defensivo.
+                // Keep fallback timeout when config is missing or invalid.
             }
 
             return fallback;

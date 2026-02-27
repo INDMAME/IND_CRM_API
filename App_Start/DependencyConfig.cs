@@ -24,8 +24,13 @@ namespace IND_CRM_API.App_Start
             var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbExchangeRateProvider = new EcbExchangeRateProvider(axLogger);
-            var exchangeRateHostProvider = new ExchangeRateHostProvider(axLogger);
-            var exchangeRateProvider = new ExchangeRateService(ecbExchangeRateProvider, exchangeRateHostProvider, axLogger);
+            var frankfurterExchangeRateProvider = new FrankfurterExchangeRateProvider(axLogger);
+            var openErApiExchangeRateProvider = new OpenErApiExchangeRateProvider(axLogger);
+            var exchangeRateProvider = new ExchangeRateService(
+                ecbExchangeRateProvider,
+                frankfurterExchangeRateProvider,
+                openErApiExchangeRateProvider,
+                axLogger);
 
             // Compartir la misma instancia en todo el proceso.
             AxSession.Initialize(sessionManager);

@@ -72,7 +72,9 @@ Endpoints
 - Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND` (legacy), `RATE_UNAVAILABLE`, `INTERNAL_ERROR`
 - Notas internas:
   - Proveedor primario: ECB.
-  - Fallback interno: ExchangeRate.host cuando ECB no encuentra divisa o falla llamada externa.
+  - Fallback nivel 2: Frankfurter (`https://api.frankfurter.app/latest?from={BASE}&to={TARGET}`).
+  - Fallback nivel 3: OpenErApi (`https://open.er-api.com/v6/latest/{BASE}`).
+  - OpenErApi usa solo latest; si se solicita fecha distinta a hoy, se consulta latest igualmente.
   - Contrato MCP/publico sin cambios: se mantiene el mismo envelope y shape de respuesta.
   - Cache: MemoryCache 24h por `base|target|date` (solo resultados exitosos).
 
@@ -80,6 +82,7 @@ Endpoints
 - HTTP: GET `/api/system/exchange-rate/public-direct`
 - Auth: AllowAnonymous
 - Query: `baseCurrency`, `targetCurrency`, `date` (opcional)
+- Endpoint de consumo recomendado: `{{baseUrl}}/api/system/exchange-rate/public-direct?baseCurrency=AED&targetCurrency=EUR`
 - Error codes: `VALIDATION_ERROR`, `EXCHANGE_RATE_NOT_FOUND` (legacy), `RATE_UNAVAILABLE`, `INTERNAL_ERROR`
 
 ## MCP

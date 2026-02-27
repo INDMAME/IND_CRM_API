@@ -20,6 +20,12 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 - Los endpoints existentes en produccion o ya publicados NO se deben eliminar, desregistrar ni sacar del `.csproj` salvo peticion explicita del usuario responsable.
 - Si un endpoint existente parece obsoleto, primero documentar impacto y pedir confirmacion antes de desactivarlo.
 
+## Regla critica de pruebas (OBLIGATORIA EN ESTE REPO)
+- En este proyecto NO se deben crear proyectos de pruebas (`*.Tests.csproj`) ni carpetas `Tests/` por defecto.
+- No agregar frameworks de testing ni referencias para tests en `.csproj` o `.slnx`.
+- Solo se permite crear o modificar pruebas si el usuario lo solicita de forma explicita y textual en ese turno.
+- Si no existe peticion explicita de pruebas, validar cambios solo con compilacion/ejecucion en el flujo normal del proyecto.
+
 ## Regla critica de enrutamiento (OBLIGATORIA)
 - En CADA creacion o modificacion de endpoints se debe revisar el enrutamiento de forma minuciosa antes de cerrar el trabajo.
 - Esta revision es gate de salida: no se da por terminado un cambio de API sin validacion de rutas.

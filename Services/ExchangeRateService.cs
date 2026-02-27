@@ -7,27 +7,29 @@ using System.Text.RegularExpressions;
 namespace IND_CRM_API.Services
 {
     /// <summary>
-    /// Orquestador de tipos de cambio con estrategia ECB primario y ExchangeRate.host fallback.
+    /// Orchestrates exchange rates using primary and multi-level fallback providers.
     /// </summary>
     public class ExchangeRateService : IExchangeRateProvider
     {
-        private const string PublicSourceName = "ECB";
         private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Z]{3}$", RegexOptions.Compiled);
 
-        private readonly IRawExchangeRateProvider _ecbProvider;
-        private readonly IRawExchangeRateProvider _fallbackProvider;
+        private readonly IRawExchangeRateProvider _primaryProvider;
+        private readonly IRawExchangeRateProvider _secondaryProvider;
+        private readonly IRawExchangeRateProvider _tertiaryProvider;
         private readonly IAxLogger _logger;
         private readonly ObjectCache _cache;
 
         public ExchangeRateService(
-            IRawExchangeRateProvider ecbProvider,
-            IRawExchangeRateProvider fallbackProvider,
+            IRawExchangeRateProvider primaryProvider,
+            IRawExchangeRateProvider secondaryProvider,
+            IRawExchangeRateProvider tertiaryProvider,
             IAxLogger logger,
             ObjectCache cache = null)
         {
-            _ecbProvider = ecbProvider ?? throw new ArgumentNullException(nameof(ecbProvider));
-            _fallbackProvider = fallbackProvider ?? throw new ArgumentNullException(nameof(fallbackProvider));
+            _primaryProvider = primaryProvider ?? throw new ArgumentNullException(nameof(primaryProvider));
+            _secondaryProvider = secondaryProvider ?? throw new ArgumentNullException(nameof(secondaryProvider));
+            _tertiaryProvider = tertiaryProvider ?? throw new ArgumentNullException(nameof(tertiaryProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = cache ?? MemoryCache.Default;
         }
@@ -40,42 +42,71 @@ namespace IND_CRM_API.Services
 
             if (!IsIsoCurrency(normalizedBase) || !IsIsoCurrency(normalizedTarget))
             {
-                return BuildFailure(ExchangeRateProviderErrorCodes.CurrencyNotFound, requestedDate, "VALIDATION", false);
+                return BuildFailure(ExchangeRateProviderErrorCodes.CurrencyNotFound, requestedDate, "VALIDATION", false, false);
             }
 
             if (normalizedBase == normalizedTarget)
             {
-                return BuildSuccess(1m, requestedDate, _ecbProvider.ProviderName, false);
+                return BuildSuccess(1m, requestedDate, _primaryProvider.ProviderName, false, false);
             }
 
             var cacheKey = BuildCacheKey(normalizedBase, normalizedTarget, requestedDate);
             if (TryGetFromCache(cacheKey, out var cachedResult))
                 return cachedResult;
 
-            var primaryResult = ExecuteProvider(_ecbProvider, normalizedBase, normalizedTarget, requestedDate);
+            var primaryResult = ExecuteProvider(_primaryProvider, normalizedBase, normalizedTarget, requestedDate);
             if (primaryResult.Success)
             {
-                var normalizedResult = BuildSuccess(primaryResult.Rate, primaryResult.Date, _ecbProvider.ProviderName, false);
+                var normalizedResult = BuildSuccess(primaryResult.Rate, primaryResult.Date, _primaryProvider.ProviderName, false, false);
                 SetInCache(cacheKey, normalizedResult);
                 return normalizedResult;
             }
 
-            var shouldFallback = string.Equals(primaryResult.ErrorCode, ExchangeRateProviderErrorCodes.CurrencyNotFound, StringComparison.OrdinalIgnoreCase) ||
-                                 string.Equals(primaryResult.ErrorCode, ExchangeRateProviderErrorCodes.ProviderError, StringComparison.OrdinalIgnoreCase);
-            if (shouldFallback)
-            {
-                _logger.Log($"[EXCHANGE-FALLBACK] from={_ecbProvider.ProviderName} to={_fallbackProvider.ProviderName} base={normalizedBase} target={normalizedTarget} date={requestedDate:yyyy-MM-dd}");
+            var fallbackLevel2Activated = false;
+            var fallbackLevel3Activated = false;
 
-                var fallbackResult = ExecuteProvider(_fallbackProvider, normalizedBase, normalizedTarget, requestedDate);
-                if (fallbackResult.Success)
+            if (CanFallback(primaryResult))
+            {
+                fallbackLevel2Activated = true;
+                _logger.Log($"[EXCHANGE-FALLBACK-L2] from={_primaryProvider.ProviderName} to={_secondaryProvider.ProviderName} base={normalizedBase} target={normalizedTarget} date={requestedDate:yyyy-MM-dd}");
+
+                var secondaryResult = ExecuteProvider(_secondaryProvider, normalizedBase, normalizedTarget, requestedDate);
+                if (secondaryResult.Success)
                 {
-                    var normalizedResult = BuildSuccess(fallbackResult.Rate, fallbackResult.Date, _fallbackProvider.ProviderName, true);
+                    var normalizedResult = BuildSuccess(secondaryResult.Rate, secondaryResult.Date, _secondaryProvider.ProviderName, true, false);
                     SetInCache(cacheKey, normalizedResult);
                     return normalizedResult;
                 }
+
+                if (CanFallback(secondaryResult))
+                {
+                    fallbackLevel3Activated = true;
+                    _logger.Log($"[EXCHANGE-FALLBACK-L3] from={_secondaryProvider.ProviderName} to={_tertiaryProvider.ProviderName} base={normalizedBase} target={normalizedTarget} date={requestedDate:yyyy-MM-dd}");
+
+                    var tertiaryResult = ExecuteProvider(_tertiaryProvider, normalizedBase, normalizedTarget, requestedDate);
+                    if (tertiaryResult.Success)
+                    {
+                        var normalizedResult = BuildSuccess(tertiaryResult.Rate, tertiaryResult.Date, _tertiaryProvider.ProviderName, true, true);
+                        SetInCache(cacheKey, normalizedResult);
+                        return normalizedResult;
+                    }
+                }
             }
 
-            return BuildFailure(ExchangeRateProviderErrorCodes.RateUnavailable, requestedDate, _ecbProvider.ProviderName, shouldFallback);
+            _logger.Log(
+                $"[EXCHANGE-FAIL] base={normalizedBase} target={normalizedTarget} date={requestedDate:yyyy-MM-dd} l2={(fallbackLevel2Activated ? 1 : 0)} l3={(fallbackLevel3Activated ? 1 : 0)} error={ExchangeRateProviderErrorCodes.RateUnavailable}",
+                AxaptaSessionManager.LogLevel.Warning);
+
+            var finalProvider = fallbackLevel3Activated
+                ? _tertiaryProvider.ProviderName
+                : (fallbackLevel2Activated ? _secondaryProvider.ProviderName : _primaryProvider.ProviderName);
+
+            return BuildFailure(
+                ExchangeRateProviderErrorCodes.RateUnavailable,
+                requestedDate,
+                finalProvider,
+                fallbackLevel2Activated || fallbackLevel3Activated,
+                fallbackLevel3Activated);
         }
 
         private ExchangeRateResult ExecuteProvider(
@@ -90,13 +121,22 @@ namespace IND_CRM_API.Services
                 if (result != null)
                     return result;
 
-                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date, provider.ProviderName, false);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date, provider.ProviderName, false, false);
             }
             catch (Exception ex)
             {
                 _logger.Log($"[EXCHANGE-PROVIDER-ERROR] provider={provider.ProviderName} base={baseCurrency} target={targetCurrency} date={date:yyyy-MM-dd} error={ex.Message}", AxaptaSessionManager.LogLevel.Warning);
-                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date, provider.ProviderName, false);
+                return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date, provider.ProviderName, false, false);
             }
+        }
+
+        private static bool CanFallback(ExchangeRateResult result)
+        {
+            if (result == null || result.Success)
+                return false;
+
+            return string.Equals(result.ErrorCode, ExchangeRateProviderErrorCodes.CurrencyNotFound, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(result.ErrorCode, ExchangeRateProviderErrorCodes.ProviderError, StringComparison.OrdinalIgnoreCase);
         }
 
         private bool TryGetFromCache(string cacheKey, out ExchangeRateResult result)
@@ -131,31 +171,45 @@ namespace IND_CRM_API.Services
             _logger.Log($"[EXCHANGE-CACHE] SET {cacheKey}");
         }
 
-        private static ExchangeRateResult BuildSuccess(decimal rate, DateTime date, string providerUsed, bool fallbackActivated)
+        private static ExchangeRateResult BuildSuccess(
+            decimal rate,
+            DateTime date,
+            string providerSource,
+            bool fallbackLevel2Activated,
+            bool fallbackLevel3Activated)
         {
             return new ExchangeRateResult
             {
                 Success = true,
                 Rate = rate,
-                Source = PublicSourceName,
+                Source = providerSource,
                 ErrorCode = null,
                 Date = date.Date,
-                ProviderUsed = providerUsed,
-                FallbackActivated = fallbackActivated
+                ProviderUsed = providerSource,
+                FallbackActivated = fallbackLevel2Activated || fallbackLevel3Activated,
+                FallbackLevel2Activated = fallbackLevel2Activated,
+                FallbackLevel3Activated = fallbackLevel3Activated
             };
         }
 
-        private static ExchangeRateResult BuildFailure(string errorCode, DateTime date, string providerUsed, bool fallbackActivated)
+        private static ExchangeRateResult BuildFailure(
+            string errorCode,
+            DateTime date,
+            string providerUsed,
+            bool fallbackLevel2Activated,
+            bool fallbackLevel3Activated)
         {
             return new ExchangeRateResult
             {
                 Success = false,
                 Rate = 0m,
-                Source = PublicSourceName,
+                Source = providerUsed,
                 ErrorCode = errorCode,
                 Date = date.Date,
                 ProviderUsed = providerUsed,
-                FallbackActivated = fallbackActivated
+                FallbackActivated = fallbackLevel2Activated || fallbackLevel3Activated,
+                FallbackLevel2Activated = fallbackLevel2Activated,
+                FallbackLevel3Activated = fallbackLevel3Activated
             };
         }
 
@@ -169,7 +223,9 @@ namespace IND_CRM_API.Services
                 ErrorCode = source.ErrorCode,
                 Date = source.Date,
                 ProviderUsed = source.ProviderUsed,
-                FallbackActivated = source.FallbackActivated
+                FallbackActivated = source.FallbackActivated,
+                FallbackLevel2Activated = source.FallbackLevel2Activated,
+                FallbackLevel3Activated = source.FallbackLevel3Activated
             };
         }
 

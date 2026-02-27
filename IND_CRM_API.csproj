@@ -228,7 +228,8 @@
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
-    <Compile Include="Services\ExchangeRateHostProvider.cs" />
+    <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
+    <Compile Include="Services\OpenErApiExchangeRateProvider.cs" />
     <Compile Include="Services\ExchangeRateProviderErrorCodes.cs" />
     <Compile Include="Services\ExchangeRateProviderResult.cs" />
     <Compile Include="Services\ExchangeRateResult.cs" />

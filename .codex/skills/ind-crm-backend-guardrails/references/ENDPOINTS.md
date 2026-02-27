@@ -37,13 +37,17 @@ Endpoints
   Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
   Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source=ECB
-  Comportamiento interno: ECB es proveedor primario; si ECB no encuentra la divisa o falla la llamada externa, se activa fallback a ExchangeRate.host.
+  Comportamiento interno: ECB es proveedor primario; fallback nivel 2 a Frankfurter y fallback nivel 3 a OpenErApi.
+  Frankfurter endpoint: https://api.frankfurter.app/latest?from={BASE}&to={TARGET}
+  OpenErApi endpoint: https://open.er-api.com/v6/latest/{BASE}
+  Nota OpenErApi: solo soporta latest; si se solicita fecha distinta a hoy, se usa latest igualmente.
   Contrato externo: sin cambios en ruta, envelope ni estructura publica (no se expone el fallback).
   Cache: MemoryCache 24h por clave base|target|date (solo resultados exitosos).
   ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404, legacy), RATE_UNAVAILABLE (404), INTERNAL_ERROR (500)
 - GET /api/system/exchange-rate/public-direct?baseCurrency=USD&targetCurrency=EUR&date=2026-02-18 (AllowAnonymous)
   Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
+  Endpoint de consumo recomendado: {{baseUrl}}/api/system/exchange-rate/public-direct?baseCurrency=AED&targetCurrency=EUR
   Response: IndApiResponse<ExchangeRateDto> con el mismo contrato que /api/system/exchange-rate
   ErrorCode: VALIDATION_ERROR (422), EXCHANGE_RATE_NOT_FOUND (404, legacy), RATE_UNAVAILABLE (404), INTERNAL_ERROR (500)
 
