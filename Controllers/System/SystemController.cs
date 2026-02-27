@@ -21,7 +21,9 @@ namespace IND_CRM_API.Controllers.System
     [RoutePrefix("api/system")]
     public class SystemController : ApiController
     {
-        private const string PublicExchangeRateSource = "ECB";
+        private const string ExchangeRateSourceLevel1 = "Banco Central Europeo (ECB)";
+        private const string ExchangeRateSourceLevel2 = "Frankfurter API (fallback nivel 2)";
+        private const string ExchangeRateSourceLevel3 = "Open ER API (fallback nivel 3)";
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Za-z]{3}$", RegexOptions.Compiled);
 
         private readonly IExchangeRateProvider _exchangeRateProvider;
@@ -179,7 +181,7 @@ namespace IND_CRM_API.Controllers.System
                         TargetCurrency = normalizedTarget,
                         Rate = providerResult.Rate,
                         Date = providerResult.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                        Source = PublicExchangeRateSource
+                        Source = ResolveExchangeRateSource(providerResult)
                     },
                     TraceId = traceId
                 };
@@ -230,6 +232,18 @@ namespace IND_CRM_API.Controllers.System
             CancellationToken cancellationToken = default(CancellationToken))
         {
             return GetExchangeRate(baseCurrency, targetCurrency, date, cancellationToken);
+        }
+
+        // Returns fixed source text based on provider resolution level for frontend handling.
+        private static string ResolveExchangeRateSource(ExchangeRateResult providerResult)
+        {
+            if (providerResult != null && providerResult.FallbackLevel3Activated)
+                return ExchangeRateSourceLevel3;
+
+            if (providerResult != null && providerResult.FallbackLevel2Activated)
+                return ExchangeRateSourceLevel2;
+
+            return ExchangeRateSourceLevel1;
         }
     }
 }

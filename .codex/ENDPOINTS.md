@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-26)
+# IND_CRM_API Endpoints (actualizado 2026-02-27)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -36,7 +36,11 @@ Endpoints
 - GET /api/system/exchange-rate?baseCurrency=EUR&targetCurrency=USD&date=2026-02-16 (Authorize)
   Query required: baseCurrency, targetCurrency (ISO 4217, 3 letras)
   Query optional: date (yyyy-MM-dd; si no se envia usa latest)
-  Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source=ECB
+  Response: IndApiResponse<ExchangeRateDto> con BaseCurrency, TargetCurrency, Rate, Date, Source natural por proveedor
+  Source posibles:
+  - Banco Central Europeo (ECB)
+  - Frankfurter API (fallback nivel 2)
+  - Open ER API (fallback nivel 3)
   Comportamiento interno: ECB es proveedor primario; fallback nivel 2 a Frankfurter y fallback nivel 3 a OpenErApi.
   Frankfurter endpoint: https://api.frankfurter.app/latest?from={BASE}&to={TARGET}
   OpenErApi endpoint: https://open.er-api.com/v6/latest/{BASE}
@@ -106,16 +110,17 @@ Endpoints
   mode 2: agrega lineas a `existingFileId`.
   Body mode 0|1: description, currencyCode, transDate, urlFile.
   Body mode 0|2: lines[] con description, qty, price (totalAmount opcional).
-  Optional: totalAmount, comentario, fileExtension, existingFileId.
+  Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14).
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
-  Cabecera incluye `processedByAI` (bool) para indicar si el ticket fue procesado por IA.
+  Cabecera incluye `processedByAI` (bool) y `gastoType` (int).
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: page, pageSize.
-  Body optional: filter, status (0 Pending, 1 Assigned).
-  Response items incluyen `processedByAI` (bool).
+  Body required: page, pageSize, createdDateFrom, createdDateTo.
+  Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14).
+  Nota: siempre se requiere rango de fechas junto con `X-IND-Company` y `X-IND-AxUserId`.
+  Response items incluyen `processedByAI` (bool) y `gastoType` (int).
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Actualiza cabecera y DocuRef (description, currencyCode, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension, processedByAI).
+  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension, processedByAI).
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.
   Reglas:
@@ -123,7 +128,7 @@ Endpoints
   - Marca `processedByAI=true`.
   - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
   - Compatibilidad de entrada: si llega envelope tipo `expensefromticket` (`{ Success, Message, Data, TraceId }`), el backend adapta automaticamente `Data` al contrato esperado.
-  Body: `description`, `currencyCode`, `totalAmount` (opcional), `transDate`, `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
+  Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate`, `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.

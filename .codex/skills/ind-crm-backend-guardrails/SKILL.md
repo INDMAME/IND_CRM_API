@@ -45,6 +45,29 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 - Nunca contradecir reglas documentadas ahi.
 - Referencias locales sincronizadas: `.codex/skills/ind-crm-backend-guardrails/references/*.md`.
 
+## Procedimiento obligatorio para clases Axapta del proyecto
+- Alcance: aplica SIEMPRE cuando se modifique o cree un metodo en una clase Axapta del repo (por ejemplo `.codex/Axapta/*.xpo`).
+- Antes de editar:
+  - Hacer analisis del flujo actual del metodo/clase.
+  - Solicitar explicitamente analisis y propuesta de mejoras cuando el caso sea susceptible a optimizacion de logica.
+  - Proponer ideas de mejora u optimizacion cuando exista oportunidad (minimo 2 alternativas cuando aplique), con recomendacion tecnica.
+- Fase 1 (solo clase AX):
+  - Crear un plan de cambios limitado a ESA clase AX (no mezclar aun cambios de endpoint, salvo peticion explicita).
+  - Documentar metodos impactados, contratos de entrada/salida (indices de container), validaciones y compatibilidad.
+- Fase 2 (registro temporal obligatorio):
+  - Crear o actualizar un `.md` temporal en `.codex/` con formato sugerido:
+    - `.codex/AX_<ClassName>_CHANGES_YYYY-MM-DD.md`
+  - Mantener ese archivo actualizado en cada iteracion hasta que AX quede validado/probado.
+  - El `.md` temporal debe incluir: objetivo, cambios por metodo, contratos nuevos/ajustados, riesgos, pendientes para API.
+- Fase 3 (ajuste de endpoints):
+  - Usar el MISMO `.md` temporal como fuente para aplicar los cambios en endpoints/DTOs/mappers/documentacion.
+  - No cerrar el trabajo de integracion AX->API si el `.md` no refleja el estado final aplicado.
+- Fase 4 (nuevos metodos AX que seran endpoint):
+  - Definir en el `.md` temporal el contrato AX propuesto y su mapeo al endpoint futuro (ruta, request, response, errores).
+  - Implementar primero AX, validar, y despues aplicar endpoint siguiendo ese contrato documentado.
+- Regla de salida:
+  - Todo cambio AX debe terminar con: plan por clase, `.md` temporal actualizado y checklist de pendientes para endpoint.
+
 ## Required Sub-Skill Routing
 
 1) Analisis (`brainstorming`)

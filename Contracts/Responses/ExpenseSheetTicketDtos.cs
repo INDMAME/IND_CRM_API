@@ -10,6 +10,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string FileId { get; set; }
         public string Description { get; set; }
         public int? Status { get; set; }
+        public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
         public decimal? TotalAmount { get; set; }
@@ -43,6 +44,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string FileId { get; set; }
         public string Description { get; set; }
         public int? Status { get; set; }
+        public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
         public decimal? TotalAmount { get; set; }

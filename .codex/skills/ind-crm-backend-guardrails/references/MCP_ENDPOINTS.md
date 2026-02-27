@@ -1,6 +1,6 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-26)
+# IND_CRM_API MCP Endpoints (actualizado 2026-02-27)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V22.
+Fuentes: `.codex/ENDPOINTS.md` + Postman V25.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
@@ -74,6 +74,10 @@ Endpoints
   - Proveedor primario: ECB.
   - Fallback nivel 2: Frankfurter (`https://api.frankfurter.app/latest?from={BASE}&to={TARGET}`).
   - Fallback nivel 3: OpenErApi (`https://open.er-api.com/v6/latest/{BASE}`).
+  - Source de respuesta (texto UI):
+    - `Banco Central Europeo (ECB)`
+    - `Frankfurter API (fallback nivel 2)`
+    - `Open ER API (fallback nivel 3)`
   - OpenErApi usa solo latest; si se solicita fecha distinta a hoy, se consulta latest igualmente.
   - Contrato MCP/publico sin cambios: se mantiene el mismo envelope y shape de respuesta.
   - Cache: MemoryCache 24h por `base|target|date` (solo resultados exitosos).
@@ -179,7 +183,7 @@ Endpoints
   - `mode` (0|1|2)
   - `existingFileId` (requerido cuando `mode=2`)
   - `description`, `currencyCode`, `transDate`, `urlFile` (requeridos cuando `mode=0|1`)
-  - `totalAmount`, `comentario`, `fileExtension` (opcionales)
+  - `totalAmount`, `comentario`, `fileExtension`, `gastoType` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
   - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
 
 ### Tool: crm_expensesheets_tickets_get
@@ -191,20 +195,23 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/tickets/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `page`, `pageSize`, `filter` (opcional), `status` (opcional 0|1)
+- Body:
+  - Requerido: `page`, `pageSize`, `createdDateFrom`, `createdDateTo` (yyyyMMdd o yyyy-MM-dd)
+  - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14)
+  - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company`, `X-IND-AxUserId` y el rango de fechas.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `totalAmount`, `status` (0|1), `transDate`, `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate`, `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body:
-  - `description`, `currencyCode`, `transDate`, `urlFile` (se completan desde ticket actual si no se envian)
+  - `description`, `currencyCode`, `gastoType`, `transDate`, `urlFile` (se completan desde ticket actual si no se envian)
   - `totalAmount` (opcional)
   - `comentario` (opcional)
   - `fileName` (opcional), `fileExtension` (opcional si no hay `fileName`)

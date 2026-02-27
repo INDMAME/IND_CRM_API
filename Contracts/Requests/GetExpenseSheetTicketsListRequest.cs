@@ -7,7 +7,12 @@ namespace IND_CRM_API.Contracts.Requests
     {
         public int page { get; set; }
         public int pageSize { get; set; }
+        public string searchKey { get; set; }
         public string filter { get; set; }
         public int? status { get; set; }
+        public string createdDateFrom { get; set; }
+        public string createdDateTo { get; set; }
+        public string currencyCode { get; set; }
+        public int? gastoType { get; set; }
     }
 }

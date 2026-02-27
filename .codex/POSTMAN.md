@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/Postman/IND_CRM_API V24.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V24.postman_collection.json`
+- Principal: `.codex/Postman/IND_CRM_API V25.postman_collection.json`
+- Soporte: `Notes/IND_CRM_API V25.postman_collection.json`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://crm.insertec.biz:7776`
@@ -31,6 +31,9 @@ Notas
 - Tickets:
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `processedByAI`.
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
+  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
+  - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
+  - `POST /api/crm/expensesheets/tickets/list` ahora requiere `createdDateFrom` y `createdDateTo`; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
 - V23 agrega tests automatizados para:
@@ -41,3 +44,4 @@ Notas
   - `Upload Ticket File (multipart)`.
   - `Apply IA to Ticket (replace lines)`.
   - `Get Ticket by FileId`.
+- V25 actualiza contratos de tickets con `gastoType` y filtros obligatorios de fecha en `tickets/list`.

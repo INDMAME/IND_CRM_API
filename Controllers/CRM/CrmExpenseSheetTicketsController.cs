@@ -35,6 +35,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeAddLinesToExisting = 2;
         private const int TicketStatusPending = 0;
         private const int TicketStatusAssigned = 1;
+        private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
@@ -192,6 +193,8 @@ namespace IND_CRM_API.Controllers.CRM
                     headerCon.Append(body.comentario?.Trim() ?? string.Empty);
                     headerCon.Append(body.urlFile?.Trim() ?? string.Empty);
                     headerCon.Append(provisionalFileName);
+                    if (body.gastoType.HasValue)
+                        headerCon.Append(body.gastoType.Value);
                 }
                 rootCon.Append(headerCon);
 
@@ -438,6 +441,8 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            string createdDateFromYmd = string.Empty;
+            string createdDateToYmd = string.Empty;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -457,6 +462,41 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0)
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+
+                if (string.IsNullOrWhiteSpace(body.createdDateFrom))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "createdDateFrom",
+                        Message = "createdDateFrom es obligatorio."
+                    });
+                }
+                else if (!TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "createdDateFrom",
+                        Message = "createdDateFrom debe ser yyyyMMdd o yyyy-MM-dd."
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(body.createdDateTo))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "createdDateTo",
+                        Message = "createdDateTo es obligatorio."
+                    });
+                }
+                else if (!TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "createdDateTo",
+                        Message = "createdDateTo debe ser yyyyMMdd o yyyy-MM-dd."
+                    });
+                }
+
                 if (body.status.HasValue && !IsValidTicketStatus(body.status.Value))
                 {
                     validationErrors.Add(new IndValidationError
@@ -464,6 +504,29 @@ namespace IND_CRM_API.Controllers.CRM
                         Field = "status",
                         Message = "status invalido. Valores permitidos: 0 Pending, 1 Assigned."
                     });
+                }
+
+                if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "gastoType",
+                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
+                {
+                    var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
+                    var toOk = DateTime.TryParseExact(createdDateToYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate);
+                    if (fromOk && toOk && fromDate > toDate)
+                    {
+                        validationErrors.Add(new IndValidationError
+                        {
+                            Field = "createdDateFrom",
+                            Message = "createdDateFrom no puede ser mayor que createdDateTo."
+                        });
+                    }
                 }
             }
 
@@ -488,18 +551,31 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                var filterValue = body.filter?.Trim() ?? string.Empty;
+                var searchKeyValue = (body.searchKey ?? body.filter ?? string.Empty).Trim();
+                var statusValue = body.status;
+                var currencyCodeValue = (body.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var gastoTypeValue = body.gastoType;
                 Logger.Log(
-                    $"[API-IN] GetExpenseSheetTicketsList filter={filterValue} status={ToLogValue(body.status)} page={body.page} pageSize={body.pageSize} " +
+                    $"[API-IN] GetExpenseSheetTicketsList searchKey={searchKeyValue} status={ToLogValue(statusValue)} page={body.page} pageSize={body.pageSize} " +
+                    $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} currencyCode={currencyCodeValue} gastoType={ToLogValue(gastoTypeValue)} " +
                     $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
                 con.Append(axUserId);
-                con.Append(filterValue);
-                if (body.status.HasValue)
-                    con.Append(body.status.Value);
+                con.Append(searchKeyValue);
+                if (statusValue.HasValue)
+                    con.Append(statusValue.Value);
+                else
+                    con.Append(string.Empty);
+                con.Append(createdDateFromYmd);
+                con.Append(createdDateToYmd);
+                con.Append(currencyCodeValue);
+                if (gastoTypeValue.HasValue)
+                    con.Append(gastoTypeValue.Value);
+                else
+                    con.Append(string.Empty);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -578,11 +654,21 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
+                if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "gastoType",
+                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    });
+                }
+
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeYmdDate(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
 
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
+                    !body.gastoType.HasValue &&
                     !body.totalAmount.HasValue &&
                     !body.status.HasValue &&
                     !body.processedByAI.HasValue &&
@@ -671,6 +757,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var mergedDescription = (body.description ?? existing.Description ?? string.Empty).Trim();
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
@@ -708,6 +795,7 @@ namespace IND_CRM_API.Controllers.CRM
                 updateCon.Append(mergedUrlFile);
                 updateCon.Append(mergedFileName);
                 updateCon.Append(mergedProcessedByAI ? 1 : 0);
+                updateCon.Append(mergedGastoType);
 
                 var updateResultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -746,7 +834,8 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         FileId = fileId.Trim(),
                         FileName = mergedFileName,
-                        ProcessedByAI = mergedProcessedByAI
+                        ProcessedByAI = mergedProcessedByAI,
+                        GastoType = mergedGastoType
                     },
                     TraceId = traceId
                 });
@@ -827,6 +916,15 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
 
+                if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "gastoType",
+                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    });
+                }
+
                 if (body.lines == null || body.lines.Count == 0)
                 {
                     validationErrors.Add(new IndValidationError { Field = "lines", Message = "lines debe incluir al menos una linea." });
@@ -871,6 +969,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var mergedDescription = (body.description ?? existing.Description ?? string.Empty).Trim();
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
                 var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
                     ? body.totalAmount.Value
@@ -935,6 +1034,7 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(mergedComentario);
                 headerCon.Append(mergedUrlFile);
                 headerCon.Append(mergedFileName);
+                headerCon.Append(mergedGastoType);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -987,6 +1087,7 @@ namespace IND_CRM_API.Controllers.CRM
                     TicketRecId = extras.Count > 1 ? extras[1] : string.Empty,
                     TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount,
                     ProcessedByAI = extras.Count > 3 ? (ToNullableBool(extras[3]) ?? true) : true,
+                    GastoType = mergedGastoType,
                     FileName = mergedFileName,
                     LineRecIds = MapRecIdList(linesOut)
                 };
@@ -1836,6 +1937,14 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             var hasLines = body.lines != null && body.lines.Count > 0;
+            if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
+            {
+                errors.Add(new IndValidationError
+                {
+                    Field = "gastoType",
+                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                });
+            }
 
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
@@ -1967,6 +2076,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (!string.IsNullOrWhiteSpace(request.description) ||
                 !string.IsNullOrWhiteSpace(request.currencyCode) ||
+                request.gastoType.HasValue ||
                 request.totalAmount.HasValue ||
                 !string.IsNullOrWhiteSpace(request.transDate) ||
                 !string.IsNullOrWhiteSpace(request.comentario) ||
@@ -1989,6 +2099,7 @@ namespace IND_CRM_API.Controllers.CRM
                 currencyCode = NormalizeDraftCurrencyCode(
                     GetJsonStringIgnoreCase(dataObject, "currencyCode"),
                     GetJsonStringIgnoreCase(dataObject, "rawCurrency")),
+                gastoType = GetJsonIntIgnoreCase(dataObject, "gastoType"),
                 totalAmount = GetJsonDecimalIgnoreCase(dataObject, "totalAmount"),
                 transDate = GetJsonStringIgnoreCase(dataObject, "transDate"),
                 comentario = GetJsonStringIgnoreCase(dataObject, "comentario"),
@@ -2110,6 +2221,22 @@ namespace IND_CRM_API.Controllers.CRM
             return ToDecimal(token.ToString());
         }
 
+        // Gets an integer value from JObject using case-insensitive key lookup.
+        private static int? GetJsonIntIgnoreCase(JObject source, string propertyName)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(propertyName))
+                return null;
+
+            var token = source.GetValue(propertyName, StringComparison.OrdinalIgnoreCase);
+            if (token == null || token.Type == JTokenType.Null)
+                return null;
+
+            if (token.Type == JTokenType.Integer)
+                return token.Value<int>();
+
+            return ToInt(token.ToString());
+        }
+
         // Gets an object value from JObject using case-insensitive key lookup.
         private static JObject GetJsonObjectIgnoreCase(JObject source, string propertyName)
         {
@@ -2178,6 +2305,12 @@ namespace IND_CRM_API.Controllers.CRM
         private static bool IsValidTicketStatus(int status)
         {
             return status == TicketStatusPending || status == TicketStatusAssigned;
+        }
+
+        // Validates allowed values for AX CRMGastoType.
+        private static bool IsValidGastoType(int gastoType)
+        {
+            return AllowedGastoTypes.Contains(gastoType);
         }
 
         // Normalizes extension text for generated ticket filenames.
@@ -2259,6 +2392,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(comentario);
                 con.Append(urlFile);
                 con.Append(finalFileName ?? string.Empty);
+                con.Append(0);
+                if (source?.gastoType.HasValue == true)
+                    con.Append(source.gastoType.Value);
 
                 var result = ax.CallStaticClassMethod("INDCRMExpenseSheetService", "updateExpenseSheetTicket", con);
                 if (!TryReadHeader(result as IAxaptaContainer, out var success, out var axMessage, out _, out _))
@@ -2421,6 +2557,9 @@ namespace IND_CRM_API.Controllers.CRM
             con.Append((existing.Comentario ?? string.Empty).Trim());
             con.Append((mergedUrlFile ?? string.Empty).Trim());
             con.Append((mergedFileName ?? string.Empty).Trim());
+            con.Append((existing.ProcessedByAI ?? false) ? 1 : 0);
+            if (existing.GastoType.HasValue)
+                con.Append(existing.GastoType.Value);
 
             var resultObj = ax.CallStaticClassMethod(
                 "INDCRMExpenseSheetService",
@@ -2580,6 +2719,7 @@ namespace IND_CRM_API.Controllers.CRM
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
                 Description = headerExtras.Count > 1 ? headerExtras[1] : string.Empty,
                 Status = headerExtras.Count > 2 ? ToInt(headerExtras[2]) : null,
+                GastoType = headerExtras.Count > 11 ? ToInt(headerExtras[11]) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
@@ -2637,6 +2777,7 @@ namespace IND_CRM_API.Controllers.CRM
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     Status = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
