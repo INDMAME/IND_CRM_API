@@ -4,7 +4,8 @@
 Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
 - filtros opcionales robustos en listados de tickets,
 - opcionales de cabecera en update de hoja de gastos,
-- consistencia de mapeo nullable en endpoints de tickets.
+- consistencia de mapeo nullable en endpoints de tickets,
+- estandar de enums: valor fuera de catalogo => `null` (sin filtro/todo en listados).
 
 ## Alcance (fase AX)
 - Clase AX: `INDCRMExpenseSheetService`
@@ -20,6 +21,7 @@ Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
 ## Contrato de entrada/salida relevante
 - `getExpenseSheetTicketsList`:
   - `_data[4]` = `statusFilter` (opcional, `0|1` efectivo).
+  - `_data[8]` = `gastoType` (opcional; fuera de catalogo = sin filtro).
   - `_data[9]` = `processedByAI` (opcional, `0|1` efectivo).
   - Valores distintos de `0|1` (incluyendo vacio y token `null`) se tratan como "sin filtro".
 - `updateExpenseSheetHeader`:
@@ -34,6 +36,7 @@ Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
 - Se agrego `statusFilterRaw` para parsear `_data[4]` como texto.
 - Se cambio el parseo de `_data[4]` para activar filtro solo con `0` o `1`.
 - Se cambio el parseo de `_data[9]` para activar filtro solo con `0` o `1`.
+- Se cambio `gastoType` invalido para desactivar filtro en lugar de devolver `Sin datos`.
 - Se forzo salida numerica para enums `Status`, `ProcessedByAI` y `GastoType` usando variables `int` intermedias.
 - Se mantiene estable la logica principal del `select` y el formato de salida.
 
@@ -56,19 +59,23 @@ Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
 
 ## Ajuste de integracion API (pendiente de fase AX->API cubierto en este turno)
 - `CrmExpenseSheetTicketsController.GetExpenseSheetTicketsList`:
+  - normaliza `status` y `gastoType` invalidos a `null` (sin filtro/todo) antes de enviar a AX.
   - cuando `status` o `processedByAI` no vienen en request, se envia token `null` al container AX.
+- `CrmExpenseSheetsController.GetExpenseSheetsList`:
+  - normaliza `expenseSheetStatus` invalido a `null` (sin filtro/todo) antes de enviar a AX.
 - `CrmExpenseSheetsController.UpdateExpenseSheetHeader`:
   - se removieron restricciones artificiales entre `expenseSheetStatus`, `exchangeRateMode` y `estadoComentarios`.
   - se usa append de opcionales con posiciones estables y placeholders (`null`) para preservar indices AX.
 - `CrmExpenseSheetTicketsController` mapeos/respuesta:
-  - `MapExpenseSheetTicketDetail` y `MapExpenseSheetTicketList` devuelven defaults de enum (`0`/`false`) cuando parseo no disponible, evitando `null` para enums.
+  - `MapExpenseSheetTicketDetail` y `MapExpenseSheetTicketList` devuelven `null` cuando un enum viene fuera de catalogo.
+  - los valores validos `0/1/...` se preservan sin convertirlos a `null`.
   - `ToInt` se reforzo para parsear labels de enum frecuentes y formatos numericos decimales.
   - `ToNullableBool` se reforzo para parsear `yes/no` y variantes.
   - `UpdateExpenseSheetTicket` usa `ProcessedByAI` retornado por AX (extras) en la respuesta final.
 
 ## Riesgos y mitigaciones
-- Riesgo: consumidores legacy que dependian de defaults `false/0` en respuestas de tickets.
-- Mitigacion: se preserva semantica nullable de DTO y se alinea con datos reales de AX.
+- Riesgo: consumidores legacy que dependian de defaults `false/0` en respuestas de tickets cuando AX devolvia valores no validos.
+- Mitigacion: se adopta regla estable de enums invalido => `null`, manteniendo `0/1/...` validos.
 - Riesgo: payloads legacy con valores no numericos en `_data[8]/_data[9]` para update header.
 - Mitigacion: ahora se ignoran de forma defensiva en lugar de forzar actualizacion incorrecta.
 

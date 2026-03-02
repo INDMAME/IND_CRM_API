@@ -2228,12 +2228,12 @@ Formatversion: 1
         #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
         #
         #    if (hasGastoTypeFilter && !INDCRMExpenseSheetService::isValidGastoType(gastoTypeFilter))
-        #        return [['Sin datos.']];
+        #        hasGastoTypeFilter = false;
         #
         #    if (hasProcessedByAIFilter &&
         #        (processedByAIFilter < 0
         #      || processedByAIFilter > 1))
-        #        return [['Sin datos.']];
+        #        hasProcessedByAIFilter = false;
         #
         #    changecompany(companyId)
         #    {

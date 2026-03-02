@@ -484,24 +484,6 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
-                if (body.status.HasValue && !IsValidTicketStatus(body.status.Value))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "status",
-                        Message = "status invalido. Valores permitidos: 0 Pending, 1 Assigned."
-                    });
-                }
-
-                if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "gastoType",
-                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
-                    });
-                }
-
                 if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
                 {
                     var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
@@ -541,9 +523,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var pageValue = body.page;
                 var pageSizeValue = body.pageSize;
                 var searchKeyValue = (body.searchKey ?? body.filter ?? string.Empty).Trim();
-                var statusValue = body.status;
+                var statusValue = NormalizeTicketStatusOrNull(body.status);
                 var currencyCodeValue = (body.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
-                var gastoTypeValue = body.gastoType;
+                var gastoTypeValue = NormalizeGastoTypeOrNull(body.gastoType);
                 var processedByAIValue = body.processedByAI;
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetTicketsList searchKey={searchKeyValue} status={ToLogValue(statusValue)} page={pageValue} pageSize={pageSizeValue} " +
@@ -2356,6 +2338,24 @@ namespace IND_CRM_API.Controllers.CRM
             return AllowedGastoTypes.Contains(gastoType);
         }
 
+        // Standard enum normalization: invalid values are treated as null.
+        private static int? NormalizeTicketStatusOrNull(int? status)
+        {
+            if (!status.HasValue || !IsValidTicketStatus(status.Value))
+                return null;
+
+            return status.Value;
+        }
+
+        // Standard enum normalization: invalid values are treated as null.
+        private static int? NormalizeGastoTypeOrNull(int? gastoType)
+        {
+            if (!gastoType.HasValue || !IsValidGastoType(gastoType.Value))
+                return null;
+
+            return gastoType.Value;
+        }
+
         // Normalizes extension text for generated ticket filenames.
         private static string NormalizeFileExtension(string extension, string defaultExtension)
         {
@@ -2761,8 +2761,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
                 Description = headerExtras.Count > 1 ? headerExtras[1] : string.Empty,
-                Status = headerExtras.Count > 2 ? (ToInt(headerExtras[2]) ?? 0) : 0,
-                GastoType = headerExtras.Count > 11 ? (ToInt(headerExtras[11]) ?? 0) : 0,
+                Status = headerExtras.Count > 2 ? NormalizeTicketStatusOrNull(ToInt(headerExtras[2])) : null,
+                GastoType = headerExtras.Count > 11 ? NormalizeGastoTypeOrNull(ToInt(headerExtras[11])) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
@@ -2770,7 +2770,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
-                ProcessedByAI = headerExtras.Count > 10 ? (ToNullableBool(headerExtras[10]) ?? false) : false,
+                ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
@@ -2833,15 +2833,15 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
-                    Status = ToInt(AxContainerReadHelper.SafeString(row, 3)) ?? 0,
-                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)) ?? 0,
+                    Status = NormalizeTicketStatusOrNull(ToInt(AxContainerReadHelper.SafeString(row, 3))),
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 11))),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false,
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)),
                     HojaGastosIdDisplay = AxContainerReadHelper.SafeString(row, 12)
                 });
             }

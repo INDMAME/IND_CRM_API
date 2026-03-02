@@ -1150,15 +1150,6 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
                     validationErrors.Add(new IndValidationError { Field = "createdDateTo", Message = "createdDateTo debe ser yyyyMMdd o yyyy-MM-dd." });
 
-                if (body.expenseSheetStatus.HasValue && !IsValidExpenseSheetStatus(body.expenseSheetStatus.Value))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "expenseSheetStatus",
-                        Message = "expenseSheetStatus invalido. Valores permitidos: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid."
-                    });
-                }
-
                 if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
                 {
                     var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
@@ -1206,7 +1197,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var projIdValue = body.projId?.Trim() ?? string.Empty;
                 var currencyCodeValue = body.currencyCode?.Trim() ?? string.Empty;
-                var expenseSheetStatusValue = body.expenseSheetStatus;
+                var expenseSheetStatusValue = NormalizeExpenseSheetStatusOrNull(body.expenseSheetStatus);
 
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetsList filter={filterValue} billedMode={billedModeValue} page={pageValue} pageSize={pageSizeValue} " +
@@ -1396,6 +1387,15 @@ namespace IND_CRM_API.Controllers.CRM
         {
             return expenseSheetStatus >= ExpenseSheetStatusDraft &&
                    expenseSheetStatus <= ExpenseSheetStatusPaid;
+        }
+
+        // Standard enum normalization: invalid values are treated as null.
+        private static int? NormalizeExpenseSheetStatusOrNull(int? expenseSheetStatus)
+        {
+            if (!expenseSheetStatus.HasValue || !IsValidExpenseSheetStatus(expenseSheetStatus.Value))
+                return null;
+
+            return expenseSheetStatus.Value;
         }
 
         // Validates supported delete modes for expense sheet DELETE endpoint.
