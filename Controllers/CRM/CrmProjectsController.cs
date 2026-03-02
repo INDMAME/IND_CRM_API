@@ -22,6 +22,7 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/projects")]
     public class CrmProjectsController : BaseCrmController
     {
+        private const int MaxPageSize = 50;
         private readonly IAxaptaSessionManager _sessionManager;
 
         /// <summary>
@@ -58,6 +59,8 @@ namespace IND_CRM_API.Controllers.CRM
                 validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
             if (!pageSize.HasValue || pageSize.Value <= 0)
                 validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+            if (pageSize.HasValue && pageSize.Value > MaxPageSize)
+                validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
             if (validationErrors.Count > 0)
             {
@@ -82,7 +85,9 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetProjectsList filter={filter} page={page} pageSize={pageSize} user={username} traceId={traceId}");
+                var pageValue = page.Value;
+                var pageSizeValue = pageSize.Value;
+                Logger.Log($"[API-IN] GetProjectsList filter={filter} page={pageValue} pageSize={pageSizeValue} user={username} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -110,16 +115,15 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
 
-                var items = MapProjectList(root, out var message);
-                var pagedItems = PagingHelper.Apply(items, page.Value, pageSize.Value);
+                var items = MapProjectList(root, pageValue, pageSizeValue, out var message, out var total);
                 var okResponse = new IndPagedResponse<ProjectListItemDto>
                 {
                     Success = true,
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
-                    Total = items.Count,
-                    Page = page,
-                    PageSize = pageSize,
-                    Items = pagedItems,
+                    Total = total,
+                    Page = pageValue,
+                    PageSize = pageSizeValue,
+                    Items = items,
                     TraceId = traceId
                 };
 
@@ -143,9 +147,10 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Maps list items for project list endpoint.
-        private static List<ProjectListItemDto> MapProjectList(IAxaptaContainer root, out string message)
+        private static List<ProjectListItemDto> MapProjectList(IAxaptaContainer root, int page, int pageSize, out string message, out int total)
         {
             message = string.Empty;
+            total = 0;
             var items = new List<ProjectListItemDto>();
 
             if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
@@ -154,8 +159,20 @@ namespace IND_CRM_API.Controllers.CRM
             if (AxContainerReadHelper.IsSinDatos(root, out message))
                 return items;
 
-            var len = AxContainerReadHelper.SafeLength(root);
-            for (int i = 1; i <= len; i++)
+            total = AxContainerReadHelper.SafeLength(root);
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
                 if (row == null || AxContainerReadHelper.SafeLength(row) < 2)

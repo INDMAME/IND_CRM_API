@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/Postman/IND_CRM_API V25.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V25.postman_collection.json`
+- Principal: `.codex/Postman/IND_CRM_API V26.postman_collection.json`
+- Soporte: `Notes/IND_CRM_API V26.postman_collection.json`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://crm.insertec.biz:7776`
@@ -47,3 +47,4 @@ Notas
   - `Apply IA to Ticket (replace lines)`.
   - `Get Ticket by FileId`.
 - V25 actualiza contratos de tickets con `gastoType` y filtros de fecha en `tickets/list` (ahora opcionales).
+- V26 normaliza contratos completos en request body para endpoints con payload JSON, alineando el orden de campos al backend y el limite de paginacion (`pageSize` maximo 50) en ejemplos de listas.

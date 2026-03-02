@@ -41,6 +41,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeAddLinesToExisting = 2;
         private const int ExpenseSheetStatusDraft = 0;
         private const int ExpenseSheetStatusPaid = 4;
+        private const int MaxPageSize = 50;
 
         private readonly IAxaptaSessionManager _sessionManager;
 
@@ -1151,6 +1152,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0)
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+                if (body.pageSize > MaxPageSize)
+                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
                 if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
                     validationErrors.Add(new IndValidationError { Field = "createdDateFrom", Message = "createdDateFrom debe ser yyyyMMdd o yyyy-MM-dd." });
@@ -1241,17 +1244,16 @@ namespace IND_CRM_API.Controllers.CRM
                 );
 
                 var root = resultObj as IAxaptaContainer;
-                var items = MapExpenseSheetList(root, out var message);
-                var pagedItems = PagingHelper.Apply(items, pageValue, pageSizeValue);
+                var items = MapExpenseSheetList(root, pageValue, pageSizeValue, out var message, out var total);
 
                 var okResponse = new IndPagedResponse<ExpenseSheetListItemDto>
                 {
                     Success = true,
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
-                    Total = items.Count,
+                    Total = total,
                     Page = pageValue,
                     PageSize = pageSizeValue,
-                    Items = pagedItems,
+                    Items = items,
                     TraceId = traceId
                 };
                 LogOut(HttpStatusCode.OK);
@@ -1749,9 +1751,10 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Maps list items for expense sheet list endpoint.
-        private static List<ExpenseSheetListItemDto> MapExpenseSheetList(IAxaptaContainer root, out string message)
+        private static List<ExpenseSheetListItemDto> MapExpenseSheetList(IAxaptaContainer root, int page, int pageSize, out string message, out int total)
         {
             message = string.Empty;
+            total = 0;
             var items = new List<ExpenseSheetListItemDto>();
 
             if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
@@ -1760,8 +1763,20 @@ namespace IND_CRM_API.Controllers.CRM
             if (AxContainerReadHelper.IsSinDatos(root, out message))
                 return items;
 
-            var len = AxContainerReadHelper.SafeLength(root);
-            for (int i = 1; i <= len; i++)
+            total = AxContainerReadHelper.SafeLength(root);
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
                 var rowLen = AxContainerReadHelper.SafeLength(row);

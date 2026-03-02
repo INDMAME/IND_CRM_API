@@ -18,6 +18,7 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/accounts")]
     public class CrmAccountsController : BaseCrmController
     {
+        private const int MaxPageSize = 50;
         private readonly IAxaptaSessionManager _sessionManager;
         public CrmAccountsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
@@ -67,6 +68,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum es obligatorio." });
                 if (body.page <= 0) validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+                if (body.pageSize > MaxPageSize) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
             }
 
             if (validationErrors.Any())
@@ -115,9 +117,7 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
 
-                var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
-                var items = PagingHelper.Apply(data, body.page, body.pageSize);
-                var total = data?.Length ?? 0;
+                var items = ReadPagedItems(root, body.page, body.pageSize, out var total);
 
                 return Ok(new IndPagedResponse<object>
                 {
@@ -170,6 +170,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (body.page <= 0) validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+                if (body.pageSize > MaxPageSize) validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
             }
 
             if (validationErrors.Any())
@@ -218,9 +219,7 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
 
-                var data = IND_CRM_API.Helpers.AxContainerHelper.ToArray(root);
-                var items = PagingHelper.Apply(data, body.page, body.pageSize);
-                var total = data?.Length ?? 0;
+                var items = ReadPagedItems(root, body.page, body.pageSize, out var total);
 
                 return Ok(new IndPagedResponse<object>
                 {
@@ -247,6 +246,36 @@ namespace IND_CRM_API.Controllers.CRM
                 };
                 return Content(HttpStatusCode.InternalServerError, response);
             }
+        }
+
+        // Reads only the requested page from an AX container to avoid full materialization in API memory.
+        private static List<object> ReadPagedItems(IAxaptaContainer root, int page, int pageSize, out int total)
+        {
+            total = AxContainerReadHelper.SafeLength(root);
+            var items = new List<object>();
+
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (var i = start; i <= end; i++)
+            {
+                var value = AxContainerReadHelper.SafeValue(root, i);
+                if (value is IAxaptaContainer row)
+                    items.Add(AxContainerHelper.ToArray(row));
+                else
+                    items.Add(value);
+            }
+
+            return items;
         }
 
     }

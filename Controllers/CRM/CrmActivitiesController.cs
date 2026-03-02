@@ -24,6 +24,7 @@ namespace IND_CRM_API.Controllers.CRM
     [RoutePrefix("api/crm/activities")]
     public class CrmActivitiesController : BaseCrmController
     {
+        private const int MaxPageSize = 50;
         private readonly IAxaptaSessionManager _sessionManager;
  
         public CrmActivitiesController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
@@ -37,6 +38,8 @@ namespace IND_CRM_API.Controllers.CRM
             public string fromDate { get; set; }
             public string toDate { get; set; }
             public string accountNum { get; set; }
+            public int? page { get; set; }
+            public int? pageSize { get; set; }
         }
 
         /// <summary>
@@ -234,7 +237,9 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error en AX/COM", typeof(IndApiResponse<object>))]
         public IHttpActionResult ListActivities([FromBody] GetActivitiesRequest body)
         {
-            return BuildActivitiesListResponse(body, 1, 0);
+            var page = body?.page ?? 1;
+            var pageSize = body?.pageSize ?? MaxPageSize;
+            return BuildActivitiesListResponse(body, page, pageSize);
         }
 
         /// <summary>
@@ -1006,6 +1011,12 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "fromDate", Message = "fromDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (string.IsNullOrWhiteSpace(body.toDate) || !TryParseAxDate(body.toDate, out toDate))
                     validationErrors.Add(new IndValidationError { Field = "toDate", Message = "toDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (page <= 0)
+                    validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+                if (pageSize <= 0)
+                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+                if (pageSize > MaxPageSize)
+                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
             }
 
             if (validationErrors.Any())
@@ -1058,19 +1069,15 @@ namespace IND_CRM_API.Controllers.CRM
 
                 try
                 {
-                    var data = Helpers.AxContainerHelper.ToArray(root) ?? Array.Empty<object>();
-                    var usePaging = pageSize > 0;
-                    var responseTotal = usePaging ? (int?)data.Length : null;
-                    var responsePage = usePaging ? (int?)page : null;
-                    var responsePageSize = usePaging ? (int?)pageSize : null;
+                    var pagedItems = ReadPagedItems(root, page, pageSize, out var total);
                     return Ok(new IndPagedResponse<object>
                     {
                         Success = true,
                         Message = "OK",
-                        Total = responseTotal,
-                        Page = responsePage,
-                        PageSize = responsePageSize,
-                        Items = data.ToList(),
+                        Total = total,
+                        Page = page,
+                        PageSize = pageSize,
+                        Items = pagedItems,
                         TraceId = traceId
                     });
                 }
@@ -1153,6 +1160,36 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 return $"<SafeSerialize failed: {ex.Message}>";
             }
+        }
+
+        // Reads only one page from AX container to keep memory use stable on list endpoints.
+        private static List<object> ReadPagedItems(IAxaptaContainer root, int page, int pageSize, out int total)
+        {
+            total = AxContainerReadHelper.SafeLength(root);
+            var items = new List<object>();
+
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (var i = start; i <= end; i++)
+            {
+                var value = AxContainerReadHelper.SafeValue(root, i);
+                if (value is IAxaptaContainer row)
+                    items.Add(AxContainerHelper.ToArray(row));
+                else
+                    items.Add(value);
+            }
+
+            return items;
         }
 
     }

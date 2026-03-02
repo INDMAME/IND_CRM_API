@@ -35,6 +35,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeAddLinesToExisting = 2;
         private const int TicketStatusPending = 0;
         private const int TicketStatusAssigned = 1;
+        private const int MaxPageSize = 50;
         private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
 
         private readonly IAxaptaSessionManager _sessionManager;
@@ -462,6 +463,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
                 if (body.pageSize <= 0)
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+                if (body.pageSize > MaxPageSize)
+                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
                 if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
                 {
@@ -535,13 +538,15 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
+                var pageValue = body.page;
+                var pageSizeValue = body.pageSize;
                 var searchKeyValue = (body.searchKey ?? body.filter ?? string.Empty).Trim();
                 var statusValue = body.status;
                 var currencyCodeValue = (body.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var gastoTypeValue = body.gastoType;
                 var processedByAIValue = body.processedByAI;
                 Logger.Log(
-                    $"[API-IN] GetExpenseSheetTicketsList searchKey={searchKeyValue} status={ToLogValue(statusValue)} page={body.page} pageSize={body.pageSize} " +
+                    $"[API-IN] GetExpenseSheetTicketsList searchKey={searchKeyValue} status={ToLogValue(statusValue)} page={pageValue} pageSize={pageSizeValue} " +
                     $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} currencyCode={currencyCodeValue} gastoType={ToLogValue(gastoTypeValue)} " +
                     $"processedByAI={(processedByAIValue.HasValue ? (processedByAIValue.Value ? "1" : "0") : "null")} " +
                     $"user={username} axUserId={axUserId} traceId={traceId}");
@@ -573,18 +578,17 @@ namespace IND_CRM_API.Controllers.CRM
                     con
                 );
 
-                var items = MapExpenseSheetTicketList(resultObj as IAxaptaContainer, out var message);
-                var pagedItems = PagingHelper.Apply(items, body.page, body.pageSize);
+                var items = MapExpenseSheetTicketList(resultObj as IAxaptaContainer, pageValue, pageSizeValue, out var message, out var total);
 
                 LogOut(HttpStatusCode.OK);
                 return Ok(new IndPagedResponse<ExpenseSheetTicketListItemDto>
                 {
                     Success = true,
                     Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
-                    Total = items.Count,
-                    Page = body.page,
-                    PageSize = body.pageSize,
-                    Items = pagedItems,
+                    Total = total,
+                    Page = pageValue,
+                    PageSize = pageSizeValue,
+                    Items = items,
                     TraceId = traceId
                 });
             }
@@ -2788,9 +2792,10 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Maps AX ticket list rows to typed DTO list.
-        private static List<ExpenseSheetTicketListItemDto> MapExpenseSheetTicketList(IAxaptaContainer root, out string message)
+        private static List<ExpenseSheetTicketListItemDto> MapExpenseSheetTicketList(IAxaptaContainer root, int page, int pageSize, out string message, out int total)
         {
             message = string.Empty;
+            total = 0;
             var items = new List<ExpenseSheetTicketListItemDto>();
 
             if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
@@ -2799,8 +2804,20 @@ namespace IND_CRM_API.Controllers.CRM
             if (AxContainerReadHelper.IsSinDatos(root, out message))
                 return items;
 
-            var len = AxContainerReadHelper.SafeLength(root);
-            for (int i = 1; i <= len; i++)
+            total = AxContainerReadHelper.SafeLength(root);
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
                 if (row == null || AxContainerReadHelper.SafeLength(row) < 9)
