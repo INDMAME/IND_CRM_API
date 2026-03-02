@@ -2121,8 +2121,8 @@ Formatversion: 1
         #//  - _data[2] = axUserId
         #//  - _data[3] = searchKey/filterTxt (optional)
         #//  - _data[4] = statusFilter (optional, 0|1)
-        #//  - _data[5] = createdDateFrom (required, yyyymmdd)
-        #//  - _data[6] = createdDateTo   (required, yyyymmdd)
+        #//  - _data[5] = createdDateFrom (optional, yyyymmdd)
+        #//  - _data[6] = createdDateTo   (optional, yyyymmdd)
         #//  - _data[7] = currencyCode    (optional)
         #//  - _data[8] = gastoType       (optional)
         #// Output rows:
@@ -2170,8 +2170,7 @@ Formatversion: 1
         #    createdDateFrom = str2Date(conPeek(_data, 5), 321);
         #    createdDateTo   = str2Date(conPeek(_data, 6), 321);
         #
-        #    //if (!createdDateFrom || !createdDateTo ||
-        #    if(createdDateFrom > createdDateTo)
+        #    if (createdDateFrom && createdDateTo && createdDateFrom > createdDateTo)
         #        return [['Sin datos, la fecha desde no puede ser mayor a la fecha hasta.']];
         #
         #    if (conLen(_data) >= 7)
@@ -2221,10 +2220,10 @@ Formatversion: 1
         #            if (!docuRef.RecId)
         #                continue;
         #
-        #            if (docuRef.INDTransDate < createdDateFrom)
+        #            if (createdDateFrom && docuRef.INDTransDate < createdDateFrom)
         #                continue;
         #
-        #            if (docuRef.INDTransDate > createdDateTo)
+        #            if (createdDateTo && docuRef.INDTransDate > createdDateTo)
         #                continue;
         #
         #            conItem = [[

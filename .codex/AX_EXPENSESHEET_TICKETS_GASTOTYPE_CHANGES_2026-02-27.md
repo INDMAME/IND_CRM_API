@@ -61,19 +61,21 @@ Entrada actual:
 - `_data[2] = axUserId`
 - `_data[3] = searchKey/filterTxt` (opcional)
 - `_data[4] = statusFilter` (opcional, 0|1)
-- `_data[5] = createdDateFrom` (requerido, formato yyyymmdd)
-- `_data[6] = createdDateTo` (requerido, formato yyyymmdd)
+- `_data[5] = createdDateFrom` (opcional, formato yyyymmdd)
+- `_data[6] = createdDateTo` (opcional, formato yyyymmdd)
 - `_data[7] = currencyCode` (opcional)
 - `_data[8] = gastoType` (opcional)
 
 Reglas aplicadas:
-- `companyId`, `axUserId`, `createdDateFrom` y `createdDateTo` son obligatorios para ejecutar la consulta.
-- Si falta algun requerido o el rango es invalido (`from > to`), AX retorna `Sin datos`.
+- `companyId` y `axUserId` son obligatorios para ejecutar la consulta.
+- Si `createdDateFrom` y `createdDateTo` vienen informadas, AX valida rango (`from <= to`).
+- Si solo llega una fecha, AX aplica filtro abierto (desde/hasta).
+- Si no llega ninguna fecha, AX no aplica filtro por fecha.
 - `statusFilter` valido: `0..1`.
 - `currencyCode` se normaliza en mayusculas.
 - `gastoType` opcional se valida con `isValidGastoType(...)`.
 - `searchKey/filterTxt` usa `INDSearchKey` y conserva busqueda por `Description` y `FileId` para compatibilidad.
-- Rango de fechas obligatorio aplica sobre `DocuRef.INDTransDate`.
+- El filtro de fechas (cuando aplica) usa `DocuRef.INDTransDate`.
 
 ## Cambios endpoints C# aplicados (fase AX->API)
 Archivos actualizados:
@@ -93,7 +95,7 @@ Archivos actualizados:
 
 ### Validaciones y container AX alineados
 - `GetExpenseSheetTicketsList`:
-  - Requiere `createdDateFrom` y `createdDateTo` (ademas de headers `X-IND-Company` y `X-IND-AxUserId`).
+  - `createdDateFrom` y `createdDateTo` son opcionales (headers requeridos: `X-IND-Company` y `X-IND-AxUserId`).
   - Valida formato fecha (`yyyyMMdd` o `yyyy-MM-dd`) y rango (`from <= to`).
   - Valida `status` (0|1) y `gastoType` (0,1,2,3,4,5,6,7,8,14).
   - Construye container AX en orden fijo:
