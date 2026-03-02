@@ -463,15 +463,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body.pageSize <= 0)
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
 
-                if (string.IsNullOrWhiteSpace(body.createdDateFrom))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "createdDateFrom",
-                        Message = "createdDateFrom es obligatorio."
-                    });
-                }
-                else if (!TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
+                if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
                 {
                     validationErrors.Add(new IndValidationError
                     {
@@ -480,15 +472,7 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
-                if (string.IsNullOrWhiteSpace(body.createdDateTo))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "createdDateTo",
-                        Message = "createdDateTo es obligatorio."
-                    });
-                }
-                else if (!TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
+                if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
                 {
                     validationErrors.Add(new IndValidationError
                     {
@@ -2761,7 +2745,8 @@ namespace IND_CRM_API.Controllers.CRM
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
                 Description = headerExtras.Count > 1 ? headerExtras[1] : string.Empty,
                 Status = headerExtras.Count > 2 ? ToInt(headerExtras[2]) : null,
-                GastoType = headerExtras.Count > 11 ? ToInt(headerExtras[11]) : null,
+                // Always expose these fields in query responses even when AX omits values.
+                GastoType = headerExtras.Count > 11 ? (ToInt(headerExtras[11]) ?? 0) : 0,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
@@ -2769,7 +2754,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
-                ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
+                ProcessedByAI = headerExtras.Count > 10 ? (ToNullableBool(headerExtras[10]) ?? false) : false,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -2819,14 +2804,14 @@ namespace IND_CRM_API.Controllers.CRM
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     Status = ToInt(AxContainerReadHelper.SafeString(row, 3)),
-                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)),
+                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)) ?? 0,
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10))
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false
                 });
             }
 

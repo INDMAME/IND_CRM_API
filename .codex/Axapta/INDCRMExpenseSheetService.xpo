@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Viernes 2/27/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Lunes 3/2/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -2153,9 +2153,6 @@ Formatversion: 1
         #    if (!companyId)
         #        return conNull();
         #
-        #    if (conLen(_data) < 6)
-        #        return [['Sin datos.']];
-        #
         #    axUserId = conPeek(_data, 2);
         #
         #    if (!axUserId)
@@ -2170,14 +2167,12 @@ Formatversion: 1
         #        hasStatusFilter = true;
         #    }
         #
-        #    if (!conPeek(_data, 5) || !conPeek(_data, 6))
-        #        return [['Sin datos.']];
-        #
         #    createdDateFrom = str2Date(conPeek(_data, 5), 321);
         #    createdDateTo   = str2Date(conPeek(_data, 6), 321);
         #
-        #    if (!createdDateFrom || !createdDateTo || createdDateFrom > createdDateTo)
-        #        return [['Sin datos.']];
+        #    //if (!createdDateFrom || !createdDateTo ||
+        #    if(createdDateFrom > createdDateTo)
+        #        return [['Sin datos, la fecha desde no puede ser mayor a la fecha hasta.']];
         #
         #    if (conLen(_data) >= 7)
         #        currencyCode = conPeek(_data, 7);
