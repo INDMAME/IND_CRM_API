@@ -2086,7 +2086,8 @@ Formatversion: 1
         #                                                      strFmt('%1', docuRef.INDURLFile),
         #                                                      strFmt('%1', docuRef.INDFilename),
         #                                                      strFmt('%1', ticketHeader.ProcessedByAI),
-        #                                                      strFmt('%1', ticketHeader.GastoType)
+        #                                                      strFmt('%1', ticketHeader.GastoType),
+        #                                                      strFmt('%1', ticketHeader.hojaGastosIdDisplay())
         #                                                     ]);
         #
         #        while select ticketLine
@@ -2127,7 +2128,7 @@ Formatversion: 1
         #//  - _data[8] = gastoType       (optional)
         #//  - _data[9] = processedByAI   (optional, 0|1)
         #// Output rows:
-        #//  - [[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType], ...]
+        #//  - [[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType, HojaGastosIdDisplay], ...]
         #static server container getExpenseSheetTicketsList(container _data)
         #{
         #    DataAreaId         companyId;
@@ -2258,7 +2259,8 @@ Formatversion: 1
         #                        strFmt('%1', docuRef.INDURLFile),
         #                        strFmt('%1', docuRef.INDFilename),
         #                        strFmt('%1', ticketHeader.ProcessedByAI),
-        #                        strFmt('%1', ticketHeader.GastoType)
+        #                        strFmt('%1', ticketHeader.GastoType),
+        #                        strFmt('%1', ticketHeader.hojaGastosIdDisplay())
         #                      ]];
         #
         #            conResult += conItem;

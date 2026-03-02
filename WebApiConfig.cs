@@ -33,10 +33,10 @@ namespace IND_CRM_API
             // Do not expose detailed errors in responses.
             config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Never;
 
-            // Standard JSON serialization (omit nulls).
+            // Standard JSON serialization (include null fields for stable contracts).
             config.Formatters.JsonFormatter.SerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
             {
-                NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                NullValueHandling = Newtonsoft.Json.NullValueHandling.Include,
                 Formatting = Newtonsoft.Json.Formatting.None
             };
         }

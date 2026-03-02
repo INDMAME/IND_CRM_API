@@ -2761,6 +2761,7 @@ namespace IND_CRM_API.Controllers.CRM
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
                 ProcessedByAI = headerExtras.Count > 10 ? (ToNullableBool(headerExtras[10]) ?? false) : false,
+                HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -2817,7 +2818,8 @@ namespace IND_CRM_API.Controllers.CRM
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false,
+                    HojaGastosIdDisplay = AxContainerReadHelper.SafeString(row, 12)
                 });
             }
 

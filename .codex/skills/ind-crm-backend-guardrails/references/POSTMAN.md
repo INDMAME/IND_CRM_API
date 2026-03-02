@@ -32,6 +32,7 @@ Notas
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `processedByAI`.
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
+  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `hojaGastosIdDisplay`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
   - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
   - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).

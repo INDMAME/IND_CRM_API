@@ -191,6 +191,7 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Respuesta: cabecera incluye `processedByAI`, `gastoType` y `hojaGastosIdDisplay`.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`
@@ -200,6 +201,7 @@ Endpoints
   - Requerido: `page`, `pageSize`
   - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom`, `createdDateTo` (yyyyMMdd o yyyy-MM-dd), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
   - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional.
+- Respuesta: cada item incluye `processedByAI`, `gastoType` y `hojaGastosIdDisplay`.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`

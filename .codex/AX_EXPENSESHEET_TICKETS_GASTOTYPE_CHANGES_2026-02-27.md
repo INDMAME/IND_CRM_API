@@ -43,15 +43,15 @@ Se integro `GastoType` en metodos de ticket que crean, actualizan y devuelven ca
 ### 2) Salidas AX ampliadas con `GastoType`
 #### `getExpenseSheetTicket(container _data)`
 - Header extras agrega al final:
-  - `... , ProcessedByAI, GastoType`
+  - `... , ProcessedByAI, GastoType, HojaGastosIdDisplay`
 - Nota compatibilidad:
-  - Se agrego al final para no desplazar indices existentes.
+  - Se agregan campos al final para no desplazar indices existentes.
 
 #### `getExpenseSheetTicketsList(container _data)`
 - Cada row ahora retorna:
-  - `[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType]`
+  - `[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType, HojaGastosIdDisplay]`
 - Nota compatibilidad:
-  - `GastoType` agregado al final del row.
+  - `GastoType` y `HojaGastosIdDisplay` agregados al final del row.
 
 ### 3) `getExpenseSheetTicketsList` con filtros nuevos
 Se ampliaron filtros opcionales, replicando el patron de `getExpenseSheetsList`.
@@ -113,6 +113,9 @@ Archivos actualizados:
 - `ExpenseSheetTicketDetailDto` y `ExpenseSheetTicketListItemDto` ahora incluyen `GastoType`.
 - `MapExpenseSheetTicketDetail(...)` lee `GastoType` desde extras de cabecera.
 - `MapExpenseSheetTicketList(...)` lee `GastoType` desde row de listado.
+- `ExpenseSheetTicketDetailDto` y `ExpenseSheetTicketListItemDto` incluyen `HojaGastosIdDisplay`.
+- `MapExpenseSheetTicketDetail(...)` lee `HojaGastosIdDisplay` desde extras de cabecera.
+- `MapExpenseSheetTicketList(...)` lee `HojaGastosIdDisplay` desde row de listado.
 
 ### Routing y compatibilidad
 - No se cambiaron `RoutePrefix` ni plantillas de ruta.

@@ -19,6 +19,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string Comentario { get; set; }
         public string UrlFile { get; set; }
         public string FileName { get; set; }
+        public string HojaGastosIdDisplay { get; set; }
         public List<ExpenseSheetTicketLineDto> Lines { get; set; }
     }
 
@@ -52,5 +53,6 @@ namespace IND_CRM_API.Contracts.Responses
         public string TransDate { get; set; }
         public string UrlFile { get; set; }
         public string FileName { get; set; }
+        public string HojaGastosIdDisplay { get; set; }
     }
 }

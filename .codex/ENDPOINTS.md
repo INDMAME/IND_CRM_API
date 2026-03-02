@@ -114,12 +114,12 @@ Endpoints
   Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14).
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
-  Cabecera incluye `processedByAI` (bool) y `gastoType` (int).
+  Cabecera incluye `processedByAI` (bool), `gastoType` (int) y `hojaGastosIdDisplay` (string).
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom, createdDateTo, currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
   Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`.
-  Response items incluyen `processedByAI` (bool) y `gastoType` (int).
+  Response items incluyen `processedByAI` (bool), `gastoType` (int) y `hojaGastosIdDisplay` (string).
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate, comentario, urlFile, fileName, fileExtension, processedByAI).
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
