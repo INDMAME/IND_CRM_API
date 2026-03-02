@@ -2121,12 +2121,12 @@ Formatversion: 1
         #//  - _data[1] = CompanyId
         #//  - _data[2] = axUserId
         #//  - _data[3] = searchKey/filterTxt (optional)
-        #//  - _data[4] = statusFilter (optional, 0|1)
+        #//  - _data[4] = statusFilter (optional, 0|1; otros valores = sin filtro)
         #//  - _data[5] = createdDateFrom (optional, yyyymmdd)
         #//  - _data[6] = createdDateTo   (optional, yyyymmdd)
         #//  - _data[7] = currencyCode    (optional)
         #//  - _data[8] = gastoType       (optional)
-        #//  - _data[9] = processedByAI   (optional, 0|1)
+        #//  - _data[9] = processedByAI   (optional, 0|1; otros valores = sin filtro)
         #// Output rows:
         #//  - [[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType, HojaGastosIdDisplay], ...]
         #static server container getExpenseSheetTicketsList(container _data)
@@ -2146,6 +2146,7 @@ Formatversion: 1
         #    int                processedByAIFilter;
         #    boolean            hasProcessedByAIFilter;
         #    str 16             processedByAIRaw;
+        #    str 16             statusFilterRaw;
         #
         #    INDTicketInfoTable ticketHeader;
         #    DocuRef            docuRef;
@@ -2168,8 +2169,13 @@ Formatversion: 1
         #
         #    if (conLen(_data) >= 4)
         #    {
-        #        statusFilter = conPeek(_data, 4);
-        #        hasStatusFilter = true;
+        #        statusFilterRaw = strFmt('%1', conPeek(_data, 4));
+        #        statusFilterRaw = strLwr(strLTrim(strRTrim(statusFilterRaw)));
+        #        if (statusFilterRaw == '0' || statusFilterRaw == '1')
+        #        {
+        #            statusFilter = str2Int(statusFilterRaw);
+        #            hasStatusFilter = true;
+        #        }
         #    }
         #
         #    createdDateFrom = str2Date(conPeek(_data, 5), 321);
@@ -2190,8 +2196,8 @@ Formatversion: 1
         #    if (conLen(_data) >= 9)
         #    {
         #        processedByAIRaw = strFmt('%1', conPeek(_data, 9));
-        #        processedByAIRaw = strLTrim(strRTrim(processedByAIRaw));
-        #        if (processedByAIRaw != '')
+        #        processedByAIRaw = strLwr(strLTrim(strRTrim(processedByAIRaw)));
+        #        if (processedByAIRaw == '0' || processedByAIRaw == '1')
         #        {
         #            processedByAIFilter = str2Int(processedByAIRaw);
         #            hasProcessedByAIFilter = true;
@@ -2427,7 +2433,7 @@ Formatversion: 1
         #//  - _data[1] = CompanyId
         #//  - _data[2] = axUserId
         #// Output rows:
-        #//  - [[crmUserId, subordinateUserId], ...]
+        #//  - [[subordinateUserId, subordinateName], ...]
         #static server container getSubordinatesByUser(container _data)
         #{
         #    DataAreaId                 companyId;
@@ -2557,8 +2563,8 @@ Formatversion: 1
         #//  - _data[5] = CurrencyCode
         #//  - _data[6] = ExchRate
         #//  - _data[7] = ProjId
-        #//  - _data[8] = ExpenseSheetStatus (opcional)
-        #//  - _data[9] = ExchangeRateMode (opcional)
+        #//  - _data[8] = ExpenseSheetStatus (opcional, entero >= 0; otros valores = sin cambio)
+        #//  - _data[9] = ExchangeRateMode (opcional, entero >= 0; otros valores = sin cambio)
         #//  - _data[10] = estadoComentarios (opcional)
         #static server container updateExpenseSheetHeader(container _data)
         #{
@@ -2579,6 +2585,8 @@ Formatversion: 1
         #    INDExpenseSheetStatus expenseSheetStatus;
         #    INDExchangeRateMode   exchangeRateMode;
         #    CRMHojaGastosTable    header;
+        #    str 16                expenseSheetStatusRaw;
+        #    str 16                exchangeRateModeRaw;
         #    ;
         #    companyId = INDCRMUtilityService::getCompany(_data);
         #
@@ -2601,14 +2609,26 @@ Formatversion: 1
         #
         #    if (conLen(_data) >= 8)
         #    {
-        #        expenseSheetStatus   = conPeek(_data, 8);
-        #        hasExpenseSheetStatus = true;
+        #        expenseSheetStatusRaw = strFmt('%1', conPeek(_data, 8));
+        #        expenseSheetStatusRaw = strLwr(strLTrim(strRTrim(expenseSheetStatusRaw)));
+        #        if (expenseSheetStatusRaw == '0' || str2Int(expenseSheetStatusRaw) != 0)
+        #        {
+        #            expenseSheetStatus = str2Int(expenseSheetStatusRaw);
+        #            if (expenseSheetStatus >= 0)
+        #                hasExpenseSheetStatus = true;
+        #        }
         #    }
         #
         #    if (conLen(_data) >= 9)
         #    {
-        #        exchangeRateMode   = conPeek(_data, 9);
-        #        hasExchangeRateMode = true;
+        #        exchangeRateModeRaw = strFmt('%1', conPeek(_data, 9));
+        #        exchangeRateModeRaw = strLwr(strLTrim(strRTrim(exchangeRateModeRaw)));
+        #        if (exchangeRateModeRaw == '0' || str2Int(exchangeRateModeRaw) != 0)
+        #        {
+        #            exchangeRateMode = str2Int(exchangeRateModeRaw);
+        #            if (exchangeRateMode >= 0)
+        #                hasExchangeRateMode = true;
+        #        }
         #    }
         #
         #    if (conLen(_data) >= 10)

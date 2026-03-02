@@ -702,17 +702,6 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus debe ser mayor o igual que 0." });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
-                if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
-                    validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
-                if (!string.IsNullOrWhiteSpace(body.estadoComentarios) &&
-                    (!body.expenseSheetStatus.HasValue || !body.exchangeRateMode.HasValue))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "estadoComentarios",
-                        Message = "expenseSheetStatus y exchangeRateMode son obligatorios cuando se envia estadoComentarios."
-                    });
-                }
             }
 
             if (validationErrors.Any())
@@ -1420,17 +1409,29 @@ namespace IND_CRM_API.Controllers.CRM
         // Appends optional header fields to AX container using stable positions.
         private static void AppendHeaderEnumFields(IAxaptaContainer container, int? expenseSheetStatus, int? exchangeRateMode, string estadoComentarios)
         {
-            if (container == null || !expenseSheetStatus.HasValue)
+            if (container == null)
                 return;
 
-            container.Append(expenseSheetStatus.Value);
+            var hasEstadoComentarios = estadoComentarios != null;
+            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios)
+                return;
 
-            if (exchangeRateMode.HasValue)
+            const string noOptionalValueToken = "null";
+
+            if (expenseSheetStatus.HasValue)
+                container.Append(expenseSheetStatus.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            if (exchangeRateMode.HasValue || hasEstadoComentarios)
             {
-                container.Append(exchangeRateMode.Value);
+                if (exchangeRateMode.HasValue)
+                    container.Append(exchangeRateMode.Value);
+                else
+                    container.Append(noOptionalValueToken);
 
                 // _data[10] in AX updateExpenseSheetHeader: EstadoComentarios (optional).
-                if (estadoComentarios != null)
+                if (hasEstadoComentarios)
                     container.Append(estadoComentarios.Trim());
             }
         }

@@ -553,13 +553,15 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
+                // Use explicit token so AX does not interpret empty filters as 0.
+                const string NoFilterToken = "null";
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(searchKeyValue);
                 if (statusValue.HasValue)
                     con.Append(statusValue.Value);
                 else
-                    con.Append(string.Empty);
+                    con.Append(NoFilterToken);
                 con.Append(createdDateFromYmd);
                 con.Append(createdDateToYmd);
                 con.Append(currencyCodeValue);
@@ -570,7 +572,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (processedByAIValue.HasValue)
                     con.Append(processedByAIValue.Value ? 1 : 0);
                 else
-                    con.Append(string.Empty);
+                    con.Append(NoFilterToken);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -797,7 +799,7 @@ namespace IND_CRM_API.Controllers.CRM
                     updateCon
                 );
 
-                if (!TryReadHeader(updateResultObj as IAxaptaContainer, out var success, out var message, out _, out _))
+                if (!TryReadHeader(updateResultObj as IAxaptaContainer, out var success, out var message, out var updateExtras, out _))
                 {
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
@@ -817,6 +819,11 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(status, error);
                 }
 
+                var responseFileId = updateExtras.Count > 0 ? updateExtras[0] : fileId.Trim();
+                var responseProcessedByAI = updateExtras.Count > 1
+                    ? (ToNullableBool(updateExtras[1]) ?? mergedProcessedByAI)
+                    : mergedProcessedByAI;
+
                 LogOut(HttpStatusCode.OK);
                 return Ok(new IndApiResponse<object>
                 {
@@ -826,9 +833,9 @@ namespace IND_CRM_API.Controllers.CRM
                     Errors = null,
                     Data = new
                     {
-                        FileId = fileId.Trim(),
+                        FileId = responseFileId,
                         FileName = mergedFileName,
-                        ProcessedByAI = mergedProcessedByAI,
+                        ProcessedByAI = responseProcessedByAI,
                         GastoType = mergedGastoType
                     },
                     TraceId = traceId
@@ -2755,8 +2762,8 @@ namespace IND_CRM_API.Controllers.CRM
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
                 Description = headerExtras.Count > 1 ? headerExtras[1] : string.Empty,
                 Status = headerExtras.Count > 2 ? ToInt(headerExtras[2]) : null,
-                // Always expose these fields in query responses even when AX omits values.
-                GastoType = headerExtras.Count > 11 ? (ToInt(headerExtras[11]) ?? 0) : 0,
+                // Keep null when AX omits optional fields.
+                GastoType = headerExtras.Count > 11 ? ToInt(headerExtras[11]) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
@@ -2764,7 +2771,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
-                ProcessedByAI = headerExtras.Count > 10 ? (ToNullableBool(headerExtras[10]) ?? false) : false,
+                ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
@@ -2828,14 +2835,14 @@ namespace IND_CRM_API.Controllers.CRM
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     Status = ToInt(AxContainerReadHelper.SafeString(row, 3)),
-                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)) ?? 0,
+                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false,
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)),
                     HojaGastosIdDisplay = AxContainerReadHelper.SafeString(row, 12)
                 });
             }
