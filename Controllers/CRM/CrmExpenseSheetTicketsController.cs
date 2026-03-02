@@ -2761,9 +2761,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
                 Description = headerExtras.Count > 1 ? headerExtras[1] : string.Empty,
-                Status = headerExtras.Count > 2 ? ToInt(headerExtras[2]) : null,
-                // Keep null when AX omits optional fields.
-                GastoType = headerExtras.Count > 11 ? ToInt(headerExtras[11]) : null,
+                Status = headerExtras.Count > 2 ? (ToInt(headerExtras[2]) ?? 0) : 0,
+                GastoType = headerExtras.Count > 11 ? (ToInt(headerExtras[11]) ?? 0) : 0,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
@@ -2771,7 +2770,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
-                ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
+                ProcessedByAI = headerExtras.Count > 10 ? (ToNullableBool(headerExtras[10]) ?? false) : false,
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
@@ -2834,15 +2833,15 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
-                    Status = ToInt(AxContainerReadHelper.SafeString(row, 3)),
-                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)),
+                    Status = ToInt(AxContainerReadHelper.SafeString(row, 3)) ?? 0,
+                    GastoType = ToInt(AxContainerReadHelper.SafeString(row, 11)) ?? 0,
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
                     TransDate = AxContainerReadHelper.SafeString(row, 7),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)),
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)) ?? false,
                     HojaGastosIdDisplay = AxContainerReadHelper.SafeString(row, 12)
                 });
             }
@@ -2870,8 +2869,51 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(value))
                 return null;
 
-            if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            var trimmed = value.Trim();
+
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
+
+            var lowered = trimmed.ToLowerInvariant();
+            switch (lowered)
+            {
+                case "pending":
+                case "pendiente":
+                    return 0;
+                case "assigned":
+                case "asignado":
+                    return 1;
+                case "none":
+                    return 0;
+                case "peaje":
+                    return 1;
+                case "parking":
+                    return 2;
+                case "km":
+                    return 3;
+                case "desayuno":
+                    return 4;
+                case "comida":
+                    return 5;
+                case "cena":
+                    return 6;
+                case "hotel":
+                    return 7;
+                case "varios":
+                    return 8;
+                case "taxi":
+                    return 14;
+            }
+
+            if (decimal.TryParse(NormalizeDecimalValue(trimmed), NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalParsed))
+            {
+                if (decimal.Truncate(decimalParsed) == decimalParsed &&
+                    decimalParsed >= int.MinValue &&
+                    decimalParsed <= int.MaxValue)
+                {
+                    return (int)decimalParsed;
+                }
+            }
 
             return null;
         }
@@ -2992,6 +3034,12 @@ namespace IND_CRM_API.Controllers.CRM
                 return true;
 
             if (trimmed == "0")
+                return false;
+
+            var lowered = trimmed.ToLowerInvariant();
+            if (lowered == "yes" || lowered == "si" || lowered == "s")
+                return true;
+            if (lowered == "no")
                 return false;
 
             return null;

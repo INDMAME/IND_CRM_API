@@ -34,12 +34,22 @@ Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
 - Se agrego `statusFilterRaw` para parsear `_data[4]` como texto.
 - Se cambio el parseo de `_data[4]` para activar filtro solo con `0` o `1`.
 - Se cambio el parseo de `_data[9]` para activar filtro solo con `0` o `1`.
+- Se forzo salida numerica para enums `Status`, `ProcessedByAI` y `GastoType` usando variables `int` intermedias.
 - Se mantiene estable la logica principal del `select` y el formato de salida.
 
 ### updateExpenseSheetHeader
 - Se agregaron `expenseSheetStatusRaw` y `exchangeRateModeRaw`.
 - Se cambio parseo de `_data[8]` y `_data[9]` para activar update solo con enteros validos (>= 0).
 - Se evita que placeholders de API activen actualizaciones no deseadas.
+
+### getExpenseSheetTicket
+- Se forzo salida numerica para enums `Status`, `ProcessedByAI` y `GastoType` usando variables `int` intermedias.
+
+### updateExpenseSheetTicket
+- Se forzo salida numerica para `ProcessedByAI` en extras de header (respuesta AX).
+
+### updateExpenseSheetTicketFromIA
+- Se forzo salida numerica para `ProcessedByAI` en extras de header (respuesta AX).
 
 ### getSubordinatesByUser
 - Se corrigio el comentario de contrato de salida para reflejar el orden real de columnas.
@@ -51,7 +61,9 @@ Corregir discrepancias de contrato AX/API en gastos y tickets, priorizando:
   - se removieron restricciones artificiales entre `expenseSheetStatus`, `exchangeRateMode` y `estadoComentarios`.
   - se usa append de opcionales con posiciones estables y placeholders (`null`) para preservar indices AX.
 - `CrmExpenseSheetTicketsController` mapeos/respuesta:
-  - `MapExpenseSheetTicketDetail` y `MapExpenseSheetTicketList` preservan `null` en `ProcessedByAI` y `GastoType`.
+  - `MapExpenseSheetTicketDetail` y `MapExpenseSheetTicketList` devuelven defaults de enum (`0`/`false`) cuando parseo no disponible, evitando `null` para enums.
+  - `ToInt` se reforzo para parsear labels de enum frecuentes y formatos numericos decimales.
+  - `ToNullableBool` se reforzo para parsear `yes/no` y variantes.
   - `UpdateExpenseSheetTicket` usa `ProcessedByAI` retornado por AX (extras) en la respuesta final.
 
 ## Riesgos y mitigaciones
