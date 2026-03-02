@@ -33,7 +33,8 @@ Notas
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
-  - `POST /api/crm/expensesheets/tickets/list` ahora requiere `createdDateFrom` y `createdDateTo`; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
+  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
+  - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
 - V23 agrega tests automatizados para:
@@ -44,4 +45,4 @@ Notas
   - `Upload Ticket File (multipart)`.
   - `Apply IA to Ticket (replace lines)`.
   - `Get Ticket by FileId`.
-- V25 actualiza contratos de tickets con `gastoType` y filtros obligatorios de fecha en `tickets/list`.
+- V25 actualiza contratos de tickets con `gastoType` y filtros de fecha en `tickets/list` (ahora opcionales).

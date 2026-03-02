@@ -14,5 +14,6 @@ namespace IND_CRM_API.Contracts.Requests
         public string createdDateTo { get; set; }
         public string currencyCode { get; set; }
         public int? gastoType { get; set; }
+        public bool? processedByAI { get; set; }
     }
 }

@@ -197,9 +197,9 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body:
-  - Requerido: `page`, `pageSize`, `createdDateFrom`, `createdDateTo` (yyyyMMdd o yyyy-MM-dd)
-  - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14)
-  - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company`, `X-IND-AxUserId` y el rango de fechas.
+  - Requerido: `page`, `pageSize`
+  - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom`, `createdDateTo` (yyyyMMdd o yyyy-MM-dd), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
+  - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`

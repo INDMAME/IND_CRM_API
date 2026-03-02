@@ -65,6 +65,7 @@ Entrada actual:
 - `_data[6] = createdDateTo` (opcional, formato yyyymmdd)
 - `_data[7] = currencyCode` (opcional)
 - `_data[8] = gastoType` (opcional)
+- `_data[9] = processedByAI` (opcional, 0|1)
 
 Reglas aplicadas:
 - `companyId` y `axUserId` son obligatorios para ejecutar la consulta.
@@ -74,6 +75,7 @@ Reglas aplicadas:
 - `statusFilter` valido: `0..1`.
 - `currencyCode` se normaliza en mayusculas.
 - `gastoType` opcional se valida con `isValidGastoType(...)`.
+- `processedByAI` opcional acepta `0|1` y filtra `INDTicketInfoTable.ProcessedByAI`.
 - `searchKey/filterTxt` usa `INDSearchKey` y conserva busqueda por `Description` y `FileId` para compatibilidad.
 - El filtro de fechas (cuando aplica) usa `DocuRef.INDTransDate`.
 
@@ -88,7 +90,7 @@ Archivos actualizados:
 
 ### Contratos request actualizados
 - `GetExpenseSheetTicketsListRequest`:
-  - Nuevos campos: `searchKey`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`.
+  - Nuevos campos: `searchKey`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`.
   - Compatibilidad: `filter` se mantiene y se mapea como fallback de `searchKey`.
 - Create/Update/IA:
   - Se agrego `gastoType` para crear/actualizar en AX.
@@ -97,9 +99,9 @@ Archivos actualizados:
 - `GetExpenseSheetTicketsList`:
   - `createdDateFrom` y `createdDateTo` son opcionales (headers requeridos: `X-IND-Company` y `X-IND-AxUserId`).
   - Valida formato fecha (`yyyyMMdd` o `yyyy-MM-dd`) y rango (`from <= to`).
-  - Valida `status` (0|1) y `gastoType` (0,1,2,3,4,5,6,7,8,14).
+  - Valida `status` (0|1), `gastoType` (0,1,2,3,4,5,6,7,8,14) y `processedByAI` (0|1 en AX; bool en request API).
   - Construye container AX en orden fijo:
-    - `[company, axUserId, searchKey, status|empty, createdDateFrom, createdDateTo, currencyCode|empty, gastoType|empty]`
+    - `[company, axUserId, searchKey, status|empty, createdDateFrom, createdDateTo, currencyCode|empty, gastoType|empty, processedByAI|empty]`
 - `createExpenseSheetTicket`:
   - En mode 0/1 envia `headerIn[9]=gastoType` cuando aplica.
 - `updateExpenseSheetTicket`:

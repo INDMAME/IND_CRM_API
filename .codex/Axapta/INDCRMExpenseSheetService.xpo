@@ -2125,6 +2125,7 @@ Formatversion: 1
         #//  - _data[6] = createdDateTo   (optional, yyyymmdd)
         #//  - _data[7] = currencyCode    (optional)
         #//  - _data[8] = gastoType       (optional)
+        #//  - _data[9] = processedByAI   (optional, 0|1)
         #// Output rows:
         #//  - [[FileId, Description, Status, CurrencyCode, TotalAmount, CreatedByUserId, TransDate, UrlFile, FileName, ProcessedByAI, GastoType], ...]
         #static server container getExpenseSheetTicketsList(container _data)
@@ -2141,6 +2142,9 @@ Formatversion: 1
         #    CurrencyCode       currencyCode;
         #    int                gastoTypeFilter;
         #    boolean            hasGastoTypeFilter;
+        #    int                processedByAIFilter;
+        #    boolean            hasProcessedByAIFilter;
+        #    str 16             processedByAIRaw;
         #
         #    INDTicketInfoTable ticketHeader;
         #    DocuRef            docuRef;
@@ -2182,6 +2186,17 @@ Formatversion: 1
         #        hasGastoTypeFilter = true;
         #    }
         #
+        #    if (conLen(_data) >= 9)
+        #    {
+        #        processedByAIRaw = strFmt('%1', conPeek(_data, 9));
+        #        processedByAIRaw = strLTrim(strRTrim(processedByAIRaw));
+        #        if (processedByAIRaw != '')
+        #        {
+        #            processedByAIFilter = str2Int(processedByAIRaw);
+        #            hasProcessedByAIFilter = true;
+        #        }
+        #    }
+        #
         #    if (hasStatusFilter &&
         #        (statusFilter < 0
         #      || statusFilter > 1))
@@ -2198,6 +2213,11 @@ Formatversion: 1
         #    if (hasGastoTypeFilter && !INDCRMExpenseSheetService::isValidGastoType(gastoTypeFilter))
         #        return [['Sin datos.']];
         #
+        #    if (hasProcessedByAIFilter &&
+        #        (processedByAIFilter < 0
+        #      || processedByAIFilter > 1))
+        #        return [['Sin datos.']];
+        #
         #    changecompany(companyId)
         #    {
         #        crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
@@ -2211,6 +2231,7 @@ Formatversion: 1
         #               && (!filterTxt          || ticketHeader.SearchKey like likePattern )
         #               && (!currencyCode       || ticketHeader.CurrencyCode == currencyCode)
         #               && (!hasGastoTypeFilter || ticketHeader.GastoType == gastoTypeFilter)
+        #               && (!hasProcessedByAIFilter || ticketHeader.ProcessedByAI == processedByAIFilter)
         #        {
         #            select firstonly docuRef
         #                where docuRef.RefTableId == tableNum(INDTicketInfoTable)

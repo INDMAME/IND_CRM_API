@@ -539,9 +539,11 @@ namespace IND_CRM_API.Controllers.CRM
                 var statusValue = body.status;
                 var currencyCodeValue = (body.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var gastoTypeValue = body.gastoType;
+                var processedByAIValue = body.processedByAI;
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetTicketsList searchKey={searchKeyValue} status={ToLogValue(statusValue)} page={body.page} pageSize={body.pageSize} " +
                     $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} currencyCode={currencyCodeValue} gastoType={ToLogValue(gastoTypeValue)} " +
+                    $"processedByAI={(processedByAIValue.HasValue ? (processedByAIValue.Value ? "1" : "0") : "null")} " +
                     $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
@@ -558,6 +560,10 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(currencyCodeValue);
                 if (gastoTypeValue.HasValue)
                     con.Append(gastoTypeValue.Value);
+                else
+                    con.Append(string.Empty);
+                if (processedByAIValue.HasValue)
+                    con.Append(processedByAIValue.Value ? 1 : 0);
                 else
                     con.Append(string.Empty);
 
