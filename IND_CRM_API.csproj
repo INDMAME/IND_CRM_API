@@ -240,6 +240,7 @@
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
     <Compile Include="Services\IND_OpenAiModerationService.cs" />
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
+    <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
     <Compile Include="Services\IAxLogger.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
     <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />

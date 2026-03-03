@@ -293,6 +293,23 @@ namespace IND_CRM_API.Controllers.System
                 LogApiOut(HttpStatusCode.OK, traceId, AxaptaSessionManager.LogLevel.Info);
                 return Ok(ok);
             }
+            catch (IND_OpenAiRateLimitException ex)
+            {
+                totalSw.Stop();
+                _logger.Log(
+                    "[SPEECH] OpenAI rate limit: " + ex.Message +
+                    " retryAfter=" + (ex.RetryAfterSeconds.HasValue ? ex.RetryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na") +
+                    " summary=" + (ex.ProviderSummary ?? string.Empty) +
+                    " totalMs=" + totalSw.ElapsedMilliseconds +
+                    " traceId=" + traceId,
+                    AxaptaSessionManager.LogLevel.Warning);
+
+                return ReturnTooManyRequests(
+                    traceId,
+                    "Se excedio el limite de solicitudes de IA. Intente de nuevo en unos segundos.",
+                    IndErrorCodes.AiRateLimitExceeded,
+                    ex.RetryAfterSeconds);
+            }
             catch (Exception ex)
             {
                 // Nunca loguear la API key. Solo registrar el resumen del error.
@@ -481,6 +498,20 @@ namespace IND_CRM_API.Controllers.System
                 _logger.Log("[IA-DRAFT] Validacion: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
                 LogApiOut((HttpStatusCode)422, traceId, AxaptaSessionManager.LogLevel.Warning);
                 return ReturnError((HttpStatusCode)422, traceId, ex.Message, IndErrorCodes.ValidationError, null);
+            }
+            catch (IND_OpenAiRateLimitException ex)
+            {
+                _logger.Log(
+                    "[IA-DRAFT] OpenAI rate limit: " + ex.Message +
+                    " retryAfter=" + (ex.RetryAfterSeconds.HasValue ? ex.RetryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na") +
+                    " summary=" + (ex.ProviderSummary ?? string.Empty),
+                    AxaptaSessionManager.LogLevel.Warning);
+
+                return ReturnTooManyRequests(
+                    traceId,
+                    "Se excedio el limite de solicitudes de IA. Intente de nuevo en unos segundos.",
+                    IndErrorCodes.AiRateLimitExceeded,
+                    ex.RetryAfterSeconds);
             }
             catch (TaskCanceledException ex)
             {
@@ -958,6 +989,29 @@ namespace IND_CRM_API.Controllers.System
 
             status = (HttpStatusCode)422;
             errorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields;
+        }
+
+        private IHttpActionResult ReturnTooManyRequests(string traceId, string message, string errorCode, int? retryAfterSeconds)
+        {
+            LogApiOut((HttpStatusCode)429, traceId, AxaptaSessionManager.LogLevel.Warning);
+
+            var payload = new IndApiResponse<object>
+            {
+                Success = false,
+                Message = message,
+                ErrorCode = errorCode,
+                Data = null,
+                Errors = null,
+                TraceId = traceId
+            };
+
+            var response = Request.CreateResponse((HttpStatusCode)429, payload);
+            if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0)
+            {
+                response.Headers.Add("Retry-After", retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture));
+            }
+
+            return ResponseMessage(response);
         }
 
         private IHttpActionResult ReturnError(HttpStatusCode statusCode, string traceId, string message, string errorCode, string field)

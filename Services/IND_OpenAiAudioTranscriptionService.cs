@@ -125,7 +125,19 @@ namespace IND_CRM_API.Services
                     if (!response.IsSuccessStatusCode)
                     {
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
-                        _logger.Log($"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} {summary}".Trim(), AxaptaSessionManager.LogLevel.Error);
+                        var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
+                        _logger.Log(
+                            $"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : \"na\")} {summary}".Trim(),
+                            AxaptaSessionManager.LogLevel.Error);
+
+                        if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
+                        {
+                            throw new IND_OpenAiRateLimitException(
+                                "OpenAI rate limit exceeded while transcribing audio.",
+                                retryAfterSeconds,
+                                summary);
+                        }
+
                         throw new Exception("Fallo al transcribir con OpenAI.");
                     }
 

@@ -91,7 +91,19 @@ namespace IND_CRM_API.Services
                     if (!response.IsSuccessStatusCode)
                     {
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
-                        _logger.Log($"[OPENAI] Expense draft failed status={(int)response.StatusCode} summary={summary}", AxaptaSessionManager.LogLevel.Warning);
+                        var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
+                        _logger.Log(
+                            $"[OPENAI] Expense draft failed status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : \"na\")} summary={summary}",
+                            AxaptaSessionManager.LogLevel.Warning);
+
+                        if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
+                        {
+                            throw new IND_OpenAiRateLimitException(
+                                "OpenAI rate limit exceeded while extracting expense ticket draft.",
+                                retryAfterSeconds,
+                                summary);
+                        }
+
                         throw new Exception("Error en servicio de extraccion de ticket.");
                     }
 

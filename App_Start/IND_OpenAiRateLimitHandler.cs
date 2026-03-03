@@ -25,12 +25,14 @@ namespace IND_CRM_API.App_Start
         private const string ExpenseMaxRequestsSettingKey = "OpenAI:RateLimitExpenseTicketMaxRequests";
         private const string ExpenseWindowSecondsSettingKey = "OpenAI:RateLimitExpenseTicketWindowSeconds";
         private const string MaxConcurrentPerUserSettingKey = "OpenAI:RateLimitMaxConcurrentPerUser";
+        private const string ValidationMultiplierSettingKey = "OpenAI:RateLimitValidationMultiplier";
 
         private const int DefaultSpeechMaxRequests = 5;
         private const int DefaultSpeechWindowSeconds = 300;
         private const int DefaultExpenseMaxRequests = 10;
         private const int DefaultExpenseWindowSeconds = 600;
         private const int DefaultMaxConcurrentPerUser = 1;
+        private const int DefaultValidationMultiplier = 1;
 
         private static readonly EndpointLimit SpeechLimit = new EndpointLimit(
             "speech",
@@ -52,11 +54,13 @@ namespace IND_CRM_API.App_Start
 
         private readonly IAxLogger _logger;
         private readonly int _maxConcurrentPerUser;
+        private readonly int _validationMultiplier;
 
         public IND_OpenAiRateLimitHandler(IAxLogger logger)
         {
             _logger = logger ?? new FileAxLogger();
             _maxConcurrentPerUser = ReadPositiveIntFromConfig(MaxConcurrentPerUserSettingKey, DefaultMaxConcurrentPerUser);
+            _validationMultiplier = ReadPositiveIntFromConfig(ValidationMultiplierSettingKey, DefaultValidationMultiplier);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -85,17 +89,21 @@ namespace IND_CRM_API.App_Start
 
             try
             {
-                if (!TryConsumeRequest(userKey, endpoint, out var retryAfterSeconds))
+                if (!TryConsumeRequest(userKey, endpoint, out var retryAfterSeconds, out var effectiveMaxRequests))
                 {
                     var traceId = Guid.NewGuid().ToString("N");
                     _logger.Log(
-                        $"[AI-LIMIT] Rate limit exceeded user={userKey} endpoint={endpoint.Name} maxRequests={endpoint.MaxRequests} windowSeconds={(int)endpoint.Window.TotalSeconds} retryAfterSeconds={retryAfterSeconds} traceId={traceId}",
+                        $"[AI-LIMIT] Rate limit exceeded user={userKey} endpoint={endpoint.Name} configuredMaxRequests={endpoint.MaxRequests} effectiveMaxRequests={effectiveMaxRequests} validationMultiplier={_validationMultiplier} windowSeconds={(int)endpoint.Window.TotalSeconds} retryAfterSeconds={retryAfterSeconds} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
+
+                    var limitMessage = _validationMultiplier > 1
+                        ? $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos (modo pruebas x{_validationMultiplier})."
+                        : $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos.";
 
                     return BuildTooManyRequestsResponse(
                         request,
                         traceId,
-                        $"Se excedio el limite de {endpoint.MaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos.",
+                        limitMessage,
                         IndErrorCodes.AiRateLimitExceeded,
                         retryAfterSeconds);
                 }
@@ -108,11 +116,12 @@ namespace IND_CRM_API.App_Start
             }
         }
 
-        private bool TryConsumeRequest(string userKey, EndpointLimit endpoint, out int retryAfterSeconds)
+        private bool TryConsumeRequest(string userKey, EndpointLimit endpoint, out int retryAfterSeconds, out int effectiveMaxRequests)
         {
             var nowUtc = DateTime.UtcNow;
             var key = userKey + "|" + endpoint.Name;
             var state = _rateWindows.GetOrAdd(key, _ => new RateWindowState(nowUtc));
+            effectiveMaxRequests = GetEffectiveMaxRequests(endpoint.MaxRequests);
 
             lock (state.SyncRoot)
             {
@@ -123,7 +132,7 @@ namespace IND_CRM_API.App_Start
                     state.Count = 0;
                 }
 
-                if (state.Count >= endpoint.MaxRequests)
+                if (state.Count >= effectiveMaxRequests)
                 {
                     var resetAt = state.WindowStartUtc.Add(endpoint.Window);
                     retryAfterSeconds = (int)Math.Ceiling((resetAt - nowUtc).TotalSeconds);
@@ -137,6 +146,15 @@ namespace IND_CRM_API.App_Start
                 retryAfterSeconds = 0;
                 return true;
             }
+        }
+
+        private int GetEffectiveMaxRequests(int configuredMaxRequests)
+        {
+            if (_validationMultiplier <= 1)
+                return configuredMaxRequests;
+
+            var effective = (int)Math.Ceiling((double)configuredMaxRequests / _validationMultiplier);
+            return effective <= 0 ? 1 : effective;
         }
 
         private bool TryAcquireConcurrency(string userKey, out int activeCount)
