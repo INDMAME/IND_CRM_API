@@ -291,7 +291,13 @@ namespace IND_CRM_API.Services
 - gastoType representa el tipo de gasto dominante del ticket.
 - Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
-- price debe representar el precio unitario de la linea. Si solo detectas un total y qty=1, usa ese valor como price.
+- qty debe ser la cantidad real de la linea (admite decimales) y nunca 0.
+- price debe representar el precio unitario de la linea.
+- lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
+- Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty.
+- Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
+- No uses separadores de miles en los numeros del JSON.
+- Si solo detectas un importe unico para la linea y qty=1, usa ese valor como price y lineTotal.
 - transDate en formato yyyyMMdd o null si no se puede inferir.
 - fileId debe ser null en todas las lineas (se asigna despues en backend).
 - qty por defecto 1 salvo evidencia fuerte.
@@ -456,8 +462,33 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(transDate))
                 warnings = EnsureWarnings(warnings, "No se pudo inferir fecha de gasto. Se deja transDate null.");
 
-            var qty = ParseQty(lineToken["qty"]);
+            var qtyParsed = TryParseDecimal(lineToken["qty"]);
+            var qty = qtyParsed.HasValue && qtyParsed.Value > 0m ? qtyParsed.Value : 1m;
+            if (!qtyParsed.HasValue || qtyParsed.Value <= 0m)
+                warnings = EnsureWarnings(warnings, "No se detecto qty valida. Se uso qty=1 por defecto.");
+
             var price = TryParseDecimal(lineToken["price"]);
+            var lineTotal = TryParseDecimal(lineToken["lineTotal"]);
+
+            if (!price.HasValue && lineTotal.HasValue && qty > 0m)
+            {
+                price = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
+                warnings = EnsureWarnings(warnings, "price se calculo desde lineTotal/qty por falta de precio unitario explicito.");
+            }
+
+            if (price.HasValue && lineTotal.HasValue && qty > 0m)
+            {
+                var expectedTotal = price.Value * qty;
+                if (Math.Abs(expectedTotal - lineTotal.Value) > 0.02m)
+                {
+                    var normalizedPrice = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
+                    if (normalizedPrice > 0m)
+                    {
+                        price = normalizedPrice;
+                        warnings = EnsureWarnings(warnings, "Se ajusto price para mantener coherencia con qty y lineTotal detectado.");
+                    }
+                }
+            }
 
             if (!price.HasValue)
                 warnings = EnsureWarnings(warnings, "No se detecto el price de la linea. Revisar manualmente.");
@@ -545,15 +576,6 @@ namespace IND_CRM_API.Services
             return value;
         }
 
-        private static decimal ParseQty(JToken token)
-        {
-            var parsed = TryParseDecimal(token);
-            if (!parsed.HasValue)
-                return 1m;
-
-            return parsed.Value <= 0m ? 1m : parsed.Value;
-        }
-
         private static decimal? TryParseDecimal(JToken token)
         {
             if (token == null)
@@ -562,11 +584,115 @@ namespace IND_CRM_API.Services
             if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
                 return token.Value<decimal>();
 
-            var text = token.ToString();
-            if (decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            if (token.Type == JTokenType.Boolean)
+                return token.Value<bool>() ? 1m : 0m;
+
+            return TryParseDecimalFromText(token.ToString());
+        }
+
+        private static decimal? TryParseDecimalFromText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var normalized = NormalizeNumericText(raw);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return null;
+
+            if (decimal.TryParse(
+                normalized,
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var parsed))
+            {
+                return parsed;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.GetCultureInfo("es-ES"), out parsed))
                 return parsed;
 
             return null;
+        }
+
+        private static string NormalizeNumericText(string raw)
+        {
+            var trimmed = (raw ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+                return string.Empty;
+
+            var filteredChars = trimmed
+                .Where(ch => char.IsDigit(ch) || ch == '-' || ch == '+' || ch == '.' || ch == ',')
+                .ToArray();
+            var candidate = new string(filteredChars);
+            if (string.IsNullOrWhiteSpace(candidate))
+                return string.Empty;
+
+            if (candidate.Length > 1)
+            {
+                var hasLeadingSign = candidate[0] == '-' || candidate[0] == '+';
+                var sign = hasLeadingSign ? candidate[0].ToString() : string.Empty;
+                var unsigned = hasLeadingSign ? candidate.Substring(1) : candidate;
+                unsigned = unsigned.Replace("+", string.Empty).Replace("-", string.Empty);
+                candidate = sign + unsigned;
+            }
+
+            var lastComma = candidate.LastIndexOf(',');
+            var lastDot = candidate.LastIndexOf('.');
+
+            if (lastComma >= 0 && lastDot >= 0)
+            {
+                if (lastComma > lastDot)
+                {
+                    candidate = candidate.Replace(".", string.Empty);
+                    candidate = candidate.Replace(',', '.');
+                }
+                else
+                {
+                    candidate = candidate.Replace(",", string.Empty);
+                }
+
+                return candidate;
+            }
+
+            if (lastComma >= 0)
+            {
+                var commaCount = candidate.Count(ch => ch == ',');
+                if (commaCount > 1)
+                {
+                    var decimalsLen = candidate.Length - candidate.LastIndexOf(',') - 1;
+                    candidate = candidate.Replace(",", string.Empty);
+                    if (decimalsLen > 0 && decimalsLen <= 2 && candidate.Length > decimalsLen)
+                        candidate = candidate.Insert(candidate.Length - decimalsLen, ".");
+
+                    return candidate;
+                }
+
+                var decimals = candidate.Length - lastComma - 1;
+                if (decimals > 0 && decimals <= 2)
+                    return candidate.Replace(',', '.');
+
+                return candidate.Replace(",", string.Empty);
+            }
+
+            if (lastDot >= 0)
+            {
+                var dotCount = candidate.Count(ch => ch == '.');
+                if (dotCount > 1)
+                {
+                    var decimalsLen = candidate.Length - candidate.LastIndexOf('.') - 1;
+                    candidate = candidate.Replace(".", string.Empty);
+                    if (decimalsLen > 0 && decimalsLen <= 2 && candidate.Length > decimalsLen)
+                        candidate = candidate.Insert(candidate.Length - decimalsLen, ".");
+
+                    return candidate;
+                }
+
+                var decimals = candidate.Length - lastDot - 1;
+                if (decimals == 3 && lastDot > 1)
+                    return candidate.Replace(".", string.Empty);
+            }
+
+            return candidate;
         }
 
         private static int? NormalizeTypeValue(JToken token)
@@ -778,6 +904,10 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = new JArray("number", "null")
                     },
+                    ["lineTotal"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null")
+                    },
                     ["projId"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
@@ -791,6 +921,7 @@ namespace IND_CRM_API.Services
                     "fileId",
                     "qty",
                     "price",
+                    "lineTotal",
                     "projId")
             };
         }
