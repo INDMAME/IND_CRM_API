@@ -127,7 +127,7 @@ namespace IND_CRM_API.Services
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
                         var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
                         _logger.Log(
-                            $"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : \"na\")} {summary}".Trim(),
+                            $"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "na")} {summary}".Trim(),
                             AxaptaSessionManager.LogLevel.Error);
 
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))

@@ -93,7 +93,7 @@ namespace IND_CRM_API.Services
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
                         var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
                         _logger.Log(
-                            $"[OPENAI] Expense draft failed status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : \"na\")} summary={summary}",
+                            $"[OPENAI] Expense draft failed status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
                             AxaptaSessionManager.LogLevel.Warning);
 
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
