@@ -78,6 +78,7 @@ if errorlevel 1 (
 )
 
 echo Servicio creado correctamente.
+sc description IND_CRM_API "API REST de integracion CRM con Axapta (Business Connector)." >nul 2>&1
 echo.
 
 REM ------------------------------------------------------
