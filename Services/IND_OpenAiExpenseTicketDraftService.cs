@@ -730,6 +730,7 @@ namespace IND_CRM_API.Services
                     "mode",
                     "description",
                     "currencyCode",
+                    "gastoType",
                     "exchRate",
                     "projId",
                     "confidence",
