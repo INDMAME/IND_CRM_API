@@ -40,11 +40,12 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
 - Si se detecta ambiguedad de rutas, se debe corregir antes de continuar (no diferir).
 
 ## Regla critica de fechas (OBLIGATORIA EN TICKETS Y HOJAS DE GASTOS)
-- En endpoints de `tickets` y `hojas de gastos`, TODO campo de fecha expuesto por API (request y response) debe usar formato `DDMMYYYY`.
+- En endpoints de `tickets` y `hojas de gastos`, los campos de fecha del request deben aceptar `DDMMYYYY` y `DD.MM.YYYY`.
+- En endpoints de `tickets` y `hojas de gastos`, TODO campo de fecha del response debe devolverse en formato `DD.MM.YYYY`.
 - Campos incluidos (no limitativo): `transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`.
-- No aceptar formatos alternos en contrato API publico para esos endpoints.
 - Conversion permitida solo en frontera API->AX:
-  - API: `DDMMYYYY` (obligatorio).
+  - API input: `DDMMYYYY` o `DD.MM.YYYY`.
+  - API output: `DD.MM.YYYY`.
   - Interno AX: `yyyyMMdd` (si el metodo AX lo requiere).
 - Si una respuesta AX llega con otro formato, normalizar antes de devolver al cliente.
 

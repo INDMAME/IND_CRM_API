@@ -471,7 +471,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "createdDateFrom",
-                        Message = "createdDateFrom debe ser DDMMYYYY."
+                        Message = "createdDateFrom debe ser DDMMYYYY o DD.MM.YYYY."
                     });
                 }
 
@@ -480,7 +480,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "createdDateTo",
-                        Message = "createdDateTo debe ser DDMMYYYY."
+                        Message = "createdDateTo debe ser DDMMYYYY o DD.MM.YYYY."
                     });
                 }
 
@@ -642,7 +642,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY." });
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
@@ -894,7 +894,7 @@ namespace IND_CRM_API.Controllers.CRM
             else
             {
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY." });
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
                 if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
@@ -1938,7 +1938,7 @@ namespace IND_CRM_API.Controllers.CRM
                     errors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio cuando mode es 0 o 1." });
 
                 if (!TryNormalizeApiDateToAxYmd(body.transDate, out _))
-                    errors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY cuando mode es 0 o 1." });
+                    errors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY cuando mode es 0 o 1." });
 
                 if (string.IsNullOrWhiteSpace(body.urlFile))
                     errors.Add(new IndValidationError { Field = "urlFile", Message = "urlFile es obligatorio cuando mode es 0 o 1." });
@@ -2303,7 +2303,7 @@ namespace IND_CRM_API.Controllers.CRM
             return TryNormalizeApiDateToAxYmd(input, out var normalized) ? normalized : string.Empty;
         }
 
-        // Validates the mandatory API date format DDMMYYYY and converts it to AX format.
+        // Validates accepted API date formats (DDMMYYYY / DD.MM.YYYY) and converts to AX format.
         private static bool TryNormalizeApiDateToAxYmd(string input, out string normalized)
         {
             normalized = string.Empty;
@@ -2311,7 +2311,14 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
 
             var trimmed = input.Trim();
-            if (!DateTime.TryParseExact(trimmed, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            var acceptedFormats = new[]
+            {
+                "ddMMyyyy",
+                "dd.MM.yyyy",
+                "d.M.yyyy"
+            };
+
+            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 return false;
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
@@ -2329,6 +2336,8 @@ namespace IND_CRM_API.Controllers.CRM
             var acceptedFormats = new[]
             {
                 "ddMMyyyy",
+                "dd.MM.yyyy",
+                "d.M.yyyy",
                 "yyyyMMdd",
                 "yyyy-MM-dd",
                 "dd/MM/yyyy"
@@ -2341,7 +2350,7 @@ namespace IND_CRM_API.Controllers.CRM
             return true;
         }
 
-        // Formats known incoming AX/API date values to DDMMYYYY for response payloads.
+        // Formats known incoming AX/API date values to DD.MM.YYYY for response payloads.
         private static string FormatApiDate(string input)
         {
             if (!TryNormalizeAnyDateToAxYmd(input, out var normalizedYmd))
@@ -2350,7 +2359,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (!DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 return string.Empty;
 
-            return date.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+            return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }
 
         // Validates allowed values for AX INDTicketStatus.

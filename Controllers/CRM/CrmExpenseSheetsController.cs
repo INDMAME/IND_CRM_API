@@ -404,7 +404,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Gets fuel price per kilometer for the current user and date.
         /// </summary>
-        /// <param name="transDate">Fecha de consulta en formato DDMMYYYY. Si no se envia, usa hoy.</param>
+        /// <param name="transDate">Fecha de consulta en formato DDMMYYYY o DD.MM.YYYY. Si no se envia, usa hoy.</param>
         [HttpGet, Route("fuel-price-km")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetFuelPriceKmDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -441,7 +441,7 @@ namespace IND_CRM_API.Controllers.CRM
                         new IndValidationError
                         {
                             Field = "transDate",
-                            Message = "transDate debe ser DDMMYYYY."
+                            Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY."
                         }
                     },
                     Data = null,
@@ -834,7 +834,7 @@ namespace IND_CRM_API.Controllers.CRM
             else
             {
                 if (!TryNormalizeApiDateToAxYmd(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY." });
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
                 if (!body.typeValue.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "typeValue", Message = "typeValue es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.description))
@@ -1145,10 +1145,10 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
                 if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeApiDateToAxYmd(body.createdDateFrom, out createdDateFromYmd))
-                    validationErrors.Add(new IndValidationError { Field = "createdDateFrom", Message = "createdDateFrom debe ser DDMMYYYY." });
+                    validationErrors.Add(new IndValidationError { Field = "createdDateFrom", Message = "createdDateFrom debe ser DDMMYYYY o DD.MM.YYYY." });
 
                 if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeApiDateToAxYmd(body.createdDateTo, out createdDateToYmd))
-                    validationErrors.Add(new IndValidationError { Field = "createdDateTo", Message = "createdDateTo debe ser DDMMYYYY." });
+                    validationErrors.Add(new IndValidationError { Field = "createdDateTo", Message = "createdDateTo debe ser DDMMYYYY o DD.MM.YYYY." });
 
                 if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
                 {
@@ -1341,7 +1341,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 if (!TryNormalizeApiDateToAxYmd(line.transDate, out _))
-                    errors.Add(new IndValidationError { Field = prefix + ".transDate", Message = "transDate debe ser DDMMYYYY." });
+                    errors.Add(new IndValidationError { Field = prefix + ".transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
                 if (!line.typeValue.HasValue)
                     errors.Add(new IndValidationError { Field = prefix + ".typeValue", Message = "typeValue es obligatorio." });
                 if (string.IsNullOrWhiteSpace(line.description))
@@ -1359,7 +1359,7 @@ namespace IND_CRM_API.Controllers.CRM
             return TryNormalizeApiDateToAxYmd(input, out var normalized) ? normalized : string.Empty;
         }
 
-        // Validates the mandatory API date format DDMMYYYY and converts it to AX format.
+        // Validates accepted API date formats (DDMMYYYY / DD.MM.YYYY) and converts to AX format.
         private static bool TryNormalizeApiDateToAxYmd(string input, out string normalized)
         {
             normalized = string.Empty;
@@ -1367,7 +1367,14 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
 
             var trimmed = input.Trim();
-            if (!DateTime.TryParseExact(trimmed, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            var acceptedFormats = new[]
+            {
+                "ddMMyyyy",
+                "dd.MM.yyyy",
+                "d.M.yyyy"
+            };
+
+            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 return false;
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
@@ -1385,6 +1392,8 @@ namespace IND_CRM_API.Controllers.CRM
             var acceptedFormats = new[]
             {
                 "ddMMyyyy",
+                "dd.MM.yyyy",
+                "d.M.yyyy",
                 "yyyyMMdd",
                 "yyyy-MM-dd",
                 "dd/MM/yyyy"
@@ -1397,7 +1406,7 @@ namespace IND_CRM_API.Controllers.CRM
             return true;
         }
 
-        // Formats any supported incoming AX/API date into DDMMYYYY for responses.
+        // Formats any supported incoming AX/API date into DD.MM.YYYY for responses.
         private static string FormatApiDate(string input)
         {
             if (!TryNormalizeAnyDateToAxYmd(input, out var normalizedYmd))
@@ -1406,7 +1415,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (!DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 return string.Empty;
 
-            return date.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+            return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }
 
         // Validates allowed values for AX INDExpenseSheetStatus.
@@ -2142,6 +2151,8 @@ namespace IND_CRM_API.Controllers.CRM
             var trimmed = value.Trim();
             var acceptedFormats = new[]
             {
+                "dd.MM.yyyy",
+                "d.M.yyyy",
                 "yyyyMMdd",
                 "yyyy-MM-dd",
                 "MM/dd/yyyy",

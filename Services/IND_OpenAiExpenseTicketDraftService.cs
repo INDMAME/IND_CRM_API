@@ -298,7 +298,7 @@ namespace IND_CRM_API.Services
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
 - No uses separadores de miles en los numeros del JSON.
 - Si solo detectas un importe unico para la linea y qty=1, usa ese valor como price y lineTotal.
-- transDate en formato DDMMYYYY o null si no se puede inferir.
+- transDate en formato DD.MM.YYYY o null si no se puede inferir.
 - fileId debe ser null en todas las lineas (se asigna despues en backend).
 - qty por defecto 1 salvo evidencia fuerte.
 - internacional true solo si hay evidencia de gasto internacional.
@@ -774,12 +774,12 @@ namespace IND_CRM_API.Services
                 return null;
 
             var trimmed = value.Trim();
-            var acceptedFormats = new[] { "ddMMyyyy", "yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy" };
+            var acceptedFormats = new[] { "ddMMyyyy", "dd.MM.yyyy", "d.M.yyyy", "yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy" };
             if (DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
-                return parsed.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+                return parsed.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var any))
-                return any.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+                return any.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             return null;
         }

@@ -10,7 +10,7 @@ Convenciones globales
 - Header empresa: `X-IND-Company: {{companyId}}` (obligatorio en endpoints CRM).
 - Header usuario AX: `X-IND-AxUserId: {{axUserId}}` (obligatorio cuando el endpoint envia userId a AX).
 - `axUserId` se obtiene de `/api/auth/entra/context` (Header.AxUserId).
-- Fechas en tickets y hojas de gastos: `DDMMYYYY` (request y response).
+- Fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve `DD.MM.YYYY`.
 
 Catalogo MCP
 - Archivo canonico de tools: `.codex/MCP_TOOLS.json`.
@@ -129,14 +129,14 @@ Endpoints
   - `existingHojaGastosId` (requerido cuando `mode=2`)
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
-  - `lines[].transDate` (`DDMMYYYY`), `typeValue`, `description`, `qty`, `price`
+  - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
   - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Query: `transDate` (`DDMMYYYY`, opcional)
+- Query: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`, opcional)
 
 ### Tool: crm_expensesheets_get
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
@@ -156,7 +156,7 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate` (`DDMMYYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional)
+- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional)
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -171,7 +171,7 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY`, opcional), `createdDateTo` (`DDMMYYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional)
+- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional)
 - Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `exchRate`, `createdDate`.
 
 ## Expense Sheet Tickets
@@ -183,7 +183,7 @@ Endpoints
 - Body:
   - `mode` (0|1|2)
   - `existingFileId` (requerido cuando `mode=2`)
-  - `description`, `currencyCode`, `transDate` (`DDMMYYYY`), `urlFile` (requeridos cuando `mode=0|1`)
+  - `description`, `currencyCode`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (requeridos cuando `mode=0|1`)
   - `totalAmount`, `comentario`, `fileExtension`, `gastoType` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
   - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
 
@@ -199,7 +199,7 @@ Endpoints
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body:
   - Requerido: `page`, `pageSize`
-  - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom` (`DDMMYYYY`), `createdDateTo` (`DDMMYYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
+  - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
   - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional.
 - Respuesta: cada item incluye `processedByAI`, `gastoType` y `hojaGastosIdDisplay`.
 
@@ -207,14 +207,14 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY`), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body:
-  - `description`, `currencyCode`, `gastoType`, `transDate` (`DDMMYYYY`), `urlFile` (se completan desde ticket actual si no se envian)
+  - `description`, `currencyCode`, `gastoType`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (se completan desde ticket actual si no se envian)
   - `totalAmount` (opcional)
   - `comentario` (opcional)
   - `fileName` (opcional), `fileExtension` (opcional si no hay `fileName`)

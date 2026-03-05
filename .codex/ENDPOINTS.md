@@ -13,7 +13,7 @@ Reglas
 - Todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
 - Los endpoints de negocio CRM deben exigir companyId por header X-IND-Company.
 - Swagger debe documentar resumen, parametros, respuestas y errores.
-- Regla obligatoria de fechas en tickets y hojas de gastos: todo `transDate`, `createdDateFrom`, `createdDateTo` y `createdDate` usa formato `DDMMYYYY` en request/response.
+- Regla obligatoria de fechas en tickets y hojas de gastos: request admite `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` para `transDate`, `createdDateFrom`, `createdDateTo` y `createdDate`.
 
 Endpoints
 
@@ -83,7 +83,7 @@ Endpoints
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
   Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].internacional, lines[].fileId
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
-  Query optional: transDate (DDMMYYYY; si no se envia usa hoy)
+  Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate
@@ -93,7 +93,7 @@ Endpoints
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: transDate (DDMMYYYY), typeValue, description, qty, price
+  Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
@@ -101,7 +101,7 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY), createdDateTo (DDMMYYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, exchRate y createdDate
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
@@ -110,7 +110,7 @@ Endpoints
   mode 0: crea cabecera + lineas + DocuRef.
   mode 1: crea solo cabecera + DocuRef.
   mode 2: agrega lineas a `existingFileId`.
-  Body mode 0|1: description, currencyCode, transDate (DDMMYYYY), urlFile.
+  Body mode 0|1: description, currencyCode, transDate (DDMMYYYY o DD.MM.YYYY), urlFile.
   Body mode 0|2: lines[] con description, qty, price (totalAmount opcional).
   Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14).
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -118,11 +118,11 @@ Endpoints
   Cabecera incluye `processedByAI` (bool), `gastoType` (int) y `hojaGastosIdDisplay` (string).
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
-  Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom (DDMMYYYY), createdDateTo (DDMMYYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
+  Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
   Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`.
   Response items incluyen `processedByAI` (bool), `gastoType` (int) y `hojaGastosIdDisplay` (string).
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY), comentario, urlFile, fileName, fileExtension, processedByAI).
+  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), comentario, urlFile, fileName, fileExtension, processedByAI).
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.
   Reglas:
@@ -130,7 +130,7 @@ Endpoints
   - Marca `processedByAI=true`.
   - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
   - Compatibilidad de entrada: si llega envelope tipo `expensefromticket` (`{ Success, Message, Data, TraceId }`), el backend adapta automaticamente `Data` al contrato esperado.
-  Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate` (DDMMYYYY), `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
+  Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate` (DDMMYYYY o DD.MM.YYYY), `comentario` (opcional), `urlFile`, `fileName` (opcional), `fileExtension` (opcional), `lines[]`.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.

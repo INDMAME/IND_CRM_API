@@ -21,7 +21,7 @@ Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
-- Regla obligatoria de fechas en tickets y hojas de gastos: usar siempre `DDMMYYYY` en request y response (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
+- Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
 - `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`), y cuando se envia requiere `expenseSheetStatus` + `exchangeRateMode`.
@@ -35,7 +35,7 @@ Notas
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `hojaGastosIdDisplay`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
-  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
+  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
   - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.

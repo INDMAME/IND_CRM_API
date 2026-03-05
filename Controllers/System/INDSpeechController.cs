@@ -892,7 +892,7 @@ namespace IND_CRM_API.Controllers.System
                 return false;
 
             var trimmed = input.Trim();
-            var acceptedFormats = new[] { "ddMMyyyy", "yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy" };
+            var acceptedFormats = new[] { "ddMMyyyy", "dd.MM.yyyy", "d.M.yyyy", "yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy" };
             if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 return false;
 
