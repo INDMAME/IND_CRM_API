@@ -39,6 +39,15 @@ Se ejecuta SIEMPRE antes de generar o modificar codigo de API.
   - Confirmar en logs de diagnostico que el request llega al controlador/accion esperado (`API-PIPE-MATCH`, `API-ROUTE-IN`).
 - Si se detecta ambiguedad de rutas, se debe corregir antes de continuar (no diferir).
 
+## Regla critica de fechas (OBLIGATORIA EN TICKETS Y HOJAS DE GASTOS)
+- En endpoints de `tickets` y `hojas de gastos`, TODO campo de fecha expuesto por API (request y response) debe usar formato `DDMMYYYY`.
+- Campos incluidos (no limitativo): `transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`.
+- No aceptar formatos alternos en contrato API publico para esos endpoints.
+- Conversion permitida solo en frontera API->AX:
+  - API: `DDMMYYYY` (obligatorio).
+  - Interno AX: `yyyyMMdd` (si el metodo AX lo requiere).
+- Si una respuesta AX llega con otro formato, normalizar antes de devolver al cliente.
+
 ## Fuente de verdad
 - Leer TODOS los archivos `.md` de la carpeta `.codex`.
 - Usarlos como contexto primario.

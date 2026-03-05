@@ -55,6 +55,9 @@ namespace IND_CRM_API.Contracts.Requests
     /// </summary>
     public class CreateExpenseSheetLineRequest
     {
+        /// <summary>
+        /// Transaction date in mandatory DDMMYYYY format.
+        /// </summary>
         [Required] public string transDate { get; set; }
         [Required] public int? typeValue { get; set; }
         [Required] public string description { get; set; }

@@ -9,7 +9,15 @@ namespace IND_CRM_API.Contracts.Requests
         public int page { get; set; }
         public int pageSize { get; set; }
         public int? billedMode { get; set; }
+
+        /// <summary>
+        /// Optional from date filter in DDMMYYYY format.
+        /// </summary>
         public string createdDateFrom { get; set; }
+
+        /// <summary>
+        /// Optional to date filter in DDMMYYYY format.
+        /// </summary>
         public string createdDateTo { get; set; }
         public string projId { get; set; }
         public string currencyCode { get; set; }

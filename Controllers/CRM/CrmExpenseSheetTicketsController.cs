@@ -169,7 +169,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
                 var normalizedTransDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
-                    : NormalizeYmdDate(body.transDate);
+                    : NormalizeApiDateToAxYmd(body.transDate);
 
                 Logger.Log(
                     $"[API-IN] CreateExpenseSheetTicket mode={modeValue} existingFileId={body.existingFileId} lines={body.lines?.Count ?? 0} " +
@@ -466,21 +466,21 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body.pageSize > MaxPageSize)
                     validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
-                if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeYmdDate(body.createdDateFrom, out createdDateFromYmd))
+                if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeApiDateToAxYmd(body.createdDateFrom, out createdDateFromYmd))
                 {
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "createdDateFrom",
-                        Message = "createdDateFrom debe ser yyyyMMdd o yyyy-MM-dd."
+                        Message = "createdDateFrom debe ser DDMMYYYY."
                     });
                 }
 
-                if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeYmdDate(body.createdDateTo, out createdDateToYmd))
+                if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeApiDateToAxYmd(body.createdDateTo, out createdDateToYmd))
                 {
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "createdDateTo",
-                        Message = "createdDateTo debe ser yyyyMMdd o yyyy-MM-dd."
+                        Message = "createdDateTo debe ser DDMMYYYY."
                     });
                 }
 
@@ -641,8 +641,8 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
-                if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeYmdDate(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY." });
 
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
@@ -740,7 +740,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedTransDateRaw = body.transDate ?? existing.TransDate;
-                var mergedTransDate = TryNormalizeYmdDate(mergedTransDateRaw, out var normalizedTransDate)
+                var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
                     ? normalizedTransDate
                     : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
@@ -893,8 +893,8 @@ namespace IND_CRM_API.Controllers.CRM
             }
             else
             {
-                if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeYmdDate(body.transDate, out _))
-                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY." });
 
                 if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
@@ -958,7 +958,7 @@ namespace IND_CRM_API.Controllers.CRM
                     ? body.totalAmount.Value
                     : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
                 var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
-                var mergedTransDate = TryNormalizeYmdDate(mergedTransDateRaw, out var normalizedTransDate)
+                var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
                     ? normalizedTransDate
                     : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
@@ -1937,8 +1937,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (string.IsNullOrWhiteSpace(body.currencyCode))
                     errors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio cuando mode es 0 o 1." });
 
-                if (!TryNormalizeYmdDate(body.transDate, out _))
-                    errors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd cuando mode es 0 o 1." });
+                if (!TryNormalizeApiDateToAxYmd(body.transDate, out _))
+                    errors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY cuando mode es 0 o 1." });
 
                 if (string.IsNullOrWhiteSpace(body.urlFile))
                     errors.Add(new IndValidationError { Field = "urlFile", Message = "urlFile es obligatorio cuando mode es 0 o 1." });
@@ -2110,7 +2110,7 @@ namespace IND_CRM_API.Controllers.CRM
                     if (string.IsNullOrWhiteSpace(mapped.transDate))
                     {
                         var lineTransDate = GetJsonStringIgnoreCase(lineToken, "transDate");
-                        if (TryNormalizeYmdDate(lineTransDate, out var normalizedDate))
+                        if (TryNormalizeAnyDateToAxYmd(lineTransDate, out var normalizedDate))
                             mapped.transDate = normalizedDate;
                     }
 
@@ -2297,33 +2297,60 @@ namespace IND_CRM_API.Controllers.CRM
             return extension.Trim().TrimStart('.').ToLowerInvariant();
         }
 
-        // Normalizes yyyymmdd and yyyy-MM-dd into yyyymmdd.
-        private static string NormalizeYmdDate(string input)
+        // Normalizes API date (DDMMYYYY) into AX date format (yyyyMMdd).
+        private static string NormalizeApiDateToAxYmd(string input)
         {
-            return TryNormalizeYmdDate(input, out var normalized) ? normalized : string.Empty;
+            return TryNormalizeApiDateToAxYmd(input, out var normalized) ? normalized : string.Empty;
         }
 
-        // Checks date format for yyyymmdd or yyyy-MM-dd.
-        private static bool TryNormalizeYmdDate(string input, out string normalized)
+        // Validates the mandatory API date format DDMMYYYY and converts it to AX format.
+        private static bool TryNormalizeApiDateToAxYmd(string input, out string normalized)
         {
             normalized = string.Empty;
             if (string.IsNullOrWhiteSpace(input))
                 return false;
 
             var trimmed = input.Trim();
-            if (DateTime.TryParseExact(trimmed, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            {
-                normalized = date.ToString("yyyyMMdd");
-                return true;
-            }
+            if (!DateTime.TryParseExact(trimmed, "ddMMyyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return false;
 
-            if (DateTime.TryParseExact(trimmed, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
-            {
-                normalized = date.ToString("yyyyMMdd");
-                return true;
-            }
+            normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            return true;
+        }
 
-            return false;
+        // Parses known date shapes to AX format for compatibility paths.
+        private static bool TryNormalizeAnyDateToAxYmd(string input, out string normalized)
+        {
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            var acceptedFormats = new[]
+            {
+                "ddMMyyyy",
+                "yyyyMMdd",
+                "yyyy-MM-dd",
+                "dd/MM/yyyy"
+            };
+
+            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return false;
+
+            normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        // Formats known incoming AX/API date values to DDMMYYYY for response payloads.
+        private static string FormatApiDate(string input)
+        {
+            if (!TryNormalizeAnyDateToAxYmd(input, out var normalizedYmd))
+                return string.Empty;
+
+            if (!DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return string.Empty;
+
+            return date.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
         }
 
         // Validates allowed values for AX INDTicketStatus.
@@ -2417,7 +2444,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var descripcion = source?.description?.Trim() ?? string.Empty;
                 var comentario = source?.comentario?.Trim() ?? string.Empty;
                 var urlFile = source?.urlFile?.Trim() ?? string.Empty;
-                var transDate = NormalizeYmdDate(source?.transDate);
+                var transDate = NormalizeApiDateToAxYmd(source?.transDate);
 
                 var totalAmount = source?.totalAmount ?? 0m;
                 if (mode == ModeCreateHeaderAndLines)
@@ -2580,7 +2607,7 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
-            var normalizedTransDate = TryNormalizeYmdDate(existing.TransDate, out var parsedTransDate)
+            var normalizedTransDate = TryNormalizeAnyDateToAxYmd(existing.TransDate, out var parsedTransDate)
                 ? parsedTransDate
                 : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
@@ -2766,7 +2793,7 @@ namespace IND_CRM_API.Controllers.CRM
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
-                TransDate = headerExtras.Count > 6 ? headerExtras[6] : string.Empty,
+                TransDate = headerExtras.Count > 6 ? FormatApiDate(headerExtras[6]) : string.Empty,
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
                 UrlFile = headerExtras.Count > 8 ? headerExtras[8] : string.Empty,
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
@@ -2838,7 +2865,7 @@ namespace IND_CRM_API.Controllers.CRM
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
-                    TransDate = AxContainerReadHelper.SafeString(row, 7),
+                    TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7)),
                     UrlFile = AxContainerReadHelper.SafeString(row, 8),
                     FileName = AxContainerReadHelper.SafeString(row, 9),
                     ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)),

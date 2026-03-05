@@ -884,7 +884,7 @@ namespace IND_CRM_API.Controllers.System
             return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
         }
 
-        // Normaliza fechas yyyyMMdd o yyyy-MM-dd a yyyyMMdd.
+        // Normaliza fechas conocidas al formato AX yyyyMMdd para persistencia interna.
         private static bool TryNormalizeYmdDate(string input, out string normalized)
         {
             normalized = string.Empty;
@@ -892,19 +892,12 @@ namespace IND_CRM_API.Controllers.System
                 return false;
 
             var trimmed = input.Trim();
-            if (DateTime.TryParseExact(trimmed, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            {
-                normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-                return true;
-            }
+            var acceptedFormats = new[] { "ddMMyyyy", "yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy" };
+            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return false;
 
-            if (DateTime.TryParseExact(trimmed, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
-            {
-                normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-                return true;
-            }
-
-            return false;
+            normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            return true;
         }
 
         // Lee header AX [success, message, extras...] y container de lineas opcional.

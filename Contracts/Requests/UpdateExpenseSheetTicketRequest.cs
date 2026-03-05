@@ -10,6 +10,10 @@ namespace IND_CRM_API.Contracts.Requests
         public int? gastoType { get; set; }
         public decimal? totalAmount { get; set; }
         public int? status { get; set; }
+
+        /// <summary>
+        /// Ticket date in mandatory DDMMYYYY format.
+        /// </summary>
         public string transDate { get; set; }
         public string comentario { get; set; }
         public string urlFile { get; set; }

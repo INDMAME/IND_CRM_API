@@ -10,7 +10,15 @@ namespace IND_CRM_API.Contracts.Requests
         public string searchKey { get; set; }
         public string filter { get; set; }
         public int? status { get; set; }
+
+        /// <summary>
+        /// Optional from date filter in DDMMYYYY format.
+        /// </summary>
         public string createdDateFrom { get; set; }
+
+        /// <summary>
+        /// Optional to date filter in DDMMYYYY format.
+        /// </summary>
         public string createdDateTo { get; set; }
         public string currencyCode { get; set; }
         public int? gastoType { get; set; }
