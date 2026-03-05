@@ -26,6 +26,7 @@ namespace IND_CRM_API.App_Start
         private const string ExpenseWindowSecondsSettingKey = "OpenAI:RateLimitExpenseTicketWindowSeconds";
         private const string MaxConcurrentPerUserSettingKey = "OpenAI:RateLimitMaxConcurrentPerUser";
         private const string ValidationMultiplierSettingKey = "OpenAI:RateLimitValidationMultiplier";
+        private const string RateLimitEnabledSettingKey = "OpenAI:RateLimitEnabled";
 
         private const int DefaultSpeechMaxRequests = 5;
         private const int DefaultSpeechWindowSeconds = 300;
@@ -33,6 +34,7 @@ namespace IND_CRM_API.App_Start
         private const int DefaultExpenseWindowSeconds = 600;
         private const int DefaultMaxConcurrentPerUser = 1;
         private const int DefaultValidationMultiplier = 1;
+        private const bool DefaultRateLimitEnabled = true;
 
         private static readonly EndpointLimit SpeechLimit = new EndpointLimit(
             "speech",
@@ -55,16 +57,21 @@ namespace IND_CRM_API.App_Start
         private readonly IAxLogger _logger;
         private readonly int _maxConcurrentPerUser;
         private readonly int _validationMultiplier;
+        private readonly bool _isEnabled;
 
         public IND_OpenAiRateLimitHandler(IAxLogger logger)
         {
             _logger = logger ?? new FileAxLogger();
             _maxConcurrentPerUser = ReadPositiveIntFromConfig(MaxConcurrentPerUserSettingKey, DefaultMaxConcurrentPerUser);
             _validationMultiplier = ReadPositiveIntFromConfig(ValidationMultiplierSettingKey, DefaultValidationMultiplier);
+            _isEnabled = ReadBoolFromConfig(RateLimitEnabledSettingKey, DefaultRateLimitEnabled);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (!_isEnabled)
+                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
             if (!TryResolveEndpoint(request, out var endpoint))
                 return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -245,6 +252,22 @@ namespace IND_CRM_API.App_Start
             {
                 var value = ConfigurationManager.AppSettings[key];
                 if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
+                    return parsed;
+            }
+            catch
+            {
+                // Ignore and use default value.
+            }
+
+            return defaultValue;
+        }
+
+        private static bool ReadBoolFromConfig(string key, bool defaultValue)
+        {
+            try
+            {
+                var value = ConfigurationManager.AppSettings[key];
+                if (bool.TryParse(value, out var parsed))
                     return parsed;
             }
             catch
