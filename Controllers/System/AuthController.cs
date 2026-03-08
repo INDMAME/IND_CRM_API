@@ -446,26 +446,38 @@ namespace IND_CRM_API.Controllers.System
                 if (companyCon == null)
                     continue;
 
-                // Nuevo contrato AX: CompanyItem = [companyId, isDefault, companyName, currencyCode, allowSelfManagement, modulesCon].
-                var modulesCon = SafePeekContainer(companyCon, 6);
+                // AX contract vNext:
+                // [companyId, isDefault, companyName, currencyCode, allowSelfManagement, crmUserId, modulesCon].
+                var modulesCon = SafePeekContainer(companyCon, 7);
                 var currencyCode = SafeString(companyCon, 4);
                 var allowSelfManagement = ToBool(SafeString(companyCon, 5));
+                var crmUserId = SafeString(companyCon, 6);
 
-                // Compatibilidad defensiva con formato anterior:
+                // Backward compatibility:
+                // [companyId, isDefault, companyName, currencyCode, allowSelfManagement, modulesCon].
+                if (modulesCon == null)
+                {
+                    modulesCon = SafePeekContainer(companyCon, 6);
+                    crmUserId = string.Empty;
+                }
+
+                // Backward compatibility:
                 // [companyId, isDefault, companyName, currencyCode, modulesCon].
                 if (modulesCon == null)
                 {
                     modulesCon = SafePeekContainer(companyCon, 5);
                     allowSelfManagement = false;
+                    crmUserId = string.Empty;
                 }
 
-                // Compatibilidad defensiva con formato legacy:
+                // Legacy compatibility:
                 // [companyId, isDefault, companyName, modulesCon].
                 if (modulesCon == null)
                 {
                     modulesCon = SafePeekContainer(companyCon, 4);
                     currencyCode = string.Empty;
                     allowSelfManagement = false;
+                    crmUserId = string.Empty;
                 }
 
                 companies.Add(new EntraCompanyDto
@@ -475,6 +487,7 @@ namespace IND_CRM_API.Controllers.System
                     CompanyName = SafeString(companyCon, 3),
                     CurrencyCode = currencyCode,
                     AllowSelfManagement = allowSelfManagement,
+                    CrmUserId = crmUserId,
                     Modules = MapEntraModules(modulesCon)
                 });
             }

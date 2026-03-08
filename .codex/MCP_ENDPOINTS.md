@@ -39,7 +39,7 @@ Endpoints
 - Headers: `Authorization`, `Content-Type: application/json`
 - Body: `entraOid`, `appCode`
 - Respuesta: `IndApiResponse<{ header, items }>`
-- Notas: de aqui se obtiene `companyId`, `axUserId`, `header.defaultCurrencyCode`, `companies[].currencyCode` y `companies[].allowSelfManagement`.
+- Notas: de aqui se obtiene `companyId`, `axUserId`, `header.defaultCurrencyCode`, `companies[].currencyCode`, `companies[].allowSelfManagement` y `companies[].crmUserId`.
 
 ## Health
 
