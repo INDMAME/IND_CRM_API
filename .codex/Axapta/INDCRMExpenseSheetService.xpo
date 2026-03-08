@@ -1982,10 +1982,10 @@ Formatversion: 1
         #
         #    // Filtros opcionales nuevos
         #    if (conLen(_data) >= 5 && conPeek(_data, 5))
-        #        createdDateFrom = str2Date(conPeek(_data, 5), 123);
+        #        createdDateFrom = INDCRMUtilityService::parseYmdDate(conPeek(_data, 5));
         #
         #    if (conLen(_data) >= 6 && conPeek(_data, 6))
-        #        createdDateTo = str2Date(conPeek(_data, 6), 123);
+        #        createdDateTo = INDCRMUtilityService::parseYmdDate(conPeek(_data, 6));
         #
         #    if (conLen(_data) >= 7)
         #        projId = conPeek(_data, 7);
@@ -2033,6 +2033,9 @@ Formatversion: 1
         #                   || (billedMode == 0 && hoja.Voucher == '')
         #                   || (billedMode == 1 && hoja.Voucher != '')
         #                  )
+        #
+        #               // Excluir registros legacy sin CreatedDate real.
+        #               && hoja.CreatedDate != dateNull()
         #
         #               // Fecha creacion opcional
         #               && (
@@ -2249,8 +2252,8 @@ Formatversion: 1
         #        }
         #    }
         #
-        #    createdDateFrom = str2Date(conPeek(_data, 5), 123);
-        #    createdDateTo   = str2Date(conPeek(_data, 6), 123);
+        #    createdDateFrom = INDCRMUtilityService::parseYmdDate(conPeek(_data, 5));
+        #    createdDateTo   = INDCRMUtilityService::parseYmdDate(conPeek(_data, 6));
         #
         #    if (createdDateFrom && createdDateTo && createdDateFrom > createdDateTo)
         #        return [['Sin datos, la fecha desde no puede ser mayor a la fecha hasta.']];
