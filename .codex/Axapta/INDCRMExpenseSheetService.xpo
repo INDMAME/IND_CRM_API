@@ -2516,6 +2516,7 @@ Formatversion: 1
         #    CRMUserId                  crmUserId;
         #    CRMUsuarioTable            crmUsuarioTable,crmUsuarioTableSub;
         #    CRMUsuarioSubordinadoTable subordinadoTable;
+        #    INDPersonaTable            personaTable;
         #    container                  resultCon, itemCon, subordinateUsersCon;
         #    str                        subordinateList;
         #    str                        subordinateUserId;
@@ -2551,13 +2552,14 @@ Formatversion: 1
         #        {
         #            subordinateUserId   = strLTrim(strRTrim(conPeek(subordinateUsersCon, i)));
         #            crmUsuarioTableSub  = CRMUsuarioTable::Find(subordinateUserId);
+        #            personaTable        = INDPersonaTable::findByCRM(crmUsuarioTableSub.RecId);
         #
-        #            if (!subordinateUserId || crmUsuarioTable.UserId == crmUsuarioTableSub.UserId)
+        #            if (!subordinateUserId || !personaTable.UserId || crmUsuarioTable.UserId == crmUsuarioTableSub.UserId)
         #                continue;
         #
         #            itemCon = [[
         #                        strFmt("%1", subordinateUserId),
-        #                        strFmt("%1", INDPersonaTable::findByCRM(crmUsuarioTableSub.RecId).UserId),
+        #                        strFmt("%1", personaTable.UserId),
         #                        strFmt("%1", crmUsuarioTableSub.Name)
         #                      ]];
         #
