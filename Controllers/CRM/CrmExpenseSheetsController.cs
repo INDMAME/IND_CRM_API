@@ -1631,17 +1631,32 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = 1; i <= len; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 2)
+                var rowLen = AxContainerReadHelper.SafeLength(row);
+                if (row == null || rowLen < 2)
                     continue;
 
                 var userId = AxContainerReadHelper.SafeString(row, 1);
-                var name = AxContainerReadHelper.SafeString(row, 2);
-                if (string.IsNullOrWhiteSpace(userId) && string.IsNullOrWhiteSpace(name))
+                var secondValue = AxContainerReadHelper.SafeString(row, 2);
+                var thirdValue = rowLen >= 3 ? AxContainerReadHelper.SafeString(row, 3) : string.Empty;
+
+                // AX vNext: [crmUserId, axUserId, name]
+                // Legacy:   [crmUserId, name]
+                var axUserId = rowLen >= 3 ? secondValue : userId;
+                var name = rowLen >= 3 ? thirdValue : secondValue;
+
+                // Defensive fallback when AX row is partially populated.
+                if (string.IsNullOrWhiteSpace(name))
+                    name = secondValue;
+
+                if (string.IsNullOrWhiteSpace(userId) &&
+                    string.IsNullOrWhiteSpace(axUserId) &&
+                    string.IsNullOrWhiteSpace(name))
                     continue;
 
                 items.Add(new ExpenseSheetSubordinateDto
                 {
                     UserId = userId,
+                    AxUserId = axUserId,
                     Name = name
                 });
             }

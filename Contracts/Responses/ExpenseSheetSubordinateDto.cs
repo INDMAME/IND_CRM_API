@@ -11,6 +11,11 @@ namespace IND_CRM_API.Contracts.Responses
         public string UserId { get; set; }
 
         /// <summary>
+        /// Identificador de usuario AX del subordinado.
+        /// </summary>
+        public string AxUserId { get; set; }
+
+        /// <summary>
         /// Nombre descriptivo del subordinado.
         /// </summary>
         public string Name { get; set; }
