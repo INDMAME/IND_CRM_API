@@ -28,7 +28,7 @@ Extender `getExpenseSheetsList(container _data)` para soportar un nuevo filtro o
   - El metodo sigue aceptando el contrato actual cuando `_data[9]` no viene.
   - El metodo queda preparado para un contrato futuro con indices estables y placeholder `null` en `_data[9]`.
 - Salida:
-  - Sin cambios en forma ni en orden de columnas del row.
+  - El row del listado agrega `UserName` despues de `UserId`.
 
 ## Cambios aplicados por metodo
 ### getExpenseSheetsList
@@ -53,6 +53,8 @@ Extender `getExpenseSheetsList(container _data)` para soportar un nuevo filtro o
 ### buildExpenseSheetListRow
 - Nuevo helper para construir la fila de salida con columnas estables.
 - Evita duplicar el armado del container entre la rama actual y la rama de subordinados.
+- Se amplia la salida del row con:
+  - `UserName = INDPersonaTable::findByCRM(CRMUsuarioTable::Find(_hoja.UserId).RecId).Name`
 
 ## Riesgos y mitigaciones
 - Riesgo:
@@ -74,6 +76,7 @@ Extender `getExpenseSheetsList(container _data)` para soportar un nuevo filtro o
 - `CrmExpenseSheetsController.GetExpenseSheetsList`:
   - se agrega log explicito de `includeSubordinates`.
   - se reemplaza el append variable del container AX por construccion con indices estables.
+  - se amplia el mapeo de respuesta para exponer `UserName`.
   - orden final enviado a AX:
     - `_data[1]` = `companyId`
     - `_data[2]` = `axUserId`
@@ -88,6 +91,25 @@ Extender `getExpenseSheetsList(container _data)` para soportar un nuevo filtro o
 - Documentacion local:
   - se actualiza `.codex/ENDPOINTS.md`
   - se actualiza `.codex/MCP_ENDPOINTS.md`
+
+## Contrato de salida actualizado
+- Formato actual del row AX:
+  - `[1]HojaGastosId`
+  - `[2]Description`
+  - `[3]ExpenseSheetStatus`
+  - `[4]EstadoComentarios`
+  - `[5]UserId`
+  - `[6]UserName`
+  - `[7]CurrencyCode`
+  - `[8]TotalAmountMST`
+  - `[9]ExchRate`
+  - `[10]ExchangeRateMode`
+  - `[11]ProjId`
+  - `[12]Voucher`
+  - `[13]CreatedDate`
+- API:
+  - `ExpenseSheetListItemDto` ahora expone `UserName`.
+  - El mapper mantiene compatibilidad con formatos previos dejando `UserName = null` cuando AX devuelve rows legacy.
 
 ## Revision de routing
 - Se reviso `RoutePrefix("api/crm/expensesheets")` y las rutas hermanas del controlador.

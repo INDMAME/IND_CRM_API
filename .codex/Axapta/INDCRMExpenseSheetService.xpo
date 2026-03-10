@@ -1965,6 +1965,7 @@ Formatversion: 1
         #                 strFmt("%1", expenseSheetStatus),
         #                 strFmt("%1", _hoja.EstadoComentarios),
         #                 strFmt("%1", _hoja.UserId),
+        #                 strFmt("%1", INDPersonaTable::findByCRM(CRMUsuarioTable::Find(_hoja.UserId).RecId).Name),
         #                 strFmt("%1", _hoja.CurrencyCode),
         #                 strFmt("%1", monto),
         #                 strFmt("%1", _hoja.ExchRate),

@@ -10,6 +10,8 @@ namespace IND_CRM_API.Contracts.Responses
         // Expense sheet status enum value returned by AX.
         public int? ExpenseSheetStatus { get; set; }
         public string UserId { get; set; }
+        // Display name resolved from CRM user/person tables.
+        public string UserName { get; set; }
         public string Voucher { get; set; }
         public string ProjId { get; set; }
         public string CurrencyCode { get; set; }

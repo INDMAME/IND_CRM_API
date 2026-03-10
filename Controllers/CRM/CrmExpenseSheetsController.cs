@@ -1108,7 +1108,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// Filtro opcional por estado: expenseSheetStatus.
         /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
         /// Filtro opcional includeSubordinates: cuando es true lista hojas de subordinados directos del usuario del header.
-        /// Response items include estadoComentarios.
+        /// Response items include estadoComentarios and userName.
         /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
@@ -1869,6 +1869,7 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
+                // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountMST [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate
                 // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
                 // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
                 // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
@@ -1876,7 +1877,7 @@ namespace IND_CRM_API.Controllers.CRM
                 // Current (9): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ExchangeRateMode [8]ProjId [9]Voucher
                 // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
-                if (rowLen >= 12)
+                if (rowLen >= 13)
                 {
                     items.Add(new ExpenseSheetListItemDto
                     {
@@ -1885,6 +1886,28 @@ namespace IND_CRM_API.Controllers.CRM
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
                         EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
                         UserId = AxContainerReadHelper.SafeString(row, 5),
+                        UserName = AxContainerReadHelper.SafeString(row, 6),
+                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 12)),
+                        ProjId = AxContainerReadHelper.SafeString(row, 11),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 7),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                        ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
+                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
+                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13))
+                    });
+                    continue;
+                }
+
+                if (rowLen == 12)
+                {
+                    items.Add(new ExpenseSheetListItemDto
+                    {
+                        HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                        Description = AxContainerReadHelper.SafeString(row, 2),
+                        ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
+                        UserId = AxContainerReadHelper.SafeString(row, 5),
+                        UserName = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 11)),
                         ProjId = AxContainerReadHelper.SafeString(row, 10),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 6),
@@ -1908,6 +1931,7 @@ namespace IND_CRM_API.Controllers.CRM
                             ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
                             EstadoComentarios = null,
                             UserId = AxContainerReadHelper.SafeString(row, 4),
+                            UserName = null,
                             Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
                             ProjId = AxContainerReadHelper.SafeString(row, 9),
                             CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
@@ -1926,6 +1950,7 @@ namespace IND_CRM_API.Controllers.CRM
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
                         EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
                         UserId = AxContainerReadHelper.SafeString(row, 5),
+                        UserName = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 11)),
                         ProjId = AxContainerReadHelper.SafeString(row, 10),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 6),
@@ -1946,6 +1971,7 @@ namespace IND_CRM_API.Controllers.CRM
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
                         EstadoComentarios = null,
                         UserId = AxContainerReadHelper.SafeString(row, 4),
+                        UserName = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 10)),
                         ProjId = AxContainerReadHelper.SafeString(row, 9),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
@@ -1966,6 +1992,7 @@ namespace IND_CRM_API.Controllers.CRM
                         ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
                         EstadoComentarios = null,
                         UserId = null,
+                        UserName = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 9)),
                         ProjId = AxContainerReadHelper.SafeString(row, 8),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
@@ -1986,6 +2013,7 @@ namespace IND_CRM_API.Controllers.CRM
                         ExpenseSheetStatus = null,
                         EstadoComentarios = null,
                         UserId = null,
+                        UserName = null,
                         Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 3)),
                         ProjId = AxContainerReadHelper.SafeString(row, 4),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
@@ -2006,6 +2034,7 @@ namespace IND_CRM_API.Controllers.CRM
                     ExpenseSheetStatus = null,
                     EstadoComentarios = null,
                     UserId = null,
+                    UserName = null,
                     Voucher = string.Empty,
                     ProjId = AxContainerReadHelper.SafeString(row, 3),
                     CurrencyCode = rowLen >= 4 ? AxContainerReadHelper.SafeString(row, 4) : string.Empty,
