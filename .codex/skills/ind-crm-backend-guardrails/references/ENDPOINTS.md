@@ -101,7 +101,7 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid)
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid), includeSubordinates (bool; true = subordinados directos del usuario de header)
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, exchRate y createdDate
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 

@@ -1107,6 +1107,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// Filtro opcional por estado: expenseSheetStatus.
         /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// Filtro opcional includeSubordinates: cuando es true lista hojas de subordinados directos del usuario del header.
         /// Response items include estadoComentarios.
         /// </remarks>
         [HttpPost, Route("list")]
@@ -1198,11 +1199,13 @@ namespace IND_CRM_API.Controllers.CRM
                 var projIdValue = body.projId?.Trim() ?? string.Empty;
                 var currencyCodeValue = body.currencyCode?.Trim() ?? string.Empty;
                 var expenseSheetStatusValue = NormalizeExpenseSheetStatusOrNull(body.expenseSheetStatus);
+                var includeSubordinatesValue = body.includeSubordinates ?? false;
 
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetsList filter={filterValue} billedMode={billedModeValue} page={pageValue} pageSize={pageSizeValue} " +
                     $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} projId={projIdValue} currencyCode={currencyCodeValue} " +
-                    $"expenseSheetStatus={ToLogValue(expenseSheetStatusValue)} user={username} axUserId={axUserId} traceId={traceId}");
+                    $"expenseSheetStatus={ToLogValue(expenseSheetStatusValue)} includeSubordinates={includeSubordinatesValue} " +
+                    $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -1210,12 +1213,14 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(axUserId);
                 con.Append(filterValue);
                 con.Append(billedModeValue);
-                con.Append(createdDateFromYmd);
-                con.Append(createdDateToYmd);
-                con.Append(projIdValue);
-                con.Append(currencyCodeValue);
-                if (expenseSheetStatusValue.HasValue)
-                    con.Append(expenseSheetStatusValue.Value);
+                AppendExpenseSheetListFilters(
+                    con,
+                    createdDateFromYmd,
+                    createdDateToYmd,
+                    projIdValue,
+                    currencyCodeValue,
+                    expenseSheetStatusValue,
+                    includeSubordinatesValue);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1432,6 +1437,34 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             return expenseSheetStatus.Value;
+        }
+
+        // Appends expense sheet list filters to AX container using stable positions.
+        private static void AppendExpenseSheetListFilters(
+            IAxaptaContainer container,
+            string createdDateFromYmd,
+            string createdDateToYmd,
+            string projId,
+            string currencyCode,
+            int? expenseSheetStatus,
+            bool includeSubordinates)
+        {
+            if (container == null)
+                return;
+
+            const string noOptionalValueToken = "null";
+
+            container.Append(createdDateFromYmd ?? string.Empty);
+            container.Append(createdDateToYmd ?? string.Empty);
+            container.Append(projId ?? string.Empty);
+            container.Append(currencyCode ?? string.Empty);
+
+            if (expenseSheetStatus.HasValue)
+                container.Append(expenseSheetStatus.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            container.Append(includeSubordinates ? 1 : 0);
         }
 
         // Validates supported delete modes for expense sheet DELETE endpoint.

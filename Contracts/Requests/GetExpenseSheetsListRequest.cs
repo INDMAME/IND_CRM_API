@@ -27,5 +27,11 @@ namespace IND_CRM_API.Contracts.Requests
         /// Valores permitidos: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
         /// </summary>
         public int? expenseSheetStatus { get; set; }
+
+        /// <summary>
+        /// Cuando es true, lista las hojas de los subordinados directos del usuario del header.
+        /// Cuando no se informa o es false, mantiene el listado del propio usuario.
+        /// </summary>
+        public bool? includeSubordinates { get; set; }
     }
 }
