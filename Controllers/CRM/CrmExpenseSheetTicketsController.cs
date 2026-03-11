@@ -3037,6 +3037,12 @@ namespace IND_CRM_API.Controllers.CRM
                 : "null";
         }
 
+        // Converts bool to AX int (1/0).
+        private static int ToAxBool(bool? value)
+        {
+            return value.HasValue && value.Value ? 1 : 0;
+        }
+
         // Minimal target sheet data required by bulk-link validation.
         private sealed class ExpenseSheetTargetInfo
         {
@@ -4084,6 +4090,41 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return raw;
+        }
+
+        // Detects common date strings to distinguish them from numeric values.
+        private static bool IsLikelyDateValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var trimmed = value.Trim();
+            var acceptedFormats = new[]
+            {
+                "dd.MM.yyyy",
+                "d.M.yyyy",
+                "yyyyMMdd",
+                "yyyy-MM-dd",
+                "MM/dd/yyyy",
+                "M/d/yyyy",
+                "dd/MM/yyyy",
+                "d/M/yyyy"
+            };
+
+            if (DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                return true;
+
+            return DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out _);
+        }
+
+        // AX can return voucher as "0" when it is effectively empty.
+        private static string NormalizeVoucher(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var trimmed = value.Trim();
+            return trimmed == "0" ? string.Empty : trimmed;
         }
 
         private static bool ToBool(string value)
