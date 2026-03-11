@@ -200,8 +200,27 @@ Endpoints
 - Body:
   - Requerido: `page`, `pageSize`
   - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
-  - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional.
-- Respuesta: cada item incluye `processedByAI`, `gastoType` y `hojaGastosIdDisplay`.
+  - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional y usa `ticketHeader.createdDate`.
+- Respuesta: cada item incluye `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `GastoType`.
+
+### Tool: crm_expensesheets_tickets_link_list
+- HTTP: POST `/api/crm/expensesheets/tickets/link/list`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body:
+  - Requerido: `page`, `pageSize`
+  - Opcional: `searchKey` (compatibilidad: `filter`), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
+  - Regla: el origen sale prefiltrado con `status = Pending` y `totalAmount != 0`; la fecha de referencia es `ticketHeader.createdDate`.
+- Respuesta: cada item incluye `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI`, `GastoType`.
+
+### Tool: crm_expensesheets_tickets_link_bulk
+- HTTP: POST `/api/crm/expensesheets/tickets/link/bulk`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body:
+  - Requerido: `expenseSheetId`, `ticketIds[]`
+  - Regla: reutiliza `createExpenseSheet` en modo `2` para vincular una linea por ticket y soporta resultado parcial.
+- Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`

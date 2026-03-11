@@ -10,6 +10,7 @@ Ambiente (variables sugeridas)
 - `companyId` = compania obtenida desde Entra Context
 - `axUserId` = usuario AX obtenido desde Entra Context
 - `fileId` = se autocompleta desde respuestas de tickets
+- `expenseSheetId` = hoja de gastos destino para pruebas de vinculacion bulk
 - `lineRecId` = se autocompleta desde respuestas de lineas de tickets
 - `ticketImagePath` = ruta local para pruebas de upload en multipart (opcional)
 - `ticketUrlFile` = URL del blob cargado (se autocompleta desde upload)
@@ -33,10 +34,12 @@ Notas
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `processedByAI`.
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
-  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `hojaGastosIdDisplay`.
+  - `POST /api/crm/expensesheets/tickets/list` devuelve solo `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName` y `GastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
-  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`).
+  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`) y la fecha de referencia es `ticketHeader.createdDate`.
   - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
+  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`.
+  - `POST /api/crm/expensesheets/tickets/link/bulk` recibe `expenseSheetId` y `ticketIds[]`, reutiliza `createExpenseSheet` en modo `2` y devuelve resultado parcial con `linked`, `skipped` y `failed`.
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
 - V23 agrega tests automatizados para:
@@ -48,4 +51,4 @@ Notas
   - `Apply IA to Ticket (replace lines)`.
   - `Get Ticket by FileId`.
 - V25 actualiza contratos de tickets con `gastoType` y filtros de fecha en `tickets/list` (ahora opcionales).
-- V26 normaliza contratos completos en request body para endpoints con payload JSON, alineando el orden de campos al backend y el limite de paginacion (`pageSize` maximo 50) en ejemplos de listas.
+- V26 normaliza contratos completos en request body para endpoints con payload JSON, alinea `tickets/list` al contrato reducido, agrega `tickets/link/list`, agrega `tickets/link/bulk` y mantiene `TransDate` basado en `ticketHeader.createdDate`.

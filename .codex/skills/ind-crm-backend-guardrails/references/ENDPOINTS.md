@@ -119,8 +119,19 @@ Endpoints
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
-  Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`.
-  Response items incluyen `processedByAI` (bool), `gastoType` (int) y `hojaGastosIdDisplay` (string).
+  Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`. La fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
+  Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `GastoType`.
+- POST /api/crm/expensesheets/tickets/link/list (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: page, pageSize.
+  Body optional: searchKey (compat: `filter`), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
+  Prefiltros fijos en origen: `status = Pending` y `totalAmount != 0`.
+  Nota: la fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
+  Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI`, `GastoType`.
+- POST /api/crm/expensesheets/tickets/link/bulk (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `expenseSheetId`, `ticketIds[]`.
+  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente.
+  Valida hoja destino, permisos, editabilidad, moneda, duplicados y soporta resultado parcial.
+  Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), comentario, urlFile, fileName, fileExtension, processedByAI).
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)

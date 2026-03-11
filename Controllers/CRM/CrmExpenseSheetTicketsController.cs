@@ -459,44 +459,14 @@ namespace IND_CRM_API.Controllers.CRM
             }
             else
             {
-                if (body.page <= 0)
-                    validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
-                if (body.pageSize <= 0)
-                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
-                if (body.pageSize > MaxPageSize)
-                    validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
-
-                if (!string.IsNullOrWhiteSpace(body.createdDateFrom) && !TryNormalizeApiDateToAxYmd(body.createdDateFrom, out createdDateFromYmd))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "createdDateFrom",
-                        Message = "createdDateFrom debe ser DDMMYYYY o DD.MM.YYYY."
-                    });
-                }
-
-                if (!string.IsNullOrWhiteSpace(body.createdDateTo) && !TryNormalizeApiDateToAxYmd(body.createdDateTo, out createdDateToYmd))
-                {
-                    validationErrors.Add(new IndValidationError
-                    {
-                        Field = "createdDateTo",
-                        Message = "createdDateTo debe ser DDMMYYYY o DD.MM.YYYY."
-                    });
-                }
-
-                if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
-                {
-                    var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
-                    var toOk = DateTime.TryParseExact(createdDateToYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate);
-                    if (fromOk && toOk && fromDate > toDate)
-                    {
-                        validationErrors.Add(new IndValidationError
-                        {
-                            Field = "createdDateFrom",
-                            Message = "createdDateFrom no puede ser mayor que createdDateTo."
-                        });
-                    }
-                }
+                ValidateTicketListPagingAndDates(
+                    body.page,
+                    body.pageSize,
+                    body.createdDateFrom,
+                    body.createdDateTo,
+                    validationErrors,
+                    out createdDateFromYmd,
+                    out createdDateToYmd);
             }
 
             if (validationErrors.Any())
@@ -579,6 +549,355 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] GetExpenseSheetTicketsList: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lista tickets pendientes disponibles para vinculacion con filtros y paginacion.
+        /// </summary>
+        [HttpPost, Route("link/list")]
+        [ResponseType(typeof(IndPagedResponse<ExpenseSheetTicketLinkListItemDto>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Listado de tickets para vinculacion", typeof(IndPagedResponse<ExpenseSheetTicketLinkListItemDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult GetExpenseSheetTicketLinkList([FromBody] GetExpenseSheetTicketLinkListRequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+            string createdDateFromYmd = string.Empty;
+            string createdDateToYmd = string.Empty;
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                ValidateTicketListPagingAndDates(
+                    body.page,
+                    body.pageSize,
+                    body.createdDateFrom,
+                    body.createdDateTo,
+                    validationErrors,
+                    out createdDateFromYmd,
+                    out createdDateToYmd);
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] GetExpenseSheetTicketLinkList {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                var pageValue = body.page;
+                var pageSizeValue = body.pageSize;
+                var searchKeyValue = (body.searchKey ?? body.filter ?? string.Empty).Trim();
+                var currencyCodeValue = (body.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var gastoTypeValue = NormalizeGastoTypeOrNull(body.gastoType);
+                var processedByAIValue = body.processedByAI;
+                Logger.Log(
+                    $"[API-IN] GetExpenseSheetTicketLinkList searchKey={searchKeyValue} page={pageValue} pageSize={pageSizeValue} " +
+                    $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} currencyCode={currencyCodeValue} gastoType={ToLogValue(gastoTypeValue)} " +
+                    $"processedByAI={(processedByAIValue.HasValue ? (processedByAIValue.Value ? "1" : "0") : "null")} " +
+                    $"user={username} axUserId={axUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                const string NoFilterToken = "null";
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(searchKeyValue);
+                con.Append(createdDateFromYmd);
+                con.Append(createdDateToYmd);
+                con.Append(currencyCodeValue);
+                if (gastoTypeValue.HasValue)
+                    con.Append(gastoTypeValue.Value);
+                else
+                    con.Append(string.Empty);
+                if (processedByAIValue.HasValue)
+                    con.Append(processedByAIValue.Value ? 1 : 0);
+                else
+                    con.Append(NoFilterToken);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "getExpenseSheetTicketsLinkList",
+                    con
+                );
+
+                var items = MapExpenseSheetTicketLinkList(resultObj as IAxaptaContainer, pageValue, pageSizeValue, out var message, out var total);
+
+                LogOut(HttpStatusCode.OK);
+                return Ok(new IndPagedResponse<ExpenseSheetTicketLinkListItemDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    Total = total,
+                    Page = pageValue,
+                    PageSize = pageSizeValue,
+                    Items = items,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] GetExpenseSheetTicketLinkList: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+        }
+
+        /// <summary>
+        /// Vincula multiples tickets a una hoja existente reutilizando createExpenseSheet en modo add-lines.
+        /// </summary>
+        [HttpPost, Route("link/bulk")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetTicketBulkLinkResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Resultado de vinculacion bulk", typeof(IndApiResponse<ExpenseSheetTicketBulkLinkResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult BulkLinkExpenseSheetTickets([FromBody] BulkLinkExpenseSheetTicketsRequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(body.expenseSheetId))
+                    validationErrors.Add(new IndValidationError { Field = "expenseSheetId", Message = "expenseSheetId es obligatorio." });
+
+                if (body.ticketIds == null || body.ticketIds.Count == 0)
+                    validationErrors.Add(new IndValidationError { Field = "ticketIds", Message = "ticketIds debe incluir al menos un ticket." });
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] BulkLinkExpenseSheetTickets {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                var expenseSheetId = body.expenseSheetId.Trim();
+                var requestedTicketIds = body.ticketIds ?? new List<string>();
+                Logger.Log(
+                    $"[API-IN] BulkLinkExpenseSheetTickets expenseSheetId={expenseSheetId} requested={requestedTicketIds.Count} " +
+                    $"user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                if (!TryGetExpenseSheetTargetInfo(ax, company, axUserId, expenseSheetId, traceId, out var targetInfo, out var targetMessage, out var targetStatus))
+                {
+                    LogOut(targetStatus);
+                    if (targetStatus == HttpStatusCode.InternalServerError)
+                    {
+                        return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                        {
+                            Success = false,
+                            Message = NormalizeIssueReason(targetMessage, "Error al procesar la respuesta de AX."),
+                            ErrorCode = IndErrorCodes.AxComError,
+                            Data = null,
+                            TraceId = traceId
+                        });
+                    }
+
+                    return Content(targetStatus, BuildExpenseSheetActionError(targetMessage, traceId, out _));
+                }
+
+                if (!string.IsNullOrWhiteSpace(targetInfo.Voucher))
+                {
+                    LogOut((HttpStatusCode)422);
+                    return Content((HttpStatusCode)422, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "La hoja de gastos no esta abierta. No se pueden anadir lineas.",
+                        ErrorCode = IndErrorCodes.CrmExpenseSheetLocked,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
+                var result = new ExpenseSheetTicketBulkLinkResultDto
+                {
+                    expenseSheetId = expenseSheetId,
+                    requestedCount = requestedTicketIds.Count,
+                    linkedTicketIds = new List<string>(),
+                    skipped = new List<ExpenseSheetTicketBulkLinkIssueDto>(),
+                    failed = new List<ExpenseSheetTicketBulkLinkIssueDto>()
+                };
+
+                var seenTicketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string terminalSheetReason = null;
+
+                foreach (var rawTicketId in requestedTicketIds)
+                {
+                    var ticketId = (rawTicketId ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(ticketId))
+                    {
+                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = string.Empty,
+                            reason = "TicketId is empty."
+                        });
+                        continue;
+                    }
+
+                    if (!seenTicketIds.Add(ticketId))
+                    {
+                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = ticketId,
+                            reason = "TicketId is duplicated in the request."
+                        });
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(terminalSheetReason))
+                    {
+                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = ticketId,
+                            reason = terminalSheetReason
+                        });
+                        continue;
+                    }
+
+                    if (!TryGetExpenseSheetTicketDetail(ax, company, axUserId, ticketId, traceId, out var ticketDetail, out var ticketMessage, out var ticketStatus))
+                    {
+                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = ticketId,
+                            reason = NormalizeIssueReason(ticketMessage, ticketStatus == HttpStatusCode.NotFound ? "Ticket not found." : "Ticket could not be loaded.")
+                        });
+                        continue;
+                    }
+
+                    var skipReason = GetBulkLinkSkipReason(ticketDetail, targetInfo.CurrencyCode);
+                    if (!string.IsNullOrWhiteSpace(skipReason))
+                    {
+                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = ticketId,
+                            reason = skipReason
+                        });
+                        continue;
+                    }
+
+                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, out var linkMessage, out var linkStatus))
+                    {
+                        if (IsTicketAlreadyLinkedMessage(linkMessage))
+                        {
+                            result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = NormalizeIssueReason(linkMessage, "Ticket is already linked to an expense sheet.")
+                            });
+                            continue;
+                        }
+
+                        var normalizedFailure = NormalizeIssueReason(linkMessage, "Ticket could not be linked.");
+                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        {
+                            ticketId = ticketId,
+                            reason = normalizedFailure
+                        });
+
+                        if (IsTerminalExpenseSheetLinkError(linkMessage, linkStatus))
+                            terminalSheetReason = normalizedFailure;
+
+                        continue;
+                    }
+
+                    result.linkedTicketIds.Add(ticketId);
+                }
+
+                result.linkedCount = result.linkedTicketIds.Count;
+                result.skippedCount = result.skipped.Count;
+                result.failedCount = result.failed.Count;
+
+                var responseMessage = result.linkedCount > 0
+                    ? $"Linked {result.linkedCount} of {result.requestedCount} requested tickets."
+                    : "No tickets were linked.";
+
+                LogOut(HttpStatusCode.OK);
+                return Ok(new IndApiResponse<ExpenseSheetTicketBulkLinkResultDto>
+                {
+                    Success = true,
+                    Message = responseMessage,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = result,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] BulkLinkExpenseSheetTickets: {ex}");
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
                 {
@@ -2717,6 +3036,305 @@ namespace IND_CRM_API.Controllers.CRM
                 : "null";
         }
 
+        // Minimal target sheet data required by bulk-link validation.
+        private sealed class ExpenseSheetTargetInfo
+        {
+            public string HojaGastosId { get; set; }
+            public string CurrencyCode { get; set; }
+            public string Voucher { get; set; }
+        }
+
+        // Validates shared paging and date filters for ticket list endpoints.
+        private static void ValidateTicketListPagingAndDates(
+            int page,
+            int pageSize,
+            string createdDateFrom,
+            string createdDateTo,
+            List<IndValidationError> validationErrors,
+            out string createdDateFromYmd,
+            out string createdDateToYmd)
+        {
+            createdDateFromYmd = string.Empty;
+            createdDateToYmd = string.Empty;
+
+            if (page <= 0)
+                validationErrors.Add(new IndValidationError { Field = "page", Message = "page debe ser mayor que cero." });
+            if (pageSize <= 0)
+                validationErrors.Add(new IndValidationError { Field = "pageSize", Message = "pageSize debe ser mayor que cero." });
+            if (pageSize > MaxPageSize)
+                validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
+
+            if (!string.IsNullOrWhiteSpace(createdDateFrom) && !TryNormalizeApiDateToAxYmd(createdDateFrom, out createdDateFromYmd))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "createdDateFrom",
+                    Message = "createdDateFrom debe ser DDMMYYYY o DD.MM.YYYY."
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(createdDateTo) && !TryNormalizeApiDateToAxYmd(createdDateTo, out createdDateToYmd))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "createdDateTo",
+                    Message = "createdDateTo debe ser DDMMYYYY o DD.MM.YYYY."
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(createdDateFromYmd) && !string.IsNullOrWhiteSpace(createdDateToYmd))
+            {
+                var fromOk = DateTime.TryParseExact(createdDateFromYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate);
+                var toOk = DateTime.TryParseExact(createdDateToYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate);
+                if (fromOk && toOk && fromDate > toDate)
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "createdDateFrom",
+                        Message = "createdDateFrom no puede ser mayor que createdDateTo."
+                    });
+                }
+            }
+        }
+
+        // Returns a readable issue reason for bulk-link responses.
+        private static string NormalizeIssueReason(string message, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(message) ? fallback : message.Trim();
+        }
+
+        // Returns a skip reason when a ticket is not eligible for bulk linking.
+        private static string GetBulkLinkSkipReason(ExpenseSheetTicketDetailDto ticketDetail, string targetCurrencyCode)
+        {
+            if (ticketDetail == null)
+                return "Ticket data is empty.";
+
+            if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusPending)
+                return "Ticket is not pending.";
+
+            if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
+                return "Ticket total amount must be greater than zero.";
+
+            if (!ticketDetail.GastoType.HasValue || !IsValidGastoType(ticketDetail.GastoType.Value))
+                return "Ticket gastoType is not valid for linking.";
+
+            if (string.IsNullOrWhiteSpace(ticketDetail.CurrencyCode))
+                return "Ticket currencyCode is empty.";
+
+            if (!string.IsNullOrWhiteSpace(targetCurrencyCode) &&
+                !string.Equals(ticketDetail.CurrencyCode.Trim(), targetCurrencyCode.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return "Ticket currencyCode does not match the target expense sheet.";
+            }
+
+            if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out _))
+                return "Ticket transDate is not valid.";
+
+            return null;
+        }
+
+        // Detects duplicate-link business messages returned by AX.
+        private static bool IsTicketAlreadyLinkedMessage(string message)
+        {
+            var lower = (message ?? string.Empty).ToLowerInvariant();
+            return lower.Contains("ya esta asignado") || lower.Contains("ticket asignado");
+        }
+
+        // Detects target-sheet errors that make remaining link attempts fail as well.
+        private static bool IsTerminalExpenseSheetLinkError(string message, HttpStatusCode status)
+        {
+            var lower = (message ?? string.Empty).ToLowerInvariant();
+            if (status == HttpStatusCode.NotFound || status == HttpStatusCode.Forbidden)
+                return true;
+
+            return lower.Contains("hoja de gastos") &&
+                   (lower.Contains("no existe") ||
+                    lower.Contains("no encontrada") ||
+                    lower.Contains("no esta abierta") ||
+                    lower.Contains("no tiene permisos"));
+        }
+
+        // Loads target expense sheet data needed by the bulk-link flow.
+        private static bool TryGetExpenseSheetTargetInfo(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string expenseSheetId,
+            string traceId,
+            out ExpenseSheetTargetInfo targetInfo,
+            out string message,
+            out HttpStatusCode status)
+        {
+            targetInfo = null;
+            message = string.Empty;
+            status = HttpStatusCode.OK;
+
+            var con = ax.CreateContainer();
+            con.Append(company);
+            con.Append(axUserId);
+            con.Append(expenseSheetId);
+
+            var resultObj = ax.CallStaticClassMethod(
+                "INDCRMExpenseSheetService",
+                "getExpenseSheet",
+                con
+            );
+
+            if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var axMessage, out var extras, out _))
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            if (!success)
+            {
+                message = axMessage;
+                BuildExpenseSheetActionError(axMessage, traceId, out status);
+                return false;
+            }
+
+            targetInfo = MapExpenseSheetTargetInfo(extras);
+            if (targetInfo == null)
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            message = axMessage ?? string.Empty;
+            return true;
+        }
+
+        // Loads a ticket detail from AX for bulk-link validation.
+        private static bool TryGetExpenseSheetTicketDetail(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string fileId,
+            string traceId,
+            out ExpenseSheetTicketDetailDto detail,
+            out string message,
+            out HttpStatusCode status)
+        {
+            detail = null;
+            message = string.Empty;
+            status = HttpStatusCode.OK;
+
+            var con = ax.CreateContainer();
+            con.Append(company);
+            con.Append(axUserId);
+            con.Append(fileId);
+
+            var resultObj = ax.CallStaticClassMethod(
+                "INDCRMExpenseSheetService",
+                "getExpenseSheetTicket",
+                con
+            );
+
+            if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var axMessage, out var extras, out var linesOut))
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            if (!success)
+            {
+                message = axMessage;
+                BuildTicketActionError(axMessage, traceId, out status);
+                return false;
+            }
+
+            detail = MapExpenseSheetTicketDetail(extras, linesOut);
+            if (detail == null)
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            message = axMessage ?? string.Empty;
+            return true;
+        }
+
+        // Links one ticket into an existing expense sheet by reusing AX createExpenseSheet mode 2.
+        private static bool TryLinkTicketToExpenseSheet(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string expenseSheetId,
+            ExpenseSheetTicketDetailDto ticketDetail,
+            string traceId,
+            out string message,
+            out HttpStatusCode status)
+        {
+            message = string.Empty;
+            status = HttpStatusCode.OK;
+
+            if (ticketDetail == null)
+            {
+                status = (HttpStatusCode)422;
+                message = "Ticket data is empty.";
+                return false;
+            }
+
+            if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out var transDateYmd))
+            {
+                status = (HttpStatusCode)422;
+                message = "Ticket transDate is not valid.";
+                return false;
+            }
+
+            var rootCon = ax.CreateContainer();
+            rootCon.Append(company);
+
+            var headerCon = ax.CreateContainer();
+            headerCon.Append(axUserId);
+            rootCon.Append(headerCon);
+
+            var linesCon = ax.CreateContainer();
+            var lineCon = ax.CreateContainer();
+            lineCon.Append(transDateYmd);
+            lineCon.Append(ticketDetail.GastoType ?? 0);
+            lineCon.Append((ticketDetail.Description ?? ticketDetail.FileId ?? string.Empty).Trim());
+            lineCon.Append(ToAxBool(false));
+            lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
+            lineCon.Append(1m);
+            lineCon.Append(ticketDetail.TotalAmount ?? 0m);
+            lineCon.Append(string.Empty);
+            linesCon.Append(lineCon);
+            rootCon.Append(linesCon);
+
+            var optionsCon = ax.CreateContainer();
+            optionsCon.Append(ModeAddLinesToExisting);
+            optionsCon.Append(expenseSheetId);
+            rootCon.Append(optionsCon);
+
+            var resultObj = ax.CallStaticClassMethod(
+                "INDCRMExpenseSheetService",
+                "createExpenseSheet",
+                rootCon
+            );
+
+            if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var axMessage, out _, out _))
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            if (!success)
+            {
+                message = axMessage;
+                BuildExpenseSheetActionError(axMessage, traceId, out status);
+                return false;
+            }
+
+            message = axMessage ?? string.Empty;
+            return true;
+        }
+
         // Reads a header and optional lines container from AX.
         private static bool TryReadHeader(IAxaptaContainer root, out bool success, out string message, out List<string> extras, out IAxaptaContainer linesCon)
         {
@@ -2747,7 +3365,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Builds a standard error response for ticket actions.
-        private IndApiResponse<object> BuildTicketActionError(string message, string traceId, out HttpStatusCode status)
+        private static IndApiResponse<object> BuildTicketActionError(string message, string traceId, out HttpStatusCode status)
         {
             var lower = (message ?? string.Empty).ToLowerInvariant();
             if (lower.Contains("no encontrada") || lower.Contains("no encontrado") || lower.Contains("no existe"))
@@ -2782,6 +3400,60 @@ namespace IND_CRM_API.Controllers.CRM
                 Success = false,
                 Message = string.IsNullOrWhiteSpace(message) ? "Error de validacion." : message,
                 ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                Data = null,
+                TraceId = traceId
+            };
+        }
+
+        // Builds a standard error response for expense sheet actions reused by bulk link.
+        private static IndApiResponse<object> BuildExpenseSheetActionError(string message, string traceId, out HttpStatusCode status)
+        {
+            var lower = (message ?? string.Empty).ToLowerInvariant();
+            if (lower.Contains("no encontrada") || lower.Contains("no encontrado") || lower.Contains("no existe"))
+            {
+                status = HttpStatusCode.NotFound;
+                return new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message) ? "Hoja de gastos no encontrada." : message,
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetNotFound,
+                    Data = null,
+                    TraceId = traceId
+                };
+            }
+
+            if (lower.Contains("no tiene permisos"))
+            {
+                status = HttpStatusCode.Forbidden;
+                return new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message) ? "No tiene permisos para operar sobre la hoja de gastos." : message,
+                    ErrorCode = IndErrorCodes.AuthForbidden,
+                    Data = null,
+                    TraceId = traceId
+                };
+            }
+
+            if (lower.Contains("no esta abierta") || lower.Contains("bloqueada"))
+            {
+                status = (HttpStatusCode)422;
+                return new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message) ? "Hoja de gastos bloqueada." : message,
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetLocked,
+                    Data = null,
+                    TraceId = traceId
+                };
+            }
+
+            status = (HttpStatusCode)422;
+            return new IndApiResponse<object>
+            {
+                Success = false,
+                Message = string.IsNullOrWhiteSpace(message) ? "Error de validacion." : message,
+                ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
                 Data = null,
                 TraceId = traceId
             };
@@ -2870,19 +3542,122 @@ namespace IND_CRM_API.Controllers.CRM
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     Status = NormalizeTicketStatusOrNull(ToInt(AxContainerReadHelper.SafeString(row, 3))),
-                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 11))),
-                    CurrencyCode = AxContainerReadHelper.SafeString(row, 4),
-                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 5)),
-                    CreatedByUserId = AxContainerReadHelper.SafeString(row, 6),
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 4)),
+                    CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
+                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7)),
-                    UrlFile = AxContainerReadHelper.SafeString(row, 8),
-                    FileName = AxContainerReadHelper.SafeString(row, 9),
-                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 10)),
-                    HojaGastosIdDisplay = AxContainerReadHelper.SafeString(row, 12)
+                    FileName = AxContainerReadHelper.SafeString(row, 8),
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9)))
                 });
             }
 
             return items;
+        }
+
+        // Maps AX ticket-link rows to typed DTO list.
+        private static List<ExpenseSheetTicketLinkListItemDto> MapExpenseSheetTicketLinkList(IAxaptaContainer root, int page, int pageSize, out string message, out int total)
+        {
+            message = string.Empty;
+            total = 0;
+            var items = new List<ExpenseSheetTicketLinkListItemDto>();
+
+            if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
+                return items;
+
+            if (AxContainerReadHelper.IsSinDatos(root, out message))
+                return items;
+
+            total = AxContainerReadHelper.SafeLength(root);
+            if (total <= 0)
+                return items;
+
+            var skipLong = ((long)page - 1L) * pageSize;
+            if (skipLong < 0L)
+                skipLong = 0L;
+
+            if (skipLong >= total)
+                return items;
+
+            var start = (int)skipLong + 1;
+            var end = Math.Min(total, start + pageSize - 1);
+            for (int i = start; i <= end; i++)
+            {
+                var row = AxContainerReadHelper.SafePeekContainer(root, i);
+                if (row == null || AxContainerReadHelper.SafeLength(row) < 8)
+                    continue;
+
+                items.Add(new ExpenseSheetTicketLinkListItemDto
+                {
+                    FileId = AxContainerReadHelper.SafeString(row, 1),
+                    Description = AxContainerReadHelper.SafeString(row, 2),
+                    CurrencyCode = AxContainerReadHelper.SafeString(row, 3),
+                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 4)),
+                    TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 5)),
+                    FileName = AxContainerReadHelper.SafeString(row, 6),
+                    ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 7)),
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8)))
+                });
+            }
+
+            return items;
+        }
+
+        // Maps the minimum expense sheet data needed by bulk-link validation.
+        private static ExpenseSheetTargetInfo MapExpenseSheetTargetInfo(List<string> headerExtras)
+        {
+            if (headerExtras == null || headerExtras.Count == 0)
+                return null;
+
+            var targetInfo = new ExpenseSheetTargetInfo
+            {
+                HojaGastosId = headerExtras[0]
+            };
+
+            if (headerExtras.Count >= 12)
+            {
+                targetInfo.CurrencyCode = headerExtras[5];
+                targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                return targetInfo;
+            }
+
+            if (headerExtras.Count == 11)
+            {
+                if (IsLikelyDateValue(headerExtras[10]))
+                {
+                    targetInfo.CurrencyCode = headerExtras[4];
+                    targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                }
+                else
+                {
+                    targetInfo.CurrencyCode = headerExtras[5];
+                    targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                }
+
+                return targetInfo;
+            }
+
+            if (headerExtras.Count == 10)
+            {
+                targetInfo.CurrencyCode = headerExtras[4];
+                targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                return targetInfo;
+            }
+
+            if (headerExtras.Count == 8)
+            {
+                targetInfo.CurrencyCode = headerExtras[3];
+                targetInfo.Voucher = NormalizeVoucher(headerExtras[7]);
+                return targetInfo;
+            }
+
+            if (headerExtras.Count == 7)
+            {
+                targetInfo.CurrencyCode = headerExtras[3];
+                targetInfo.Voucher = NormalizeVoucher(headerExtras[6]);
+                return targetInfo;
+            }
+
+            return null;
         }
 
         private static List<long> MapRecIdList(IAxaptaContainer linesCon)

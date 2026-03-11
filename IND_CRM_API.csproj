@@ -173,7 +173,9 @@
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetTicketRequest.cs" />
+    <Compile Include="Contracts\Requests\BulkLinkExpenseSheetTicketsRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetsListRequest.cs" />
+    <Compile Include="Contracts\Requests\GetExpenseSheetTicketLinkListRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetTicketsListRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
