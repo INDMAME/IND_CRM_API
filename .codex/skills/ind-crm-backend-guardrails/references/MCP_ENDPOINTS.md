@@ -215,12 +215,16 @@ Endpoints
 
 ### Tool: crm_expensesheets_tickets_link_bulk
 - HTTP: POST `/api/crm/expensesheets/tickets/link/bulk`
-- Auth: Bearer token
-- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body:
-  - Requerido: `expenseSheetId`, `ticketIds[]`
-  - Regla: reutiliza `createExpenseSheet` en modo `2` para vincular una linea por ticket y soporta resultado parcial.
-- Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
+  - Auth: Bearer token
+  - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+  - Body:
+    - Legacy soportado: `expenseSheetId`, `ticketIds[]` (`selectionMode = selected`)
+    - Requerido: `expenseSheetId`
+    - Opcional: `selectionMode` (`selected` por defecto, `filtered`)
+    - En `selected`: `ticketIds[]` obligatorio
+    - En `filtered`: `filters` obligatorio (`searchKey`, `filter`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`) y `excludedIds[]` opcional
+    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2` y soporta resultado parcial.
+  - Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`

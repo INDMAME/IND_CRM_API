@@ -128,9 +128,16 @@ Endpoints
   Nota: la fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
   Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI`, `GastoType`.
 - POST /api/crm/expensesheets/tickets/link/bulk (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: `expenseSheetId`, `ticketIds[]`.
+  Body legacy soportado: `expenseSheetId`, `ticketIds[]` (equivale a `selectionMode = selected`).
+  Body ampliado:
+  - `expenseSheetId` obligatorio
+  - `selectionMode` opcional (`selected` por defecto, `filtered`)
+  - `ticketIds[]` obligatorio en `selected`
+  - `filters` obligatorio en `filtered`: `searchKey` (compat: `filter`), `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`
+  - `excludedIds[]` opcional en `filtered`
+  En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base `status = Pending` y `totalAmount != 0`.
   Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente.
-  Valida hoja destino, permisos, editabilidad, moneda, duplicados y soporta resultado parcial.
+  Valida hoja destino, permisos, editabilidad, moneda, deduplicacion y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), comentario, urlFile, fileName, fileExtension, processedByAI).

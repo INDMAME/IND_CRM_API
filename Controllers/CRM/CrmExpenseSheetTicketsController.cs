@@ -36,6 +36,8 @@ namespace IND_CRM_API.Controllers.CRM
         private const int TicketStatusPending = 0;
         private const int TicketStatusAssigned = 1;
         private const int MaxPageSize = 50;
+        private const string BulkSelectionModeSelected = "selected";
+        private const string BulkSelectionModeFiltered = "filtered";
         private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
 
         private readonly IAxaptaSessionManager _sessionManager;
@@ -635,22 +637,16 @@ namespace IND_CRM_API.Controllers.CRM
                     $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                var con = ax.CreateContainer();
-                const string NoFilterToken = "null";
-                con.Append(company);
-                con.Append(axUserId);
-                con.Append(searchKeyValue);
-                con.Append(createdDateFromYmd);
-                con.Append(createdDateToYmd);
-                con.Append(currencyCodeValue);
-                if (gastoTypeValue.HasValue)
-                    con.Append(gastoTypeValue.Value);
-                else
-                    con.Append(string.Empty);
-                if (processedByAIValue.HasValue)
-                    con.Append(processedByAIValue.Value ? 1 : 0);
-                else
-                    con.Append(NoFilterToken);
+                var con = BuildExpenseSheetTicketLinkListRequestContainer(
+                    ax,
+                    company,
+                    axUserId,
+                    searchKeyValue,
+                    createdDateFromYmd,
+                    createdDateToYmd,
+                    currencyCodeValue,
+                    gastoTypeValue,
+                    processedByAIValue);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -701,6 +697,9 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
+            var selectionMode = BulkSelectionModeSelected;
+            string createdDateFromYmd = string.Empty;
+            string createdDateToYmd = string.Empty;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -716,11 +715,12 @@ namespace IND_CRM_API.Controllers.CRM
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(body.expenseSheetId))
-                    validationErrors.Add(new IndValidationError { Field = "expenseSheetId", Message = "expenseSheetId es obligatorio." });
-
-                if (body.ticketIds == null || body.ticketIds.Count == 0)
-                    validationErrors.Add(new IndValidationError { Field = "ticketIds", Message = "ticketIds debe incluir al menos un ticket." });
+                ValidateBulkLinkRequest(
+                    body,
+                    validationErrors,
+                    out selectionMode,
+                    out createdDateFromYmd,
+                    out createdDateToYmd);
             }
 
             if (validationErrors.Any())
@@ -745,12 +745,35 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
                 var expenseSheetId = body.expenseSheetId.Trim();
-                var requestedTicketIds = body.ticketIds ?? new List<string>();
+                var requestedTicketIds = new List<string>();
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                if (!TryResolveBulkLinkTicketIds(
+                        ax,
+                        company,
+                        axUserId,
+                        body,
+                        selectionMode,
+                        createdDateFromYmd,
+                        createdDateToYmd,
+                        out requestedTicketIds,
+                        out var resolveMessage,
+                        out var resolveStatus))
+                {
+                    LogOut(resolveStatus);
+                    return Content(resolveStatus, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = NormalizeIssueReason(resolveMessage, "Error al procesar la respuesta de AX."),
+                        ErrorCode = resolveStatus == HttpStatusCode.InternalServerError ? IndErrorCodes.AxComError : IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
                 Logger.Log(
-                    $"[API-IN] BulkLinkExpenseSheetTickets expenseSheetId={expenseSheetId} requested={requestedTicketIds.Count} " +
+                    $"[API-IN] BulkLinkExpenseSheetTickets expenseSheetId={expenseSheetId} selectionMode={selectionMode} requested={requestedTicketIds.Count} " +
                     $"user={username} axUserId={axUserId} company={company} traceId={traceId}");
 
-                var ax = _sessionManager.GetAxInstanceForUser(username);
                 if (!TryGetExpenseSheetTargetInfo(ax, company, axUserId, expenseSheetId, traceId, out var targetInfo, out var targetMessage, out var targetStatus))
                 {
                     LogOut(targetStatus);
@@ -791,32 +814,10 @@ namespace IND_CRM_API.Controllers.CRM
                     failed = new List<ExpenseSheetTicketBulkLinkIssueDto>()
                 };
 
-                var seenTicketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 string terminalSheetReason = null;
 
-                foreach (var rawTicketId in requestedTicketIds)
+                foreach (var ticketId in requestedTicketIds)
                 {
-                    var ticketId = (rawTicketId ?? string.Empty).Trim();
-                    if (string.IsNullOrWhiteSpace(ticketId))
-                    {
-                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = string.Empty,
-                            reason = "TicketId is empty."
-                        });
-                        continue;
-                    }
-
-                    if (!seenTicketIds.Add(ticketId))
-                    {
-                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = ticketId,
-                            reason = "TicketId is duplicated in the request."
-                        });
-                        continue;
-                    }
-
                     if (!string.IsNullOrWhiteSpace(terminalSheetReason))
                     {
                         result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
@@ -3064,6 +3065,20 @@ namespace IND_CRM_API.Controllers.CRM
             if (pageSize > MaxPageSize)
                 validationErrors.Add(new IndValidationError { Field = "pageSize", Message = $"pageSize no puede ser mayor que {MaxPageSize}." });
 
+            ValidateTicketDateRange(createdDateFrom, createdDateTo, validationErrors, out createdDateFromYmd, out createdDateToYmd);
+        }
+
+        // Validates shared createdDate range rules used by ticket filters.
+        private static void ValidateTicketDateRange(
+            string createdDateFrom,
+            string createdDateTo,
+            List<IndValidationError> validationErrors,
+            out string createdDateFromYmd,
+            out string createdDateToYmd)
+        {
+            createdDateFromYmd = string.Empty;
+            createdDateToYmd = string.Empty;
+
             if (!string.IsNullOrWhiteSpace(createdDateFrom) && !TryNormalizeApiDateToAxYmd(createdDateFrom, out createdDateFromYmd))
             {
                 validationErrors.Add(new IndValidationError
@@ -3095,6 +3110,232 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
             }
+        }
+
+        // Validates bulk-link request semantics while keeping backward compatibility.
+        private static void ValidateBulkLinkRequest(
+            BulkLinkExpenseSheetTicketsRequest body,
+            List<IndValidationError> validationErrors,
+            out string selectionMode,
+            out string createdDateFromYmd,
+            out string createdDateToYmd)
+        {
+            selectionMode = NormalizeBulkSelectionMode(body?.selectionMode);
+            createdDateFromYmd = string.Empty;
+            createdDateToYmd = string.Empty;
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body.expenseSheetId))
+                validationErrors.Add(new IndValidationError { Field = "expenseSheetId", Message = "expenseSheetId es obligatorio." });
+
+            if (!IsValidBulkSelectionMode(selectionMode))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "selectionMode",
+                    Message = "selectionMode invalido. Valores permitidos: selected, filtered."
+                });
+                return;
+            }
+
+            if (string.Equals(selectionMode, BulkSelectionModeSelected, StringComparison.Ordinal))
+            {
+                if (NormalizeDistinctTicketIds(body.ticketIds).Count == 0)
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "ticketIds",
+                        Message = "ticketIds debe incluir al menos un ticket valido."
+                    });
+                }
+
+                if (body.filters != null)
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "filters",
+                        Message = "filters no aplica cuando selectionMode es selected."
+                    });
+                }
+
+                if (body.excludedIds != null && body.excludedIds.Count > 0)
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "excludedIds",
+                        Message = "excludedIds no aplica cuando selectionMode es selected."
+                    });
+                }
+
+                return;
+            }
+
+            if (body.filters == null)
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "filters",
+                    Message = "filters es obligatorio cuando selectionMode es filtered."
+                });
+            }
+            else
+            {
+                ValidateTicketDateRange(
+                    body.filters.createdDateFrom,
+                    body.filters.createdDateTo,
+                    validationErrors,
+                    out createdDateFromYmd,
+                    out createdDateToYmd);
+            }
+
+            if (body.ticketIds != null && body.ticketIds.Count > 0)
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "ticketIds",
+                    Message = "ticketIds no aplica cuando selectionMode es filtered."
+                });
+            }
+        }
+
+        // Returns the normalized bulk selection mode, defaulting to the legacy selected behavior.
+        private static string NormalizeBulkSelectionMode(string selectionMode)
+        {
+            return string.IsNullOrWhiteSpace(selectionMode)
+                ? BulkSelectionModeSelected
+                : selectionMode.Trim();
+        }
+
+        // Validates the allowed bulk selection modes.
+        private static bool IsValidBulkSelectionMode(string selectionMode)
+        {
+            return string.Equals(selectionMode, BulkSelectionModeSelected, StringComparison.Ordinal) ||
+                   string.Equals(selectionMode, BulkSelectionModeFiltered, StringComparison.Ordinal);
+        }
+
+        // Normalizes ticket ids by trimming, removing empties and deduplicating case-insensitively.
+        private static List<string> NormalizeDistinctTicketIds(IEnumerable<string> ticketIds)
+        {
+            var items = new List<string>();
+            if (ticketIds == null)
+                return items;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rawTicketId in ticketIds)
+            {
+                var ticketId = (rawTicketId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(ticketId))
+                    continue;
+
+                if (seen.Add(ticketId))
+                    items.Add(ticketId);
+            }
+
+            return items;
+        }
+
+        // Resolves the final candidate ids for bulk-link, either from explicit selection or from server-side filters.
+        private static bool TryResolveBulkLinkTicketIds(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            BulkLinkExpenseSheetTicketsRequest body,
+            string selectionMode,
+            string createdDateFromYmd,
+            string createdDateToYmd,
+            out List<string> requestedTicketIds,
+            out string message,
+            out HttpStatusCode status)
+        {
+            requestedTicketIds = new List<string>();
+            message = string.Empty;
+            status = HttpStatusCode.OK;
+
+            if (string.Equals(selectionMode, BulkSelectionModeSelected, StringComparison.Ordinal))
+            {
+                requestedTicketIds = NormalizeDistinctTicketIds(body?.ticketIds);
+                return true;
+            }
+
+            var filters = body?.filters ?? new BulkLinkExpenseSheetTicketFiltersRequest();
+            var excludedIds = new HashSet<string>(NormalizeDistinctTicketIds(body?.excludedIds), StringComparer.OrdinalIgnoreCase);
+            var con = BuildExpenseSheetTicketLinkListRequestContainer(
+                ax,
+                company,
+                axUserId,
+                (filters.searchKey ?? filters.filter ?? string.Empty).Trim(),
+                createdDateFromYmd,
+                createdDateToYmd,
+                (filters.currencyCode ?? string.Empty).Trim().ToUpperInvariant(),
+                NormalizeGastoTypeOrNull(filters.gastoType),
+                filters.processedByAI);
+
+            var resultObj = ax.CallStaticClassMethod(
+                "INDCRMExpenseSheetService",
+                "getExpenseSheetTicketsLinkList",
+                con
+            );
+
+            var items = MapAllExpenseSheetTicketLinkList(resultObj as IAxaptaContainer, out message, out _);
+            if (items == null)
+            {
+                status = HttpStatusCode.InternalServerError;
+                message = "Error al procesar la respuesta de AX.";
+                return false;
+            }
+
+            var seenTicketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                var ticketId = (item?.FileId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(ticketId))
+                    continue;
+
+                if (excludedIds.Contains(ticketId))
+                    continue;
+
+                if (seenTicketIds.Add(ticketId))
+                    requestedTicketIds.Add(ticketId);
+            }
+
+            return true;
+        }
+
+        // Builds the AX container used by the ticket-link list query.
+        private static IAxaptaContainer BuildExpenseSheetTicketLinkListRequestContainer(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string searchKeyValue,
+            string createdDateFromYmd,
+            string createdDateToYmd,
+            string currencyCodeValue,
+            int? gastoTypeValue,
+            bool? processedByAIValue)
+        {
+            var con = ax.CreateContainer();
+            const string NoFilterToken = "null";
+            con.Append(company);
+            con.Append(axUserId);
+            con.Append(searchKeyValue);
+            con.Append(createdDateFromYmd);
+            con.Append(createdDateToYmd);
+            con.Append(currencyCodeValue);
+            if (gastoTypeValue.HasValue)
+                con.Append(gastoTypeValue.Value);
+            else
+                con.Append(string.Empty);
+            if (processedByAIValue.HasValue)
+                con.Append(processedByAIValue.Value ? 1 : 0);
+            else
+                con.Append(NoFilterToken);
+
+            return con;
         }
 
         // Returns a readable issue reason for bulk-link responses.
@@ -3557,6 +3798,24 @@ namespace IND_CRM_API.Controllers.CRM
         // Maps AX ticket-link rows to typed DTO list.
         private static List<ExpenseSheetTicketLinkListItemDto> MapExpenseSheetTicketLinkList(IAxaptaContainer root, int page, int pageSize, out string message, out int total)
         {
+            return MapExpenseSheetTicketLinkListInternal(root, page, pageSize, true, out message, out total);
+        }
+
+        // Maps all AX ticket-link rows without applying pagination.
+        private static List<ExpenseSheetTicketLinkListItemDto> MapAllExpenseSheetTicketLinkList(IAxaptaContainer root, out string message, out int total)
+        {
+            return MapExpenseSheetTicketLinkListInternal(root, 1, int.MaxValue, false, out message, out total);
+        }
+
+        // Shared mapper for paged and non-paged ticket-link list responses.
+        private static List<ExpenseSheetTicketLinkListItemDto> MapExpenseSheetTicketLinkListInternal(
+            IAxaptaContainer root,
+            int page,
+            int pageSize,
+            bool applyPaging,
+            out string message,
+            out int total)
+        {
             message = string.Empty;
             total = 0;
             var items = new List<ExpenseSheetTicketLinkListItemDto>();
@@ -3571,15 +3830,21 @@ namespace IND_CRM_API.Controllers.CRM
             if (total <= 0)
                 return items;
 
-            var skipLong = ((long)page - 1L) * pageSize;
-            if (skipLong < 0L)
-                skipLong = 0L;
+            var start = 1;
+            var end = total;
+            if (applyPaging)
+            {
+                var skipLong = ((long)page - 1L) * pageSize;
+                if (skipLong < 0L)
+                    skipLong = 0L;
 
-            if (skipLong >= total)
-                return items;
+                if (skipLong >= total)
+                    return items;
 
-            var start = (int)skipLong + 1;
-            var end = Math.Min(total, start + pageSize - 1);
+                start = (int)skipLong + 1;
+                end = Math.Min(total, start + pageSize - 1);
+            }
+
             for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
