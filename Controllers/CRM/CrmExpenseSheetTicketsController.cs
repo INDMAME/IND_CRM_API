@@ -838,7 +838,7 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    var skipReason = GetBulkLinkSkipReason(ticketDetail, targetInfo.CurrencyCode);
+                    var skipReason = GetBulkLinkSkipReason(ticketDetail);
                     if (!string.IsNullOrWhiteSpace(skipReason))
                     {
                         result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
@@ -3046,8 +3046,6 @@ namespace IND_CRM_API.Controllers.CRM
         // Minimal target sheet data required by bulk-link validation.
         private sealed class ExpenseSheetTargetInfo
         {
-            public string HojaGastosId { get; set; }
-            public string CurrencyCode { get; set; }
             public string Voucher { get; set; }
         }
 
@@ -3351,7 +3349,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Returns a skip reason when a ticket is not eligible for bulk linking.
-        private static string GetBulkLinkSkipReason(ExpenseSheetTicketDetailDto ticketDetail, string targetCurrencyCode)
+        private static string GetBulkLinkSkipReason(ExpenseSheetTicketDetailDto ticketDetail)
         {
             if (ticketDetail == null)
                 return "Ticket data is empty.";
@@ -3367,12 +3365,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (string.IsNullOrWhiteSpace(ticketDetail.CurrencyCode))
                 return "Ticket currencyCode is empty.";
-
-            if (!string.IsNullOrWhiteSpace(targetCurrencyCode) &&
-                !string.Equals(ticketDetail.CurrencyCode.Trim(), targetCurrencyCode.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return "Ticket currencyCode does not match the target expense sheet.";
-            }
 
             if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out _))
                 return "Ticket transDate is not valid.";
@@ -3879,14 +3871,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras == null || headerExtras.Count == 0)
                 return null;
 
-            var targetInfo = new ExpenseSheetTargetInfo
-            {
-                HojaGastosId = headerExtras[0]
-            };
+            var targetInfo = new ExpenseSheetTargetInfo();
 
             if (headerExtras.Count >= 12)
             {
-                targetInfo.CurrencyCode = headerExtras[5];
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
                 return targetInfo;
             }
@@ -3895,12 +3883,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (IsLikelyDateValue(headerExtras[10]))
                 {
-                    targetInfo.CurrencyCode = headerExtras[4];
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
                 }
                 else
                 {
-                    targetInfo.CurrencyCode = headerExtras[5];
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
                 }
 
@@ -3909,21 +3895,18 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (headerExtras.Count == 10)
             {
-                targetInfo.CurrencyCode = headerExtras[4];
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
                 return targetInfo;
             }
 
             if (headerExtras.Count == 8)
             {
-                targetInfo.CurrencyCode = headerExtras[3];
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[7]);
                 return targetInfo;
             }
 
             if (headerExtras.Count == 7)
             {
-                targetInfo.CurrencyCode = headerExtras[3];
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[6]);
                 return targetInfo;
             }

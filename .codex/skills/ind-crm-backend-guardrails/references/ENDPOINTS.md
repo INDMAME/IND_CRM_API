@@ -137,7 +137,7 @@ Endpoints
   - `excludedIds[]` opcional en `filtered`
   En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base `status = Pending` y `totalAmount != 0`.
   Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente.
-  Valida hoja destino, permisos, editabilidad, moneda, deduplicacion y soporta resultado parcial.
+  Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), comentario, urlFile, fileName, fileExtension, processedByAI).
