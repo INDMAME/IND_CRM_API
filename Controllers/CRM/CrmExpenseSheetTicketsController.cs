@@ -3131,7 +3131,7 @@ namespace IND_CRM_API.Controllers.CRM
                 description = string.IsNullOrWhiteSpace(draft?.description) ? fallbackDescription : draft.description.Trim(),
                 currencyCode = currencyCode,
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
-                totalAmount = linesTotal > 0m ? linesTotal : null,
+                totalAmount = linesTotal > 0m ? (decimal?)linesTotal : null,
                 transDate = FormatApiDate(transDateYmd),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
