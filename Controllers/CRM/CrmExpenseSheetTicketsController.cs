@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
@@ -38,17 +39,23 @@ namespace IND_CRM_API.Controllers.CRM
         private const int MaxPageSize = 50;
         private const string BulkSelectionModeSelected = "selected";
         private const string BulkSelectionModeFiltered = "filtered";
+        private const string QuickCreateStageTicketCreated = "ticket-created";
+        private const string QuickCreateStageFileUploaded = "file-uploaded";
+        private const string QuickCreateStageDraftExtracted = "draft-extracted";
+        private const string QuickCreateStageTicketFinalized = "ticket-finalized";
+        private const string QuickCreateStageSheetLinked = "sheet-linked";
         private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
+        private readonly IND_IExpenseTicketDraftService _ticketDraft;
 
         /// <summary>
         /// Compatibility constructor when DI does not provide blob service explicitly.
         /// </summary>
         public CrmExpenseSheetTicketsController(
             IAxaptaSessionManager sessionManager,
-            IAxLogger logger) : this(sessionManager, null, logger)
+            IAxLogger logger) : this(sessionManager, null, null, logger)
         {
         }
 
@@ -58,10 +65,22 @@ namespace IND_CRM_API.Controllers.CRM
         public CrmExpenseSheetTicketsController(
             IAxaptaSessionManager sessionManager,
             IExpenseTicketBlobStorageService ticketBlobStorage,
+            IAxLogger logger) : this(sessionManager, ticketBlobStorage, null, logger)
+        {
+        }
+
+        /// <summary>
+        /// Creates the controller with its dependencies.
+        /// </summary>
+        public CrmExpenseSheetTicketsController(
+            IAxaptaSessionManager sessionManager,
+            IExpenseTicketBlobStorageService ticketBlobStorage,
+            IND_IExpenseTicketDraftService ticketDraft,
             IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
             _ticketBlobStorage = ticketBlobStorage ?? new ExpenseTicketBlobStorageService(logger);
+            _ticketDraft = ticketDraft;
         }
         /// <summary>
         /// Crea ticket de gasto (cabecera/lineas) en AX.
@@ -309,6 +328,324 @@ namespace IND_CRM_API.Controllers.CRM
                     Data = null,
                     TraceId = traceId
                 });
+            }
+        }
+
+        /// <summary>
+        /// Orquesta el alta rapida de ticket desde imagen en un solo request multipart.
+        /// </summary>
+        [HttpPost, Route("quick-create")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.Created, "Ticket creado y finalizado", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var resultData = new ExpenseSheetTicketQuickCreateResultDto
+            {
+                LinkedToSheet = false,
+                ProcessedByAI = false,
+                CompletedStage = string.Empty,
+                StepTraceIds = new ExpenseSheetTicketQuickCreateStepTraceIdsDto()
+            };
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (_ticketDraft == null)
+            {
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
+                {
+                    Success = false,
+                    Message = "El servicio de borrador IA no esta disponible.",
+                    ErrorCode = IndErrorCodes.InternalError,
+                    Data = null,
+                    Errors = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] QuickCreateExpenseSheetTicket {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var quickCreateForm = await ReadQuickCreateFormAsync(cancellationToken, traceId).ConfigureAwait(false);
+                if (!quickCreateForm.Success)
+                {
+                    LogOut(quickCreateForm.StatusCode);
+                    return Content(quickCreateForm.StatusCode, quickCreateForm.ErrorResponse);
+                }
+
+                var username = GetAuthenticatedUsername();
+                var createStepTraceId = Guid.NewGuid().ToString("N");
+                resultData.StepTraceIds.TicketCreate = createStepTraceId;
+                resultData.HojaGastosId = string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId)
+                    ? null
+                    : quickCreateForm.ExistingHojaGastosId;
+
+                Logger.Log(
+                    $"[API-IN] QuickCreateExpenseSheetTicket user={username} axUserId={axUserId} company={company} " +
+                    $"existingHojaGastosId={ToLogValue(resultData.HojaGastosId)} traceId={traceId}");
+
+                var provisionalDescription = !string.IsNullOrWhiteSpace(quickCreateForm.Description)
+                    ? quickCreateForm.Description.Trim()
+                    : ExpenseTicketImageHelper.BuildDescriptionFromFileName(quickCreateForm.OriginalFileName);
+                var provisionalCurrencyCode = NormalizeQuickCreateCurrencyCode(quickCreateForm.CurrencyCode);
+                var provisionalComentario = (quickCreateForm.Comentario ?? string.Empty).Trim();
+                var provisionalUrlFile = $"pending://ticket-upload/{traceId}";
+                var provisionalCreateRequest = new CreateExpenseSheetTicketRequest
+                {
+                    mode = ModeCreateHeaderOnly,
+                    description = provisionalDescription,
+                    currencyCode = provisionalCurrencyCode,
+                    totalAmount = 0m,
+                    transDate = DateTime.Today.ToString("ddMMyyyy", CultureInfo.InvariantCulture),
+                    comentario = provisionalComentario,
+                    urlFile = provisionalUrlFile,
+                    fileExtension = quickCreateForm.Extension,
+                    lines = null
+                };
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                if (!TryCreateQuickCreateProvisionalTicket(
+                        ax,
+                        company,
+                        axUserId,
+                        provisionalCreateRequest,
+                        createStepTraceId,
+                        out var createResult,
+                        out var createError,
+                        out var createStatus))
+                {
+                    LogOut(createStatus);
+                    return Content(createStatus, createError);
+                }
+
+                resultData.FileId = createResult.FileId;
+                resultData.FileName = createResult.FileName;
+                resultData.UrlFile = provisionalUrlFile;
+                resultData.CompletedStage = QuickCreateStageTicketCreated;
+
+                var uploadStepTraceId = Guid.NewGuid().ToString("N");
+                resultData.StepTraceIds.FileUpload = uploadStepTraceId;
+
+                if (!TryUploadQuickCreateTicketFile(
+                        ax,
+                        company,
+                        axUserId,
+                        quickCreateForm.ImageBytes,
+                        quickCreateForm.ContentType,
+                        quickCreateForm.Extension,
+                        resultData.FileId,
+                        uploadStepTraceId,
+                        traceId,
+                        out var fileUploadResult,
+                        out var uploadMessage,
+                        out var uploadErrorCode,
+                        out var uploadStatus))
+                {
+                    LogOut(uploadStatus);
+                    return Content(uploadStatus, BuildQuickCreateErrorResponse(
+                        traceId,
+                        uploadMessage,
+                        uploadErrorCode,
+                        resultData,
+                        null));
+                }
+
+                resultData.UrlFile = fileUploadResult.UrlFile;
+                resultData.FileName = fileUploadResult.FileName;
+                resultData.CompletedStage = QuickCreateStageFileUploaded;
+
+                var draftStepTraceId = Guid.NewGuid().ToString("N");
+                resultData.StepTraceIds.DraftExtract = draftStepTraceId;
+
+                ExpenseSheetDraftResponse draft;
+                try
+                {
+                    draft = await _ticketDraft.ExtractFromTicketImageAsync(
+                        quickCreateForm.ImageBytes,
+                        quickCreateForm.OriginalFileName,
+                        quickCreateForm.ContentType,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (IND_OpenAiRateLimitException ex)
+                {
+                    LogOut((HttpStatusCode)429);
+                    return BuildQuickCreateTooManyRequests(
+                        traceId,
+                        string.IsNullOrWhiteSpace(ex.Message) ? "Limite de uso IA excedido." : ex.Message,
+                        IndErrorCodes.AiRateLimitExceeded,
+                        ex.RetryAfterSeconds,
+                        resultData);
+                }
+                catch (OperationCanceledException)
+                {
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Timeout o cancelacion en la extraccion del draft.",
+                        IndErrorCodes.InternalError,
+                        resultData,
+                        null));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft: {ex}");
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Error de extraccion de borrador.",
+                        IndErrorCodes.InternalError,
+                        resultData,
+                        null));
+                }
+
+                if (draft == null)
+                {
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
+                        traceId,
+                        "No se pudo generar el borrador desde el ticket.",
+                        IndErrorCodes.InternalError,
+                        resultData,
+                        null));
+                }
+
+                resultData.CompletedStage = QuickCreateStageDraftExtracted;
+
+                var updateRequest = BuildQuickCreateUpdateRequestFromDraft(
+                    draft,
+                    resultData.UrlFile,
+                    resultData.FileName,
+                    quickCreateForm.Extension,
+                    provisionalDescription,
+                    provisionalCurrencyCode,
+                    provisionalComentario);
+
+                var normalizationErrors = new List<IndValidationError>();
+                ValidateUpdateTicketFromIABody(updateRequest, normalizationErrors);
+                if (normalizationErrors.Any())
+                {
+                    LogOut((HttpStatusCode)422);
+                    return Content((HttpStatusCode)422, BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Error de validacion.",
+                        IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                        resultData,
+                        normalizationErrors));
+                }
+
+                var finalizeStepTraceId = Guid.NewGuid().ToString("N");
+                resultData.StepTraceIds.TicketFinalize = finalizeStepTraceId;
+
+                if (!TryApplyTicketFromIACore(
+                        ax,
+                        company,
+                        axUserId,
+                        resultData.FileId,
+                        updateRequest,
+                        traceId,
+                        out var applyResult,
+                        out var applyError,
+                        out var applyStatus))
+                {
+                    LogOut(applyStatus);
+                    return Content(applyStatus, BuildQuickCreateErrorResponse(
+                        traceId,
+                        applyError?.Message ?? "No se pudo finalizar el ticket.",
+                        applyError?.ErrorCode ?? IndErrorCodes.InternalError,
+                        resultData,
+                        applyError?.Errors));
+                }
+
+                resultData.FileName = string.IsNullOrWhiteSpace(applyResult.FileName) ? resultData.FileName : applyResult.FileName;
+                resultData.ProcessedByAI = applyResult.ProcessedByAI;
+                resultData.CompletedStage = QuickCreateStageTicketFinalized;
+
+                if (!string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId))
+                {
+                    var linkStepTraceId = Guid.NewGuid().ToString("N");
+                    resultData.StepTraceIds.SheetLink = linkStepTraceId;
+
+                    if (!TryGetExpenseSheetTicketDetail(
+                            ax,
+                            company,
+                            axUserId,
+                            resultData.FileId,
+                            traceId,
+                            out var linkedTicketDetail,
+                            out var linkedTicketMessage,
+                            out var linkedTicketStatus))
+                    {
+                        LogOut(linkedTicketStatus);
+                        return Content(linkedTicketStatus, BuildQuickCreateErrorResponse(
+                            traceId,
+                            NormalizeIssueReason(linkedTicketMessage, "No se pudo cargar el ticket final."),
+                            linkedTicketStatus == HttpStatusCode.InternalServerError ? IndErrorCodes.AxComError : IndErrorCodes.CrmExpenseSheetTicketNotFound,
+                            resultData,
+                            null));
+                    }
+
+                    if (!TryLinkTicketToExpenseSheet(
+                            ax,
+                            company,
+                            axUserId,
+                            quickCreateForm.ExistingHojaGastosId,
+                            linkedTicketDetail,
+                            traceId,
+                            quickCreateForm.ProjectId,
+                            out var linkMessage,
+                            out var linkStatus))
+                    {
+                        var linkError = BuildExpenseSheetActionError(linkMessage, traceId, out _);
+                        LogOut(linkStatus);
+                        return Content(linkStatus, BuildQuickCreateErrorResponse(
+                            traceId,
+                            linkError.Message,
+                            linkError.ErrorCode,
+                            resultData,
+                            linkError.Errors));
+                    }
+
+                    resultData.LinkedToSheet = true;
+                    resultData.HojaGastosId = quickCreateForm.ExistingHojaGastosId;
+                    resultData.CompletedStage = QuickCreateStageSheetLinked;
+                }
+
+                LogOut(HttpStatusCode.Created);
+                return Content(HttpStatusCode.Created, new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
+                {
+                    Success = true,
+                    Message = "OK",
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = resultData,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
+                    traceId,
+                    "Error interno del servidor.",
+                    ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    resultData.FileId == null ? null : resultData,
+                    null));
             }
         }
 
@@ -849,7 +1186,7 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, out var linkMessage, out var linkStatus))
+                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, null, out var linkMessage, out var linkStatus))
                     {
                         if (IsTicketAlreadyLinkedMessage(linkMessage))
                         {
@@ -2217,6 +2554,856 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
+        // Carries validated multipart data for the quick-create flow.
+        private sealed class QuickCreateFormReadResult
+        {
+            public bool Success { get; set; }
+            public HttpStatusCode StatusCode { get; set; }
+            public IndApiResponse<ExpenseSheetTicketQuickCreateResultDto> ErrorResponse { get; set; }
+            public string OriginalFileName { get; set; }
+            public string ContentType { get; set; }
+            public string Extension { get; set; }
+            public byte[] ImageBytes { get; set; }
+            public string CurrencyCode { get; set; }
+            public string Description { get; set; }
+            public string Comentario { get; set; }
+            public string ExistingHojaGastosId { get; set; }
+            public string ProjectId { get; set; }
+        }
+
+        // Minimal create result reused by the quick-create orchestration.
+        private sealed class TicketCreateCoreResult
+        {
+            public string FileId { get; set; }
+            public string TicketRecId { get; set; }
+            public List<long> LineRecIds { get; set; }
+            public string FileName { get; set; }
+            public bool FileNameFinalized { get; set; }
+        }
+
+        // Minimal upload result reused by the quick-create orchestration.
+        private sealed class TicketFileSyncResult
+        {
+            public string UrlFile { get; set; }
+            public string FileName { get; set; }
+            public string BlobName { get; set; }
+            public string ContentType { get; set; }
+        }
+
+        // Minimal AX apply-from-IA result reused by the quick-create orchestration.
+        private sealed class TicketIaApplyResult
+        {
+            public string FileId { get; set; }
+            public string TicketRecId { get; set; }
+            public decimal? TotalAmount { get; set; }
+            public bool? ProcessedByAI { get; set; }
+            public int? GastoType { get; set; }
+            public string FileName { get; set; }
+            public List<long> LineRecIds { get; set; }
+        }
+
+        // Reads and validates the multipart contract for the quick-create flow.
+        private async Task<QuickCreateFormReadResult> ReadQuickCreateFormAsync(CancellationToken cancellationToken, string traceId)
+        {
+            if (Request?.Content == null || !Request.Content.IsMimeMultipartContent())
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = HttpStatusCode.UnsupportedMediaType,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Se requiere multipart/form-data.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "contentType", Message = "Se requiere multipart/form-data." }
+                        })
+                };
+            }
+
+            var provider = new MultipartMemoryStreamProvider();
+            await Request.Content.ReadAsMultipartAsync(provider, cancellationToken).ConfigureAwait(false);
+
+            var filePart = FindFilePart(provider, "ticketImage");
+            if (filePart == null)
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "ticketImage es obligatorio.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "ticketImage es obligatorio." }
+                        })
+                };
+            }
+
+            var originalFileName = GetFileName(filePart);
+            if (string.IsNullOrWhiteSpace(originalFileName))
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "ticketImage debe incluir nombre de archivo.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "ticketImage debe incluir nombre de archivo." }
+                        })
+                };
+            }
+
+            var extension = Path.GetExtension(originalFileName);
+            if (!ExpenseTicketImageHelper.IsAllowedExtension(extension))
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Formato de imagen no soportado. Permitidos: .jpg, .jpeg, .png, .webp",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "Formato de imagen no soportado. Permitidos: .jpg, .jpeg, .png, .webp" }
+                        })
+                };
+            }
+
+            var contentType = filePart.Headers?.ContentType?.MediaType;
+            if (!string.IsNullOrWhiteSpace(contentType) && !ExpenseTicketImageHelper.IsAllowedContentType(contentType))
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "Content-Type de imagen no soportado.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "Content-Type de imagen no soportado." }
+                        })
+                };
+            }
+
+            var contentLength = filePart.Headers?.ContentLength;
+            if (contentLength.HasValue && contentLength.Value > ExpenseTicketImageHelper.MaxImageBytes)
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "ticketImage supera el limite de 50 MB.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "ticketImage supera el limite de 50 MB." }
+                        })
+                };
+            }
+
+            var imageBytes = await filePart.ReadAsByteArrayAsync().ConfigureAwait(false);
+            if (imageBytes == null || imageBytes.Length <= 0)
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "ticketImage esta vacio.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "ticketImage esta vacio." }
+                        })
+                };
+            }
+
+            if (imageBytes.Length > ExpenseTicketImageHelper.MaxImageBytes)
+            {
+                return new QuickCreateFormReadResult
+                {
+                    Success = false,
+                    StatusCode = (HttpStatusCode)422,
+                    ErrorResponse = BuildQuickCreateErrorResponse(
+                        traceId,
+                        "ticketImage supera el limite de 50 MB.",
+                        IndErrorCodes.ValidationError,
+                        null,
+                        new List<IndValidationError>
+                        {
+                            new IndValidationError { Field = "ticketImage", Message = "ticketImage supera el limite de 50 MB." }
+                        })
+                };
+            }
+
+            return new QuickCreateFormReadResult
+            {
+                Success = true,
+                StatusCode = HttpStatusCode.OK,
+                OriginalFileName = originalFileName,
+                ContentType = contentType,
+                Extension = NormalizeFileExtension(extension, "jpg"),
+                ImageBytes = imageBytes,
+                CurrencyCode = await ReadFormFieldAsync(provider, "currencyCode").ConfigureAwait(false),
+                Description = await ReadFormFieldAsync(provider, "description").ConfigureAwait(false),
+                Comentario = await ReadFormFieldAsync(provider, "comentario").ConfigureAwait(false),
+                ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
+                ProjectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim()
+            };
+        }
+
+        // Builds the standard quick-create error envelope, preserving partial data when available.
+        private static IndApiResponse<ExpenseSheetTicketQuickCreateResultDto> BuildQuickCreateErrorResponse(
+            string traceId,
+            string message,
+            string errorCode,
+            ExpenseSheetTicketQuickCreateResultDto data,
+            List<IndValidationError> errors)
+        {
+            return new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
+            {
+                Success = false,
+                Message = string.IsNullOrWhiteSpace(message) ? "Error interno del servidor." : message,
+                ErrorCode = errorCode,
+                Errors = errors,
+                Data = data,
+                TraceId = traceId
+            };
+        }
+
+        // Returns a 429 quick-create response while preserving partial data.
+        private IHttpActionResult BuildQuickCreateTooManyRequests(
+            string traceId,
+            string message,
+            string errorCode,
+            int? retryAfterSeconds,
+            ExpenseSheetTicketQuickCreateResultDto data)
+        {
+            var payload = BuildQuickCreateErrorResponse(traceId, message, errorCode, data, null);
+            var response = Request.CreateResponse((HttpStatusCode)429, payload);
+            if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0)
+                response.Headers.Add("Retry-After", retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture));
+
+            return ResponseMessage(response);
+        }
+
+        // Normalizes optional currency input for the quick-create flow.
+        private static string NormalizeQuickCreateCurrencyCode(string currencyCode)
+        {
+            var normalized = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            return string.IsNullOrWhiteSpace(normalized) ? "EUR" : normalized;
+        }
+
+        private static async Task<string> ReadFormFieldAsync(MultipartMemoryStreamProvider provider, string fieldName)
+        {
+            if (provider == null || string.IsNullOrWhiteSpace(fieldName))
+                return null;
+
+            foreach (var part in provider.Contents)
+            {
+                var name = part.Headers?.ContentDisposition?.Name?.Trim('"');
+                if (!string.Equals(name, fieldName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var value = await part.ReadAsStringAsync().ConfigureAwait(false);
+                return value?.Trim();
+            }
+
+            return null;
+        }
+
+        private static HttpContent FindFilePart(MultipartMemoryStreamProvider provider, string expectedName)
+        {
+            if (provider == null)
+                return null;
+
+            var byName = provider.Contents.FirstOrDefault(content =>
+            {
+                var name = content.Headers?.ContentDisposition?.Name?.Trim('"');
+                var fileName = content.Headers?.ContentDisposition?.FileName;
+                return !string.IsNullOrWhiteSpace(fileName) &&
+                       string.Equals(name, expectedName, StringComparison.OrdinalIgnoreCase);
+            });
+
+            return byName ?? provider.Contents.FirstOrDefault(content => !string.IsNullOrWhiteSpace(content.Headers?.ContentDisposition?.FileName));
+        }
+
+        private static string GetFileName(HttpContent filePart)
+        {
+            try
+            {
+                return filePart?.Headers?.ContentDisposition?.FileName?.Trim('"');
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Creates the provisional ticket using the existing createExpenseSheetTicket AX contract.
+        private bool TryCreateQuickCreateProvisionalTicket(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            CreateExpenseSheetTicketRequest body,
+            string stepTraceId,
+            out TicketCreateCoreResult result,
+            out IndApiResponse<object> error,
+            out HttpStatusCode status)
+        {
+            result = null;
+            error = null;
+            status = HttpStatusCode.Created;
+
+            try
+            {
+                var modeValue = ResolveCreateTicketMode(body);
+                var extension = NormalizeFileExtension(body?.fileExtension, "jpg");
+                var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
+                var normalizedTransDate = modeValue == ModeAddLinesToExisting
+                    ? string.Empty
+                    : NormalizeApiDateToAxYmd(body?.transDate);
+
+                var rootCon = ax.CreateContainer();
+                rootCon.Append(company);
+
+                var headerCon = ax.CreateContainer();
+                headerCon.Append(axUserId);
+                headerCon.Append(body?.description?.Trim() ?? string.Empty);
+                headerCon.Append((body?.currencyCode ?? string.Empty).Trim().ToUpperInvariant());
+                headerCon.Append(body?.totalAmount ?? 0m);
+                headerCon.Append(normalizedTransDate);
+                headerCon.Append(body?.comentario?.Trim() ?? string.Empty);
+                headerCon.Append(body?.urlFile?.Trim() ?? string.Empty);
+                headerCon.Append(provisionalFileName);
+                if (body?.gastoType.HasValue == true)
+                    headerCon.Append(body.gastoType.Value);
+                rootCon.Append(headerCon);
+
+                var linesCon = ax.CreateContainer();
+                if (body?.lines != null)
+                {
+                    foreach (var line in body.lines)
+                    {
+                        var lineCon = ax.CreateContainer();
+                        lineCon.Append(line.description?.Trim() ?? string.Empty);
+                        lineCon.Append(line.qty ?? 0m);
+                        lineCon.Append(line.price ?? 0m);
+                        if (line.totalAmount.HasValue)
+                            lineCon.Append(line.totalAmount.Value);
+                        linesCon.Append(lineCon);
+                    }
+                }
+                rootCon.Append(linesCon);
+
+                var optionsCon = ax.CreateContainer();
+                optionsCon.Append(modeValue);
+                optionsCon.Append(body?.existingFileId?.Trim() ?? string.Empty);
+                rootCon.Append(optionsCon);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "createExpenseSheetTicket",
+                    rootCon);
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out var linesOut))
+                {
+                    status = HttpStatusCode.InternalServerError;
+                    error = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = stepTraceId
+                    };
+                    return false;
+                }
+
+                if (!success)
+                {
+                    error = BuildTicketActionError(message, stepTraceId, out status);
+                    return false;
+                }
+
+                var fileId = extras.Count > 0 ? extras[0] : string.Empty;
+                var ticketRecId = extras.Count > 1 ? extras[1] : string.Empty;
+                var lineRecIds = MapRecIdList(linesOut);
+
+                var finalFileName = provisionalFileName;
+                var fileNameFinalized = false;
+                if (!string.IsNullOrWhiteSpace(fileId))
+                {
+                    finalFileName = BuildTicketFileName(axUserId, fileId, extension);
+                    fileNameFinalized = TryFinalizeTicketFileName(
+                        ax,
+                        company,
+                        axUserId,
+                        fileId,
+                        body,
+                        modeValue,
+                        finalFileName,
+                        out var finalizeMessage);
+
+                    if (!fileNameFinalized)
+                    {
+                        Logger.Log(
+                            $"[WARN] QuickCreate provisional filename finalize failed fileId={fileId} stepTraceId={stepTraceId} msg={finalizeMessage}");
+                    }
+                }
+
+                result = new TicketCreateCoreResult
+                {
+                    FileId = fileId,
+                    TicketRecId = ticketRecId,
+                    LineRecIds = lineRecIds,
+                    FileName = fileNameFinalized ? finalFileName : provisionalFileName,
+                    FileNameFinalized = fileNameFinalized
+                };
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] TryCreateQuickCreateProvisionalTicket: {ex}");
+                status = HttpStatusCode.InternalServerError;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = stepTraceId
+                };
+                return false;
+            }
+        }
+
+        // Uploads the ticket image and syncs the final blob URL into AX.
+        private bool TryUploadQuickCreateTicketFile(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            byte[] imageBytes,
+            string contentType,
+            string extension,
+            string fileId,
+            string stepTraceId,
+            string traceId,
+            out TicketFileSyncResult result,
+            out string message,
+            out string errorCode,
+            out HttpStatusCode status)
+        {
+            result = null;
+            message = string.Empty;
+            errorCode = null;
+            status = HttpStatusCode.OK;
+
+            try
+            {
+                if (!TryGetTicketDetailFromAx(ax, company, axUserId, fileId, traceId, out var existingTicket, out var getError, out var getStatus))
+                {
+                    status = getStatus;
+                    message = getError?.Message ?? "No se pudo cargar el ticket provisional.";
+                    errorCode = getError?.ErrorCode ?? (getStatus == HttpStatusCode.InternalServerError ? IndErrorCodes.AxComError : IndErrorCodes.CrmExpenseSheetTicketNotFound);
+                    return false;
+                }
+
+                TicketBlobUploadResult uploadResult;
+                var finalFileName = BuildTicketFileName(axUserId, fileId, extension);
+                using (var stream = new MemoryStream(imageBytes, false))
+                {
+                    uploadResult = _ticketBlobStorage.UploadTicketFile(
+                        company,
+                        axUserId,
+                        fileId,
+                        finalFileName,
+                        stream,
+                        contentType);
+                }
+
+                if (!TryUpdateTicketFromExisting(
+                        ax,
+                        company,
+                        axUserId,
+                        fileId,
+                        existingTicket,
+                        uploadResult.BlobUrl,
+                        finalFileName,
+                        traceId,
+                        out var updateMessage,
+                        out var updateError,
+                        out var updateStatus))
+                {
+                    try
+                    {
+                        _ticketBlobStorage.DeleteTicketFileByUrl(uploadResult.BlobUrl);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        Logger.Log($"[WARN] QuickCreate upload rollback failed: {rollbackEx.Message} stepTraceId={stepTraceId} traceId={traceId}");
+                    }
+
+                    status = updateStatus;
+                    message = updateError?.Message ?? updateMessage ?? "No se pudo sincronizar el archivo del ticket.";
+                    errorCode = updateError?.ErrorCode ?? (updateStatus == HttpStatusCode.InternalServerError
+                        ? IndErrorCodes.AxComError
+                        : IndErrorCodes.CrmExpenseSheetTicketFileUploadFailed);
+                    return false;
+                }
+
+                result = new TicketFileSyncResult
+                {
+                    UrlFile = uploadResult.BlobUrl,
+                    FileName = finalFileName,
+                    BlobName = uploadResult.BlobName,
+                    ContentType = contentType
+                };
+                message = updateMessage ?? string.Empty;
+                errorCode = null;
+                return true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                Logger.Log($"[ERROR] QuickCreate upload storage configuration: {ex.Message} stepTraceId={stepTraceId} traceId={traceId}");
+                status = HttpStatusCode.InternalServerError;
+                message = "No se pudo acceder a la configuracion de Azure Blob Storage.";
+                errorCode = IndErrorCodes.CrmExpenseSheetTicketFileStorageNotConfigured;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] QuickCreate upload: {ex}");
+                status = HttpStatusCode.InternalServerError;
+                message = "Error interno al cargar archivo del ticket.";
+                errorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.CrmExpenseSheetTicketFileUploadFailed;
+                return false;
+            }
+        }
+
+        // Maps an IA draft into the existing update-from-IA request contract.
+        private static UpdateExpenseSheetTicketFromIARequest BuildQuickCreateUpdateRequestFromDraft(
+            ExpenseSheetDraftResponse draft,
+            string urlFile,
+            string fileName,
+            string fileExtension,
+            string fallbackDescription,
+            string fallbackCurrencyCode,
+            string fallbackComentario)
+        {
+            var validLines = MapQuickCreateDraftLines(draft?.lines);
+            var linesTotal = CalculateTicketLinesTotal(validLines);
+            var currencyCode = NormalizeDraftCurrencyCode(draft?.currencyCode, draft?.RawCurrency);
+            if (string.IsNullOrWhiteSpace(currencyCode))
+                currencyCode = NormalizeQuickCreateCurrencyCode(fallbackCurrencyCode);
+
+            var comentario = !string.IsNullOrWhiteSpace(fallbackComentario)
+                ? fallbackComentario.Trim()
+                : (draft?.Merchant ?? string.Empty).Trim();
+
+            var transDateYmd = ResolveQuickCreateDraftTransDate(draft);
+
+            return new UpdateExpenseSheetTicketFromIARequest
+            {
+                description = string.IsNullOrWhiteSpace(draft?.description) ? fallbackDescription : draft.description.Trim(),
+                currencyCode = currencyCode,
+                gastoType = ResolveQuickCreateDraftGastoType(draft),
+                totalAmount = linesTotal > 0m ? linesTotal : null,
+                transDate = FormatApiDate(transDateYmd),
+                comentario = comentario,
+                urlFile = (urlFile ?? string.Empty).Trim(),
+                fileName = (fileName ?? string.Empty).Trim(),
+                fileExtension = NormalizeFileExtension(fileExtension, "jpg"),
+                lines = validLines
+            };
+        }
+
+        // Normalizes IA draft lines into ticket line payloads with positive qty/price only.
+        private static List<ExpenseSheetTicketLineRequest> MapQuickCreateDraftLines(IEnumerable<CreateExpenseSheetLineRequest> lines)
+        {
+            var mapped = new List<ExpenseSheetTicketLineRequest>();
+            if (lines == null)
+                return mapped;
+
+            foreach (var line in lines)
+            {
+                if (line == null)
+                    continue;
+
+                var description = (line.description ?? string.Empty).Trim();
+                var qty = line.qty ?? 0m;
+                var price = line.price ?? 0m;
+                if (string.IsNullOrWhiteSpace(description) || qty <= 0m || price <= 0m)
+                    continue;
+
+                mapped.Add(new ExpenseSheetTicketLineRequest
+                {
+                    description = description,
+                    qty = qty,
+                    price = price,
+                    totalAmount = qty * price
+                });
+            }
+
+            return mapped;
+        }
+
+        // Resolves a safe ticket date from the IA draft, defaulting to today in AX format.
+        private static string ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
+        {
+            if (draft?.lines != null)
+            {
+                foreach (var line in draft.lines)
+                {
+                    if (line == null || string.IsNullOrWhiteSpace(line.transDate))
+                        continue;
+
+                    if (TryNormalizeAnyDateToAxYmd(line.transDate, out var normalized))
+                        return normalized;
+                }
+            }
+
+            return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        // Resolves gastoType from draft header first and then from the dominant draft line type.
+        private static int? ResolveQuickCreateDraftGastoType(ExpenseSheetDraftResponse draft)
+        {
+            if (draft != null && draft.gastoType.HasValue && IsValidGastoType(draft.gastoType.Value))
+                return draft.gastoType.Value;
+
+            if (draft?.lines == null || draft.lines.Count == 0)
+                return null;
+
+            var firstByType = new Dictionary<int, int>();
+            for (int i = 0; i < draft.lines.Count; i++)
+            {
+                var typeValue = draft.lines[i]?.typeValue;
+                if (!typeValue.HasValue || !IsValidGastoType(typeValue.Value))
+                    continue;
+
+                if (!firstByType.ContainsKey(typeValue.Value))
+                    firstByType[typeValue.Value] = i;
+            }
+
+            var dominant = draft.lines
+                .Where(line => line != null && line.typeValue.HasValue && IsValidGastoType(line.typeValue.Value))
+                .GroupBy(line => line.typeValue.Value)
+                .Select(group => new
+                {
+                    TypeValue = group.Key,
+                    Count = group.Count(),
+                    FirstIndex = firstByType.ContainsKey(group.Key) ? firstByType[group.Key] : int.MaxValue
+                })
+                .OrderByDescending(group => group.Count)
+                .ThenBy(group => group.FirstIndex)
+                .FirstOrDefault();
+
+            return dominant?.TypeValue;
+        }
+
+        // Validates shared request rules before calling AX updateExpenseSheetTicketFromIA.
+        private static void ValidateUpdateTicketFromIABody(UpdateExpenseSheetTicketFromIARequest body, List<IndValidationError> validationErrors)
+        {
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
+                validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+            if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
+                validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+
+            if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
+            {
+                validationErrors.Add(new IndValidationError
+                {
+                    Field = "gastoType",
+                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                });
+            }
+
+            if (body.lines == null || body.lines.Count == 0)
+            {
+                validationErrors.Add(new IndValidationError { Field = "lines", Message = "lines debe incluir al menos una linea." });
+            }
+            else
+            {
+                ValidateTicketLines(body.lines, validationErrors);
+            }
+        }
+
+        // Executes the existing AX atomic replace flow used by UpdateExpenseSheetTicketFromIA.
+        private bool TryApplyTicketFromIACore(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string fileId,
+            UpdateExpenseSheetTicketFromIARequest body,
+            string traceId,
+            out TicketIaApplyResult result,
+            out IndApiResponse<object> error,
+            out HttpStatusCode status)
+        {
+            result = null;
+            error = null;
+            status = HttpStatusCode.OK;
+
+            if (!TryGetTicketDetailFromAx(ax, company, axUserId, fileId.Trim(), traceId, out var existing, out error, out status))
+                return false;
+
+            var mergedDescription = (body.description ?? existing.Description ?? string.Empty).Trim();
+            var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
+            var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
+            var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
+                ? body.totalAmount.Value
+                : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+            var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
+            var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
+                ? normalizedTransDate
+                : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
+            var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
+            var mergedFileName = (body.fileName ?? string.Empty).Trim();
+
+            if (string.IsNullOrWhiteSpace(mergedFileName))
+            {
+                if (!string.IsNullOrWhiteSpace(body.fileExtension))
+                {
+                    var extension = NormalizeFileExtension(body.fileExtension, "jpg");
+                    mergedFileName = BuildTicketFileName(axUserId, fileId.Trim(), extension);
+                }
+                else
+                {
+                    mergedFileName = (existing.FileName ?? string.Empty).Trim();
+                }
+            }
+
+            var validationErrors = new List<IndValidationError>();
+            if (string.IsNullOrWhiteSpace(mergedDescription))
+                validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio para aplicar IA." });
+            if (string.IsNullOrWhiteSpace(mergedCurrencyCode))
+                validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio para aplicar IA." });
+            if (string.IsNullOrWhiteSpace(mergedUrlFile))
+                validationErrors.Add(new IndValidationError { Field = "urlFile", Message = "urlFile es obligatorio para aplicar IA." });
+            if (string.IsNullOrWhiteSpace(mergedFileName))
+                validationErrors.Add(new IndValidationError { Field = "fileName", Message = "fileName o fileExtension es obligatorio para aplicar IA." });
+
+            if (validationErrors.Any())
+            {
+                status = (HttpStatusCode)422;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return false;
+            }
+
+            var rootCon = ax.CreateContainer();
+            rootCon.Append(company);
+
+            var headerCon = ax.CreateContainer();
+            headerCon.Append(axUserId);
+            headerCon.Append(fileId.Trim());
+            headerCon.Append(mergedDescription);
+            headerCon.Append(mergedCurrencyCode);
+            headerCon.Append(mergedTotalAmount);
+            headerCon.Append(mergedTransDate);
+            headerCon.Append(mergedComentario);
+            headerCon.Append(mergedUrlFile);
+            headerCon.Append(mergedFileName);
+            headerCon.Append(mergedGastoType);
+            rootCon.Append(headerCon);
+
+            var linesCon = ax.CreateContainer();
+            foreach (var line in body.lines)
+            {
+                var qty = line.qty ?? 0m;
+                var price = line.price ?? 0m;
+                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
+                    ? line.totalAmount.Value
+                    : qty * price;
+
+                var lineCon = ax.CreateContainer();
+                lineCon.Append(line.description?.Trim() ?? string.Empty);
+                lineCon.Append(qty);
+                lineCon.Append(price);
+                lineCon.Append(lineTotal);
+                linesCon.Append(lineCon);
+            }
+            rootCon.Append(linesCon);
+
+            var resultObj = ax.CallStaticClassMethod(
+                "INDCRMExpenseSheetService",
+                "updateExpenseSheetTicketFromIA",
+                rootCon);
+
+            if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out var linesOut))
+            {
+                status = HttpStatusCode.InternalServerError;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error al procesar la respuesta de AX.",
+                    ErrorCode = IndErrorCodes.AxComError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return false;
+            }
+
+            if (!success)
+            {
+                error = BuildTicketActionError(message, traceId, out status);
+                return false;
+            }
+
+            result = new TicketIaApplyResult
+            {
+                FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
+                TicketRecId = extras.Count > 1 ? extras[1] : string.Empty,
+                TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount,
+                ProcessedByAI = extras.Count > 3 ? (ToNullableBool(extras[3]) ?? true) : true,
+                GastoType = mergedGastoType,
+                FileName = mergedFileName,
+                LineRecIds = MapRecIdList(linesOut)
+            };
+
+            return true;
+        }
+
         // Resolves ticket creation mode with backward-compatible default.
         private static int ResolveCreateTicketMode(CreateExpenseSheetTicketRequest body)
         {
@@ -3037,6 +4224,12 @@ namespace IND_CRM_API.Controllers.CRM
                 : "null";
         }
 
+        // Formats nullable strings for logs.
+        private static string ToLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
+        }
+
         // Converts bool to AX int (1/0).
         private static int ToAxBool(bool? value)
         {
@@ -3505,6 +4698,7 @@ namespace IND_CRM_API.Controllers.CRM
             string expenseSheetId,
             ExpenseSheetTicketDetailDto ticketDetail,
             string traceId,
+            string projectId,
             out string message,
             out HttpStatusCode status)
         {
@@ -3541,7 +4735,7 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
             lineCon.Append(1m);
             lineCon.Append(ticketDetail.TotalAmount ?? 0m);
-            lineCon.Append(string.Empty);
+            lineCon.Append((projectId ?? string.Empty).Trim());
             linesCon.Append(lineCon);
             rootCon.Append(linesCon);
 

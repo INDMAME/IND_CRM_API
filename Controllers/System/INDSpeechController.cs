@@ -34,8 +34,6 @@ namespace IND_CRM_API.Controllers.System
     {
         private const int MaxAudioBytes = 25 * 1024 * 1024; // 25 MB (limite interno alineado con OpenAI)
         private const int DefaultMaxPromptWords = 500; // limite local por defecto para mantener el prompt acotado
-        private const int MaxExpenseTicketImageBytes = 50 * 1024 * 1024; // 50 MB (align OpenAI payload limit)
-
         private const string DefaultPromptEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT";
         private const string DefaultPromptPathEnvVar = "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH";
         private const string DefaultPromptAppSettingKey = "OpenAI:TranscriptionDefaultPrompt";
@@ -68,22 +66,6 @@ namespace IND_CRM_API.Controllers.System
             "audio/vnd.wave",
             "audio/flac",
             "application/octet-stream"
-        };
-
-        private static readonly HashSet<string> AllowedTicketImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".webp"
-        };
-
-        private static readonly HashSet<string> AllowedTicketImageContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "image/jpeg",
-            "image/pjpeg",
-            "image/png",
-            "image/webp"
         };
 
         private static readonly HashSet<int> AllowedTicketGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
@@ -379,19 +361,19 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var extension = Path.GetExtension(originalFileName);
-                if (string.IsNullOrWhiteSpace(extension) || !AllowedTicketImageExtensions.Contains(extension))
+                if (!ExpenseTicketImageHelper.IsAllowedExtension(extension))
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "Formato de imagen no soportado. Permitidos: .jpg, .jpeg, .png, .webp", IndErrorCodes.ValidationError, "ticketImage");
                 }
 
                 var mediaType = filePart.Headers?.ContentType?.MediaType;
-                if (!string.IsNullOrWhiteSpace(mediaType) && !AllowedTicketImageContentTypes.Contains(mediaType))
+                if (!string.IsNullOrWhiteSpace(mediaType) && !ExpenseTicketImageHelper.IsAllowedContentType(mediaType))
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "Content-Type de imagen no soportado.", IndErrorCodes.ValidationError, "ticketImage");
                 }
 
                 var contentLength = filePart.Headers?.ContentLength;
-                if (contentLength.HasValue && contentLength.Value > MaxExpenseTicketImageBytes)
+                if (contentLength.HasValue && contentLength.Value > ExpenseTicketImageHelper.MaxImageBytes)
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "ticketImage supera el limite de 50 MB.", IndErrorCodes.ValidationError, "ticketImage");
                 }
@@ -403,7 +385,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "ticketImage esta vacio.", IndErrorCodes.ValidationError, "ticketImage");
                 }
-                if (imageBytes.Length > MaxExpenseTicketImageBytes)
+                if (imageBytes.Length > ExpenseTicketImageHelper.MaxImageBytes)
                 {
                     return ReturnError((HttpStatusCode)422, traceId, "ticketImage supera el limite de 50 MB.", IndErrorCodes.ValidationError, "ticketImage");
                 }

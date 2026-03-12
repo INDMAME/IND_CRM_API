@@ -1240,11 +1240,128 @@
                      "name":  "CRM Expense Sheets",
                      "item":  [
                                   {
-                                      "name":  "Expense Sheet Tickets",
-                                      "item":  [
-                                                   {
-                                                       "name":  "Create Ticket - Header + Lines (mode 0)",
-                                                       "request":  {
+                                     "name":  "Expense Sheet Tickets",
+                                     "item":  [
+                                                  {
+                                                      "name":  "Quick Create Ticket From Image",
+                                                      "event":  [
+                                                                    {
+                                                                        "listen":  "test",
+                                                                        "script":  {
+                                                                                       "type":  "text/javascript",
+                                                                                       "exec":  [
+                                                                                                    "pm.test(\u0027Status created or partial failure\u0027, function () {",
+                                                                                                    "  pm.expect(pm.response.code).to.be.oneOf([201, 422, 429, 500]);",
+                                                                                                    "});",
+                                                                                                    "",
+                                                                                                    "var j = {};",
+                                                                                                    "try { j = pm.response.json(); } catch (e) { j = {}; }",
+                                                                                                    "var d = j.data || j.Data || {};",
+                                                                                                    "var fileId = d.FileId || d.fileId || \u0027\u0027;",
+                                                                                                    "var urlFile = d.UrlFile || d.urlFile || \u0027\u0027;",
+                                                                                                    "var fileName = d.FileName || d.fileName || \u0027\u0027;",
+                                                                                                    "var processedByAI = d.ProcessedByAI;",
+                                                                                                    "if (processedByAI === undefined) processedByAI = d.processedByAI;",
+                                                                                                    "var linkedToSheet = d.LinkedToSheet;",
+                                                                                                    "if (linkedToSheet === undefined) linkedToSheet = d.linkedToSheet;",
+                                                                                                    "var hojaGastosId = d.HojaGastosId || d.hojaGastosId || \u0027\u0027;",
+                                                                                                    "var completedStage = d.CompletedStage || d.completedStage || \u0027\u0027;",
+                                                                                                    "var stepTraceIds = d.StepTraceIds || d.stepTraceIds || {};",
+                                                                                                    "",
+                                                                                                    "if (fileId) {",
+                                                                                                    "  pm.collectionVariables.set(\u0027fileId\u0027, String(fileId));",
+                                                                                                    "  pm.collectionVariables.set(\u0027persistedTicketFileId\u0027, String(fileId));",
+                                                                                                    "}",
+                                                                                                    "if (urlFile) pm.collectionVariables.set(\u0027ticketUrlFile\u0027, String(urlFile));",
+                                                                                                    "if (fileName) pm.collectionVariables.set(\u0027ticketFileName\u0027, String(fileName));",
+                                                                                                    "if (completedStage) pm.collectionVariables.set(\u0027quickCreateCompletedStage\u0027, String(completedStage));",
+                                                                                                    "if (hojaGastosId) pm.collectionVariables.set(\u0027quickCreateHojaGastosId\u0027, String(hojaGastosId));",
+                                                                                                    "if (linkedToSheet !== undefined) pm.collectionVariables.set(\u0027quickCreateLinkedToSheet\u0027, String(!!linkedToSheet));",
+                                                                                                    "if (processedByAI !== undefined) pm.collectionVariables.set(\u0027quickCreateProcessedByAI\u0027, String(!!processedByAI));",
+                                                                                                    "if (stepTraceIds.TicketCreate) pm.collectionVariables.set(\u0027quickCreateTraceTicketCreate\u0027, String(stepTraceIds.TicketCreate));",
+                                                                                                    "if (stepTraceIds.FileUpload) pm.collectionVariables.set(\u0027quickCreateTraceFileUpload\u0027, String(stepTraceIds.FileUpload));",
+                                                                                                    "if (stepTraceIds.DraftExtract) pm.collectionVariables.set(\u0027quickCreateTraceDraftExtract\u0027, String(stepTraceIds.DraftExtract));",
+                                                                                                    "if (stepTraceIds.TicketFinalize) pm.collectionVariables.set(\u0027quickCreateTraceTicketFinalize\u0027, String(stepTraceIds.TicketFinalize));",
+                                                                                                    "if (stepTraceIds.SheetLink) pm.collectionVariables.set(\u0027quickCreateTraceSheetLink\u0027, String(stepTraceIds.SheetLink));",
+                                                                                                    "",
+                                                                                                    "var traceId = j.traceId || j.TraceId;",
+                                                                                                    "if (traceId) pm.collectionVariables.set(\u0027lastTraceId\u0027, String(traceId));"
+                                                                                                ]
+                                                                                   }
+                                                                    }
+                                                                ],
+                                                      "request":  {
+                                                                      "method":  "POST",
+                                                                      "header":  [
+                                                                                     {
+                                                                                         "key":  "Authorization",
+                                                                                         "value":  "Bearer {{tokenId}}"
+                                                                                     },
+                                                                                     {
+                                                                                         "key":  "X-IND-Company",
+                                                                                         "value":  "{{companyId}}"
+                                                                                     },
+                                                                                     {
+                                                                                         "key":  "X-IND-AxUserId",
+                                                                                         "value":  "{{axUserId}}"
+                                                                                     }
+                                                                                 ],
+                                                                      "body":  {
+                                                                                   "mode":  "formdata",
+                                                                                   "formdata":  [
+                                                                                                    {
+                                                                                                        "key":  "ticketImage",
+                                                                                                        "type":  "file",
+                                                                                                        "value":  null
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "key":  "currencyCode",
+                                                                                                        "value":  "EUR",
+                                                                                                        "type":  "text"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "key":  "description",
+                                                                                                        "value":  "Quick create ticket",
+                                                                                                        "type":  "text"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "key":  "comentario",
+                                                                                                        "value":  "Quick create from Postman V27",
+                                                                                                        "type":  "text"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "key":  "existingHojaGastosId",
+                                                                                                        "value":  "",
+                                                                                                        "type":  "text"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "key":  "projectId",
+                                                                                                        "value":  "",
+                                                                                                        "type":  "text"
+                                                                                                    }
+                                                                                                ]
+                                                                               },
+                                                                      "url":  {
+                                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets/quick-create",
+                                                                                  "host":  [
+                                                                                               "{{baseUrl}}"
+                                                                                           ],
+                                                                                  "path":  [
+                                                                                               "api",
+                                                                                               "crm",
+                                                                                               "expensesheets",
+                                                                                               "tickets",
+                                                                                               "quick-create"
+                                                                                           ]
+                                                                              }
+                                                                  },
+                                                      "response":  [
+
+                                                                   ]
+                                                  },
+                                                  {
+                                                      "name":  "Create Ticket - Header + Lines (mode 0)",
+                                                      "request":  {
                                                                        "method":  "POST",
                                                                        "header":  [
                                                                                       {

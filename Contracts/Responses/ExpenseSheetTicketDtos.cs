@@ -91,4 +91,31 @@ namespace IND_CRM_API.Contracts.Responses
         public string ticketId { get; set; }
         public string reason { get; set; }
     }
+
+    /// <summary>
+    /// Resultado del flujo compuesto de alta rapida de ticket.
+    /// </summary>
+    public class ExpenseSheetTicketQuickCreateResultDto
+    {
+        public string FileId { get; set; }
+        public string UrlFile { get; set; }
+        public string FileName { get; set; }
+        public bool? ProcessedByAI { get; set; }
+        public bool LinkedToSheet { get; set; }
+        public string HojaGastosId { get; set; }
+        public string CompletedStage { get; set; }
+        public ExpenseSheetTicketQuickCreateStepTraceIdsDto StepTraceIds { get; set; }
+    }
+
+    /// <summary>
+    /// Trace ids por etapa del flujo compuesto quick-create.
+    /// </summary>
+    public class ExpenseSheetTicketQuickCreateStepTraceIdsDto
+    {
+        public string TicketCreate { get; set; }
+        public string FileUpload { get; set; }
+        public string DraftExtract { get; set; }
+        public string TicketFinalize { get; set; }
+        public string SheetLink { get; set; }
+    }
 }
