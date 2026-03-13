@@ -1,4 +1,5 @@
 using System;
+using DiagnosticsStopwatch = global::System.Diagnostics.Stopwatch;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -345,7 +346,7 @@ namespace IND_CRM_API.Controllers.CRM
         public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var totalSw = System.Diagnostics.Stopwatch.StartNew();
+            var totalSw = DiagnosticsStopwatch.StartNew();
             var resultData = new ExpenseSheetTicketQuickCreateResultDto
             {
                 LinkedToSheet = false,
@@ -393,7 +394,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
-                var readFormSw = System.Diagnostics.Stopwatch.StartNew();
+                var readFormSw = DiagnosticsStopwatch.StartNew();
                 var quickCreateForm = await ReadQuickCreateFormAsync(cancellationToken, traceId).ConfigureAwait(false);
                 readFormMs = readFormSw.ElapsedMilliseconds;
                 if (!quickCreateForm.Success)
@@ -433,7 +434,7 @@ namespace IND_CRM_API.Controllers.CRM
                 };
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                var createSw = System.Diagnostics.Stopwatch.StartNew();
+                var createSw = DiagnosticsStopwatch.StartNew();
                 if (!TryCreateQuickCreateProvisionalTicket(
                         ax,
                         company,
@@ -457,7 +458,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var uploadStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.FileUpload = uploadStepTraceId;
 
-                var uploadSw = System.Diagnostics.Stopwatch.StartNew();
+                var uploadSw = DiagnosticsStopwatch.StartNew();
                 if (!TryUploadQuickCreateTicketFile(
                         ax,
                         company,
@@ -491,7 +492,7 @@ namespace IND_CRM_API.Controllers.CRM
                 resultData.StepTraceIds.DraftExtract = draftStepTraceId;
 
                 ExpenseSheetDraftResponse draft;
-                var draftSw = System.Diagnostics.Stopwatch.StartNew();
+                var draftSw = DiagnosticsStopwatch.StartNew();
                 try
                 {
                     draft = await _ticketDraft.ExtractFromTicketImageAsync(
@@ -576,7 +577,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var finalizeStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.TicketFinalize = finalizeStepTraceId;
 
-                var finalizeSw = System.Diagnostics.Stopwatch.StartNew();
+                var finalizeSw = DiagnosticsStopwatch.StartNew();
                 if (!TryApplyTicketFromIACore(
                         ax,
                         company,
@@ -607,7 +608,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var linkStepTraceId = Guid.NewGuid().ToString("N");
                     resultData.StepTraceIds.SheetLink = linkStepTraceId;
 
-                    var linkSw = System.Diagnostics.Stopwatch.StartNew();
+                    var linkSw = DiagnosticsStopwatch.StartNew();
                     if (!TryGetExpenseSheetTicketDetail(
                             ax,
                             company,
@@ -1809,7 +1810,7 @@ namespace IND_CRM_API.Controllers.CRM
         public IHttpActionResult UploadExpenseSheetTicketFile(string fileId, [FromUri] string extension = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
-            var totalSw = System.Diagnostics.Stopwatch.StartNew();
+            var totalSw = DiagnosticsStopwatch.StartNew();
             var validationErrors = new List<IndValidationError>();
             long? multipartReadMs = null;
             long? ticketLookupMs = null;
@@ -1861,7 +1862,7 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[API-IN] UploadExpenseSheetTicketFile fileId={cleanFileId} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var provider = new MultipartMemoryStreamProvider();
-                var multipartSw = System.Diagnostics.Stopwatch.StartNew();
+                var multipartSw = DiagnosticsStopwatch.StartNew();
                 Request.Content.ReadAsMultipartAsync(provider).GetAwaiter().GetResult();
                 multipartReadMs = multipartSw.ElapsedMilliseconds;
 
@@ -1897,7 +1898,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var contentType = fileContent.Headers?.ContentType?.MediaType;
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                var ticketLookupSw = System.Diagnostics.Stopwatch.StartNew();
+                var ticketLookupSw = DiagnosticsStopwatch.StartNew();
                 if (!TryGetTicketDetailFromAx(ax, company, axUserId, cleanFileId, traceId, out var existingTicket, out var getError, out var getStatus))
                 {
                     LogOut(getStatus);
@@ -1906,7 +1907,7 @@ namespace IND_CRM_API.Controllers.CRM
                 ticketLookupMs = ticketLookupSw.ElapsedMilliseconds;
 
                 TicketBlobUploadResult uploadResult;
-                var blobUploadSw = System.Diagnostics.Stopwatch.StartNew();
+                var blobUploadSw = DiagnosticsStopwatch.StartNew();
                 using (var stream = fileContent.ReadAsStreamAsync().GetAwaiter().GetResult())
                 {
                     uploadResult = _ticketBlobStorage.UploadTicketFile(
@@ -1919,7 +1920,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 blobUploadMs = blobUploadSw.ElapsedMilliseconds;
 
-                var axSyncSw = System.Diagnostics.Stopwatch.StartNew();
+                var axSyncSw = DiagnosticsStopwatch.StartNew();
                 if (!TryUpdateTicketFromExisting(
                         ax,
                         company,

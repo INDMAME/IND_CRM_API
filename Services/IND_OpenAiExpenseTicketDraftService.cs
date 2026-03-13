@@ -1201,8 +1201,6 @@ namespace IND_CRM_API.Services
                     "projId")
                 };
             }
-        }
-
         // Holds the effective request knobs that define a latency profile.
         private sealed class ExpenseTicketRequestOptions
         {
@@ -1224,4 +1222,5 @@ namespace IND_CRM_API.Services
             public int? ReasoningTokens { get; set; }
             public int? TotalTokens { get; set; }
         }
+    }
 }
