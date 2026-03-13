@@ -1371,19 +1371,15 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(input))
                 return false;
 
-            var trimmed = input.Trim();
-            var acceptedFormats = new[]
-            {
-                "ddMMyyyy",
-                "dd.MM.yyyy",
-                "d.M.yyyy"
-            };
-
-            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-                return false;
-
-            normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-            return true;
+            return TryParseTicketOrSheetDateExact(
+                input.Trim(),
+                new[]
+                {
+                    "ddMMyyyy",
+                    "dd.MM.yyyy",
+                    "d.M.yyyy"
+                },
+                out normalized);
         }
 
         // Parses known date shapes to AX format for internal compatibility paths.
@@ -1394,31 +1390,63 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
 
             var trimmed = input.Trim();
-            var acceptedFormats = new[]
+            if (trimmed.All(char.IsDigit))
             {
-                "ddMMyyyy",
-                "dd.MM.yyyy",
-                "d.M.yyyy",
-                "yyyyMMdd",
-                "yyyy-MM-dd",
-                "dd/MM/yyyy"
-            };
+                if (trimmed.Length != 8)
+                    return false;
 
-            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return TryParseTicketOrSheetDateExact(
+                    trimmed,
+                    new[]
+                    {
+                        "yyyyMMdd",
+                        "ddMMyyyy"
+                    },
+                    out normalized);
+            }
+
+            return TryParseTicketOrSheetDateExact(
+                trimmed,
+                new[]
+                {
+                    "dd.MM.yyyy",
+                    "d.M.yyyy",
+                    "yyyy-MM-dd",
+                    "dd/MM/yyyy"
+                },
+                out normalized);
+        }
+
+        // Rejects technically valid dates that are outside the supported business range.
+        private static bool TryParseTicketOrSheetDateExact(string input, string[] acceptedFormats, out string normalized)
+        {
+            normalized = string.Empty;
+            if (!DateTime.TryParseExact(input, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return false;
+
+            if (!IsReasonableTicketOrSheetDate(date))
                 return false;
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             return true;
         }
 
+        // Filters out OCR or compatibility dates that would push impossible years into AX.
+        private static bool IsReasonableTicketOrSheetDate(DateTime date)
+        {
+            var minDate = new DateTime(1900, 1, 1);
+            var maxDate = DateTime.Today.AddYears(1);
+            return date >= minDate && date <= maxDate;
+        }
+
         // Formats any supported incoming AX/API date into DD.MM.YYYY for responses.
         private static string FormatApiDate(string input)
         {
             if (!TryNormalizeAnyDateToAxYmd(input, out var normalizedYmd))
-                return string.Empty;
+                normalizedYmd = DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
             if (!DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-                return string.Empty;
+                return DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }

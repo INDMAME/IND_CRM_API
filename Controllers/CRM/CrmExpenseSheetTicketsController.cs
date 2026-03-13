@@ -1433,9 +1433,12 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedTransDateRaw = body.transDate ?? existing.TransDate;
-                var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
-                    ? normalizedTransDate
-                    : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
+                if (usedTransDateFallback)
+                {
+                    Logger.Log(
+                        $"[WARN] UpdateExpenseSheetTicket transDate fallback-to-today raw={ToLogValue(mergedTransDateRaw)} fileId={ToLogValue(fileId)} traceId={traceId}");
+                }
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
                 var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
                 var mergedFileName = (body.fileName ?? string.Empty).Trim();
@@ -1651,9 +1654,12 @@ namespace IND_CRM_API.Controllers.CRM
                     ? body.totalAmount.Value
                     : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
                 var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
-                var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
-                    ? normalizedTransDate
-                    : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
+                if (usedTransDateFallback)
+                {
+                    Logger.Log(
+                        $"[WARN] UpdateExpenseSheetTicketFromIA transDate fallback-to-today raw={ToLogValue(mergedTransDateRaw)} fileId={ToLogValue(fileId)} traceId={traceId}");
+                }
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
                 var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
                 var mergedFileName = (body.fileName ?? string.Empty).Trim();
@@ -4318,19 +4324,15 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(input))
                 return false;
 
-            var trimmed = input.Trim();
-            var acceptedFormats = new[]
-            {
-                "ddMMyyyy",
-                "dd.MM.yyyy",
-                "d.M.yyyy"
-            };
-
-            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-                return false;
-
-            normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-            return true;
+            return TryParseTicketOrSheetDateExact(
+                input.Trim(),
+                new[]
+                {
+                    "ddMMyyyy",
+                    "dd.MM.yyyy",
+                    "d.M.yyyy"
+                },
+                out normalized);
         }
 
         // Parses known date shapes to AX format for compatibility paths.
@@ -4341,31 +4343,75 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
 
             var trimmed = input.Trim();
-            var acceptedFormats = new[]
+            if (trimmed.All(char.IsDigit))
             {
-                "ddMMyyyy",
-                "dd.MM.yyyy",
-                "d.M.yyyy",
-                "yyyyMMdd",
-                "yyyy-MM-dd",
-                "dd/MM/yyyy"
-            };
+                if (trimmed.Length != 8)
+                    return false;
 
-            if (!DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return TryParseTicketOrSheetDateExact(
+                    trimmed,
+                    new[]
+                    {
+                        "yyyyMMdd",
+                        "ddMMyyyy"
+                    },
+                    out normalized);
+            }
+
+            return TryParseTicketOrSheetDateExact(
+                trimmed,
+                new[]
+                {
+                    "dd.MM.yyyy",
+                    "d.M.yyyy",
+                    "yyyy-MM-dd",
+                    "dd/MM/yyyy"
+                },
+                out normalized);
+        }
+
+        // Uses today when an internal compatibility date cannot be normalized safely for AX.
+        private static string NormalizeAnyDateToAxYmdOrToday(string input, out bool usedFallback)
+        {
+            if (TryNormalizeAnyDateToAxYmd(input, out var normalized))
+            {
+                usedFallback = false;
+                return normalized;
+            }
+
+            usedFallback = true;
+            return DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        // Rejects technically valid dates that are outside the supported business range.
+        private static bool TryParseTicketOrSheetDateExact(string input, string[] acceptedFormats, out string normalized)
+        {
+            normalized = string.Empty;
+            if (!DateTime.TryParseExact(input, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return false;
+
+            if (!IsReasonableTicketOrSheetDate(date))
                 return false;
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             return true;
         }
 
+        // Filters out OCR or compatibility dates that would push impossible years into AX.
+        private static bool IsReasonableTicketOrSheetDate(DateTime date)
+        {
+            var minDate = new DateTime(1900, 1, 1);
+            var maxDate = DateTime.Today.AddYears(1);
+            return date >= minDate && date <= maxDate;
+        }
+
         // Formats known incoming AX/API date values to DD.MM.YYYY for response payloads.
         private static string FormatApiDate(string input)
         {
-            if (!TryNormalizeAnyDateToAxYmd(input, out var normalizedYmd))
-                return string.Empty;
+            var normalizedYmd = NormalizeAnyDateToAxYmdOrToday(input, out _);
 
             if (!DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-                return string.Empty;
+                return DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }
@@ -4624,9 +4670,12 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
-            var normalizedTransDate = TryNormalizeAnyDateToAxYmd(existing.TransDate, out var parsedTransDate)
-                ? parsedTransDate
-                : DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            var normalizedTransDate = NormalizeAnyDateToAxYmdOrToday(existing.TransDate, out var usedTransDateFallback);
+            if (usedTransDateFallback)
+            {
+                Logger.Log(
+                    $"[WARN] TryUpdateTicketFromExisting transDate fallback-to-today raw={ToLogValue(existing.TransDate)} fileId={ToLogValue(fileId)} traceId={traceId}");
+            }
 
             var statusValue = existing.Status ?? TicketStatusPending;
             if (!IsValidTicketStatus(statusValue))
@@ -5213,12 +5262,7 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
-            if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out var transDateYmd))
-            {
-                status = (HttpStatusCode)422;
-                message = "Ticket transDate is not valid.";
-                return false;
-            }
+            var transDateYmd = NormalizeAnyDateToAxYmdOrToday(ticketDetail.TransDate, out _);
 
             var rootCon = ax.CreateContainer();
             rootCon.Append(company);
