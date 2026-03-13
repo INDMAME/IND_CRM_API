@@ -26,6 +26,7 @@ namespace IND_CRM_API.Services
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
         private const int DefaultMaxOutputTokens = 1024;
+        private const int MaxRetryOutputTokens = 4096;
         private const string DefaultImageDetail = "high";
         private const string DefaultServiceTier = "priority";
         private const string DefaultProfileTag = "ticket-fast-v1";
@@ -84,52 +85,52 @@ namespace IND_CRM_API.Services
                 throw new InvalidOperationException("OpenAI API key no esta configurada.");
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
+            var normalizedContentType = GetNormalizedDataContentType(contentType);
             var promptText = BuildPayloadPromptText();
             var requestOptions = BuildRequestOptions(_serviceTier);
-            var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, requestOptions);
+            HttpResponseMessage response = null;
+            string responseBody = null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var attempt = 0;
+            var retriedWithoutServiceTier = false;
+            var retriedWithExpandedOutput = false;
 
-            using (var request = CreateRequestMessage(payloadJson, openAiApiKey))
+            try
             {
-                HttpResponseMessage response = null;
-                string responseBody = null;
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
-                _logger.Log(
-                    $"[OPENAI] Expense draft request profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} imageBytes={imageBytes.Length} payloadBytes={payloadBytes}",
-                    AxaptaSessionManager.LogLevel.Info);
-
-                try
+                while (true)
                 {
-                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                    attempt++;
 
-                    response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
-                        .ConfigureAwait(false);
-                    responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    var payloadJson = BuildPayloadJson(imageBase64, normalizedContentType, fileName, promptText, requestOptions);
+                    var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
+
+                    _logger.Log(
+                        $"[OPENAI] Expense draft request attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} imageBytes={imageBytes.Length} payloadBytes={payloadBytes}",
+                        AxaptaSessionManager.LogLevel.Info);
+
+                    response?.Dispose();
+                    response = null;
+
+                    using (var request = CreateRequestMessage(payloadJson, openAiApiKey))
+                    {
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
+                            .ConfigureAwait(false);
+                        responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    }
 
                     if (!response.IsSuccessStatusCode &&
+                        !retriedWithoutServiceTier &&
                         ShouldRetryWithoutServiceTier(response.StatusCode, responseBody, requestOptions.ServiceTier))
                     {
+                        retriedWithoutServiceTier = true;
                         _logger.Log(
-                            $"[OPENAI] Expense draft retry without priority profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
+                            $"[OPENAI] Expense draft retry without priority attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
                             AxaptaSessionManager.LogLevel.Warning);
 
-                        response.Dispose();
-                        response = null;
-
-                        var fallbackPayloadJson = BuildPayloadJson(
-                            imageBase64,
-                            GetNormalizedDataContentType(contentType),
-                            fileName,
-                            promptText,
-                            BuildRequestOptions("auto"));
-
-                        using (var fallbackRequest = CreateRequestMessage(fallbackPayloadJson, openAiApiKey))
-                        {
-                            response = await _httpClient.SendAsync(fallbackRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
-                                .ConfigureAwait(false);
-                            responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        }
+                        requestOptions = BuildRequestOptions("auto", requestOptions.MaxOutputTokens);
+                        continue;
                     }
 
                     if (!response.IsSuccessStatusCode)
@@ -137,7 +138,7 @@ namespace IND_CRM_API.Services
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
                         var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
                         _logger.Log(
-                            $"[OPENAI] Expense draft failed status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
+                            $"[OPENAI] Expense draft failed attempt={attempt} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
                             AxaptaSessionManager.LogLevel.Warning);
 
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
@@ -154,8 +155,21 @@ namespace IND_CRM_API.Services
                     var incompleteReason = TryExtractIncompleteReason(responseBody);
                     if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
                     {
+                        var metrics = TryReadResponseMetrics(responseBody);
+                        if (!retriedWithExpandedOutput &&
+                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        {
+                            retriedWithExpandedOutput = true;
+                            _logger.Log(
+                                $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
+                                AxaptaSessionManager.LogLevel.Warning);
+
+                            requestOptions = expandedRequestOptions;
+                            continue;
+                        }
+
                         _logger.Log(
-                            $"[OPENAI] Draft truncado por max_output_tokens profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens}",
+                            $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
                             AxaptaSessionManager.LogLevel.Warning);
                         throw new Exception("OpenAI recorto el draft por max_output_tokens.");
                     }
@@ -167,26 +181,26 @@ namespace IND_CRM_API.Services
                         throw new Exception("OpenAI no devolvio un JSON valido para el draft.");
                     }
 
-                    var metrics = TryReadResponseMetrics(responseBody);
+                    var successMetrics = TryReadResponseMetrics(responseBody);
                     _logger.Log(
-                        $"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={metrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(metrics.InputTokens)} cachedTokens={ToMetricText(metrics.CachedTokens)} outputTokens={ToMetricText(metrics.OutputTokens)} reasoningTokens={ToMetricText(metrics.ReasoningTokens)} totalTokens={ToMetricText(metrics.TotalTokens)}",
+                        $"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds} attempts={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)}",
                         AxaptaSessionManager.LogLevel.Info);
                     return extracted;
                 }
-                catch (TaskCanceledException ex)
-                {
-                    _logger.Log("[OPENAI] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
-                    throw;
-                }
-                catch (Exception ex) when (!(ex is InvalidOperationException))
-                {
-                    _logger.Log("[OPENAI] Error extrayendo draft: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
-                    throw;
-                }
-                finally
-                {
-                    response?.Dispose();
-                }
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.Log("[OPENAI] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                throw;
+            }
+            catch (Exception ex) when (!(ex is InvalidOperationException))
+            {
+                _logger.Log("[OPENAI] Error extrayendo draft: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                throw;
+            }
+            finally
+            {
+                response?.Dispose();
             }
         }
 
@@ -362,18 +376,54 @@ namespace IND_CRM_API.Services
             return request;
         }
 
-        private ExpenseTicketRequestOptions BuildRequestOptions(string serviceTierOverride)
+        // Builds the effective request profile for one OpenAI draft attempt.
+        private ExpenseTicketRequestOptions BuildRequestOptions(string serviceTierOverride, int? maxOutputTokensOverride = null)
         {
             var normalizedServiceTier = NormalizeServiceTier(serviceTierOverride);
             return new ExpenseTicketRequestOptions
             {
                 Model = _model,
                 ImageDetail = NormalizeImageDetail(_imageDetail),
-                MaxOutputTokens = _maxOutputTokens,
+                MaxOutputTokens = maxOutputTokensOverride ?? _maxOutputTokens,
                 ProfileTag = _profileTag,
                 PromptCacheKey = _promptCacheKey,
                 ServiceTier = normalizedServiceTier
             };
+        }
+
+        // Expands output budget once when the model reports truncation.
+        private static bool TryBuildExpandedRequestOptions(ExpenseTicketRequestOptions currentOptions, out ExpenseTicketRequestOptions expandedOptions)
+        {
+            expandedOptions = null;
+            if (currentOptions == null)
+                return false;
+
+            var expandedMaxOutputTokens = GetExpandedMaxOutputTokens(currentOptions.MaxOutputTokens);
+            if (expandedMaxOutputTokens <= currentOptions.MaxOutputTokens)
+                return false;
+
+            expandedOptions = new ExpenseTicketRequestOptions
+            {
+                Model = currentOptions.Model,
+                ImageDetail = currentOptions.ImageDetail,
+                MaxOutputTokens = expandedMaxOutputTokens,
+                ProfileTag = currentOptions.ProfileTag,
+                PromptCacheKey = currentOptions.PromptCacheKey,
+                ServiceTier = currentOptions.ServiceTier
+            };
+            return true;
+        }
+
+        private static int GetExpandedMaxOutputTokens(int currentMaxOutputTokens)
+        {
+            if (currentMaxOutputTokens <= 0)
+                return DefaultMaxOutputTokens;
+
+            var doubled = currentMaxOutputTokens >= (MaxRetryOutputTokens / 2)
+                ? MaxRetryOutputTokens
+                : currentMaxOutputTokens * 2;
+
+            return Math.Min(MaxRetryOutputTokens, doubled);
         }
 
         private static string BuildPayloadJson(string base64Image, string contentType, string fileName, string prompt, ExpenseTicketRequestOptions requestOptions)
