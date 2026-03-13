@@ -345,6 +345,7 @@ namespace IND_CRM_API.Controllers.CRM
         public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
         {
             var traceId = Guid.NewGuid().ToString("N");
+            var totalSw = System.Diagnostics.Stopwatch.StartNew();
             var resultData = new ExpenseSheetTicketQuickCreateResultDto
             {
                 LinkedToSheet = false,
@@ -352,6 +353,12 @@ namespace IND_CRM_API.Controllers.CRM
                 CompletedStage = string.Empty,
                 StepTraceIds = new ExpenseSheetTicketQuickCreateStepTraceIdsDto()
             };
+            long? readFormMs = null;
+            long? createMs = null;
+            long? uploadMs = null;
+            long? draftMs = null;
+            long? finalizeMs = null;
+            long? linkMs = null;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -379,9 +386,16 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($"[API-OUT] QuickCreateExpenseSheetTicket {(int)statusCode} traceId={traceId}");
             }
 
+            string PerfValue(long? value)
+            {
+                return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "na";
+            }
+
             try
             {
+                var readFormSw = System.Diagnostics.Stopwatch.StartNew();
                 var quickCreateForm = await ReadQuickCreateFormAsync(cancellationToken, traceId).ConfigureAwait(false);
+                readFormMs = readFormSw.ElapsedMilliseconds;
                 if (!quickCreateForm.Success)
                 {
                     LogOut(quickCreateForm.StatusCode);
@@ -419,6 +433,7 @@ namespace IND_CRM_API.Controllers.CRM
                 };
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
+                var createSw = System.Diagnostics.Stopwatch.StartNew();
                 if (!TryCreateQuickCreateProvisionalTicket(
                         ax,
                         company,
@@ -432,6 +447,7 @@ namespace IND_CRM_API.Controllers.CRM
                     LogOut(createStatus);
                     return Content(createStatus, createError);
                 }
+                createMs = createSw.ElapsedMilliseconds;
 
                 resultData.FileId = createResult.FileId;
                 resultData.FileName = createResult.FileName;
@@ -441,6 +457,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var uploadStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.FileUpload = uploadStepTraceId;
 
+                var uploadSw = System.Diagnostics.Stopwatch.StartNew();
                 if (!TryUploadQuickCreateTicketFile(
                         ax,
                         company,
@@ -464,6 +481,7 @@ namespace IND_CRM_API.Controllers.CRM
                         resultData,
                         null));
                 }
+                uploadMs = uploadSw.ElapsedMilliseconds;
 
                 resultData.UrlFile = fileUploadResult.UrlFile;
                 resultData.FileName = fileUploadResult.FileName;
@@ -473,6 +491,7 @@ namespace IND_CRM_API.Controllers.CRM
                 resultData.StepTraceIds.DraftExtract = draftStepTraceId;
 
                 ExpenseSheetDraftResponse draft;
+                var draftSw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     draft = await _ticketDraft.ExtractFromTicketImageAsync(
@@ -512,6 +531,7 @@ namespace IND_CRM_API.Controllers.CRM
                         resultData,
                         null));
                 }
+                draftMs = draftSw.ElapsedMilliseconds;
 
                 if (draft == null)
                 {
@@ -533,7 +553,12 @@ namespace IND_CRM_API.Controllers.CRM
                     quickCreateForm.Extension,
                     provisionalDescription,
                     provisionalCurrencyCode,
-                    provisionalComentario);
+                    provisionalComentario,
+                    out var transDateResolution);
+
+                Logger.Log(
+                    $"[QUICKCREATE-DATE] rawTransDate={ToLogValue(transDateResolution.RawTransDate)} normalizedTransDate={ToLogValue(transDateResolution.NormalizedTransDateYmd)} fallback={transDateResolution.UsedFallback} fileId={ToLogValue(resultData.FileId)} completedStage={ToLogValue(resultData.CompletedStage)} reason={ToLogValue(transDateResolution.Reason)} traceId={traceId}",
+                    transDateResolution.UsedFallback ? AxaptaSessionManager.LogLevel.Warning : AxaptaSessionManager.LogLevel.Info);
 
                 var normalizationErrors = new List<IndValidationError>();
                 ValidateUpdateTicketFromIABody(updateRequest, normalizationErrors);
@@ -551,6 +576,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var finalizeStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.TicketFinalize = finalizeStepTraceId;
 
+                var finalizeSw = System.Diagnostics.Stopwatch.StartNew();
                 if (!TryApplyTicketFromIACore(
                         ax,
                         company,
@@ -570,6 +596,7 @@ namespace IND_CRM_API.Controllers.CRM
                         resultData,
                         applyError?.Errors));
                 }
+                finalizeMs = finalizeSw.ElapsedMilliseconds;
 
                 resultData.FileName = string.IsNullOrWhiteSpace(applyResult.FileName) ? resultData.FileName : applyResult.FileName;
                 resultData.ProcessedByAI = applyResult.ProcessedByAI;
@@ -580,6 +607,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var linkStepTraceId = Guid.NewGuid().ToString("N");
                     resultData.StepTraceIds.SheetLink = linkStepTraceId;
 
+                    var linkSw = System.Diagnostics.Stopwatch.StartNew();
                     if (!TryGetExpenseSheetTicketDetail(
                             ax,
                             company,
@@ -620,6 +648,7 @@ namespace IND_CRM_API.Controllers.CRM
                             linkError.Errors));
                     }
 
+                    linkMs = linkSw.ElapsedMilliseconds;
                     resultData.LinkedToSheet = true;
                     resultData.HojaGastosId = quickCreateForm.ExistingHojaGastosId;
                     resultData.CompletedStage = QuickCreateStageSheetLinked;
@@ -646,6 +675,11 @@ namespace IND_CRM_API.Controllers.CRM
                     ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
                     resultData.FileId == null ? null : resultData,
                     null));
+            }
+            finally
+            {
+                Logger.Log(
+                    $"[PERF] QuickCreateExpenseSheetTicket totalMs={totalSw.ElapsedMilliseconds} readFormMs={PerfValue(readFormMs)} createMs={PerfValue(createMs)} uploadMs={PerfValue(uploadMs)} draftMs={PerfValue(draftMs)} finalizeMs={PerfValue(finalizeMs)} linkMs={PerfValue(linkMs)} completedStage={ToLogValue(resultData.CompletedStage)} fileId={ToLogValue(resultData.FileId)} traceId={traceId}");
             }
         }
 
@@ -1775,7 +1809,12 @@ namespace IND_CRM_API.Controllers.CRM
         public IHttpActionResult UploadExpenseSheetTicketFile(string fileId, [FromUri] string extension = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
+            var totalSw = System.Diagnostics.Stopwatch.StartNew();
             var validationErrors = new List<IndValidationError>();
+            long? multipartReadMs = null;
+            long? ticketLookupMs = null;
+            long? blobUploadMs = null;
+            long? axSyncMs = null;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -1809,6 +1848,11 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($"[API-OUT] UploadExpenseSheetTicketFile {(int)statusCode} traceId={traceId}");
             }
 
+            string PerfValue(long? value)
+            {
+                return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "na";
+            }
+
             try
             {
                 var username = GetAuthenticatedUsername();
@@ -1817,7 +1861,9 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[API-IN] UploadExpenseSheetTicketFile fileId={cleanFileId} user={username} axUserId={axUserId} traceId={traceId}");
 
                 var provider = new MultipartMemoryStreamProvider();
+                var multipartSw = System.Diagnostics.Stopwatch.StartNew();
                 Request.Content.ReadAsMultipartAsync(provider).GetAwaiter().GetResult();
+                multipartReadMs = multipartSw.ElapsedMilliseconds;
 
                 var fileContent = provider.Contents.FirstOrDefault(p =>
                     p != null &&
@@ -1851,13 +1897,16 @@ namespace IND_CRM_API.Controllers.CRM
                 var contentType = fileContent.Headers?.ContentType?.MediaType;
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
+                var ticketLookupSw = System.Diagnostics.Stopwatch.StartNew();
                 if (!TryGetTicketDetailFromAx(ax, company, axUserId, cleanFileId, traceId, out var existingTicket, out var getError, out var getStatus))
                 {
                     LogOut(getStatus);
                     return Content(getStatus, getError);
                 }
+                ticketLookupMs = ticketLookupSw.ElapsedMilliseconds;
 
                 TicketBlobUploadResult uploadResult;
+                var blobUploadSw = System.Diagnostics.Stopwatch.StartNew();
                 using (var stream = fileContent.ReadAsStreamAsync().GetAwaiter().GetResult())
                 {
                     uploadResult = _ticketBlobStorage.UploadTicketFile(
@@ -1868,7 +1917,9 @@ namespace IND_CRM_API.Controllers.CRM
                         stream,
                         contentType);
                 }
+                blobUploadMs = blobUploadSw.ElapsedMilliseconds;
 
+                var axSyncSw = System.Diagnostics.Stopwatch.StartNew();
                 if (!TryUpdateTicketFromExisting(
                         ax,
                         company,
@@ -1894,6 +1945,7 @@ namespace IND_CRM_API.Controllers.CRM
                     LogOut(updateStatus);
                     return Content(updateStatus, updateError);
                 }
+                axSyncMs = axSyncSw.ElapsedMilliseconds;
 
                 LogOut(HttpStatusCode.Created);
                 return Content(HttpStatusCode.Created, new IndApiResponse<object>
@@ -1938,6 +1990,11 @@ namespace IND_CRM_API.Controllers.CRM
                     Data = null,
                     TraceId = traceId
                 });
+            }
+            finally
+            {
+                Logger.Log(
+                    $"[PERF] UploadExpenseSheetTicketFile totalMs={totalSw.ElapsedMilliseconds} multipartReadMs={PerfValue(multipartReadMs)} ticketLookupMs={PerfValue(ticketLookupMs)} blobUploadMs={PerfValue(blobUploadMs)} axSyncMs={PerfValue(axSyncMs)} traceId={traceId}");
             }
         }
 
@@ -2602,6 +2659,15 @@ namespace IND_CRM_API.Controllers.CRM
             public List<long> LineRecIds { get; set; }
         }
 
+        // Carries the quick-create OCR date decision for validation, fallback and audit logs.
+        private sealed class QuickCreateTransDateResolution
+        {
+            public string RawTransDate { get; set; }
+            public string NormalizedTransDateYmd { get; set; }
+            public bool UsedFallback { get; set; }
+            public string Reason { get; set; }
+        }
+
         // Reads and validates the multipart contract for the quick-create flow.
         private async Task<QuickCreateFormReadResult> ReadQuickCreateFormAsync(CancellationToken cancellationToken, string traceId)
         {
@@ -3112,7 +3178,8 @@ namespace IND_CRM_API.Controllers.CRM
             string fileExtension,
             string fallbackDescription,
             string fallbackCurrencyCode,
-            string fallbackComentario)
+            string fallbackComentario,
+            out QuickCreateTransDateResolution transDateResolution)
         {
             var validLines = MapQuickCreateDraftLines(draft?.lines);
             var linesTotal = CalculateTicketLinesTotal(validLines);
@@ -3124,7 +3191,7 @@ namespace IND_CRM_API.Controllers.CRM
                 ? fallbackComentario.Trim()
                 : (draft?.Merchant ?? string.Empty).Trim();
 
-            var transDateYmd = ResolveQuickCreateDraftTransDate(draft);
+            transDateResolution = ResolveQuickCreateDraftTransDate(draft);
 
             return new UpdateExpenseSheetTicketFromIARequest
             {
@@ -3132,7 +3199,7 @@ namespace IND_CRM_API.Controllers.CRM
                 currencyCode = currencyCode,
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
                 totalAmount = linesTotal > 0m ? (decimal?)linesTotal : null,
-                transDate = FormatApiDate(transDateYmd),
+                transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
                 fileName = (fileName ?? string.Empty).Trim(),
@@ -3171,9 +3238,10 @@ namespace IND_CRM_API.Controllers.CRM
             return mapped;
         }
 
-        // Resolves a safe ticket date from the IA draft, defaulting to today in AX format.
-        private static string ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
+        // Resolves a safe quick-create date from OCR, using robust parsing and fallback to today.
+        private static QuickCreateTransDateResolution ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
         {
+            var rawCandidates = new List<string>();
             if (draft?.lines != null)
             {
                 foreach (var line in draft.lines)
@@ -3181,12 +3249,243 @@ namespace IND_CRM_API.Controllers.CRM
                     if (line == null || string.IsNullOrWhiteSpace(line.transDate))
                         continue;
 
-                    if (TryNormalizeAnyDateToAxYmd(line.transDate, out var normalized))
-                        return normalized;
+                    var rawTransDate = line.transDate.Trim();
+                    rawCandidates.Add(rawTransDate);
+
+                    if (TryNormalizeQuickCreateDraftDateToAxYmd(rawTransDate, out var normalized, out var reason))
+                    {
+                        return new QuickCreateTransDateResolution
+                        {
+                            RawTransDate = rawTransDate,
+                            NormalizedTransDateYmd = normalized,
+                            UsedFallback = false,
+                            Reason = reason
+                        };
+                    }
                 }
             }
 
-            return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            return new QuickCreateTransDateResolution
+            {
+                RawTransDate = rawCandidates.FirstOrDefault() ?? string.Empty,
+                NormalizedTransDateYmd = DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                UsedFallback = true,
+                Reason = rawCandidates.Count == 0
+                    ? "fallback-today-no-date-detected"
+                    : "fallback-today-invalid-or-unreasonable-date"
+            };
+        }
+
+        // Tries exact formats first and then OCR-safe compact heuristics for quick-create dates.
+        private static bool TryNormalizeQuickCreateDraftDateToAxYmd(string input, out string normalized, out string reason)
+        {
+            normalized = string.Empty;
+            reason = "empty-date";
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            var sanitized = SanitizeQuickCreateDraftDateInput(trimmed);
+            if (TryParseReasonableQuickCreateDateExact(sanitized, out var exactDate))
+            {
+                normalized = exactDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                reason = string.Equals(trimmed, sanitized, StringComparison.Ordinal)
+                    ? "exact-format"
+                    : "ocr-sanitized-exact-format";
+                return true;
+            }
+
+            var digits = new string(sanitized.Where(char.IsDigit).ToArray());
+            if (TryNormalizeQuickCreateDraftDateDigits(digits, out normalized, out reason))
+                return true;
+
+            reason = string.Equals(trimmed, sanitized, StringComparison.Ordinal)
+                ? "unsupported-or-unreasonable-date"
+                : "ocr-sanitized-but-unresolved";
+            return false;
+        }
+
+        // Normalizes common OCR substitutions before parsing the draft date.
+        private static string SanitizeQuickCreateDraftDateInput(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            var chars = input.Trim().ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                switch (char.ToUpperInvariant(chars[i]))
+                {
+                    case 'O':
+                    case 'Q':
+                        chars[i] = '0';
+                        break;
+                    case 'I':
+                    case 'L':
+                    case '|':
+                        chars[i] = '1';
+                        break;
+                    case 'Z':
+                        chars[i] = '2';
+                        break;
+                    case 'S':
+                        chars[i] = '5';
+                        break;
+                    case 'B':
+                        chars[i] = '8';
+                        break;
+                }
+            }
+
+            return new string(chars).Replace(" ", string.Empty);
+        }
+
+        // Tries explicit known formats while rejecting implausible business years.
+        private static bool TryParseReasonableQuickCreateDateExact(string input, out DateTime date)
+        {
+            date = default(DateTime);
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var acceptedFormats = new[]
+            {
+                "ddMMyyyy",
+                "dd.MM.yyyy",
+                "d.M.yyyy",
+                "dd/MM/yyyy",
+                "d/M/yyyy",
+                "dd-MM-yyyy",
+                "d-M-yyyy",
+                "yyyyMMdd",
+                "yyyy-MM-dd"
+            };
+
+            if (!DateTime.TryParseExact(input, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                return false;
+
+            if (!IsReasonableQuickCreateTicketDate(parsed))
+                return false;
+
+            date = parsed;
+            return true;
+        }
+
+        // Tries compact digit-only OCR dates, including two-digit year pivoting.
+        private static bool TryNormalizeQuickCreateDraftDateDigits(string digits, out string normalized, out string reason)
+        {
+            normalized = string.Empty;
+            reason = "unsupported-digit-shape";
+            if (string.IsNullOrWhiteSpace(digits))
+                return false;
+
+            if (digits.Length == 8)
+            {
+                if (TryBuildReasonableQuickCreateDate(digits.Substring(0, 2), digits.Substring(2, 2), digits.Substring(4, 4), out var ddMMyyyyDate))
+                {
+                    normalized = ddMMyyyyDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                    reason = "compact-ddMMyyyy";
+                    return true;
+                }
+
+                if (TryBuildReasonableQuickCreateDate(digits.Substring(6, 2), digits.Substring(4, 2), digits.Substring(0, 4), out var yyyyMMddDate))
+                {
+                    normalized = yyyyMMddDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                    reason = "compact-yyyyMMdd";
+                    return true;
+                }
+
+                if (TryBuildReasonableQuickCreateDateWithPivot(digits.Substring(0, 2), digits.Substring(2, 2), digits.Substring(6, 2), out var pivotDate))
+                {
+                    normalized = pivotDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                    reason = "ocr-year-pivot";
+                    return true;
+                }
+            }
+
+            if (digits.Length == 6)
+            {
+                if (TryBuildReasonableQuickCreateDateWithPivot(digits.Substring(0, 2), digits.Substring(2, 2), digits.Substring(4, 2), out var ddMMyyDate))
+                {
+                    normalized = ddMMyyDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                    reason = "two-digit-year-pivot";
+                    return true;
+                }
+
+                if (TryBuildReasonableQuickCreateDateWithPivot(digits.Substring(4, 2), digits.Substring(2, 2), digits.Substring(0, 2), out var yyMMddDate))
+                {
+                    normalized = yyMMddDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                    reason = "compact-yyMMdd-pivot";
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Builds a strict calendar date and rejects values outside the expected ticket-capture range.
+        private static bool TryBuildReasonableQuickCreateDate(string dayText, string monthText, string yearText, out DateTime date)
+        {
+            date = default(DateTime);
+            if (!int.TryParse(dayText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day) ||
+                !int.TryParse(monthText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month) ||
+                !int.TryParse(yearText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year))
+                return false;
+
+            if (year < 100)
+                return false;
+
+            try
+            {
+                var parsed = new DateTime(year, month, day);
+                if (!IsReasonableQuickCreateTicketDate(parsed))
+                    return false;
+
+                date = parsed;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Applies a rolling pivot for OCR two-digit years close to the current business period.
+        private static bool TryBuildReasonableQuickCreateDateWithPivot(string dayText, string monthText, string yearText, out DateTime date)
+        {
+            date = default(DateTime);
+            if (!int.TryParse(yearText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var twoDigitYear))
+                return false;
+
+            var resolvedYear = ResolveQuickCreateTwoDigitYear(twoDigitYear);
+            return TryBuildReasonableQuickCreateDate(
+                dayText,
+                monthText,
+                resolvedYear.ToString("0000", CultureInfo.InvariantCulture),
+                out date);
+        }
+
+        // Rejects medieval or implausibly future dates that can appear in OCR mistakes.
+        private static bool IsReasonableQuickCreateTicketDate(DateTime date)
+        {
+            var minDate = new DateTime(2000, 1, 1);
+            var maxDate = DateTime.Today.AddYears(1);
+            return date >= minDate && date <= maxDate;
+        }
+
+        // Resolves a two-digit year around the current year and otherwise falls back to the previous century.
+        private static int ResolveQuickCreateTwoDigitYear(int twoDigitYear)
+        {
+            if (twoDigitYear < 0)
+                twoDigitYear = 0;
+            else if (twoDigitYear > 99)
+                twoDigitYear %= 100;
+
+            var currentYear = DateTime.Today.Year;
+            var currentCentury = (currentYear / 100) * 100;
+            var currentYearTwoDigits = currentYear % 100;
+            return twoDigitYear <= currentYearTwoDigits + 1
+                ? currentCentury + twoDigitYear
+                : currentCentury - 100 + twoDigitYear;
         }
 
         // Resolves gastoType from draft header first and then from the dominant draft line type.

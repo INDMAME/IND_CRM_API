@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Configuration;
 using System.Globalization;
-using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -23,13 +22,23 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService
     {
-        private const string DefaultModel = "gpt-4o";
+        private const string DefaultModel = "gpt-5-mini";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
+        private const int DefaultMaxOutputTokens = 1024;
+        private const string DefaultImageDetail = "high";
+        private const string DefaultServiceTier = "priority";
+        private const string DefaultProfileTag = "ticket-fast-v1";
+        private const string DefaultPromptCacheKey = "expense-ticket-draft-v2";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
         private const string TimeoutSettingKey = "OpenAI:ExpenseTicketTimeoutSeconds";
         private const string MaxImageBytesSettingKey = "OpenAI:ExpenseTicketMaxImageBytes";
+        private const string MaxOutputTokensSettingKey = "OpenAI:ExpenseTicketMaxOutputTokens";
+        private const string ImageDetailSettingKey = "OpenAI:ExpenseTicketImageDetail";
+        private const string ServiceTierSettingKey = "OpenAI:ExpenseTicketServiceTier";
+        private const string ProfileTagSettingKey = "OpenAI:ExpenseTicketProfileTag";
+        private const string PromptCacheKeySettingKey = "OpenAI:ExpenseTicketPromptCacheKey";
 
         private static readonly HashSet<int> AllowedTypeValues = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
@@ -38,11 +47,21 @@ namespace IND_CRM_API.Services
 
         private readonly IAxLogger _logger;
         private readonly string _model;
+        private readonly int _maxOutputTokens;
+        private readonly string _imageDetail;
+        private readonly string _serviceTier;
+        private readonly string _profileTag;
+        private readonly string _promptCacheKey;
 
         public IND_OpenAiExpenseTicketDraftService(IAxLogger logger)
         {
             _logger = logger ?? new FileAxLogger();
             _model = ReadModelFromConfig();
+            _maxOutputTokens = ReadMaxOutputTokensFromConfig();
+            _imageDetail = ReadImageDetailFromConfig();
+            _serviceTier = ReadServiceTierFromConfig();
+            _profileTag = ReadProfileTagFromConfig();
+            _promptCacheKey = ReadPromptCacheKeyFromConfig();
         }
 
         public async Task<ExpenseSheetDraftResponse> ExtractFromTicketImageAsync(
@@ -66,19 +85,19 @@ namespace IND_CRM_API.Services
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
             var promptText = BuildPayloadPromptText();
-            var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, _model);
+            var requestOptions = BuildRequestOptions(_serviceTier);
+            var payloadJson = BuildPayloadJson(imageBase64, GetNormalizedDataContentType(contentType), fileName, promptText, requestOptions);
 
-            using (var request = new HttpRequestMessage(HttpMethod.Post, ResponsesUrl))
+            using (var request = CreateRequestMessage(payloadJson, openAiApiKey))
             {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAiApiKey);
-                request.Headers.UserAgent.Clear();
-                request.Headers.UserAgent.Add(new ProductInfoHeaderValue("IND_CRM_API", "1.0"));
-                request.Headers.ExpectContinue = false;
-                request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
-
                 HttpResponseMessage response = null;
                 string responseBody = null;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
+                var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
+
+                _logger.Log(
+                    $"[OPENAI] Expense draft request profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} imageBytes={imageBytes.Length} payloadBytes={payloadBytes}",
+                    AxaptaSessionManager.LogLevel.Info);
 
                 try
                 {
@@ -87,6 +106,31 @@ namespace IND_CRM_API.Services
                     response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
                         .ConfigureAwait(false);
                     responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode &&
+                        ShouldRetryWithoutServiceTier(response.StatusCode, responseBody, requestOptions.ServiceTier))
+                    {
+                        _logger.Log(
+                            $"[OPENAI] Expense draft retry without priority profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
+                            AxaptaSessionManager.LogLevel.Warning);
+
+                        response.Dispose();
+                        response = null;
+
+                        var fallbackPayloadJson = BuildPayloadJson(
+                            imageBase64,
+                            GetNormalizedDataContentType(contentType),
+                            fileName,
+                            promptText,
+                            BuildRequestOptions("auto"));
+
+                        using (var fallbackRequest = CreateRequestMessage(fallbackPayloadJson, openAiApiKey))
+                        {
+                            response = await _httpClient.SendAsync(fallbackRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
+                                .ConfigureAwait(false);
+                            responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        }
+                    }
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -107,6 +151,15 @@ namespace IND_CRM_API.Services
                         throw new Exception("Error en servicio de extraccion de ticket.");
                     }
 
+                    var incompleteReason = TryExtractIncompleteReason(responseBody);
+                    if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.Log(
+                            $"[OPENAI] Draft truncado por max_output_tokens profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens}",
+                            AxaptaSessionManager.LogLevel.Warning);
+                        throw new Exception("OpenAI recorto el draft por max_output_tokens.");
+                    }
+
                     var extracted = TryParseExpenseDraft(responseBody);
                     if (extracted == null)
                     {
@@ -114,7 +167,10 @@ namespace IND_CRM_API.Services
                         throw new Exception("OpenAI no devolvio un JSON valido para el draft.");
                     }
 
-                    _logger.Log($"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds}", AxaptaSessionManager.LogLevel.Info);
+                    var metrics = TryReadResponseMetrics(responseBody);
+                    _logger.Log(
+                        $"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={metrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(metrics.InputTokens)} cachedTokens={ToMetricText(metrics.CachedTokens)} outputTokens={ToMetricText(metrics.OutputTokens)} reasoningTokens={ToMetricText(metrics.ReasoningTokens)} totalTokens={ToMetricText(metrics.TotalTokens)}",
+                        AxaptaSessionManager.LogLevel.Info);
                     return extracted;
                 }
                 catch (TaskCanceledException ex)
@@ -177,6 +233,22 @@ namespace IND_CRM_API.Services
             return DefaultMaxImageBytes;
         }
 
+        private static int ReadMaxOutputTokensFromConfig()
+        {
+            try
+            {
+                var value = ConfigurationManager.AppSettings[MaxOutputTokensSettingKey];
+                if (int.TryParse(value, out var parsed) && parsed >= 256)
+                    return parsed;
+            }
+            catch
+            {
+                // Ignore and return default.
+            }
+
+            return DefaultMaxOutputTokens;
+        }
+
         private static string ReadModelFromConfig()
         {
             try
@@ -187,6 +259,58 @@ namespace IND_CRM_API.Services
             catch
             {
                 return DefaultModel;
+            }
+        }
+
+        private static string ReadImageDetailFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[ImageDetailSettingKey];
+                return NormalizeImageDetail(configured);
+            }
+            catch
+            {
+                return DefaultImageDetail;
+            }
+        }
+
+        private static string ReadServiceTierFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[ServiceTierSettingKey];
+                return NormalizeServiceTier(configured);
+            }
+            catch
+            {
+                return DefaultServiceTier;
+            }
+        }
+
+        private static string ReadProfileTagFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[ProfileTagSettingKey];
+                return string.IsNullOrWhiteSpace(configured) ? DefaultProfileTag : configured.Trim();
+            }
+            catch
+            {
+                return DefaultProfileTag;
+            }
+        }
+
+        private static string ReadPromptCacheKeyFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[PromptCacheKeySettingKey];
+                return string.IsNullOrWhiteSpace(configured) ? DefaultPromptCacheKey : configured.Trim();
+            }
+            catch
+            {
+                return DefaultPromptCacheKey;
             }
         }
 
@@ -227,7 +351,32 @@ namespace IND_CRM_API.Services
             }
         }
 
-        private static string BuildPayloadJson(string base64Image, string contentType, string fileName, string prompt, string model)
+        private static HttpRequestMessage CreateRequestMessage(string payloadJson, string openAiApiKey)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, ResponsesUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAiApiKey);
+            request.Headers.UserAgent.Clear();
+            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("IND_CRM_API", "1.0"));
+            request.Headers.ExpectContinue = false;
+            request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+            return request;
+        }
+
+        private ExpenseTicketRequestOptions BuildRequestOptions(string serviceTierOverride)
+        {
+            var normalizedServiceTier = NormalizeServiceTier(serviceTierOverride);
+            return new ExpenseTicketRequestOptions
+            {
+                Model = _model,
+                ImageDetail = NormalizeImageDetail(_imageDetail),
+                MaxOutputTokens = _maxOutputTokens,
+                ProfileTag = _profileTag,
+                PromptCacheKey = _promptCacheKey,
+                ServiceTier = normalizedServiceTier
+            };
+        }
+
+        private static string BuildPayloadJson(string base64Image, string contentType, string fileName, string prompt, ExpenseTicketRequestOptions requestOptions)
         {
             var format = new JObject
             {
@@ -239,7 +388,7 @@ namespace IND_CRM_API.Services
 
             var payload = new JObject
             {
-                ["model"] = model,
+                ["model"] = requestOptions.Model,
                 ["input"] = new JArray
                 {
                     new JObject
@@ -255,7 +404,8 @@ namespace IND_CRM_API.Services
                             new JObject
                             {
                                 ["type"] = "input_image",
-                                ["image_url"] = $"data:{contentType};base64,{base64Image}"
+                                ["image_url"] = $"data:{contentType};base64,{base64Image}",
+                                ["detail"] = requestOptions.ImageDetail
                             }
                         }
                     }
@@ -264,8 +414,20 @@ namespace IND_CRM_API.Services
                 {
                     ["format"] = format
                 },
-                ["max_output_tokens"] = 1536
+                ["max_output_tokens"] = requestOptions.MaxOutputTokens,
+                ["metadata"] = new JObject
+                {
+                    ["expense_ticket_profile"] = requestOptions.ProfileTag,
+                    ["expense_ticket_detail"] = requestOptions.ImageDetail,
+                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto"
+                }
             };
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.ServiceTier))
+                payload["service_tier"] = requestOptions.ServiceTier;
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey))
+                payload["prompt_cache_key"] = requestOptions.PromptCacheKey;
 
             return JsonConvert.SerializeObject(payload);
         }
@@ -330,6 +492,119 @@ namespace IND_CRM_API.Services
             catch
             {
                 return string.Empty;
+            }
+        }
+
+        private static bool ShouldRetryWithoutServiceTier(HttpStatusCode statusCode, string responseBody, string requestedServiceTier)
+        {
+            if (string.IsNullOrWhiteSpace(requestedServiceTier) ||
+                string.Equals(requestedServiceTier, "auto", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (statusCode != HttpStatusCode.BadRequest && (int)statusCode != 422)
+                return false;
+
+            var summary = TryExtractOpenAiErrorSummary(responseBody);
+            if (string.IsNullOrWhiteSpace(summary))
+                summary = responseBody ?? string.Empty;
+
+            return summary.IndexOf("service_tier", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   summary.IndexOf("priority", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string TryExtractIncompleteReason(string responseBody)
+        {
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return null;
+
+            try
+            {
+                var root = JObject.Parse(responseBody);
+                return root["incomplete_details"]?["reason"]?.ToString();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static ExpenseTicketResponseMetrics TryReadResponseMetrics(string responseBody)
+        {
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return new ExpenseTicketResponseMetrics();
+
+            try
+            {
+                var root = JObject.Parse(responseBody);
+                var usage = root["usage"];
+                return new ExpenseTicketResponseMetrics
+                {
+                    ActualServiceTier = root["service_tier"]?.ToString(),
+                    InputTokens = ToNullableInt(usage?["input_tokens"]),
+                    CachedTokens = ToNullableInt(usage?["input_tokens_details"]?["cached_tokens"]),
+                    OutputTokens = ToNullableInt(usage?["output_tokens"]),
+                    ReasoningTokens = ToNullableInt(usage?["output_tokens_details"]?["reasoning_tokens"]),
+                    TotalTokens = ToNullableInt(usage?["total_tokens"])
+                };
+            }
+            catch
+            {
+                return new ExpenseTicketResponseMetrics();
+            }
+        }
+
+        private static int? ToNullableInt(JToken token)
+        {
+            if (token == null)
+                return null;
+
+            if (token.Type == JTokenType.Integer)
+                return token.Value<int>();
+
+            if (int.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return null;
+        }
+
+        private static string ToMetricText(int? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "na";
+        }
+
+        private static string NormalizeImageDetail(string configuredValue)
+        {
+            if (string.IsNullOrWhiteSpace(configuredValue))
+                return DefaultImageDetail;
+
+            var normalized = configuredValue.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "auto":
+                case "low":
+                case "high":
+                case "original":
+                    return normalized;
+                default:
+                    return DefaultImageDetail;
+            }
+        }
+
+        private static string NormalizeServiceTier(string configuredValue)
+        {
+            if (string.IsNullOrWhiteSpace(configuredValue))
+                return DefaultServiceTier;
+
+            var normalized = configuredValue.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "auto":
+                case "default":
+                case "flex":
+                case "priority":
+                    return normalized;
+                default:
+                    return DefaultServiceTier;
             }
         }
 
@@ -924,7 +1199,29 @@ namespace IND_CRM_API.Services
                     "price",
                     "lineTotal",
                     "projId")
-            };
+                };
+            }
         }
-    }
+
+        // Holds the effective request knobs that define a latency profile.
+        private sealed class ExpenseTicketRequestOptions
+        {
+            public string Model { get; set; }
+            public string ImageDetail { get; set; }
+            public int MaxOutputTokens { get; set; }
+            public string ServiceTier { get; set; }
+            public string ProfileTag { get; set; }
+            public string PromptCacheKey { get; set; }
+        }
+
+        // Captures usage and service-tier data returned by OpenAI for A/B timing analysis.
+        private sealed class ExpenseTicketResponseMetrics
+        {
+            public string ActualServiceTier { get; set; }
+            public int? InputTokens { get; set; }
+            public int? CachedTokens { get; set; }
+            public int? OutputTokens { get; set; }
+            public int? ReasoningTokens { get; set; }
+            public int? TotalTokens { get; set; }
+        }
 }

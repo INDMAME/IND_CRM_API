@@ -24,6 +24,8 @@ namespace IND_CRM_API.Services
         private const string DefaultPrefix = "crmtickets";
 
         private readonly IAxLogger _logger;
+        private readonly object _storageContextLock = new object();
+        private StorageContext _storageContext;
 
         /// <summary>
         /// Crea el servicio de almacenamiento de tickets.
@@ -62,8 +64,11 @@ namespace IND_CRM_API.Services
             if (content.CanSeek)
                 content.Position = 0;
 
+            var contentLength = TryGetStreamLength(content);
+            var uploadSw = System.Diagnostics.Stopwatch.StartNew();
             blob.UploadFromStream(content);
-            _logger?.Log($"[BLOB] UploadTicketFile fileId={fileId} blob={blobName}");
+            _logger?.Log(
+                $"[BLOB] UploadTicketFile fileId={fileId} blob={blobName} bytes={(contentLength.HasValue ? contentLength.Value.ToString() : "na")} contentType={blob.Properties.ContentType} ms={uploadSw.ElapsedMilliseconds}");
 
             return new TicketBlobUploadResult
             {
@@ -96,34 +101,60 @@ namespace IND_CRM_API.Services
 
         private StorageContext ResolveStorageContext()
         {
-            var connectionString = AppSettingsHelper.GetSetting(ConnectionSettingKey, ConnectionEnvVar);
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new InvalidOperationException(
-                    "No se encontro configuracion de Azure Blob Storage. Defina AZURE_BLOB_CONNECTION_STRING.");
+            if (_storageContext != null)
+                return _storageContext;
 
-            if (!TryParseStorageConnectionString(connectionString, out var account))
-                throw new InvalidOperationException("La cadena de conexion de Azure Blob Storage no es valida.");
-
-            var containerNameRaw = AppSettingsHelper.GetSetting(ContainerSettingKey, ContainerEnvVar);
-            var containerName = string.IsNullOrWhiteSpace(containerNameRaw)
-                ? DefaultContainer
-                : containerNameRaw.Trim().ToLowerInvariant();
-
-            if (!IsValidContainerName(containerName))
-                throw new InvalidOperationException("El nombre de contenedor de Azure Blob no es valido.");
-
-            var prefixRaw = AppSettingsHelper.GetSetting(PrefixSettingKey, PrefixEnvVar);
-            var basePrefix = NormalizePrefix(prefixRaw, DefaultPrefix);
-
-            var client = account.CreateCloudBlobClient();
-            var container = client.GetContainerReference(containerName);
-            container.CreateIfNotExists();
-
-            return new StorageContext
+            lock (_storageContextLock)
             {
-                BasePrefix = basePrefix,
-                Container = container
-            };
+                if (_storageContext != null)
+                    return _storageContext;
+
+                var connectionString = AppSettingsHelper.GetSetting(ConnectionSettingKey, ConnectionEnvVar);
+                if (string.IsNullOrWhiteSpace(connectionString))
+                    throw new InvalidOperationException(
+                        "No se encontro configuracion de Azure Blob Storage. Defina AZURE_BLOB_CONNECTION_STRING.");
+
+                if (!TryParseStorageConnectionString(connectionString, out var account))
+                    throw new InvalidOperationException("La cadena de conexion de Azure Blob Storage no es valida.");
+
+                var containerNameRaw = AppSettingsHelper.GetSetting(ContainerSettingKey, ContainerEnvVar);
+                var containerName = string.IsNullOrWhiteSpace(containerNameRaw)
+                    ? DefaultContainer
+                    : containerNameRaw.Trim().ToLowerInvariant();
+
+                if (!IsValidContainerName(containerName))
+                    throw new InvalidOperationException("El nombre de contenedor de Azure Blob no es valido.");
+
+                var prefixRaw = AppSettingsHelper.GetSetting(PrefixSettingKey, PrefixEnvVar);
+                var basePrefix = NormalizePrefix(prefixRaw, DefaultPrefix);
+
+                var client = account.CreateCloudBlobClient();
+                var container = client.GetContainerReference(containerName);
+                container.CreateIfNotExists();
+
+                _storageContext = new StorageContext
+                {
+                    BasePrefix = basePrefix,
+                    Container = container
+                };
+
+                return _storageContext;
+            }
+        }
+
+        private static long? TryGetStreamLength(Stream content)
+        {
+            if (content == null || !content.CanSeek)
+                return null;
+
+            try
+            {
+                return content.Length;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // Tries to parse and auto-sanitize common copy/paste artifacts in the connection string.
