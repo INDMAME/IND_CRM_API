@@ -25,7 +25,7 @@ namespace IND_CRM_API.Services
         private const string DefaultModel = "gpt-5-mini";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
-        private const int DefaultMaxOutputTokens = 1024;
+        private const int DefaultMaxOutputTokens = 2048;
         private const int MaxRetryOutputTokens = 4096;
         private const string DefaultImageDetail = "high";
         private const string DefaultServiceTier = "priority";
