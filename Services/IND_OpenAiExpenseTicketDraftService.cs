@@ -26,11 +26,15 @@ namespace IND_CRM_API.Services
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
         private const int DefaultMaxOutputTokens = 2048;
+        private const int DefaultQuickCreateMaxOutputTokens = 1536;
         private const int MaxRetryOutputTokens = 4096;
         private const string DefaultImageDetail = "high";
+        private const string DefaultQuickCreateImageDetail = "auto";
         private const string DefaultServiceTier = "priority";
         private const string DefaultProfileTag = "ticket-fast-v1";
         private const string DefaultPromptCacheKey = "expense-ticket-draft-v2";
+        private const string DefaultQuickCreateProfileTag = "ticket-quick-create-v1";
+        private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v1";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
         private const string TimeoutSettingKey = "OpenAI:ExpenseTicketTimeoutSeconds";
@@ -40,6 +44,11 @@ namespace IND_CRM_API.Services
         private const string ServiceTierSettingKey = "OpenAI:ExpenseTicketServiceTier";
         private const string ProfileTagSettingKey = "OpenAI:ExpenseTicketProfileTag";
         private const string PromptCacheKeySettingKey = "OpenAI:ExpenseTicketPromptCacheKey";
+        private const string QuickCreateMaxOutputTokensSettingKey = "OpenAI:ExpenseTicketQuickCreateMaxOutputTokens";
+        private const string QuickCreateImageDetailSettingKey = "OpenAI:ExpenseTicketQuickCreateImageDetail";
+        private const string QuickCreateServiceTierSettingKey = "OpenAI:ExpenseTicketQuickCreateServiceTier";
+        private const string QuickCreateProfileTagSettingKey = "OpenAI:ExpenseTicketQuickCreateProfileTag";
+        private const string QuickCreatePromptCacheKeySettingKey = "OpenAI:ExpenseTicketQuickCreatePromptCacheKey";
 
         private static readonly HashSet<int> AllowedTypeValues = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
@@ -53,6 +62,11 @@ namespace IND_CRM_API.Services
         private readonly string _serviceTier;
         private readonly string _profileTag;
         private readonly string _promptCacheKey;
+        private readonly int _quickCreateMaxOutputTokens;
+        private readonly string _quickCreateImageDetail;
+        private readonly string _quickCreateServiceTier;
+        private readonly string _quickCreateProfileTag;
+        private readonly string _quickCreatePromptCacheKey;
 
         public IND_OpenAiExpenseTicketDraftService(IAxLogger logger)
         {
@@ -63,13 +77,19 @@ namespace IND_CRM_API.Services
             _serviceTier = ReadServiceTierFromConfig();
             _profileTag = ReadProfileTagFromConfig();
             _promptCacheKey = ReadPromptCacheKeyFromConfig();
+            _quickCreateMaxOutputTokens = ReadQuickCreateMaxOutputTokensFromConfig();
+            _quickCreateImageDetail = ReadQuickCreateImageDetailFromConfig();
+            _quickCreateServiceTier = ReadQuickCreateServiceTierFromConfig();
+            _quickCreateProfileTag = ReadQuickCreateProfileTagFromConfig();
+            _quickCreatePromptCacheKey = ReadQuickCreatePromptCacheKeyFromConfig();
         }
 
         public async Task<ExpenseSheetDraftResponse> ExtractFromTicketImageAsync(
             byte[] imageBytes,
             string fileName,
             string contentType,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            ExpenseTicketDraftProfile profile = ExpenseTicketDraftProfile.FullDraft)
         {
             if (imageBytes == null || imageBytes.Length == 0)
                 throw new ArgumentException("ticketImage no puede estar vacio.", nameof(imageBytes));
@@ -86,8 +106,8 @@ namespace IND_CRM_API.Services
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
             var normalizedContentType = GetNormalizedDataContentType(contentType);
-            var promptText = BuildPayloadPromptText();
-            var requestOptions = BuildRequestOptions(_serviceTier);
+            var promptText = BuildPayloadPromptText(profile);
+            var requestOptions = BuildRequestOptions(profile, null);
             HttpResponseMessage response = null;
             string responseBody = null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -107,7 +127,7 @@ namespace IND_CRM_API.Services
                     var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
 
                     _logger.Log(
-                        $"[OPENAI] Expense draft request attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} imageBytes={imageBytes.Length} payloadBytes={payloadBytes}",
+                        $"[OPENAI] Expense draft request attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} imageBytes={imageBytes.Length} payloadBytes={payloadBytes}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     response?.Dispose();
@@ -126,10 +146,10 @@ namespace IND_CRM_API.Services
                     {
                         retriedWithoutServiceTier = true;
                         _logger.Log(
-                            $"[OPENAI] Expense draft retry without priority attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
+                            $"[OPENAI] Expense draft retry without priority attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
                             AxaptaSessionManager.LogLevel.Warning);
 
-                        requestOptions = BuildRequestOptions("auto", requestOptions.MaxOutputTokens);
+                        requestOptions = BuildRequestOptions(requestOptions.DraftProfile, "auto", requestOptions.MaxOutputTokens);
                         continue;
                     }
 
@@ -138,7 +158,7 @@ namespace IND_CRM_API.Services
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
                         var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
                         _logger.Log(
-                            $"[OPENAI] Expense draft failed attempt={attempt} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
+                            $"[OPENAI] Expense draft failed attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
                             AxaptaSessionManager.LogLevel.Warning);
 
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
@@ -161,7 +181,7 @@ namespace IND_CRM_API.Services
                         {
                             retriedWithExpandedOutput = true;
                             _logger.Log(
-                                $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
+                                $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
                                 AxaptaSessionManager.LogLevel.Warning);
 
                             requestOptions = expandedRequestOptions;
@@ -169,7 +189,7 @@ namespace IND_CRM_API.Services
                         }
 
                         _logger.Log(
-                            $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
+                            $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
                             AxaptaSessionManager.LogLevel.Warning);
                         throw new Exception("OpenAI recorto el draft por max_output_tokens.");
                     }
@@ -183,7 +203,7 @@ namespace IND_CRM_API.Services
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     _logger.Log(
-                        $"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds} attempts={attempt} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)}",
+                        $"[OPENAI] Draft extraido exitosamente ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} detail={requestOptions.ImageDetail} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)}",
                         AxaptaSessionManager.LogLevel.Info);
                     return extracted;
                 }
@@ -263,6 +283,22 @@ namespace IND_CRM_API.Services
             return DefaultMaxOutputTokens;
         }
 
+        private static int ReadQuickCreateMaxOutputTokensFromConfig()
+        {
+            try
+            {
+                var value = ConfigurationManager.AppSettings[QuickCreateMaxOutputTokensSettingKey];
+                if (int.TryParse(value, out var parsed) && parsed >= 256)
+                    return parsed;
+            }
+            catch
+            {
+                // Ignore and return default.
+            }
+
+            return DefaultQuickCreateMaxOutputTokens;
+        }
+
         private static string ReadModelFromConfig()
         {
             try
@@ -289,11 +325,43 @@ namespace IND_CRM_API.Services
             }
         }
 
+        private static string ReadQuickCreateImageDetailFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[QuickCreateImageDetailSettingKey];
+                if (string.IsNullOrWhiteSpace(configured))
+                    return DefaultQuickCreateImageDetail;
+
+                return NormalizeImageDetail(configured);
+            }
+            catch
+            {
+                return DefaultQuickCreateImageDetail;
+            }
+        }
+
         private static string ReadServiceTierFromConfig()
         {
             try
             {
                 var configured = ConfigurationManager.AppSettings[ServiceTierSettingKey];
+                return NormalizeServiceTier(configured);
+            }
+            catch
+            {
+                return DefaultServiceTier;
+            }
+        }
+
+        private static string ReadQuickCreateServiceTierFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[QuickCreateServiceTierSettingKey];
+                if (string.IsNullOrWhiteSpace(configured))
+                    return DefaultServiceTier;
+
                 return NormalizeServiceTier(configured);
             }
             catch
@@ -315,6 +383,19 @@ namespace IND_CRM_API.Services
             }
         }
 
+        private static string ReadQuickCreateProfileTagFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[QuickCreateProfileTagSettingKey];
+                return string.IsNullOrWhiteSpace(configured) ? DefaultQuickCreateProfileTag : configured.Trim();
+            }
+            catch
+            {
+                return DefaultQuickCreateProfileTag;
+            }
+        }
+
         private static string ReadPromptCacheKeyFromConfig()
         {
             try
@@ -325,6 +406,19 @@ namespace IND_CRM_API.Services
             catch
             {
                 return DefaultPromptCacheKey;
+            }
+        }
+
+        private static string ReadQuickCreatePromptCacheKeyFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[QuickCreatePromptCacheKeySettingKey];
+                return string.IsNullOrWhiteSpace(configured) ? DefaultQuickCreatePromptCacheKey : configured.Trim();
+            }
+            catch
+            {
+                return DefaultQuickCreatePromptCacheKey;
             }
         }
 
@@ -377,16 +471,35 @@ namespace IND_CRM_API.Services
         }
 
         // Builds the effective request profile for one OpenAI draft attempt.
-        private ExpenseTicketRequestOptions BuildRequestOptions(string serviceTierOverride, int? maxOutputTokensOverride = null)
+        private ExpenseTicketRequestOptions BuildRequestOptions(
+            ExpenseTicketDraftProfile draftProfile,
+            string serviceTierOverride,
+            int? maxOutputTokensOverride = null)
         {
-            var normalizedServiceTier = NormalizeServiceTier(serviceTierOverride);
+            var maxOutputTokens = _maxOutputTokens;
+            var imageDetail = _imageDetail;
+            var serviceTier = _serviceTier;
+            var profileTag = _profileTag;
+            var promptCacheKey = _promptCacheKey;
+
+            if (draftProfile == ExpenseTicketDraftProfile.QuickCreate)
+            {
+                maxOutputTokens = _quickCreateMaxOutputTokens;
+                imageDetail = _quickCreateImageDetail;
+                serviceTier = _quickCreateServiceTier;
+                profileTag = _quickCreateProfileTag;
+                promptCacheKey = _quickCreatePromptCacheKey;
+            }
+
+            var normalizedServiceTier = NormalizeServiceTier(string.IsNullOrWhiteSpace(serviceTierOverride) ? serviceTier : serviceTierOverride);
             return new ExpenseTicketRequestOptions
             {
+                DraftProfile = draftProfile,
                 Model = _model,
-                ImageDetail = NormalizeImageDetail(_imageDetail),
-                MaxOutputTokens = maxOutputTokensOverride ?? _maxOutputTokens,
-                ProfileTag = _profileTag,
-                PromptCacheKey = _promptCacheKey,
+                ImageDetail = NormalizeImageDetail(imageDetail),
+                MaxOutputTokens = maxOutputTokensOverride ?? maxOutputTokens,
+                ProfileTag = profileTag,
+                PromptCacheKey = promptCacheKey,
                 ServiceTier = normalizedServiceTier
             };
         }
@@ -404,6 +517,7 @@ namespace IND_CRM_API.Services
 
             expandedOptions = new ExpenseTicketRequestOptions
             {
+                DraftProfile = currentOptions.DraftProfile,
                 Model = currentOptions.Model,
                 ImageDetail = currentOptions.ImageDetail,
                 MaxOutputTokens = expandedMaxOutputTokens,
@@ -431,8 +545,8 @@ namespace IND_CRM_API.Services
             var format = new JObject
             {
                 ["type"] = "json_schema",
-                ["name"] = "expense_ticket_draft",
-                ["schema"] = BuildResponseSchema(),
+                ["name"] = BuildResponseFormatName(requestOptions.DraftProfile),
+                ["schema"] = BuildResponseSchema(requestOptions.DraftProfile),
                 ["strict"] = true
             };
 
@@ -468,6 +582,7 @@ namespace IND_CRM_API.Services
                 ["metadata"] = new JObject
                 {
                     ["expense_ticket_profile"] = requestOptions.ProfileTag,
+                    ["expense_ticket_draft_profile"] = GetDraftProfileText(requestOptions.DraftProfile),
                     ["expense_ticket_detail"] = requestOptions.ImageDetail,
                     ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto"
                 }
@@ -482,7 +597,21 @@ namespace IND_CRM_API.Services
             return JsonConvert.SerializeObject(payload);
         }
 
-        private static string BuildPayloadPromptText()
+        private static string BuildResponseFormatName(ExpenseTicketDraftProfile profile)
+        {
+            return profile == ExpenseTicketDraftProfile.QuickCreate
+                ? "expense_ticket_quick_create_draft"
+                : "expense_ticket_draft";
+        }
+
+        private static string BuildPayloadPromptText(ExpenseTicketDraftProfile profile)
+        {
+            return profile == ExpenseTicketDraftProfile.QuickCreate
+                ? BuildQuickCreatePayloadPromptText()
+                : BuildFullDraftPayloadPromptText();
+        }
+
+        private static string BuildFullDraftPayloadPromptText()
         {
             return @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
@@ -520,6 +649,47 @@ namespace IND_CRM_API.Services
 - Deduce la moneda y el valor monetario de la imagen, sin soporte externo.
 - Si un campo es imposible de inferir con calidad suficiente, usa null y deja una advertencia clara."
                 .Trim();
+        }
+
+        private static string BuildQuickCreatePayloadPromptText()
+        {
+            return @"Eres un extractor para alta rapida de tickets de gasto.
+- Responde SOLO JSON valido, sin markdown.
+- Devuelve SIEMPRE TODAS las lineas detectables del ticket.
+- No agrupes, no resumas y no combines multiples conceptos en una sola linea si aparecen separados en el ticket.
+- Si el ticket muestra varios conceptos o importes parciales, devuelve una linea por cada concepto visible.
+- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando este enum fijo:
+  - 0: None
+  - 1: Peaje
+  - 2: Parking
+  - 3: Km
+  - 4: Desayuno
+  - 5: Comida
+  - 6: Cena
+  - 7: Hotel
+  - 8: Varios
+  - 14: Taxi
+- No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
+- Cada linea debe incluir transDate, description, qty, price y lineTotal.
+- Usa la fecha del ticket en transDate para todas las lineas cuando aplique.
+- Si qty no es visible, usa 1.
+- price debe ser el precio unitario.
+- lineTotal debe ser el total bruto visible de la linea.
+- Si lineTotal y qty son validos, asegura coherencia: price = lineTotal / qty.
+- Usa punto como separador decimal en todos los numeros del JSON.
+- No uses separadores de miles en los numeros del JSON.
+- description debe ser corta y util para la linea.
+- description de cabecera debe ser corta y util para el ticket.
+- currencyCode en cabecera si se detecta; si no, deja null.
+- Puedes incluir warnings solo si algo relevante no se pudo inferir.
+- Si un campo de cabecera no se puede inferir con confianza, usa null.
+- No inventes lineas ni importes. Pero si una linea es visible, debes devolverla."
+                .Trim();
+        }
+
+        private static string GetDraftProfileText(ExpenseTicketDraftProfile profile)
+        {
+            return profile == ExpenseTicketDraftProfile.QuickCreate ? "quick-create" : "full-draft";
         }
 
         private static string TryExtractOpenAiErrorSummary(string json)
@@ -1115,7 +1285,14 @@ namespace IND_CRM_API.Services
             return string.IsNullOrWhiteSpace(trimmed) ? defaultValue : trimmed;
         }
 
-        private static JObject BuildResponseSchema()
+        private static JObject BuildResponseSchema(ExpenseTicketDraftProfile profile)
+        {
+            return profile == ExpenseTicketDraftProfile.QuickCreate
+                ? BuildQuickCreateResponseSchema()
+                : BuildFullDraftResponseSchema();
+        }
+
+        private static JObject BuildFullDraftResponseSchema()
         {
             return new JObject
             {
@@ -1175,7 +1352,7 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = "array",
                         ["minItems"] = 1,
-                        ["items"] = BuildLineSchema()
+                        ["items"] = BuildFullDraftLineSchema()
                     }
                 },
                 ["required"] = new JArray(
@@ -1193,7 +1370,7 @@ namespace IND_CRM_API.Services
             };
         }
 
-        private static JObject BuildLineSchema()
+        private static JObject BuildFullDraftLineSchema()
         {
             return new JObject
             {
@@ -1249,11 +1426,106 @@ namespace IND_CRM_API.Services
                     "price",
                     "lineTotal",
                     "projId")
-                };
-            }
+            };
+        }
+
+        private static JObject BuildQuickCreateResponseSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["description"] = new JObject
+                    {
+                        ["type"] = "string"
+                    },
+                    ["currencyCode"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["gastoType"] = new JObject
+                    {
+                        ["type"] = "integer",
+                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
+                    },
+                    ["warnings"] = new JObject
+                    {
+                        ["type"] = new JArray("array", "null"),
+                        ["items"] = new JObject
+                        {
+                            ["type"] = "string"
+                        }
+                    },
+                    ["rawCurrency"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["merchant"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["lines"] = new JObject
+                    {
+                        ["type"] = "array",
+                        ["minItems"] = 1,
+                        ["items"] = BuildQuickCreateLineSchema()
+                    }
+                },
+                ["required"] = new JArray(
+                    "description",
+                    "currencyCode",
+                    "gastoType",
+                    "warnings",
+                    "rawCurrency",
+                    "merchant",
+                    "lines")
+            };
+        }
+
+        private static JObject BuildQuickCreateLineSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["transDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["description"] = new JObject
+                    {
+                        ["type"] = "string"
+                    },
+                    ["qty"] = new JObject
+                    {
+                        ["type"] = "number"
+                    },
+                    ["price"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null")
+                    },
+                    ["lineTotal"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null")
+                    }
+                },
+                ["required"] = new JArray(
+                    "transDate",
+                    "description",
+                    "qty",
+                    "price",
+                    "lineTotal")
+            };
+        }
+
         // Holds the effective request knobs that define a latency profile.
         private sealed class ExpenseTicketRequestOptions
         {
+            public ExpenseTicketDraftProfile DraftProfile { get; set; }
             public string Model { get; set; }
             public string ImageDetail { get; set; }
             public int MaxOutputTokens { get; set; }

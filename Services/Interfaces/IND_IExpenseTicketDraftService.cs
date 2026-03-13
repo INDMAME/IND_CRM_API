@@ -4,6 +4,15 @@ using IND_CRM_API.Contracts.Responses;
 
 namespace IND_CRM_API.Services.Interfaces
 {
+    /// <summary>
+    /// Perfiles de extraccion IA para tickets segun el flujo que consume el draft.
+    /// </summary>
+    public enum ExpenseTicketDraftProfile
+    {
+        FullDraft = 0,
+        QuickCreate = 1
+    }
+
     public interface IND_IExpenseTicketDraftService
     {
         /// <summary>
@@ -13,6 +22,7 @@ namespace IND_CRM_API.Services.Interfaces
             byte[] imageBytes,
             string fileName,
             string contentType,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            ExpenseTicketDraftProfile profile = ExpenseTicketDraftProfile.FullDraft);
     }
 }
