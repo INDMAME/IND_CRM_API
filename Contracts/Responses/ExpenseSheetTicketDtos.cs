@@ -20,6 +20,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string UrlFile { get; set; }
         public string FileName { get; set; }
         public string HojaGastosIdDisplay { get; set; }
+        public string OcrJson { get; set; }
+        public string NormalizedJson { get; set; }
         public List<ExpenseSheetTicketLineDto> Lines { get; set; }
     }
 

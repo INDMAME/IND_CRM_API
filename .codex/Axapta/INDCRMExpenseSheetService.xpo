@@ -559,7 +559,7 @@ Formatversion: 1
         #    Input _data (container):
         #      1) companyId
         #      2) headerIn
-        #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional)]
+        #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional)]
         #         - Mode 2  : at least [axUserId]
         #      3) linesIn (container of line containers)
         #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
@@ -595,6 +595,9 @@ Formatversion: 1
         #    str                urlFile;
         #    str                fileName;
         #
+        #    str                ocrJson;
+        #    str                normalizedJson;
+        #
         #    str                lineDescr;
         #    real               qty;
         #    real               price;
@@ -604,6 +607,8 @@ Formatversion: 1
         #    boolean            hasHeaderTotalAmount;
         #    boolean            hasProcessedByAI;
         #    boolean            hasGastoType;
+        #    boolean            hasOcrJson;
+        #    boolean            hasNormalizedJson;
         #
         #    INDTicketInfoTable ticketHeader;
         #    INDTicketInfoLine  ticketLine;
@@ -636,6 +641,8 @@ Formatversion: 1
         #    hasHeaderTotalAmount = false;
         #    hasProcessedByAI     = false;
         #    hasGastoType        = false;
+        #    hasOcrJson          = false;
+        #    hasNormalizedJson   = false;
         #
         #    if (conLen(optionsIn) >= 1)
         #        mode = conPeek(optionsIn, 1);
@@ -694,6 +701,18 @@ Formatversion: 1
         #        {
         #            gastoType = conPeek(headerIn, 9);
         #            hasGastoType = true;
+        #        }
+        #
+        #        if (conLen(headerIn) >= 10)
+        #        {
+        #            ocrJson = conPeek(headerIn, 10);
+        #            hasOcrJson = true;
+        #        }
+        #
+        #        if (conLen(headerIn) >= 11)
+        #        {
+        #            normalizedJson = conPeek(headerIn, 11);
+        #            hasNormalizedJson = true;
         #        }
         #
         #        hasHeaderTotalAmount = true;
@@ -765,6 +784,12 @@ Formatversion: 1
         #                docuRef.INDURLFile            = urlFile;
         #                docuRef.INDFilename           = fileName;
         #                docuRef.INDCreatedByUserId    = axUserId;
+        #
+        #                if (hasOcrJson)
+        #                    docuRef.INDOCRJson = ocrJson;
+        #
+        #                if (hasNormalizedJson)
+        #                    docuRef.INDNormalizedJson = normalizedJson;
         #                docuRef.insert();
         #
         #                ticketHeader.clear();
@@ -2237,7 +2262,9 @@ Formatversion: 1
         #                                                      strFmt('%1', docuRef.INDFilename),
         #                                                      strFmt('%1', processedByAIInt),
         #                                                      strFmt('%1', gastoTypeInt),
-        #                                                      strFmt('%1', ticketHeader.hojaGastosIdDisplay())
+        #                                                      strFmt('%1', ticketHeader.hojaGastosIdDisplay()),
+        #                                                      strFmt('%1', docuRef.INDOCRJson),
+        #                                                      strFmt('%1', docuRef.INDNormalizedJson)
         #                                                     ]);
         #
         #        while select ticketLine
@@ -3259,6 +3286,8 @@ Formatversion: 1
         #//  - _data[11] = fileName (optional)
         #//  - _data[12] = processedByAI (optional: 0|1)
         #//  - _data[13] = gastoType (optional)
+        #//  - _data[14] = ocrJson (optional)
+        #//  - _data[15] = normalizedJson (optional)
         #static server container updateExpenseSheetTicket(container _data)
         #{
         #    DataAreaId         companyId;
@@ -3277,6 +3306,8 @@ Formatversion: 1
         #    str                fileName;
         #    int                processedByAI;
         #    int                gastoType;
+        #    str                ocrJson;
+        #    str                normalizedJson;
         #
         #    boolean            hasTotalAmount;
         #    boolean            hasStatus;
@@ -3286,6 +3317,8 @@ Formatversion: 1
         #    boolean            hasFileName;
         #    boolean            hasProcessedByAI;
         #    boolean            hasGastoType;
+        #    boolean            hasOcrJson;
+        #    boolean            hasNormalizedJson;
         #
         #    int                startLine;
         #    str                msg;
@@ -3369,6 +3402,18 @@ Formatversion: 1
         #    {
         #        gastoType = conPeek(_data, 13);
         #        hasGastoType = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 14)
+        #    {
+        #        ocrJson = conPeek(_data, 14);
+        #        hasOcrJson = true;
+        #    }
+        #
+        #    if (conLen(_data) >= 15)
+        #    {
+        #        normalizedJson = conPeek(_data, 15);
+        #        hasNormalizedJson = true;
         #    }
         #
         #    if (currencyCode)
@@ -3476,6 +3521,12 @@ Formatversion: 1
         #                docuRef.Name       = fileName;
         #            }
         #
+        #            if (hasOcrJson)
+        #                docuRef.INDOCRJson = ocrJson;
+        #
+        #            if (hasNormalizedJson)
+        #                docuRef.INDNormalizedJson = normalizedJson;
+        #
         #            if (createDocuRef)
         #                docuRef.insert();
         #            else
@@ -3528,7 +3579,7 @@ Formatversion: 1
         #//  - Marks ticket as ProcessedByAI = 1.
         #// Input:
         #//  - _data[1] = CompanyId
-        #//  - _data[2] = headerIn = [axUserId, fileId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional)]
+        #//  - _data[2] = headerIn = [axUserId, fileId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional)]
         #//  - _data[3] = linesIn  = container of lines [lineDescr, qty, price, lineTotal(optional)]
         #// Output:
         #//  - [header, linesOutRecIds]
@@ -3552,6 +3603,8 @@ Formatversion: 1
         #    str                urlFile;
         #    str                fileName;
         #    int                gastoType;
+        #    str                ocrJson;
+        #    str                normalizedJson;
         #
         #    str                lineDescr;
         #    real               qty;
@@ -3560,6 +3613,8 @@ Formatversion: 1
         #    real               linesTotalAmount;
         #    boolean            hasTotalAmount;
         #    boolean            hasGastoType;
+        #    boolean            hasOcrJson;
+        #    boolean            hasNormalizedJson;
         #
         #    int                i;
         #    int                lineCount;
@@ -3603,6 +3658,18 @@ Formatversion: 1
         #    {
         #        gastoType = conPeek(headerIn, 10);
         #        hasGastoType = true;
+        #    }
+        #
+        #    if (conLen(headerIn) >= 11)
+        #    {
+        #        ocrJson = conPeek(headerIn, 11);
+        #        hasOcrJson = true;
+        #    }
+        #
+        #    if (conLen(headerIn) >= 12)
+        #    {
+        #        normalizedJson = conPeek(headerIn, 12);
+        #        hasNormalizedJson = true;
         #    }
         #
         #    hasTotalAmount = true;
@@ -3698,6 +3765,12 @@ Formatversion: 1
         #            docuRef.INDFilename           = fileName;
         #            docuRef.Name                  = fileName;
         #            docuRef.Notes                 = comentario;
+        #
+        #            if (hasOcrJson)
+        #                docuRef.INDOCRJson = ocrJson;
+        #
+        #            if (hasNormalizedJson)
+        #                docuRef.INDNormalizedJson = normalizedJson;
         #
         #            if (createDocuRef)
         #                docuRef.insert();

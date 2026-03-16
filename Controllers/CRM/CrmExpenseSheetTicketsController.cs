@@ -216,8 +216,17 @@ namespace IND_CRM_API.Controllers.CRM
                     headerCon.Append(body.comentario?.Trim() ?? string.Empty);
                     headerCon.Append(body.urlFile?.Trim() ?? string.Empty);
                     headerCon.Append(provisionalFileName);
-                    if (body.gastoType.HasValue)
-                        headerCon.Append(body.gastoType.Value);
+                    var hasExtendedDocuRefJson = body.ocrJson != null || body.normalizedJson != null;
+                    if (body.gastoType.HasValue || hasExtendedDocuRefJson)
+                    {
+                        headerCon.Append(body.gastoType ?? 0);
+
+                        if (hasExtendedDocuRefJson)
+                        {
+                            headerCon.Append(body.ocrJson ?? string.Empty);
+                            headerCon.Append(body.normalizedJson ?? string.Empty);
+                        }
+                    }
                 }
                 rootCon.Append(headerCon);
 
@@ -1346,6 +1355,8 @@ namespace IND_CRM_API.Controllers.CRM
                     string.IsNullOrWhiteSpace(body.transDate) &&
                     body.comentario == null &&
                     body.urlFile == null &&
+                    body.ocrJson == null &&
+                    body.normalizedJson == null &&
                     string.IsNullOrWhiteSpace(body.fileName) &&
                     string.IsNullOrWhiteSpace(body.fileExtension))
                 {
@@ -1432,6 +1443,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
+                var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
+                var mergedNormalizedJson = body.normalizedJson ?? existing.NormalizedJson;
                 var mergedTransDateRaw = body.transDate ?? existing.TransDate;
                 var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
                 if (usedTransDateFallback)
@@ -1469,7 +1482,18 @@ namespace IND_CRM_API.Controllers.CRM
                 updateCon.Append(mergedUrlFile);
                 updateCon.Append(mergedFileName);
                 updateCon.Append(mergedProcessedByAI ? 1 : 0);
-                updateCon.Append(mergedGastoType);
+
+                var shouldAppendExtendedDocuRefJson = body.gastoType.HasValue || body.ocrJson != null || body.normalizedJson != null;
+                if (shouldAppendExtendedDocuRefJson)
+                {
+                    updateCon.Append(mergedGastoType);
+
+                    if (body.ocrJson != null || body.normalizedJson != null)
+                    {
+                        updateCon.Append(mergedOcrJson ?? string.Empty);
+                        updateCon.Append(mergedNormalizedJson ?? string.Empty);
+                    }
+                }
 
                 var updateResultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1663,6 +1687,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
                 var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
                 var mergedFileName = (body.fileName ?? string.Empty).Trim();
+                var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
+                var mergedNormalizedJson = body.normalizedJson ?? existing.NormalizedJson;
 
                 if (string.IsNullOrWhiteSpace(mergedFileName))
                 {
@@ -1717,6 +1743,8 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(mergedUrlFile);
                 headerCon.Append(mergedFileName);
                 headerCon.Append(mergedGastoType);
+                headerCon.Append(mergedOcrJson ?? string.Empty);
+                headerCon.Append(mergedNormalizedJson ?? string.Empty);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -2986,8 +3014,17 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body?.comentario?.Trim() ?? string.Empty);
                 headerCon.Append(body?.urlFile?.Trim() ?? string.Empty);
                 headerCon.Append(provisionalFileName);
-                if (body?.gastoType.HasValue == true)
-                    headerCon.Append(body.gastoType.Value);
+                var hasExtendedDocuRefJson = body?.ocrJson != null || body?.normalizedJson != null;
+                if (body?.gastoType.HasValue == true || hasExtendedDocuRefJson)
+                {
+                    headerCon.Append(body?.gastoType ?? 0);
+
+                    if (hasExtendedDocuRefJson)
+                    {
+                        headerCon.Append(body?.ocrJson ?? string.Empty);
+                        headerCon.Append(body?.normalizedJson ?? string.Empty);
+                    }
+                }
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -3799,6 +3836,8 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
             var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
             var mergedFileName = (body.fileName ?? string.Empty).Trim();
+            var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
+            var mergedNormalizedJson = body.normalizedJson ?? existing.NormalizedJson;
 
             if (string.IsNullOrWhiteSpace(mergedFileName))
             {
@@ -3852,6 +3891,8 @@ namespace IND_CRM_API.Controllers.CRM
             headerCon.Append(mergedUrlFile);
             headerCon.Append(mergedFileName);
             headerCon.Append(mergedGastoType);
+            headerCon.Append(mergedOcrJson ?? string.Empty);
+            headerCon.Append(mergedNormalizedJson ?? string.Empty);
             rootCon.Append(headerCon);
 
             var linesCon = ax.CreateContainer();
@@ -4079,6 +4120,8 @@ namespace IND_CRM_API.Controllers.CRM
                 !string.IsNullOrWhiteSpace(request.comentario) ||
                 !string.IsNullOrWhiteSpace(request.urlFile) ||
                 !string.IsNullOrWhiteSpace(request.fileName) ||
+                !string.IsNullOrWhiteSpace(request.ocrJson) ||
+                !string.IsNullOrWhiteSpace(request.normalizedJson) ||
                 !string.IsNullOrWhiteSpace(request.fileExtension))
             {
                 return true;
@@ -4102,6 +4145,8 @@ namespace IND_CRM_API.Controllers.CRM
                 comentario = GetJsonStringIgnoreCase(dataObject, "comentario"),
                 urlFile = GetJsonStringIgnoreCase(dataObject, "urlFile"),
                 fileName = GetJsonStringIgnoreCase(dataObject, "fileName"),
+                ocrJson = GetJsonStringIgnoreCase(dataObject, "ocrJson"),
+                normalizedJson = GetJsonStringIgnoreCase(dataObject, "normalizedJson"),
                 fileExtension = GetJsonStringIgnoreCase(dataObject, "fileExtension"),
                 lines = new List<ExpenseSheetTicketLineRequest>()
             };
@@ -4526,8 +4571,17 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(urlFile);
                 con.Append(finalFileName ?? string.Empty);
                 con.Append(0);
-                if (source?.gastoType.HasValue == true)
-                    con.Append(source.gastoType.Value);
+                var hasExtendedDocuRefJson = source?.ocrJson != null || source?.normalizedJson != null;
+                if (source?.gastoType.HasValue == true || hasExtendedDocuRefJson)
+                {
+                    con.Append(source?.gastoType ?? 0);
+
+                    if (hasExtendedDocuRefJson)
+                    {
+                        con.Append(source?.ocrJson ?? string.Empty);
+                        con.Append(source?.normalizedJson ?? string.Empty);
+                    }
+                }
 
                 var result = ax.CallStaticClassMethod("INDCRMExpenseSheetService", "updateExpenseSheetTicket", con);
                 if (!TryReadHeader(result as IAxaptaContainer, out var success, out var axMessage, out _, out _))
@@ -4694,8 +4748,17 @@ namespace IND_CRM_API.Controllers.CRM
             con.Append((mergedUrlFile ?? string.Empty).Trim());
             con.Append((mergedFileName ?? string.Empty).Trim());
             con.Append((existing.ProcessedByAI ?? false) ? 1 : 0);
-            if (existing.GastoType.HasValue)
-                con.Append(existing.GastoType.Value);
+            var shouldAppendExtendedDocuRefJson = existing.GastoType.HasValue || existing.OcrJson != null || existing.NormalizedJson != null;
+            if (shouldAppendExtendedDocuRefJson)
+            {
+                con.Append(existing.GastoType ?? 0);
+
+                if (existing.OcrJson != null || existing.NormalizedJson != null)
+                {
+                    con.Append(existing.OcrJson ?? string.Empty);
+                    con.Append(existing.NormalizedJson ?? string.Empty);
+                }
+            }
 
             var resultObj = ax.CallStaticClassMethod(
                 "INDCRMExpenseSheetService",
@@ -5458,6 +5521,8 @@ namespace IND_CRM_API.Controllers.CRM
                 FileName = headerExtras.Count > 9 ? headerExtras[9] : string.Empty,
                 ProcessedByAI = headerExtras.Count > 10 ? ToNullableBool(headerExtras[10]) : null,
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
+                OcrJson = headerExtras.Count > 13 ? headerExtras[13] : null,
+                NormalizedJson = headerExtras.Count > 14 ? headerExtras[14] : null,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 

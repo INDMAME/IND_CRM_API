@@ -19,6 +19,8 @@ namespace IND_CRM_API.Contracts.Requests
         public string comentario { get; set; }
         public string urlFile { get; set; }
         public string fileName { get; set; }
+        public string ocrJson { get; set; }
+        public string normalizedJson { get; set; }
 
         /// <summary>
         /// Extension para generar fileName final en formato estandar cuando no se envie fileName.

@@ -30,6 +30,8 @@ namespace IND_CRM_API.Contracts.Requests
         public string transDate { get; set; }
         public string comentario { get; set; }
         public string urlFile { get; set; }
+        public string ocrJson { get; set; }
+        public string normalizedJson { get; set; }
 
         /// <summary>
         /// Extension para generar INDFilename final (ej: jpg, jpeg, png, webp).
