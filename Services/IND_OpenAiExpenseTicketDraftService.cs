@@ -1751,7 +1751,16 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
+                    "mode",
                     "description",
+                    "currencyCode",
+                    "gastoType",
+                    "exchRate",
+                    "projId",
+                    "confidence",
+                    "warnings",
+                    "rawCurrency",
+                    "merchant",
                     "lines")
             };
         }
@@ -1803,10 +1812,15 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
+                    "transDate",
                     "typeValue",
                     "description",
+                    "internacional",
+                    "fileId",
                     "qty",
-                    "price")
+                    "price",
+                    "lineTotal",
+                    "projId")
             };
         }
 
@@ -1856,7 +1870,11 @@ namespace IND_CRM_API.Services
                 },
                 ["required"] = new JArray(
                     "description",
+                    "currencyCode",
                     "gastoType",
+                    "warnings",
+                    "rawCurrency",
+                    "merchant",
                     "lines")
             };
         }
@@ -1891,9 +1909,11 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
+                    "transDate",
                     "description",
                     "qty",
-                    "price")
+                    "price",
+                    "lineTotal")
             };
         }
 
