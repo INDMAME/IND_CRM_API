@@ -160,3 +160,47 @@ Se agregan logs por etapa para ver el pipeline real en produccion:
   - target `Compile`
 - La busqueda en controladores y DI ya no muestra uso activo de `input_image`.
 - El codigo legacy de vision OpenAI permanece solo como implementacion interna reutilizable, no como pipeline activo de endpoints.
+
+## Optimizacion posterior del pipeline de texto
+
+### Objetivo
+
+Reducir la latencia de OpenAI ahora que el flujo activo ya no procesa imagen directa y solo recibe OCR estructurado.
+
+### Ajustes aplicados
+
+- Modelo por defecto de normalizacion:
+  - `gpt-5-nano`
+
+- Effort de razonamiento:
+  - `minimal`
+
+- `max_output_tokens`:
+  - perfil general: `1024`
+  - perfil `quick-create`: `768`
+
+- OCR projection hacia OpenAI:
+  - ya no se envia `content` completo del OCR
+  - se envia un JSON compacto con:
+    - `merchant`
+    - `transactionDate`
+    - `currencyCode`
+    - `totals`
+    - `items[]` compactos
+    - `itemCount`
+
+- Prompt:
+  - mas corto
+  - orientado a JSON->JSON
+  - instruye a omitir metadatos opcionales cuando no aportan valor
+
+- Schema:
+  - se relajaron campos opcionales para que el modelo no tenga que devolver ruido innecesario
+  - en `quick-create`, solo se fuerzan realmente los datos minimos del ticket y sus lineas
+
+### Impacto esperado
+
+- Menor `inputTokens`
+- Menor `reasoningTokens`
+- Menor `outputTokens`
+- Menor latencia especialmente en `quick-create`

@@ -22,11 +22,11 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService, IOpenAITicketNormalizationService
     {
-        private const string DefaultModel = "gpt-5-mini";
+        private const string DefaultModel = "gpt-5-nano";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
-        private const int DefaultMaxOutputTokens = 2048;
-        private const int DefaultQuickCreateMaxOutputTokens = 1536;
+        private const int DefaultMaxOutputTokens = 1024;
+        private const int DefaultQuickCreateMaxOutputTokens = 768;
         private const int MaxRetryOutputTokens = 4096;
         private const string DefaultImageDetail = "high";
         private const string DefaultQuickCreateImageDetail = "auto";
@@ -35,6 +35,7 @@ namespace IND_CRM_API.Services
         private const string DefaultPromptCacheKey = "expense-ticket-draft-v2";
         private const string DefaultQuickCreateProfileTag = "ticket-quick-create-v1";
         private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v1";
+        private const string DefaultReasoningEffort = "minimal";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
         private const string TimeoutSettingKey = "OpenAI:ExpenseTicketTimeoutSeconds";
@@ -49,6 +50,8 @@ namespace IND_CRM_API.Services
         private const string QuickCreateServiceTierSettingKey = "OpenAI:ExpenseTicketQuickCreateServiceTier";
         private const string QuickCreateProfileTagSettingKey = "OpenAI:ExpenseTicketQuickCreateProfileTag";
         private const string QuickCreatePromptCacheKeySettingKey = "OpenAI:ExpenseTicketQuickCreatePromptCacheKey";
+        private const string ReasoningEffortSettingKey = "OpenAI:ExpenseTicketReasoningEffort";
+        private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
         private static readonly HashSet<int> AllowedTypeValues = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
@@ -67,6 +70,8 @@ namespace IND_CRM_API.Services
         private readonly string _quickCreateServiceTier;
         private readonly string _quickCreateProfileTag;
         private readonly string _quickCreatePromptCacheKey;
+        private readonly string _reasoningEffort;
+        private readonly string _quickCreateReasoningEffort;
 
         public IND_OpenAiExpenseTicketDraftService(IAxLogger logger)
         {
@@ -82,6 +87,8 @@ namespace IND_CRM_API.Services
             _quickCreateServiceTier = ReadQuickCreateServiceTierFromConfig();
             _quickCreateProfileTag = ReadQuickCreateProfileTagFromConfig();
             _quickCreatePromptCacheKey = ReadQuickCreatePromptCacheKeyFromConfig();
+            _reasoningEffort = ReadReasoningEffortFromConfig();
+            _quickCreateReasoningEffort = ReadQuickCreateReasoningEffortFromConfig();
         }
 
         public async Task<ExpenseSheetDraftResponse> ExtractFromTicketImageAsync(
@@ -339,7 +346,7 @@ namespace IND_CRM_API.Services
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
                     _logger.Log(
-                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} normalizedJsonChars={normalizedJson.Length}",
+                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} normalizedJsonChars={normalizedJson.Length}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     return new OpenAITicketNormalizationResult
@@ -564,6 +571,35 @@ namespace IND_CRM_API.Services
             }
         }
 
+        private static string ReadReasoningEffortFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[ReasoningEffortSettingKey];
+                return NormalizeReasoningEffort(configured);
+            }
+            catch
+            {
+                return DefaultReasoningEffort;
+            }
+        }
+
+        private static string ReadQuickCreateReasoningEffortFromConfig()
+        {
+            try
+            {
+                var configured = ConfigurationManager.AppSettings[QuickCreateReasoningEffortSettingKey];
+                if (string.IsNullOrWhiteSpace(configured))
+                    return _NormalizeQuickCreateReasoningFallback();
+
+                return NormalizeReasoningEffort(configured);
+            }
+            catch
+            {
+                return _NormalizeQuickCreateReasoningFallback();
+            }
+        }
+
         private static string GetOpenAiApiKey()
         {
             try
@@ -623,6 +659,7 @@ namespace IND_CRM_API.Services
             var serviceTier = _serviceTier;
             var profileTag = _profileTag;
             var promptCacheKey = _promptCacheKey;
+            var reasoningEffort = _reasoningEffort;
 
             if (draftProfile == ExpenseTicketDraftProfile.QuickCreate)
             {
@@ -631,6 +668,7 @@ namespace IND_CRM_API.Services
                 serviceTier = _quickCreateServiceTier;
                 profileTag = _quickCreateProfileTag;
                 promptCacheKey = _quickCreatePromptCacheKey;
+                reasoningEffort = _quickCreateReasoningEffort;
             }
 
             var normalizedServiceTier = NormalizeServiceTier(string.IsNullOrWhiteSpace(serviceTierOverride) ? serviceTier : serviceTierOverride);
@@ -642,7 +680,8 @@ namespace IND_CRM_API.Services
                 MaxOutputTokens = maxOutputTokensOverride ?? maxOutputTokens,
                 ProfileTag = profileTag,
                 PromptCacheKey = promptCacheKey,
-                ServiceTier = normalizedServiceTier
+                ServiceTier = normalizedServiceTier,
+                ReasoningEffort = reasoningEffort
             };
         }
 
@@ -665,7 +704,8 @@ namespace IND_CRM_API.Services
                 MaxOutputTokens = expandedMaxOutputTokens,
                 ProfileTag = currentOptions.ProfileTag,
                 PromptCacheKey = currentOptions.PromptCacheKey,
-                ServiceTier = currentOptions.ServiceTier
+                ServiceTier = currentOptions.ServiceTier,
+                ReasoningEffort = currentOptions.ReasoningEffort
             };
             return true;
         }
@@ -726,12 +766,16 @@ namespace IND_CRM_API.Services
                     ["expense_ticket_profile"] = requestOptions.ProfileTag,
                     ["expense_ticket_draft_profile"] = GetDraftProfileText(requestOptions.DraftProfile),
                     ["expense_ticket_detail"] = requestOptions.ImageDetail,
-                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto"
+                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto",
+                    ["expense_ticket_reasoning_effort"] = requestOptions.ReasoningEffort ?? "na"
                 }
             };
 
             if (!string.IsNullOrWhiteSpace(requestOptions.ServiceTier))
                 payload["service_tier"] = requestOptions.ServiceTier;
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.ReasoningEffort))
+                payload["reasoning"] = new JObject { ["effort"] = requestOptions.ReasoningEffort };
 
             if (!string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey))
                 payload["prompt_cache_key"] = requestOptions.PromptCacheKey;
@@ -767,7 +811,7 @@ namespace IND_CRM_API.Services
                             new JObject
                             {
                                 ["type"] = "input_text",
-                                ["text"] = $"OCR JSON for file '{fileName}':\n{structuredOcrJson}"
+                                ["text"] = structuredOcrJson
                             }
                         }
                     }
@@ -782,12 +826,16 @@ namespace IND_CRM_API.Services
                     ["expense_ticket_profile"] = requestOptions.ProfileTag,
                     ["expense_ticket_draft_profile"] = GetDraftProfileText(requestOptions.DraftProfile),
                     ["expense_ticket_input_source"] = "azure-docs-json",
-                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto"
+                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto",
+                    ["expense_ticket_reasoning_effort"] = requestOptions.ReasoningEffort ?? "na"
                 }
             };
 
             if (!string.IsNullOrWhiteSpace(requestOptions.ServiceTier))
                 payload["service_tier"] = requestOptions.ServiceTier;
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.ReasoningEffort))
+                payload["reasoning"] = new JObject { ["effort"] = requestOptions.ReasoningEffort };
 
             if (!string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey))
                 payload["prompt_cache_key"] = requestOptions.PromptCacheKey;
@@ -812,13 +860,13 @@ namespace IND_CRM_API.Services
         private static string BuildStructuredOcrPayloadPromptText(ExpenseTicketDraftProfile profile)
         {
             return
-                @"Recibiras un JSON OCR estructurado de Azure Document Intelligence (prebuilt-receipt).
-- Usa ese JSON OCR como fuente principal para construir el contrato CRM.
-- Responde SOLO JSON valido, sin markdown ni texto narrativo.
-- No inventes campos ni lineas que no tengan soporte razonable en el OCR.
-- Si faltan datos, aplica null o warnings segun las reglas del schema.
-- Mantiene todas las lineas detectables del ticket cuando el OCR muestre conceptos separados.
-- No describas el OCR; solo devuelve el JSON final del ticket."
+                @"Recibiras un JSON OCR compacto de Azure Document Intelligence.
+- Tu tarea es convertir ese JSON al contrato CRM.
+- Responde SOLO JSON valido.
+- Usa el OCR como fuente principal.
+- No inventes datos ni lineas.
+- Omite metadatos opcionales si no aportan valor.
+- Prioriza exactitud estructural y salida breve."
                 .Trim() + Environment.NewLine + BuildPayloadPromptText(profile);
         }
 
@@ -881,21 +929,46 @@ namespace IND_CRM_API.Services
   - 8: Varios
   - 14: Taxi
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
-- Cada linea debe incluir transDate, description, qty, price y lineTotal.
-- Usa la fecha del ticket en transDate para todas las lineas cuando aplique.
+- Cada linea debe incluir como minimo description, qty y price.
+- Incluye transDate solo si el OCR la muestra con claridad.
+- Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Si qty no es visible, usa 1.
 - price debe ser el precio unitario.
-- lineTotal debe ser el total bruto visible de la linea.
-- Si lineTotal y qty son validos, asegura coherencia: price = lineTotal / qty.
+- Si hay total visible de linea y qty > 0, asegura coherencia: price = total / qty.
 - Usa punto como separador decimal en todos los numeros del JSON.
 - No uses separadores de miles en los numeros del JSON.
 - description debe ser corta y util para la linea.
 - description de cabecera debe ser corta y util para el ticket.
-- currencyCode en cabecera si se detecta; si no, deja null.
-- Puedes incluir warnings solo si algo relevante no se pudo inferir.
+- currencyCode en cabecera solo si se detecta; si no, deja null.
+- Omite warnings, rawCurrency y merchant salvo que aporten valor real.
 - Si un campo de cabecera no se puede inferir con confianza, usa null.
 - No inventes lineas ni importes. Pero si una linea es visible, debes devolverla."
                 .Trim();
+        }
+
+        private static string NormalizeReasoningEffort(string configuredValue)
+        {
+            if (string.IsNullOrWhiteSpace(configuredValue))
+                return DefaultReasoningEffort;
+
+            var normalized = configuredValue.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "minimal":
+                case "low":
+                case "medium":
+                case "high":
+                    return normalized;
+                default:
+                    return DefaultReasoningEffort;
+            }
+        }
+
+        private static string _NormalizeQuickCreateReasoningFallback()
+        {
+            return string.IsNullOrWhiteSpace(DefaultReasoningEffort)
+                ? "minimal"
+                : DefaultReasoningEffort;
         }
 
         private static string GetDraftProfileText(ExpenseTicketDraftProfile profile)
@@ -1678,16 +1751,7 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
-                    "mode",
                     "description",
-                    "currencyCode",
-                    "gastoType",
-                    "exchRate",
-                    "projId",
-                    "confidence",
-                    "warnings",
-                    "rawCurrency",
-                    "merchant",
                     "lines")
             };
         }
@@ -1739,15 +1803,10 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
-                    "transDate",
                     "typeValue",
                     "description",
-                    "internacional",
-                    "fileId",
                     "qty",
-                    "price",
-                    "lineTotal",
-                    "projId")
+                    "price")
             };
         }
 
@@ -1797,11 +1856,7 @@ namespace IND_CRM_API.Services
                 },
                 ["required"] = new JArray(
                     "description",
-                    "currencyCode",
                     "gastoType",
-                    "warnings",
-                    "rawCurrency",
-                    "merchant",
                     "lines")
             };
         }
@@ -1836,11 +1891,9 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
-                    "transDate",
                     "description",
                     "qty",
-                    "price",
-                    "lineTotal")
+                    "price")
             };
         }
 
@@ -1854,6 +1907,7 @@ namespace IND_CRM_API.Services
             public string ServiceTier { get; set; }
             public string ProfileTag { get; set; }
             public string PromptCacheKey { get; set; }
+            public string ReasoningEffort { get; set; }
         }
 
         // Captures usage and service-tier data returned by OpenAI for A/B timing analysis.

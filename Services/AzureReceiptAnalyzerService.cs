@@ -160,82 +160,142 @@ namespace IND_CRM_API.Services
             var documents = analyzeResult["documents"] as JArray;
             var firstDocument = documents?.OfType<JObject>().FirstOrDefault();
             var fields = firstDocument?["fields"] as JObject;
+            var items = BuildCompactItems(fields?["Items"]);
+            var totalToken = ProjectMoneyField(fields?["Total"] as JObject);
+            var subtotalToken = ProjectMoneyField(fields?["Subtotal"] as JObject);
+            var taxToken = ProjectMoneyField(fields?["TotalTax"] as JObject);
+            var tipToken = ProjectMoneyField(fields?["Tip"] as JObject);
+            var transactionDate = ReadFieldScalar(fields?["TransactionDate"] as JObject);
+            var merchantName = ReadFieldScalar(fields?["MerchantName"] as JObject);
+            var merchantAddress = ReadFieldScalar(fields?["MerchantAddress"] as JObject);
+            var merchantPhone = ReadFieldScalar(fields?["MerchantPhoneNumber"] as JObject);
             var projected = new JObject
             {
                 ["source"] = "azure-document-intelligence",
                 ["modelId"] = analyzeResult["modelId"]?.ToString() ?? firstDocument?["docType"]?.ToString(),
-                ["content"] = analyzeResult["content"]?.ToString(),
-                ["fields"] = ProjectFields(fields)
+                ["receiptType"] = firstDocument?["docType"]?.ToString(),
+                ["merchant"] = new JObject
+                {
+                    ["name"] = merchantName == null ? JValue.CreateNull() : new JValue(merchantName),
+                    ["address"] = merchantAddress == null ? JValue.CreateNull() : new JValue(merchantAddress),
+                    ["phone"] = merchantPhone == null ? JValue.CreateNull() : new JValue(merchantPhone)
+                },
+                ["transactionDate"] = transactionDate == null ? JValue.CreateNull() : new JValue(transactionDate),
+                ["currencyCode"] = ReadProjectedCurrencyCode(totalToken),
+                ["totals"] = new JObject
+                {
+                    ["subtotal"] = subtotalToken ?? JValue.CreateNull(),
+                    ["tax"] = taxToken ?? JValue.CreateNull(),
+                    ["tip"] = tipToken ?? JValue.CreateNull(),
+                    ["total"] = totalToken ?? JValue.CreateNull()
+                },
+                ["items"] = items,
+                ["itemCount"] = items.Count
             };
 
-            var items = projected["fields"]?["Items"] as JArray;
             return new AzureReceiptAnalysisResult
             {
                 RawJson = rawJson,
                 PromptJson = JsonConvert.SerializeObject(projected),
-                MerchantName = projected["fields"]?["MerchantName"]?.ToString(),
-                TransactionDate = projected["fields"]?["TransactionDate"]?.ToString(),
-                CurrencyCode = ReadProjectedCurrencyCode(projected["fields"]?["Total"]),
-                TotalAmount = ReadProjectedAmount(projected["fields"]?["Total"]),
-                ItemCount = items?.Count ?? 0,
+                MerchantName = merchantName,
+                TransactionDate = transactionDate,
+                CurrencyCode = ReadProjectedCurrencyCode(totalToken),
+                TotalAmount = ReadProjectedAmount(totalToken),
+                ItemCount = items.Count,
                 Warnings = new List<string>()
             };
         }
 
-        private static JToken ProjectFields(JObject fields)
+        private static JArray BuildCompactItems(JToken itemsToken)
         {
-            if (fields == null)
-                return new JObject();
+            var items = new JArray();
+            if (!(itemsToken is JObject itemsField) || !(itemsField["valueArray"] is JArray itemsArray))
+                return items;
 
-            var projected = new JObject();
-            foreach (var property in fields.Properties())
-                projected[property.Name] = ProjectField(property.Value as JObject);
+            foreach (var item in itemsArray.OfType<JObject>())
+            {
+                var valueObject = item["valueObject"] as JObject;
+                if (valueObject == null)
+                    continue;
 
-            return projected;
+                items.Add(new JObject
+                {
+                    ["description"] = ToNullableValue(ReadFieldScalar(valueObject["Description"] as JObject)),
+                    ["quantity"] = ToNullableNumber(ReadFieldNumber(valueObject["Quantity"] as JObject)),
+                    ["unitPrice"] = ProjectMoneyField(valueObject["Price"] as JObject) ?? JValue.CreateNull(),
+                    ["amount"] = ProjectMoneyField(valueObject["TotalPrice"] as JObject) ?? JValue.CreateNull()
+                });
+            }
+
+            return items;
         }
 
-        private static JToken ProjectField(JObject field)
+        private static JToken ProjectMoneyField(JObject field)
         {
             if (field == null)
                 return JValue.CreateNull();
-
-            if (field["valueArray"] is JArray array)
-            {
-                var projectedArray = new JArray();
-                foreach (var item in array.OfType<JObject>())
-                    projectedArray.Add(ProjectField(item));
-                return projectedArray;
-            }
-
-            if (field["valueObject"] is JObject valueObject)
-            {
-                var projectedObject = new JObject();
-                foreach (var property in valueObject.Properties())
-                    projectedObject[property.Name] = ProjectField(property.Value as JObject);
-                return projectedObject;
-            }
 
             if (field["valueCurrency"] is JObject valueCurrency)
             {
                 return new JObject
                 {
                     ["amount"] = valueCurrency["amount"],
-                    ["currencyCode"] = valueCurrency["currencyCode"] ?? field["content"],
-                    ["content"] = field["content"]
+                    ["currencyCode"] = valueCurrency["currencyCode"] ?? field["content"]
                 };
             }
+
+            var amount = ReadFieldNumber(field);
+            if (!amount.HasValue)
+                return JValue.CreateNull();
+
+            return new JObject
+            {
+                ["amount"] = amount.Value,
+                ["currencyCode"] = field["content"]?.ToString()
+            };
+        }
+
+        private static string ReadFieldScalar(JObject field)
+        {
+            if (field == null)
+                return null;
 
             var scalar = field["valueString"]
                 ?? field["valueDate"]
                 ?? field["valueTime"]
                 ?? field["valuePhoneNumber"]
                 ?? field["valueCountryRegion"]
-                ?? field["valueNumber"]
-                ?? field["valueInteger"]
-                ?? field["valueBoolean"]
-                ?? field["valueSelectionMark"];
+                ?? field["content"];
 
-            return scalar ?? field["content"] ?? JValue.CreateNull();
+            var value = scalar?.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static decimal? ReadFieldNumber(JObject field)
+        {
+            if (field == null)
+                return null;
+
+            var token = field["valueNumber"] ?? field["valueInteger"] ?? field["valueCurrency"]?["amount"];
+            if (token == null)
+                return null;
+
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+                return token.Value<decimal>();
+
+            return decimal.TryParse(token.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : (decimal?)null;
+        }
+
+        private static JToken ToNullableValue(string value)
+        {
+            return value == null ? JValue.CreateNull() : new JValue(value);
+        }
+
+        private static JToken ToNullableNumber(decimal? value)
+        {
+            return value.HasValue ? new JValue(value.Value) : JValue.CreateNull();
         }
 
         private static string ReadProjectedCurrencyCode(JToken token)
