@@ -81,7 +81,7 @@ namespace IND_CRM_API.Services
 
             totalSw.Stop();
             _logger.Log(
-                $"[TICKET-AI] Pipeline completed source=stored-blob profile={profile} totalMs={totalSw.ElapsedMilliseconds} ocrMs={analysisSw.ElapsedMilliseconds} normalizeMs={normalizationSw.ElapsedMilliseconds} itemCount={analysis?.ItemCount ?? 0} ocrJsonChars={ToLogLength(analysis?.RawJson)} normalizedJsonChars={ToLogLength(normalization?.NormalizedJson)} attempts={(normalization?.Attempts ?? 0)}",
+                $"[TICKET-AI] Pipeline completed source=stored-blob profile={profile} totalMs={totalSw.ElapsedMilliseconds} ocrMs={analysisSw.ElapsedMilliseconds} normalizeMs={normalizationSw.ElapsedMilliseconds} itemCount={analysis?.ItemCount ?? 0} ocrCurrency={ToLogValue(analysis?.CurrencyCode)} normalizedCurrency={ToLogValue(normalization?.Draft?.currencyCode)} ocrJsonChars={ToLogLength(analysis?.RawJson)} normalizedJsonChars={ToLogLength(normalization?.NormalizedJson)} attempts={(normalization?.Attempts ?? 0)}",
                 AxaptaSessionManager.LogLevel.Info);
 
             return new TicketAIProcessingResult
@@ -145,6 +145,11 @@ namespace IND_CRM_API.Services
         private static string ToLogLength(string value)
         {
             return value == null ? "null" : value.Length.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string ToLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
         }
     }
 }

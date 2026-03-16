@@ -126,7 +126,7 @@ namespace IND_CRM_API.Services
                                             throw new InvalidOperationException("Azure Document Intelligence devolvio un resultado vacio.");
 
                                         _logger.Log(
-                                            $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)}",
+                                            $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
                                             AxaptaSessionManager.LogLevel.Info);
                                         return result;
                                     }
@@ -169,6 +169,10 @@ namespace IND_CRM_API.Services
             var merchantName = ReadFieldScalar(fields?["MerchantName"] as JObject);
             var merchantAddress = ReadFieldScalar(fields?["MerchantAddress"] as JObject);
             var merchantPhone = ReadFieldScalar(fields?["MerchantPhoneNumber"] as JObject);
+            var receiptContent = analyzeResult["content"]?.ToString();
+            var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
+            var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
+            var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
             var projected = new JObject
             {
                 ["source"] = "azure-document-intelligence",
@@ -181,7 +185,9 @@ namespace IND_CRM_API.Services
                     ["phone"] = merchantPhone == null ? JValue.CreateNull() : new JValue(merchantPhone)
                 },
                 ["transactionDate"] = transactionDate == null ? JValue.CreateNull() : new JValue(transactionDate),
-                ["currencyCode"] = ReadProjectedCurrencyCode(totalToken),
+                ["currencyCode"] = ToNullableValue(resolvedCurrencyCode),
+                ["rawCurrency"] = ToNullableValue(resolvedRawCurrency),
+                ["currencyHints"] = new JArray(currencyHints.Select(h => new JValue(h))),
                 ["totals"] = new JObject
                 {
                     ["subtotal"] = subtotalToken ?? JValue.CreateNull(),
@@ -199,10 +205,12 @@ namespace IND_CRM_API.Services
                 PromptJson = JsonConvert.SerializeObject(projected),
                 MerchantName = merchantName,
                 TransactionDate = transactionDate,
-                CurrencyCode = ReadProjectedCurrencyCode(totalToken),
+                CurrencyCode = resolvedCurrencyCode,
+                RawCurrency = resolvedRawCurrency,
                 TotalAmount = ReadProjectedAmount(totalToken),
                 ItemCount = items.Count,
-                Warnings = new List<string>()
+                Warnings = new List<string>(),
+                CurrencyHints = currencyHints
             };
         }
 
@@ -237,10 +245,14 @@ namespace IND_CRM_API.Services
 
             if (field["valueCurrency"] is JObject valueCurrency)
             {
+                var rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(
+                    valueCurrency["currencyCode"]?.ToString(),
+                    field["content"]?.ToString()));
                 return new JObject
                 {
                     ["amount"] = valueCurrency["amount"],
-                    ["currencyCode"] = valueCurrency["currencyCode"] ?? field["content"]
+                    ["currencyCode"] = ToNullableValue(CurrencyCodeHelper.NormalizeToIso4217(rawCurrency)),
+                    ["rawCurrency"] = ToNullableValue(rawCurrency)
                 };
             }
 
@@ -248,10 +260,12 @@ namespace IND_CRM_API.Services
             if (!amount.HasValue)
                 return JValue.CreateNull();
 
+            var fallbackRawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(field["content"]?.ToString()));
             return new JObject
             {
                 ["amount"] = amount.Value,
-                ["currencyCode"] = field["content"]?.ToString()
+                ["currencyCode"] = ToNullableValue(CurrencyCodeHelper.NormalizeToIso4217(fallbackRawCurrency)),
+                ["rawCurrency"] = ToNullableValue(fallbackRawCurrency)
             };
         }
 
@@ -290,7 +304,8 @@ namespace IND_CRM_API.Services
 
         private static JToken ToNullableValue(string value)
         {
-            return value == null ? JValue.CreateNull() : new JValue(value);
+            var trimmed = ReadNonEmpty(value);
+            return trimmed == null ? JValue.CreateNull() : new JValue(trimmed);
         }
 
         private static JToken ToNullableNumber(decimal? value)
@@ -304,6 +319,15 @@ namespace IND_CRM_API.Services
                 return null;
 
             var value = currencyObject["currencyCode"]?.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static string ReadProjectedRawCurrency(JToken token)
+        {
+            if (!(token is JObject currencyObject))
+                return null;
+
+            var value = currencyObject["rawCurrency"]?.ToString();
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
@@ -323,6 +347,105 @@ namespace IND_CRM_API.Services
                 return parsed;
 
             return null;
+        }
+
+        private static List<string> BuildCurrencyHints(string receiptContent, params JToken[] currencyTokens)
+        {
+            var hints = new List<string>();
+
+            foreach (var hint in CurrencyCodeHelper.ExtractHints(receiptContent))
+                AddDistinct(hints, hint);
+
+            foreach (var token in EnumerateCurrencyTokens(currencyTokens))
+            {
+                AddDistinct(hints, ReadProjectedCurrencyCode(token));
+                AddDistinct(hints, ReadProjectedRawCurrency(token));
+            }
+
+            return hints;
+        }
+
+        private static IEnumerable<JToken> EnumerateCurrencyTokens(IEnumerable<JToken> tokens)
+        {
+            if (tokens == null)
+                yield break;
+
+            foreach (var token in tokens)
+            {
+                if (token == null || token.Type == JTokenType.Null)
+                    continue;
+
+                if (token is JArray array)
+                {
+                    foreach (var childObject in array.OfType<JObject>())
+                    {
+                        var unitPrice = childObject["unitPrice"];
+                        if (unitPrice != null && unitPrice.Type != JTokenType.Null)
+                            yield return unitPrice;
+
+                        var amount = childObject["amount"];
+                        if (amount != null && amount.Type != JTokenType.Null)
+                            yield return amount;
+                    }
+
+                    continue;
+                }
+
+                yield return token;
+            }
+        }
+
+        private static string ResolveCurrencyCode(string receiptContent, params JToken[] currencyTokens)
+        {
+            var candidates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(receiptContent))
+                candidates.Add(receiptContent);
+
+            foreach (var token in EnumerateCurrencyTokens(currencyTokens))
+            {
+                candidates.Add(ReadProjectedCurrencyCode(token));
+                candidates.Add(ReadProjectedRawCurrency(token));
+            }
+
+            return CurrencyCodeHelper.ResolveToIso4217(candidates.ToArray());
+        }
+
+        private static string ResolveRawCurrency(List<string> currencyHints, params JToken[] currencyTokens)
+        {
+            var fromHints = currencyHints?.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h));
+            if (!string.IsNullOrWhiteSpace(fromHints))
+                return fromHints;
+
+            foreach (var token in EnumerateCurrencyTokens(currencyTokens))
+            {
+                var rawCurrency = ReadProjectedRawCurrency(token);
+                if (!string.IsNullOrWhiteSpace(rawCurrency))
+                    return rawCurrency;
+
+                var isoCurrency = ReadProjectedCurrencyCode(token);
+                if (!string.IsNullOrWhiteSpace(isoCurrency))
+                    return isoCurrency;
+            }
+
+            return null;
+        }
+
+        private static string ReadNonEmpty(string value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+        }
+
+        private static void AddDistinct(List<string> target, string value)
+        {
+            var trimmed = ReadNonEmpty(value);
+            if (trimmed == null || target == null)
+                return;
+
+            if (target.Any(existing => string.Equals(existing, trimmed, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            target.Add(trimmed);
         }
 
         private static string TryReadStatus(string rawJson)

@@ -2940,7 +2940,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Normalizes optional currency input for the quick-create flow.
         private static string NormalizeQuickCreateCurrencyCode(string currencyCode)
         {
-            var normalized = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            var normalized = CurrencyCodeHelper.NormalizeToIso4217(currencyCode);
             return string.IsNullOrWhiteSpace(normalized) ? "EUR" : normalized;
         }
 
@@ -4309,27 +4309,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Normalizes currency code from IA draft metadata.
         private static string NormalizeDraftCurrencyCode(string currencyCode, string rawCurrency)
         {
-            var normalizedCode = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
-            if (!string.IsNullOrWhiteSpace(normalizedCode))
-                return normalizedCode;
-
-            var raw = (rawCurrency ?? string.Empty).Trim().ToLowerInvariant();
-            switch (raw)
-            {
-                case "eur":
-                case "euro":
-                    return "EUR";
-                case "usd":
-                case "dolar":
-                case "dollar":
-                    return "USD";
-                case "gbp":
-                case "libra":
-                case "pound":
-                    return "GBP";
-                default:
-                    return string.Empty;
-            }
+            return CurrencyCodeHelper.ResolveToIso4217(currencyCode, rawCurrency);
         }
 
         // Gets a string value from JObject using case-insensitive key lookup.

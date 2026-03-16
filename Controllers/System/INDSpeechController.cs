@@ -587,7 +587,7 @@ namespace IND_CRM_API.Controllers.System
                     EnsureDraftWarning(draft, "No se detectaron lineas validas para ticket; se persistio solo cabecera.");
 
                 var descriptionValue = string.IsNullOrWhiteSpace(draft.description) ? "Ticket" : draft.description.Trim();
-                var currencyCodeValue = (draft.currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+                var currencyCodeValue = CurrencyCodeHelper.ResolveToIso4217(draft.currencyCode, draft.RawCurrency);
                 if (string.IsNullOrWhiteSpace(currencyCodeValue))
                 {
                     currencyCodeValue = "EUR";

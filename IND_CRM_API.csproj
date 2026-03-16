@@ -215,6 +215,7 @@
     <Compile Include="Helpers\AxContainerReadHelper.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
     <Compile Include="Helpers\AppSettingsHelper.cs" />
+    <Compile Include="Helpers\CurrencyCodeHelper.cs" />
     <Compile Include="Helpers\ExpenseTicketImageHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />

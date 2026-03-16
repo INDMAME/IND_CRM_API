@@ -22,8 +22,10 @@ namespace IND_CRM_API.Services.Interfaces
         public string MerchantName { get; set; }
         public string TransactionDate { get; set; }
         public string CurrencyCode { get; set; }
+        public string RawCurrency { get; set; }
         public decimal? TotalAmount { get; set; }
         public int ItemCount { get; set; }
         public List<string> Warnings { get; set; }
+        public List<string> CurrencyHints { get; set; }
     }
 }

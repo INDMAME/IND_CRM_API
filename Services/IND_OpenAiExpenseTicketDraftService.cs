@@ -1,5 +1,6 @@
 ﻿using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Helpers;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -343,10 +344,12 @@ namespace IND_CRM_API.Services
                         throw new Exception("OpenAI no devolvio un JSON valido para la normalizacion del ticket.");
                     }
 
+                    ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
+
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
                     _logger.Log(
-                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} normalizedJsonChars={normalizedJson.Length}",
+                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} inputCurrency={ToMetricText(receiptAnalysis.CurrencyCode)} outputCurrency={ToMetricText(extracted.currencyCode)} rawCurrency={ToMetricText(extracted.RawCurrency)} normalizedJsonChars={normalizedJson.Length}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     return new OpenAITicketNormalizationResult
@@ -864,6 +867,7 @@ namespace IND_CRM_API.Services
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
+- Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
 - Prioriza exactitud estructural y salida breve."
@@ -903,7 +907,9 @@ namespace IND_CRM_API.Services
 - qty por defecto 1 salvo evidencia fuerte.
 - internacional true solo si hay evidencia de gasto internacional.
 - description corto y util para una linea de gasto.
-- currencyCode en cabecera si se detecta; si no, deja null.
+- currencyCode en cabecera debe ir siempre en ISO-4217 uppercase si existe evidencia suficiente.
+- Usa rawCurrency y currencyHints para normalizar simbolos o nombres a ISO-4217.
+- Si detectas simbolos o nombres de moneda, conserva la mejor pista en rawCurrency.
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
 - Deduce la moneda y el valor monetario de la imagen, sin soporte externo.
 - Si un campo es imposible de inferir con calidad suficiente, usa null y deja una advertencia clara."
@@ -939,8 +945,10 @@ namespace IND_CRM_API.Services
 - No uses separadores de miles en los numeros del JSON.
 - description debe ser corta y util para la linea.
 - description de cabecera debe ser corta y util para el ticket.
-- currencyCode en cabecera solo si se detecta; si no, deja null.
-- Omite warnings, rawCurrency y merchant salvo que aporten valor real.
+- currencyCode en cabecera debe ir en ISO-4217 uppercase si existe evidencia monetaria razonable.
+- Usa currencyHints, rawCurrency y los importes OCR para normalizar simbolos o nombres a ISO-4217.
+- Si detectas una pista util de moneda no ISO, guardala tambien en rawCurrency.
+- Omite warnings y merchant salvo que aporten valor real.
 - Si un campo de cabecera no se puede inferir con confianza, usa null.
 - No inventes lineas ni importes. Pero si una linea es visible, debes devolverla."
                 .Trim();
@@ -1076,6 +1084,11 @@ namespace IND_CRM_API.Services
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "na";
         }
 
+        private static string ToMetricText(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "na" : value.Trim();
+        }
+
         private static string NormalizeImageDetail(string configuredValue)
         {
             if (string.IsNullOrWhiteSpace(configuredValue))
@@ -1119,20 +1132,24 @@ namespace IND_CRM_API.Services
                 return null;
 
             var root = JObject.Parse(json);
+            var rawCurrency = NormalizeText(root["rawCurrency"]?.ToString(), null);
+            var currencyCode = CurrencyCodeHelper.ResolveToIso4217(
+                root["currencyCode"]?.ToString(),
+                rawCurrency);
 
             var request = new ExpenseSheetDraftResponse
             {
                 mode = 0,
                 userId = string.Empty,
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
-                currencyCode = NormalizeText(root["currencyCode"]?.ToString(), null),
+                currencyCode = string.IsNullOrWhiteSpace(currencyCode) ? null : currencyCode,
                 gastoType = NormalizeTypeValue(root["gastoType"]),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
                 Confidence = NormalizeConfidence(root["confidence"]),
                 Warnings = ExtractWarnings(root["warnings"]),
-                RawCurrency = NormalizeText(root["rawCurrency"]?.ToString(), null),
+                RawCurrency = rawCurrency,
                 Merchant = NormalizeText(root["merchant"]?.ToString(), null)
             };
 
@@ -1166,6 +1183,38 @@ namespace IND_CRM_API.Services
                 request.Warnings = null;
 
             return request;
+        }
+
+        private static void ApplyCurrencyFallbackFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
+        {
+            if (draft == null)
+                return;
+
+            var fallbackCurrencyCode = CurrencyCodeHelper.ResolveToIso4217(
+                draft.currencyCode,
+                draft.RawCurrency,
+                receiptAnalysis?.CurrencyCode,
+                receiptAnalysis?.RawCurrency,
+                receiptAnalysis?.CurrencyHints == null ? null : string.Join(" ", receiptAnalysis.CurrencyHints));
+
+            if (!string.IsNullOrWhiteSpace(fallbackCurrencyCode))
+                draft.currencyCode = fallbackCurrencyCode;
+
+            if (string.IsNullOrWhiteSpace(draft.RawCurrency))
+            {
+                draft.RawCurrency = NormalizeText(
+                    receiptAnalysis?.RawCurrency
+                    ?? (receiptAnalysis?.CurrencyHints == null ? null : receiptAnalysis.CurrencyHints.FirstOrDefault()),
+                    null);
+            }
+
+            if (!string.IsNullOrWhiteSpace(draft.currencyCode))
+            {
+                draft.Warnings = RemoveCurrencyMissingWarning(draft.Warnings);
+                return;
+            }
+
+            draft.Warnings = EnsureWarnings(draft.Warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)
@@ -1339,6 +1388,16 @@ namespace IND_CRM_API.Services
 
             existing.Add(warning.Trim());
             return existing;
+        }
+
+        private static List<string> RemoveCurrencyMissingWarning(List<string> warnings)
+        {
+            if (warnings == null || warnings.Count == 0)
+                return warnings;
+
+            return warnings
+                .Where(w => !string.Equals((w ?? string.Empty).Trim(), "No se detecto currencyCode en el ticket. Revisar manualmente.", StringComparison.OrdinalIgnoreCase))
+                .ToList();
         }
 
         private static decimal? NormalizeConfidence(JToken token)
