@@ -227,6 +227,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
     <Compile Include="Services\AxSession.cs" />
+    <Compile Include="Services\AzureReceiptAnalyzerService.cs" />
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
@@ -245,14 +246,19 @@
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
     <Compile Include="Services\IAxLogger.cs" />
+    <Compile Include="Services\OpenAITicketNormalizationService.cs" />
+    <Compile Include="Services\TicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
+    <Compile Include="Services\Interfaces\IAzureReceiptAnalyzerService.cs" />
     <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
+    <Compile Include="Services\Interfaces\IOpenAITicketNormalizationService.cs" />
     <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />
+    <Compile Include="Services\Interfaces\ITicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
     <Compile Include="Startup.cs" />

@@ -1,4 +1,5 @@
 using System.IO;
+using System;
 
 namespace IND_CRM_API.Services.Interfaces
 {
@@ -17,6 +18,19 @@ namespace IND_CRM_API.Services.Interfaces
             string fileName,
             Stream content,
             string contentType);
+
+        /// <summary>
+        /// Sube una imagen temporal de ticket para pipelines OCR que requieren una URL de blob.
+        /// </summary>
+        TicketBlobUploadResult UploadTemporaryTicketFile(
+            string fileName,
+            Stream content,
+            string contentType);
+
+        /// <summary>
+        /// Genera una URL temporal de solo lectura para un blob ya almacenado.
+        /// </summary>
+        string CreateReadOnlyBlobUrl(string blobUrl, TimeSpan validFor);
 
         /// <summary>
         /// Elimina una imagen de ticket desde su URL absoluta.

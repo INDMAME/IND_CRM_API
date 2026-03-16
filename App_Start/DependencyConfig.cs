@@ -20,8 +20,15 @@ namespace IND_CRM_API.App_Start
             var sessionManager = new AxaptaSessionManager(axLogger);
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
-            var expenseDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
             var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
+            var azureReceiptAnalyzerService = new AzureReceiptAnalyzerService(axLogger);
+            var openAiDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
+            var openAiTicketNormalizationService = new OpenAITicketNormalizationService(openAiDraftService);
+            var ticketAiProcessingService = new TicketAIProcessingService(
+                expenseTicketBlobStorageService,
+                azureReceiptAnalyzerService,
+                openAiTicketNormalizationService,
+                axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbExchangeRateProvider = new EcbExchangeRateProvider(axLogger);
             var frankfurterExchangeRateProvider = new FrankfurterExchangeRateProvider(axLogger);
@@ -42,8 +49,11 @@ namespace IND_CRM_API.App_Start
                 { typeof(IAxLogger), axLogger },
                 { typeof(IND_IAudioTranscriptionService), speechService },
                 { typeof(IND_ITextModerationService), moderationService },
-                { typeof(IND_IExpenseTicketDraftService), expenseDraftService },
+                { typeof(IND_IExpenseTicketDraftService), ticketAiProcessingService },
+                { typeof(ITicketAIProcessingService), ticketAiProcessingService },
                 { typeof(IExpenseTicketBlobStorageService), expenseTicketBlobStorageService },
+                { typeof(IAzureReceiptAnalyzerService), azureReceiptAnalyzerService },
+                { typeof(IOpenAITicketNormalizationService), openAiTicketNormalizationService },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };
 

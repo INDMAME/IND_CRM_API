@@ -378,12 +378,13 @@ namespace IND_CRM_API.Controllers.CRM
             if (userError != null)
                 return userError;
 
-            if (_ticketDraft == null)
+            var ticketAiProcessing = _ticketDraft as ITicketAIProcessingService;
+            if (ticketAiProcessing == null)
             {
                 return Content(HttpStatusCode.InternalServerError, new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
                 {
                     Success = false,
-                    Message = "El servicio de borrador IA no esta disponible.",
+                    Message = "El servicio de procesamiento IA no esta disponible.",
                     ErrorCode = IndErrorCodes.InternalError,
                     Data = null,
                     Errors = null,
@@ -497,6 +498,9 @@ namespace IND_CRM_API.Controllers.CRM
                 resultData.FileName = fileUploadResult.FileName;
                 resultData.CompletedStage = QuickCreateStageFileUploaded;
 
+                Logger.Log(
+                    $"[QUICKCREATE-AI-ARCH] mode=azure-docs-json azureDocumentIntelligence=true legacyOpenAiImage=false fileId={ToLogValue(resultData.FileId)} fileName={ToLogValue(resultData.FileName)} urlFile={ToLogValue(resultData.UrlFile)} traceId={traceId}");
+
                 var draftStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.DraftExtract = draftStepTraceId;
 
@@ -506,9 +510,9 @@ namespace IND_CRM_API.Controllers.CRM
                 try
                 {
                     draftExtraction = await ExtractQuickCreateDraftWithFallbackAsync(
-                        quickCreateForm.ImageBytes,
+                        ticketAiProcessing,
                         quickCreateForm.OriginalFileName,
-                        quickCreateForm.ContentType,
+                        resultData.UrlFile,
                         resultData.UrlFile,
                         resultData.FileName,
                         quickCreateForm.Extension,
@@ -1714,6 +1718,14 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (string.IsNullOrWhiteSpace(mergedFileName))
                     validationErrors.Add(new IndValidationError { Field = "fileName", Message = "fileName o fileExtension es obligatorio para aplicar IA." });
+
+                LogTicketIaJsonPayload(
+                    "endpoint-update-from-ia",
+                    fileId,
+                    body,
+                    mergedOcrJson,
+                    mergedNormalizedJson,
+                    traceId);
 
                 if (validationErrors.Any())
                 {
@@ -3231,9 +3243,9 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Runs the quick-create profile first and falls back to the full profile only when needed.
         private async Task<QuickCreateDraftExtractionResult> ExtractQuickCreateDraftWithFallbackAsync(
-            byte[] imageBytes,
+            ITicketAIProcessingService ticketAiProcessing,
             string originalFileName,
-            string contentType,
+            string blobUrl,
             string urlFile,
             string fileName,
             string fileExtension,
@@ -3243,13 +3255,16 @@ namespace IND_CRM_API.Controllers.CRM
             string traceId,
             CancellationToken cancellationToken)
         {
+            Logger.Log(
+                $"[QUICKCREATE-DRAFT-START] architecture=azure-docs-json azureDocumentIntelligence=true legacyOpenAiImage=false requestedProfile={ExpenseTicketDraftProfile.QuickCreate} blobUrl={ToLogValue(blobUrl)} fileName={ToLogValue(originalFileName)} traceId={traceId}");
+
             QuickCreateDraftExtractionResult quickAttempt;
             try
             {
                 quickAttempt = await BuildQuickCreateDraftExtractionAsync(
-                    imageBytes,
+                    ticketAiProcessing,
                     originalFileName,
-                    contentType,
+                    blobUrl,
                     urlFile,
                     fileName,
                     fileExtension,
@@ -3258,6 +3273,7 @@ namespace IND_CRM_API.Controllers.CRM
                     fallbackComentario,
                     ExpenseTicketDraftProfile.QuickCreate,
                     cancellationToken).ConfigureAwait(false);
+                LogQuickCreateDraftAttempt("quick-profile", traceId, quickAttempt);
             }
             catch (IND_OpenAiRateLimitException)
             {
@@ -3274,9 +3290,9 @@ namespace IND_CRM_API.Controllers.CRM
                     AxaptaSessionManager.LogLevel.Warning);
 
                 var fallbackFromException = await BuildQuickCreateDraftExtractionAsync(
-                    imageBytes,
+                    ticketAiProcessing,
                     originalFileName,
-                    contentType,
+                    blobUrl,
                     urlFile,
                     fileName,
                     fileExtension,
@@ -3288,6 +3304,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 fallbackFromException.UsedFullFallback = true;
                 fallbackFromException.FallbackReason = "quick-profile-exception";
+                LogQuickCreateDraftAttempt("full-profile-from-exception", traceId, fallbackFromException);
                 return fallbackFromException;
             }
 
@@ -3299,9 +3316,9 @@ namespace IND_CRM_API.Controllers.CRM
                 AxaptaSessionManager.LogLevel.Warning);
 
             var fullAttempt = await BuildQuickCreateDraftExtractionAsync(
-                imageBytes,
+                ticketAiProcessing,
                 originalFileName,
-                contentType,
+                blobUrl,
                 urlFile,
                 fileName,
                 fileExtension,
@@ -3313,14 +3330,15 @@ namespace IND_CRM_API.Controllers.CRM
 
             fullAttempt.UsedFullFallback = true;
             fullAttempt.FallbackReason = fallbackReason;
+            LogQuickCreateDraftAttempt("full-profile-from-validation", traceId, fullAttempt);
             return fullAttempt;
         }
 
         // Builds one extraction attempt and the normalized update request used by quick-create.
         private async Task<QuickCreateDraftExtractionResult> BuildQuickCreateDraftExtractionAsync(
-            byte[] imageBytes,
+            ITicketAIProcessingService ticketAiProcessing,
             string originalFileName,
-            string contentType,
+            string blobUrl,
             string urlFile,
             string fileName,
             string fileExtension,
@@ -3330,12 +3348,15 @@ namespace IND_CRM_API.Controllers.CRM
             ExpenseTicketDraftProfile profile,
             CancellationToken cancellationToken)
         {
-            var draft = await _ticketDraft.ExtractFromTicketImageAsync(
-                imageBytes,
+            if (ticketAiProcessing == null)
+                throw new InvalidOperationException("ITicketAIProcessingService no esta disponible.");
+
+            var processingResult = await ticketAiProcessing.ProcessFromStoredBlobAsync(
+                blobUrl,
                 originalFileName,
-                contentType,
-                cancellationToken,
-                profile).ConfigureAwait(false);
+                profile,
+                cancellationToken).ConfigureAwait(false);
+            var draft = processingResult?.Draft;
 
             var result = new QuickCreateDraftExtractionResult
             {
@@ -3358,11 +3379,37 @@ namespace IND_CRM_API.Controllers.CRM
                 fallbackCurrencyCode,
                 fallbackComentario,
                 out var transDateResolution);
+            if (result.UpdateRequest != null)
+            {
+                result.UpdateRequest.ocrJson = processingResult?.OcrJson;
+                result.UpdateRequest.normalizedJson = processingResult?.NormalizedJson;
+            }
             result.TransDateResolution = transDateResolution;
             result.ValidLineCount = result.UpdateRequest?.lines?.Count ?? 0;
 
             ValidateUpdateTicketFromIABody(result.UpdateRequest, result.ValidationErrors);
             return result;
+        }
+
+        // Logs one quick-create extraction attempt so the active AI pipeline is visible in app logs.
+        private void LogQuickCreateDraftAttempt(string stage, string traceId, QuickCreateDraftExtractionResult attempt)
+        {
+            var request = attempt?.UpdateRequest;
+            Logger.Log(
+                $"[QUICKCREATE-DRAFT-RESULT] stage={ToLogValue(stage)} profile={ToLogValue(attempt?.ProfileUsed.ToString())} usedFullFallback={(attempt?.UsedFullFallback ?? false)} fallbackReason={ToLogValue(attempt?.FallbackReason)} sourceLines={(attempt?.SourceLineCount ?? 0)} validLines={(attempt?.ValidLineCount ?? 0)} validationErrors={(attempt?.ValidationErrors?.Count ?? 0)} ocrJsonChars={ToLogLength(request?.ocrJson)} normalizedJsonChars={ToLogLength(request?.normalizedJson)} traceId={traceId}");
+        }
+
+        // Logs the JSON payload state before sending the final IA update to AX.
+        private void LogTicketIaJsonPayload(
+            string operation,
+            string fileId,
+            UpdateExpenseSheetTicketFromIARequest body,
+            string mergedOcrJson,
+            string mergedNormalizedJson,
+            string traceId)
+        {
+            Logger.Log(
+                $"[TICKET-IA-JSON] operation={ToLogValue(operation)} fileId={ToLogValue(fileId)} requestOcrJsonChars={ToLogLength(body?.ocrJson)} requestNormalizedJsonChars={ToLogLength(body?.normalizedJson)} mergedOcrJsonChars={ToLogLength(mergedOcrJson)} mergedNormalizedJsonChars={ToLogLength(mergedNormalizedJson)} lines={(body?.lines?.Count ?? 0)} traceId={traceId}");
         }
 
         // Falls back when the fast profile cannot produce a complete ticket payload for AX.
@@ -3861,6 +3908,14 @@ namespace IND_CRM_API.Controllers.CRM
                 validationErrors.Add(new IndValidationError { Field = "urlFile", Message = "urlFile es obligatorio para aplicar IA." });
             if (string.IsNullOrWhiteSpace(mergedFileName))
                 validationErrors.Add(new IndValidationError { Field = "fileName", Message = "fileName o fileExtension es obligatorio para aplicar IA." });
+
+            LogTicketIaJsonPayload(
+                "quick-create-apply",
+                fileId,
+                body,
+                mergedOcrJson,
+                mergedNormalizedJson,
+                traceId);
 
             if (validationErrors.Any())
             {
@@ -4841,6 +4896,14 @@ namespace IND_CRM_API.Controllers.CRM
         private static string ToLogValue(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
+        }
+
+        // Formats string length for logs so null and empty JSON payloads are distinguishable.
+        private static string ToLogLength(string value)
+        {
+            return value == null
+                ? "null"
+                : value.Length.ToString(CultureInfo.InvariantCulture);
         }
 
         // Converts bool to AX int (1/0).

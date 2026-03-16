@@ -20,7 +20,7 @@ namespace IND_CRM_API.Services
     /// <summary>
     /// Extracts draft expense-sheet payload from ticket images using OpenAI Responses API.
     /// </summary>
-    public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService
+    public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService, IOpenAITicketNormalizationService
     {
         private const string DefaultModel = "gpt-5-mini";
         private const int DefaultTimeoutSeconds = 180;
@@ -216,6 +216,148 @@ namespace IND_CRM_API.Services
             catch (Exception ex) when (!(ex is InvalidOperationException))
             {
                 _logger.Log("[OPENAI] Error extrayendo draft: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                throw;
+            }
+            finally
+            {
+                response?.Dispose();
+            }
+        }
+
+        public async Task<OpenAITicketNormalizationResult> NormalizeReceiptAsync(
+            AzureReceiptAnalysisResult receiptAnalysis,
+            string fileName,
+            ExpenseTicketDraftProfile profile,
+            CancellationToken cancellationToken)
+        {
+            if (receiptAnalysis == null)
+                throw new ArgumentNullException(nameof(receiptAnalysis));
+
+            if (string.IsNullOrWhiteSpace(receiptAnalysis.PromptJson))
+                throw new ArgumentException("receiptAnalysis.PromptJson es obligatorio.", nameof(receiptAnalysis));
+
+            var openAiApiKey = GetOpenAiApiKey();
+            if (string.IsNullOrWhiteSpace(openAiApiKey))
+                throw new InvalidOperationException("OpenAI API key no esta configurada.");
+
+            var safeFileName = string.IsNullOrWhiteSpace(fileName) ? "ticket" : fileName.Trim();
+            var promptText = BuildStructuredOcrPayloadPromptText(profile);
+            var requestOptions = BuildRequestOptions(profile, null);
+            HttpResponseMessage response = null;
+            string responseBody = null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var attempt = 0;
+            var retriedWithoutServiceTier = false;
+            var retriedWithExpandedOutput = false;
+
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+                while (true)
+                {
+                    attempt++;
+
+                    var payloadJson = BuildTextPayloadJson(promptText, receiptAnalysis.PromptJson, safeFileName, requestOptions);
+                    var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
+
+                    _logger.Log(
+                        $"[OPENAI-NORMALIZE] Receipt normalization request attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} ocrBytes={Encoding.UTF8.GetByteCount(receiptAnalysis.PromptJson)} payloadBytes={payloadBytes} fileName={safeFileName}",
+                        AxaptaSessionManager.LogLevel.Info);
+
+                    response?.Dispose();
+                    response = null;
+
+                    using (var request = CreateRequestMessage(payloadJson, openAiApiKey))
+                    {
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
+                            .ConfigureAwait(false);
+                        responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    }
+
+                    if (!response.IsSuccessStatusCode &&
+                        !retriedWithoutServiceTier &&
+                        ShouldRetryWithoutServiceTier(response.StatusCode, responseBody, requestOptions.ServiceTier))
+                    {
+                        retriedWithoutServiceTier = true;
+                        _logger.Log(
+                            $"[OPENAI-NORMALIZE] Retry without priority attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier}",
+                            AxaptaSessionManager.LogLevel.Warning);
+
+                        requestOptions = BuildRequestOptions(requestOptions.DraftProfile, "auto", requestOptions.MaxOutputTokens);
+                        continue;
+                    }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var summary = TryExtractOpenAiErrorSummary(responseBody);
+                        var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
+                        _logger.Log(
+                            $"[OPENAI-NORMALIZE] Receipt normalization failed attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
+                            AxaptaSessionManager.LogLevel.Warning);
+
+                        if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
+                        {
+                            throw new IND_OpenAiRateLimitException(
+                                "OpenAI rate limit exceeded while normalizing Azure receipt OCR.",
+                                retryAfterSeconds,
+                                summary);
+                        }
+
+                        throw new Exception("Error en servicio de normalizacion de ticket.");
+                    }
+
+                    var incompleteReason = TryExtractIncompleteReason(responseBody);
+                    if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var metrics = TryReadResponseMetrics(responseBody);
+                        if (!retriedWithExpandedOutput &&
+                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        {
+                            retriedWithExpandedOutput = true;
+                            _logger.Log(
+                                $"[OPENAI-NORMALIZE] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
+                                AxaptaSessionManager.LogLevel.Warning);
+
+                            requestOptions = expandedRequestOptions;
+                            continue;
+                        }
+
+                        _logger.Log(
+                            $"[OPENAI-NORMALIZE] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
+                            AxaptaSessionManager.LogLevel.Warning);
+                        throw new Exception("OpenAI recorto el draft por max_output_tokens.");
+                    }
+
+                    var extracted = TryParseExpenseDraft(responseBody);
+                    if (extracted == null)
+                    {
+                        _logger.Log("[OPENAI-NORMALIZE] Respuesta sin json valido de normalizacion de ticket.", AxaptaSessionManager.LogLevel.Warning);
+                        throw new Exception("OpenAI no devolvio un JSON valido para la normalizacion del ticket.");
+                    }
+
+                    var successMetrics = TryReadResponseMetrics(responseBody);
+                    var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
+                    _logger.Log(
+                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} normalizedJsonChars={normalizedJson.Length}",
+                        AxaptaSessionManager.LogLevel.Info);
+
+                    return new OpenAITicketNormalizationResult
+                    {
+                        Draft = extracted,
+                        NormalizedJson = normalizedJson,
+                        Attempts = attempt
+                    };
+                }
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.Log("[OPENAI-NORMALIZE] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                throw;
+            }
+            catch (Exception ex) when (!(ex is InvalidOperationException))
+            {
+                _logger.Log("[OPENAI-NORMALIZE] Error normalizando OCR: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
                 throw;
             }
             finally
@@ -597,6 +739,62 @@ namespace IND_CRM_API.Services
             return JsonConvert.SerializeObject(payload);
         }
 
+        private static string BuildTextPayloadJson(string prompt, string structuredOcrJson, string fileName, ExpenseTicketRequestOptions requestOptions)
+        {
+            var format = new JObject
+            {
+                ["type"] = "json_schema",
+                ["name"] = BuildResponseFormatName(requestOptions.DraftProfile),
+                ["schema"] = BuildResponseSchema(requestOptions.DraftProfile),
+                ["strict"] = true
+            };
+
+            var payload = new JObject
+            {
+                ["model"] = requestOptions.Model,
+                ["input"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["role"] = "user",
+                        ["content"] = new JArray
+                        {
+                            new JObject
+                            {
+                                ["type"] = "input_text",
+                                ["text"] = prompt
+                            },
+                            new JObject
+                            {
+                                ["type"] = "input_text",
+                                ["text"] = $"OCR JSON for file '{fileName}':\n{structuredOcrJson}"
+                            }
+                        }
+                    }
+                },
+                ["text"] = new JObject
+                {
+                    ["format"] = format
+                },
+                ["max_output_tokens"] = requestOptions.MaxOutputTokens,
+                ["metadata"] = new JObject
+                {
+                    ["expense_ticket_profile"] = requestOptions.ProfileTag,
+                    ["expense_ticket_draft_profile"] = GetDraftProfileText(requestOptions.DraftProfile),
+                    ["expense_ticket_input_source"] = "azure-docs-json",
+                    ["expense_ticket_requested_tier"] = requestOptions.ServiceTier ?? "auto"
+                }
+            };
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.ServiceTier))
+                payload["service_tier"] = requestOptions.ServiceTier;
+
+            if (!string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey))
+                payload["prompt_cache_key"] = requestOptions.PromptCacheKey;
+
+            return JsonConvert.SerializeObject(payload);
+        }
+
         private static string BuildResponseFormatName(ExpenseTicketDraftProfile profile)
         {
             return profile == ExpenseTicketDraftProfile.QuickCreate
@@ -609,6 +807,19 @@ namespace IND_CRM_API.Services
             return profile == ExpenseTicketDraftProfile.QuickCreate
                 ? BuildQuickCreatePayloadPromptText()
                 : BuildFullDraftPayloadPromptText();
+        }
+
+        private static string BuildStructuredOcrPayloadPromptText(ExpenseTicketDraftProfile profile)
+        {
+            return
+                @"Recibiras un JSON OCR estructurado de Azure Document Intelligence (prebuilt-receipt).
+- Usa ese JSON OCR como fuente principal para construir el contrato CRM.
+- Responde SOLO JSON valido, sin markdown ni texto narrativo.
+- No inventes campos ni lineas que no tengan soporte razonable en el OCR.
+- Si faltan datos, aplica null o warnings segun las reglas del schema.
+- Mantiene todas las lineas detectables del ticket cuando el OCR muestre conceptos separados.
+- No describas el OCR; solo devuelve el JSON final del ticket."
+                .Trim() + Environment.NewLine + BuildPayloadPromptText(profile);
         }
 
         private static string BuildFullDraftPayloadPromptText()
@@ -1277,6 +1488,117 @@ namespace IND_CRM_API.Services
                 return any.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             return null;
+        }
+
+        private static string BuildNormalizedDraftJson(ExpenseSheetDraftResponse draft, ExpenseTicketDraftProfile profile)
+        {
+            var root = profile == ExpenseTicketDraftProfile.QuickCreate
+                ? BuildQuickCreateNormalizedDraftToken(draft)
+                : BuildFullNormalizedDraftToken(draft);
+
+            return JsonConvert.SerializeObject(root, Formatting.None);
+        }
+
+        private static JObject BuildFullNormalizedDraftToken(ExpenseSheetDraftResponse draft)
+        {
+            var lines = new JArray();
+            foreach (var line in draft?.lines ?? new List<CreateExpenseSheetLineRequest>())
+                lines.Add(BuildFullNormalizedLineToken(line));
+
+            return new JObject
+            {
+                ["mode"] = draft?.mode ?? 0,
+                ["description"] = ToNullableStringToken(draft?.description),
+                ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
+                ["gastoType"] = ToNullableIntToken(draft?.gastoType),
+                ["exchRate"] = ToNullableDecimalToken(draft?.exchRate),
+                ["projId"] = ToNullableStringToken(draft?.projId),
+                ["confidence"] = ToNullableDecimalToken(draft?.Confidence),
+                ["warnings"] = BuildWarningsToken(draft?.Warnings),
+                ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
+                ["merchant"] = ToNullableStringToken(draft?.Merchant),
+                ["lines"] = lines
+            };
+        }
+
+        private static JObject BuildQuickCreateNormalizedDraftToken(ExpenseSheetDraftResponse draft)
+        {
+            var lines = new JArray();
+            foreach (var line in draft?.lines ?? new List<CreateExpenseSheetLineRequest>())
+                lines.Add(BuildQuickCreateNormalizedLineToken(line));
+
+            return new JObject
+            {
+                ["description"] = ToNullableStringToken(draft?.description),
+                ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
+                ["gastoType"] = new JValue(draft?.gastoType ?? 8),
+                ["warnings"] = BuildWarningsToken(draft?.Warnings),
+                ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
+                ["merchant"] = ToNullableStringToken(draft?.Merchant),
+                ["lines"] = lines
+            };
+        }
+
+        private static JObject BuildFullNormalizedLineToken(CreateExpenseSheetLineRequest line)
+        {
+            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
+            var price = line?.price;
+            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+
+            return new JObject
+            {
+                ["transDate"] = ToNullableStringToken(line?.transDate),
+                ["typeValue"] = new JValue(line?.typeValue ?? 8),
+                ["description"] = ToNullableStringToken(line?.description),
+                ["internacional"] = line?.internacional.HasValue == true ? new JValue(line.internacional.Value) : JValue.CreateNull(),
+                ["fileId"] = ToNullableStringToken(line?.fileId),
+                ["qty"] = new JValue(qty),
+                ["price"] = ToNullableDecimalToken(price),
+                ["lineTotal"] = ToNullableDecimalToken(lineTotal),
+                ["projId"] = ToNullableStringToken(line?.projId)
+            };
+        }
+
+        private static JObject BuildQuickCreateNormalizedLineToken(CreateExpenseSheetLineRequest line)
+        {
+            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
+            var price = line?.price;
+            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+
+            return new JObject
+            {
+                ["transDate"] = ToNullableStringToken(line?.transDate),
+                ["description"] = ToNullableStringToken(line?.description),
+                ["qty"] = new JValue(qty),
+                ["price"] = ToNullableDecimalToken(price),
+                ["lineTotal"] = ToNullableDecimalToken(lineTotal)
+            };
+        }
+
+        private static JToken BuildWarningsToken(List<string> warnings)
+        {
+            if (warnings == null || warnings.Count == 0)
+                return JValue.CreateNull();
+
+            return new JArray(warnings
+                .Where(w => !string.IsNullOrWhiteSpace(w))
+                .Select(w => w.Trim()));
+        }
+
+        private static JToken ToNullableStringToken(string value)
+        {
+            var normalized = NormalizeText(value, null);
+            return normalized == null ? JValue.CreateNull() : new JValue(normalized);
+        }
+
+        private static JToken ToNullableDecimalToken(decimal? value)
+        {
+            return value.HasValue ? new JValue(value.Value) : JValue.CreateNull();
+        }
+
+        private static JToken ToNullableIntToken(int? value)
+        {
+            return value.HasValue ? new JValue(value.Value) : JValue.CreateNull();
         }
 
         private static string NormalizeText(string value, string defaultValue)

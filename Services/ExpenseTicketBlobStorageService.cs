@@ -22,6 +22,7 @@ namespace IND_CRM_API.Services
         private const string PrefixEnvVar = "AZURE_BLOB_BASE_PREFIX";
         private const string DefaultContainer = "tickets";
         private const string DefaultPrefix = "crmtickets";
+        private const string TemporaryCompanySegment = "aitemp";
 
         private readonly IAxLogger _logger;
         private readonly object _storageContextLock = new object();
@@ -76,6 +77,72 @@ namespace IND_CRM_API.Services
                 BlobUrl = blob.Uri.AbsoluteUri,
                 ContainerName = context.Container.Name
             };
+        }
+
+        /// <summary>
+        /// Sube una imagen temporal para OCR por URI y devuelve su ubicacion final.
+        /// </summary>
+        public TicketBlobUploadResult UploadTemporaryTicketFile(
+            string fileName,
+            Stream content,
+            string contentType)
+        {
+            if (content == null)
+                throw new ArgumentNullException(nameof(content));
+
+            var context = ResolveStorageContext();
+            var safeFileName = NormalizeTemporaryFileName(fileName);
+            var blobName = BuildBlobName(context.BasePrefix, TemporaryCompanySegment, safeFileName);
+            var blob = context.Container.GetBlockBlobReference(blobName);
+
+            blob.Properties.ContentType = ResolveContentType(contentType, safeFileName);
+            blob.Metadata["companyId"] = TemporaryCompanySegment;
+            blob.Metadata["axUserId"] = string.Empty;
+            blob.Metadata["fileId"] = string.Empty;
+
+            if (content.CanSeek)
+                content.Position = 0;
+
+            var contentLength = TryGetStreamLength(content);
+            var uploadSw = System.Diagnostics.Stopwatch.StartNew();
+            blob.UploadFromStream(content);
+            _logger?.Log(
+                $"[BLOB] UploadTemporaryTicketFile blob={blobName} bytes={(contentLength.HasValue ? contentLength.Value.ToString() : "na")} contentType={blob.Properties.ContentType} ms={uploadSw.ElapsedMilliseconds}");
+
+            return new TicketBlobUploadResult
+            {
+                BlobName = blobName,
+                BlobUrl = blob.Uri.AbsoluteUri,
+                ContainerName = context.Container.Name
+            };
+        }
+
+        /// <summary>
+        /// Genera una URL temporal de lectura para un blob ya almacenado.
+        /// </summary>
+        public string CreateReadOnlyBlobUrl(string blobUrl, TimeSpan validFor)
+        {
+            if (string.IsNullOrWhiteSpace(blobUrl))
+                throw new ArgumentException("blobUrl es obligatorio.", nameof(blobUrl));
+
+            var context = ResolveStorageContext();
+            if (!Uri.TryCreate(blobUrl.Trim(), UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("La URL del blob no es valida.");
+
+            if (!TryResolveBlobName(uri, context.Container.Name, out var blobName))
+                throw new InvalidOperationException("La URL del blob no pertenece al contenedor configurado.");
+
+            var blob = context.Container.GetBlockBlobReference(blobName);
+            var ttl = validFor > TimeSpan.Zero ? validFor : TimeSpan.FromMinutes(15);
+            var accessPolicy = new SharedAccessBlobPolicy
+            {
+                SharedAccessStartTime = DateTimeOffset.UtcNow.AddMinutes(-5),
+                SharedAccessExpiryTime = DateTimeOffset.UtcNow.Add(ttl),
+                Permissions = SharedAccessBlobPermissions.Read
+            };
+
+            var sas = blob.GetSharedAccessSignature(accessPolicy);
+            return blob.Uri.AbsoluteUri + sas;
         }
 
         /// <summary>
@@ -308,6 +375,12 @@ namespace IND_CRM_API.Services
                 safeCompany,
                 "/",
                 safeFileName);
+        }
+
+        private static string NormalizeTemporaryFileName(string fileName)
+        {
+            var safeFileName = NormalizeFileName(fileName);
+            return string.Concat(DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"), "-", Guid.NewGuid().ToString("N"), "-", safeFileName);
         }
 
         private static bool TryResolveBlobName(Uri blobUri, string expectedContainer, out string blobName)

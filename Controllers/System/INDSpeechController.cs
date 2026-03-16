@@ -391,22 +391,29 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 _logger.Log($"[IA-DRAFT] Image read bytes={imageBytes.Length} ms={fileReadSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
-
-                var openAiApiKey = GetOpenAiApiKey();
-                if (string.IsNullOrWhiteSpace(openAiApiKey))
+                var ticketAiProcessing = _ticketDraft as ITicketAIProcessingService;
+                if (ticketAiProcessing == null)
                 {
-                    _logger.Log("[IA-DRAFT] OpenAI API key no esta configurada.", AxaptaSessionManager.LogLevel.Error);
+                    _logger.Log("[IA-DRAFT] ITicketAIProcessingService no esta disponible.", AxaptaSessionManager.LogLevel.Error);
                     return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error interno del servidor.", IndErrorCodes.InternalError, null);
                 }
 
+                _logger.Log(
+                    $"[IA-DRAFT-ARCH] mode=azure-docs-json azureDocumentIntelligence=true legacyOpenAiImage=false persistTicket={persistTicket} hasTicketUrlFile={!string.IsNullOrWhiteSpace(ticketUrlFile)} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Info);
+
                 var draftSw = Stopwatch.StartNew();
-                var draft = await _ticketDraft.ExtractFromTicketImageAsync(
+                var processingResult = await ticketAiProcessing.ProcessFromImageAsync(
                     imageBytes,
                     originalFileName,
                     mediaType,
+                    ExpenseTicketDraftProfile.FullDraft,
                     cancellationToken);
+                var draft = processingResult?.Draft;
                 draftSw.Stop();
-                _logger.Log($"[IA-DRAFT] OpenAI draft generated ms={draftSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
+                _logger.Log(
+                    $"[IA-DRAFT] AzureOCR+OpenAI draft generated ms={draftSw.ElapsedMilliseconds} ocrJsonChars={(processingResult?.OcrJson == null ? "null" : processingResult.OcrJson.Length.ToString(CultureInfo.InvariantCulture))} normalizedJsonChars={(processingResult?.NormalizedJson == null ? "null" : processingResult.NormalizedJson.Length.ToString(CultureInfo.InvariantCulture))} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Info);
 
                 if (draft == null)
                 {
@@ -428,6 +435,8 @@ namespace IND_CRM_API.Controllers.System
                         company,
                         axUserId,
                         draft,
+                        processingResult?.OcrJson,
+                        processingResult?.NormalizedJson,
                         extension,
                         ticketUrlFile,
                         traceId,
@@ -515,6 +524,8 @@ namespace IND_CRM_API.Controllers.System
             string company,
             string axUserId,
             ExpenseSheetDraftResponse draft,
+            string ocrJson,
+            string normalizedJson,
             string imageExtension,
             string ticketUrlFile,
             string traceId,
@@ -588,6 +599,9 @@ namespace IND_CRM_API.Controllers.System
                 var totalAmountValue = CalculateTicketLinesTotal(validLines);
                 var gastoTypeValue = ResolveDraftGastoType(draft);
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
+                _logger.Log(
+                    $"[IA-DRAFT] Persist draft to AX mode={mode} gastoType={gastoTypeValue} ocrJsonChars={(ocrJson == null ? "null" : ocrJson.Length.ToString(CultureInfo.InvariantCulture))} normalizedJsonChars={(normalizedJson == null ? "null" : normalizedJson.Length.ToString(CultureInfo.InvariantCulture))} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Info);
 
                 var rootCon = ax.CreateContainer();
                 rootCon.Append(company);
@@ -602,6 +616,8 @@ namespace IND_CRM_API.Controllers.System
                 headerCon.Append(effectiveUrl);
                 headerCon.Append(provisionalFileName);
                 headerCon.Append(gastoTypeValue);
+                headerCon.Append(ocrJson ?? string.Empty);
+                headerCon.Append(normalizedJson ?? string.Empty);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -672,6 +688,8 @@ namespace IND_CRM_API.Controllers.System
                     // updateExpenseSheetTicket supports optional _data[12] = processedByAI (0/1)
                     updateCon.Append(1);
                     updateCon.Append(gastoTypeValue);
+                    updateCon.Append(ocrJson ?? string.Empty);
+                    updateCon.Append(normalizedJson ?? string.Empty);
 
                     var updateObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",

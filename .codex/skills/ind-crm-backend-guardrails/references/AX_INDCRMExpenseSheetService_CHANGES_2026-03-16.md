@@ -85,3 +85,78 @@ Persistencia nueva en `DocuRef`:
 - Sin cambios de indices existentes.
 - Los nuevos campos siguen siendo opcionales.
 - `updateExpenseSheetTicketFromIA` ya persiste ambos JSON en la misma llamada atomica que reemplaza lineas.
+
+## Integracion Azure OCR -> OpenAI
+
+### Objetivo aplicado
+
+El flujo activo de IA para tickets ya no usa vision directa de OpenAI en los endpoints publicados.
+
+Ahora el pipeline activo es:
+
+- Blob URL
+- Azure Document Intelligence (`prebuilt-receipt`)
+- JSON OCR estructurado
+- OpenAI normaliza ese JSON al contrato CRM
+- AX persiste `INDOCRJson` y `INDNormalizedJson` en `DocuRef`
+
+### Servicios nuevos en API
+
+- `AzureReceiptAnalyzerService`
+  - Llama a Azure Document Intelligence por URI (`urlSource`).
+  - Devuelve:
+    - `RawJson`
+    - `PromptJson`
+    - metadatos resumidos del receipt
+
+- `OpenAITicketNormalizationService`
+  - Usa el mismo modelo OpenAI ya configurado.
+  - Ya no envia `input_image` al flujo activo.
+  - Normaliza el OCR JSON al contrato existente del draft.
+
+- `TicketAIProcessingService`
+  - Orquesta:
+    - blob SAS de lectura
+    - OCR Azure
+    - normalizacion OpenAI
+  - Implementa `IND_IExpenseTicketDraftService` para que los endpoints activos usen este pipeline sin romper contrato.
+
+### Endpoints activos ajustados
+
+- `POST /api/crm/expensesheets/tickets/quick-create`
+  - Ya no usa vision directa de OpenAI.
+  - Usa blob ya subido -> Azure OCR -> OpenAI normalization.
+  - Persiste `ocrJson` y `normalizedJson` en `updateExpenseSheetTicketFromIA`.
+
+- `POST /api/ia/service/expensefromticket`
+  - Ya no usa vision directa de OpenAI.
+  - Sube un blob temporal para OCR por URI.
+  - Si `persistTicket=true`, reenvia `ocrJson` y `normalizedJson` tambien en create/update ticket.
+
+### Compatibilidad
+
+- No cambia ninguna ruta publica.
+- No cambia el multipart esperado.
+- No cambia el response esperado.
+- Se mantiene la semantica sincronica de `quick-create`.
+
+### Logging nuevo
+
+Se agregan logs por etapa para ver el pipeline real en produccion:
+
+- `[QUICKCREATE-AI-ARCH]`
+- `[QUICKCREATE-DRAFT-START]`
+- `[QUICKCREATE-DRAFT-RESULT]`
+- `[TICKET-IA-JSON]`
+- `[IA-DRAFT-ARCH]`
+- `[AZDOCS]`
+- `[OPENAI-NORMALIZE]`
+- `[TICKET-AI]`
+
+### Verificacion funcional aplicada
+
+- Compilacion correcta con:
+  - `C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe`
+  - target `Compile`
+- La busqueda en controladores y DI ya no muestra uso activo de `input_image`.
+- El codigo legacy de vision OpenAI permanece solo como implementacion interna reutilizable, no como pipeline activo de endpoints.
