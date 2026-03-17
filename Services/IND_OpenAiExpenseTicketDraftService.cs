@@ -936,7 +936,8 @@ namespace IND_CRM_API.Services
   - 14: Taxi
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
-- Incluye transDate solo si el OCR la muestra con claridad.
+- transDate debe ir solo en cabecera, en formato DD.MM.YYYY o null.
+- No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Si qty no es visible, usa 1.
 - price debe ser el precio unitario.
@@ -1144,6 +1145,7 @@ namespace IND_CRM_API.Services
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
                 currencyCode = string.IsNullOrWhiteSpace(currencyCode) ? null : currencyCode,
                 gastoType = NormalizeTypeValue(root["gastoType"]),
+                transDate = NormalizeDate(root["transDate"]?.ToString()),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -1664,7 +1666,7 @@ namespace IND_CRM_API.Services
                 ["description"] = ToNullableStringToken(draft?.description),
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
                 ["gastoType"] = new JValue(draft?.gastoType ?? 8),
-                ["warnings"] = BuildWarningsToken(draft?.Warnings),
+                ["transDate"] = ToNullableStringToken(draft?.transDate),
                 ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
                 ["merchant"] = ToNullableStringToken(draft?.Merchant),
                 ["lines"] = lines
@@ -1699,7 +1701,6 @@ namespace IND_CRM_API.Services
 
             return new JObject
             {
-                ["transDate"] = ToNullableStringToken(line?.transDate),
                 ["description"] = ToNullableStringToken(line?.description),
                 ["qty"] = new JValue(qty),
                 ["price"] = ToNullableDecimalToken(price),
@@ -1904,13 +1905,9 @@ namespace IND_CRM_API.Services
                         ["type"] = "integer",
                         ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
                     },
-                    ["warnings"] = new JObject
+                    ["transDate"] = new JObject
                     {
-                        ["type"] = new JArray("array", "null"),
-                        ["items"] = new JObject
-                        {
-                            ["type"] = "string"
-                        }
+                        ["type"] = new JArray("string", "null")
                     },
                     ["rawCurrency"] = new JObject
                     {
@@ -1931,7 +1928,7 @@ namespace IND_CRM_API.Services
                     "description",
                     "currencyCode",
                     "gastoType",
-                    "warnings",
+                    "transDate",
                     "rawCurrency",
                     "merchant",
                     "lines")
@@ -1946,10 +1943,6 @@ namespace IND_CRM_API.Services
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["transDate"] = new JObject
-                    {
-                        ["type"] = new JArray("string", "null")
-                    },
                     ["description"] = new JObject
                     {
                         ["type"] = "string"
@@ -1968,7 +1961,6 @@ namespace IND_CRM_API.Services
                     }
                 },
                 ["required"] = new JArray(
-                    "transDate",
                     "description",
                     "qty",
                     "price",

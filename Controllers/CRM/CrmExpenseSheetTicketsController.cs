@@ -509,7 +509,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var draftSw = DiagnosticsStopwatch.StartNew();
                 try
                 {
-                    draftExtraction = await ExtractQuickCreateDraftWithFallbackAsync(
+                    draftExtraction = await ExtractQuickCreateDraftAsync(
                         ticketAiProcessing,
                         quickCreateForm.OriginalFileName,
                         resultData.UrlFile,
@@ -2716,7 +2716,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string Reason { get; set; }
         }
 
-        // Carries one quick-create extraction attempt plus validation data for fallback decisions.
+        // Carries one quick-create extraction attempt plus validation data.
         private sealed class QuickCreateDraftExtractionResult
         {
             public ExpenseTicketDraftProfile ProfileUsed { get; set; }
@@ -2726,8 +2726,6 @@ namespace IND_CRM_API.Controllers.CRM
             public List<IndValidationError> ValidationErrors { get; set; }
             public int SourceLineCount { get; set; }
             public int ValidLineCount { get; set; }
-            public bool UsedFullFallback { get; set; }
-            public string FallbackReason { get; set; }
         }
 
         // Reads and validates the multipart contract for the quick-create flow.
@@ -3241,8 +3239,8 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Runs the quick-create profile first and falls back to the full profile only when needed.
-        private async Task<QuickCreateDraftExtractionResult> ExtractQuickCreateDraftWithFallbackAsync(
+        // Runs the quick-create profile only.
+        private async Task<QuickCreateDraftExtractionResult> ExtractQuickCreateDraftAsync(
             ITicketAIProcessingService ticketAiProcessing,
             string originalFileName,
             string blobUrl,
@@ -3258,64 +3256,7 @@ namespace IND_CRM_API.Controllers.CRM
             Logger.Log(
                 $"[QUICKCREATE-DRAFT-START] architecture=azure-docs-json azureDocumentIntelligence=true legacyOpenAiImage=false requestedProfile={ExpenseTicketDraftProfile.QuickCreate} blobUrl={ToLogValue(blobUrl)} fileName={ToLogValue(originalFileName)} traceId={traceId}");
 
-            QuickCreateDraftExtractionResult quickAttempt;
-            try
-            {
-                quickAttempt = await BuildQuickCreateDraftExtractionAsync(
-                    ticketAiProcessing,
-                    originalFileName,
-                    blobUrl,
-                    urlFile,
-                    fileName,
-                    fileExtension,
-                    fallbackDescription,
-                    fallbackCurrencyCode,
-                    fallbackComentario,
-                    ExpenseTicketDraftProfile.QuickCreate,
-                    cancellationToken).ConfigureAwait(false);
-                LogQuickCreateDraftAttempt("quick-profile", traceId, quickAttempt);
-            }
-            catch (IND_OpenAiRateLimitException)
-            {
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(
-                    $"[QUICKCREATE-DRAFT-FALLBACK] reason=quick-profile-exception msg={ToLogValue(ex.Message)} traceId={traceId}",
-                    AxaptaSessionManager.LogLevel.Warning);
-
-                var fallbackFromException = await BuildQuickCreateDraftExtractionAsync(
-                    ticketAiProcessing,
-                    originalFileName,
-                    blobUrl,
-                    urlFile,
-                    fileName,
-                    fileExtension,
-                    fallbackDescription,
-                    fallbackCurrencyCode,
-                    fallbackComentario,
-                    ExpenseTicketDraftProfile.FullDraft,
-                    cancellationToken).ConfigureAwait(false);
-
-                fallbackFromException.UsedFullFallback = true;
-                fallbackFromException.FallbackReason = "quick-profile-exception";
-                LogQuickCreateDraftAttempt("full-profile-from-exception", traceId, fallbackFromException);
-                return fallbackFromException;
-            }
-
-            if (!ShouldFallbackToFullDraft(quickAttempt, out var fallbackReason))
-                return quickAttempt;
-
-            Logger.Log(
-                $"[QUICKCREATE-DRAFT-FALLBACK] reason={ToLogValue(fallbackReason)} sourceLines={quickAttempt.SourceLineCount} validLines={quickAttempt.ValidLineCount} traceId={traceId}",
-                AxaptaSessionManager.LogLevel.Warning);
-
-            var fullAttempt = await BuildQuickCreateDraftExtractionAsync(
+            var quickAttempt = await BuildQuickCreateDraftExtractionAsync(
                 ticketAiProcessing,
                 originalFileName,
                 blobUrl,
@@ -3325,13 +3266,10 @@ namespace IND_CRM_API.Controllers.CRM
                 fallbackDescription,
                 fallbackCurrencyCode,
                 fallbackComentario,
-                ExpenseTicketDraftProfile.FullDraft,
+                ExpenseTicketDraftProfile.QuickCreate,
                 cancellationToken).ConfigureAwait(false);
-
-            fullAttempt.UsedFullFallback = true;
-            fullAttempt.FallbackReason = fallbackReason;
-            LogQuickCreateDraftAttempt("full-profile-from-validation", traceId, fullAttempt);
-            return fullAttempt;
+            LogQuickCreateDraftAttempt("quick-profile", traceId, quickAttempt);
+            return quickAttempt;
         }
 
         // Builds one extraction attempt and the normalized update request used by quick-create.
@@ -3396,7 +3334,7 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var request = attempt?.UpdateRequest;
             Logger.Log(
-                $"[QUICKCREATE-DRAFT-RESULT] stage={ToLogValue(stage)} profile={ToLogValue(attempt?.ProfileUsed.ToString())} usedFullFallback={(attempt?.UsedFullFallback ?? false)} fallbackReason={ToLogValue(attempt?.FallbackReason)} sourceLines={(attempt?.SourceLineCount ?? 0)} validLines={(attempt?.ValidLineCount ?? 0)} validationErrors={(attempt?.ValidationErrors?.Count ?? 0)} ocrJsonChars={ToLogLength(request?.ocrJson)} normalizedJsonChars={ToLogLength(request?.normalizedJson)} traceId={traceId}");
+                $"[QUICKCREATE-DRAFT-RESULT] stage={ToLogValue(stage)} profile={ToLogValue(attempt?.ProfileUsed.ToString())} sourceLines={(attempt?.SourceLineCount ?? 0)} validLines={(attempt?.ValidLineCount ?? 0)} validationErrors={(attempt?.ValidationErrors?.Count ?? 0)} ocrJsonChars={ToLogLength(request?.ocrJson)} normalizedJsonChars={ToLogLength(request?.normalizedJson)} traceId={traceId}");
         }
 
         // Logs the JSON payload state before sending the final IA update to AX.
@@ -3410,56 +3348,6 @@ namespace IND_CRM_API.Controllers.CRM
         {
             Logger.Log(
                 $"[TICKET-IA-JSON] operation={ToLogValue(operation)} fileId={ToLogValue(fileId)} requestOcrJsonChars={ToLogLength(body?.ocrJson)} requestNormalizedJsonChars={ToLogLength(body?.normalizedJson)} mergedOcrJsonChars={ToLogLength(mergedOcrJson)} mergedNormalizedJsonChars={ToLogLength(mergedNormalizedJson)} lines={(body?.lines?.Count ?? 0)} traceId={traceId}");
-        }
-
-        // Falls back when the fast profile cannot produce a complete ticket payload for AX.
-        private static bool ShouldFallbackToFullDraft(QuickCreateDraftExtractionResult attempt, out string reason)
-        {
-            reason = string.Empty;
-
-            if (attempt == null)
-            {
-                reason = "quick-attempt-null";
-                return true;
-            }
-
-            if (attempt.Draft == null)
-            {
-                reason = "draft-null";
-                return true;
-            }
-
-            if (attempt.UpdateRequest == null)
-            {
-                reason = "update-request-null";
-                return true;
-            }
-
-            if (attempt.SourceLineCount <= 0)
-            {
-                reason = "no-lines-detected";
-                return true;
-            }
-
-            if (attempt.ValidLineCount <= 0)
-            {
-                reason = "no-valid-lines";
-                return true;
-            }
-
-            if (attempt.ValidLineCount != attempt.SourceLineCount)
-            {
-                reason = "dropped-invalid-lines";
-                return true;
-            }
-
-            if (attempt.ValidationErrors != null && attempt.ValidationErrors.Count > 0)
-            {
-                reason = "validation-failed";
-                return true;
-            }
-
-            return false;
         }
 
         // Maps an IA draft into the existing update-from-IA request contract.
@@ -3534,6 +3422,9 @@ namespace IND_CRM_API.Controllers.CRM
         private static QuickCreateTransDateResolution ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
         {
             var rawCandidates = new List<string>();
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.transDate))
+                rawCandidates.Add(draft.transDate.Trim());
+
             if (draft?.lines != null)
             {
                 foreach (var line in draft.lines)

@@ -9,6 +9,7 @@ namespace IND_CRM_API.Contracts.Responses
     public class ExpenseSheetDraftResponse : CreateExpenseSheetRequest
     {
         public int? gastoType { get; set; }
+        public string transDate { get; set; }
         public decimal? Confidence { get; set; }
         public List<string> Warnings { get; set; }
         public string RawCurrency { get; set; }

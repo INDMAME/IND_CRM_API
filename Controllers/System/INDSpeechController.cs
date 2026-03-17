@@ -761,9 +761,15 @@ namespace IND_CRM_API.Controllers.System
             draft.Warnings.Add(warning.Trim());
         }
 
-        // Resuelve fecha cabecera del ticket a partir de lineas o fecha actual.
+        // Resuelve fecha cabecera del ticket desde cabecera, lineas o fecha actual.
         private static string ResolveDraftTransDate(ExpenseSheetDraftResponse draft)
         {
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.transDate))
+            {
+                if (TryNormalizeYmdDate(draft.transDate, out var normalizedHeader))
+                    return normalizedHeader;
+            }
+
             if (draft?.lines != null)
             {
                 foreach (var line in draft.lines)
