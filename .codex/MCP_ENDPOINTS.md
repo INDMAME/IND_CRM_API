@@ -1,6 +1,6 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-02-27)
+# IND_CRM_API MCP Endpoints (actualizado 2026-03-17)
 
-Fuentes: `.codex/ENDPOINTS.md` + Postman V25.
+Fuentes: `.codex/ENDPOINTS.md` + Postman V28.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
@@ -184,14 +184,25 @@ Endpoints
   - `mode` (0|1|2)
   - `existingFileId` (requerido cuando `mode=2`)
   - `description`, `currencyCode`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (requeridos cuando `mode=0|1`)
-  - `totalAmount`, `comentario`, `fileExtension`, `gastoType` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
+  - `totalAmount`, `comentario`, `fileExtension`, `gastoType`, `ocrJson`, `normalizedJson` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
   - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
+
+### Tool: crm_expensesheets_tickets_quick_create
+- HTTP: POST `/api/crm/expensesheets/tickets/quick-create`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: multipart/form-data`
+- Body multipart:
+  - Requerido: `ticketImage` (jpg/jpeg/png/webp, max 50 MB)
+  - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projectId`
+- Flujo: crea ticket provisional, sube archivo, ejecuta OCR + normalizacion IA, finaliza ticket y opcionalmente lo vincula a una hoja existente.
+- Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `StepTraceIds`
+- Errores relevantes: 422 validacion, 429 limite IA, 500 error interno
 
 ### Tool: crm_expensesheets_tickets_get
 - HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta: cabecera incluye `processedByAI`, `gastoType` y `hojaGastosIdDisplay`.
+- Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson` y `normalizedJson`.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`
@@ -230,7 +241,7 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
@@ -240,7 +251,7 @@ Endpoints
   - `description`, `currencyCode`, `gastoType`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (se completan desde ticket actual si no se envian)
   - `totalAmount` (opcional)
   - `comentario` (opcional)
-  - `fileName` (opcional), `fileExtension` (opcional si no hay `fileName`)
+  - `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional si no hay `fileName`)
   - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional)
 - Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
 - Compatibilidad: acepta body directo del contrato IA o envelope de `expensefromticket` (`Success/Message/Data/TraceId`) y mapea `Data` de forma interna.
