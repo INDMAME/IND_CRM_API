@@ -19,6 +19,7 @@ namespace IND_CRM_API.App_Start
     {
         private const string SpeechPath = "/api/ia/service/speech";
         private const string ExpenseFromTicketPath = "/api/ia/service/expensefromticket";
+        private const string ExpenseSheetAskPath = "/api/ia/service/expensesheets/ask";
         private const string QuickCreateTicketPath = "/api/crm/expensesheets/tickets/quick-create";
 
         private const string SpeechMaxRequestsSettingKey = "OpenAI:RateLimitSpeechMaxRequests";
@@ -46,6 +47,12 @@ namespace IND_CRM_API.App_Start
         private static readonly EndpointLimit ExpenseFromTicketLimit = new EndpointLimit(
             "expensefromticket",
             NormalizePath(ExpenseFromTicketPath),
+            ReadPositiveIntFromConfig(ExpenseMaxRequestsSettingKey, DefaultExpenseMaxRequests),
+            TimeSpan.FromSeconds(ReadPositiveIntFromConfig(ExpenseWindowSecondsSettingKey, DefaultExpenseWindowSeconds)));
+
+        private static readonly EndpointLimit ExpenseSheetAskLimit = new EndpointLimit(
+            "expensesheets-ask",
+            NormalizePath(ExpenseSheetAskPath),
             ReadPositiveIntFromConfig(ExpenseMaxRequestsSettingKey, DefaultExpenseMaxRequests),
             TimeSpan.FromSeconds(ReadPositiveIntFromConfig(ExpenseWindowSecondsSettingKey, DefaultExpenseWindowSeconds)));
 
@@ -210,6 +217,12 @@ namespace IND_CRM_API.App_Start
             if (string.Equals(path, ExpenseFromTicketLimit.Path, StringComparison.OrdinalIgnoreCase))
             {
                 endpoint = ExpenseFromTicketLimit;
+                return true;
+            }
+
+            if (string.Equals(path, ExpenseSheetAskLimit.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                endpoint = ExpenseSheetAskLimit;
                 return true;
             }
 

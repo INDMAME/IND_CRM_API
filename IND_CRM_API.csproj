@@ -173,6 +173,7 @@
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetTicketRequest.cs" />
+    <Compile Include="Contracts\Requests\AskExpenseSheetsAiRequest.cs" />
     <Compile Include="Contracts\Requests\BulkLinkExpenseSheetTicketsRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetsListRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetTicketLinkListRequest.cs" />
@@ -185,6 +186,7 @@
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
+    <Compile Include="Contracts\Responses\AskExpenseSheetsAiResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
@@ -210,12 +212,14 @@
     <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
     <Compile Include="Controllers\System\AuthController.cs" />
+    <Compile Include="Controllers\System\INDExpenseSheetsAiController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
     <Compile Include="Controllers\System\McpToolsController.cs" />
     <Compile Include="Helpers\AxContainerReadHelper.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
     <Compile Include="Helpers\AppSettingsHelper.cs" />
     <Compile Include="Helpers\CurrencyCodeHelper.cs" />
+    <Compile Include="Helpers\ExpenseSheetListQueryHelper.cs" />
     <Compile Include="Helpers\ExpenseTicketImageHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
@@ -232,6 +236,7 @@
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
+    <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
     <Compile Include="Services\OpenErApiExchangeRateProvider.cs" />
@@ -243,6 +248,7 @@
     <Compile Include="Services\IND_AxRequestContext.cs" />
     <Compile Include="Services\IND_AxSessionGuard.cs" />
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
+    <Compile Include="Services\IND_OpenAiDatasetAnswerService.cs" />
     <Compile Include="Services\IND_OpenAiModerationService.cs" />
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
@@ -250,12 +256,14 @@
     <Compile Include="Services\OpenAITicketNormalizationService.cs" />
     <Compile Include="Services\TicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
+    <Compile Include="Services\Interfaces\IAiDatasetAnswerService.cs" />
     <Compile Include="Services\Interfaces\IAzureReceiptAnalyzerService.cs" />
     <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
+    <Compile Include="Services\Interfaces\IExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\IOpenAITicketNormalizationService.cs" />
     <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />

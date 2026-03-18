@@ -23,12 +23,14 @@ namespace IND_CRM_API.App_Start
             var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
             var azureReceiptAnalyzerService = new AzureReceiptAnalyzerService(axLogger);
             var openAiDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
+            var openAiDatasetAnswerService = new IND_OpenAiDatasetAnswerService(axLogger);
             var openAiTicketNormalizationService = new OpenAITicketNormalizationService(openAiDraftService);
             var ticketAiProcessingService = new TicketAIProcessingService(
                 expenseTicketBlobStorageService,
                 azureReceiptAnalyzerService,
                 openAiTicketNormalizationService,
                 axLogger);
+            var expenseSheetAiDatasetProvider = new ExpenseSheetAiDatasetProvider(sessionManager, axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbExchangeRateProvider = new EcbExchangeRateProvider(axLogger);
             var frankfurterExchangeRateProvider = new FrankfurterExchangeRateProvider(axLogger);
@@ -54,6 +56,8 @@ namespace IND_CRM_API.App_Start
                 { typeof(IExpenseTicketBlobStorageService), expenseTicketBlobStorageService },
                 { typeof(IAzureReceiptAnalyzerService), azureReceiptAnalyzerService },
                 { typeof(IOpenAITicketNormalizationService), openAiTicketNormalizationService },
+                { typeof(IAiDatasetAnswerService), openAiDatasetAnswerService },
+                { typeof(IExpenseSheetAiDatasetProvider), expenseSheetAiDatasetProvider },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };
 

@@ -579,6 +579,52 @@ namespace IND_CRM_API.Controllers.CRM
                 var normalizationErrors = draftExtraction.ValidationErrors ?? new List<IndValidationError>();
                 if (normalizationErrors.Any())
                 {
+                    if (ShouldFallbackQuickCreateToHeaderOnly(normalizationErrors))
+                    {
+                        var headerOnlyMessage = string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId)
+                            ? "Ticket creado. No se detectaron lineas validas; revisar manualmente."
+                            : "Ticket creado. No se detectaron lineas validas; no se vinculo a la hoja y requiere revision manual.";
+
+                        if (!TryApplyQuickCreateDraftHeaderCore(
+                                ax,
+                                company,
+                                axUserId,
+                                resultData.FileId,
+                                updateRequest,
+                                traceId,
+                                out var headerApplyResult,
+                                out var headerApplyError,
+                                out var headerApplyStatus))
+                        {
+                            LogOut(headerApplyStatus);
+                            return Content(headerApplyStatus, BuildQuickCreateErrorResponse(
+                                traceId,
+                                headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.",
+                                headerApplyError?.ErrorCode ?? IndErrorCodes.InternalError,
+                                resultData,
+                                headerApplyError?.Errors));
+                        }
+
+                        resultData.FileName = string.IsNullOrWhiteSpace(headerApplyResult.FileName) ? resultData.FileName : headerApplyResult.FileName;
+                        resultData.ProcessedByAI = headerApplyResult.ProcessedByAI ?? false;
+                        if (!string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId))
+                            resultData.HojaGastosId = null;
+
+                        Logger.Log(
+                            $"[QUICKCREATE-HEADER-ONLY] fileId={ToLogValue(resultData.FileId)} requestedSheet={ToLogValue(quickCreateForm.ExistingHojaGastosId)} linkedToSheet={resultData.LinkedToSheet} processedByAI={resultData.ProcessedByAI} traceId={traceId}");
+
+                        LogOut(HttpStatusCode.Created);
+                        return Content(HttpStatusCode.Created, new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
+                        {
+                            Success = true,
+                            Message = headerOnlyMessage,
+                            ErrorCode = null,
+                            Errors = null,
+                            Data = resultData,
+                            TraceId = traceId
+                        });
+                    }
+
                     LogOut((HttpStatusCode)422);
                     return Content((HttpStatusCode)422, BuildQuickCreateErrorResponse(
                         traceId,
@@ -3738,6 +3784,155 @@ namespace IND_CRM_API.Controllers.CRM
             else
             {
                 ValidateTicketLines(body.lines, validationErrors);
+            }
+        }
+
+        // Allows quick-create to succeed with header data only when the draft only missed valid lines.
+        private static bool ShouldFallbackQuickCreateToHeaderOnly(List<IndValidationError> validationErrors)
+        {
+            return validationErrors != null &&
+                   validationErrors.Count > 0 &&
+                   validationErrors.All(error =>
+                       error != null &&
+                       string.Equals((error.Field ?? string.Empty).Trim(), "lines", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Updates ticket header and DocuRef data without replacing lines when quick-create cannot build valid detail rows.
+        private bool TryApplyQuickCreateDraftHeaderCore(
+            Axapta2Class ax,
+            string company,
+            string axUserId,
+            string fileId,
+            UpdateExpenseSheetTicketFromIARequest body,
+            string traceId,
+            out TicketIaApplyResult result,
+            out IndApiResponse<object> error,
+            out HttpStatusCode status)
+        {
+            result = null;
+            error = null;
+            status = HttpStatusCode.OK;
+
+            if (!TryGetTicketDetailFromAx(ax, company, axUserId, fileId.Trim(), traceId, out var existing, out error, out status))
+                return false;
+
+            var mergedDescription = (body?.description ?? existing.Description ?? string.Empty).Trim();
+            var mergedCurrencyCode = (body?.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            var mergedGastoType = body?.gastoType ?? existing.GastoType ?? 0;
+            var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value > 0m
+                ? body.totalAmount.Value
+                : (existing.TotalAmount ?? 0m);
+            var mergedTransDateRaw = string.IsNullOrWhiteSpace(body?.transDate) ? existing.TransDate : body.transDate;
+            var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
+            if (usedTransDateFallback)
+            {
+                Logger.Log(
+                    $"[WARN] QuickCreate header-only transDate fallback-to-today raw={ToLogValue(mergedTransDateRaw)} fileId={ToLogValue(fileId)} traceId={traceId}");
+            }
+
+            var mergedComentario = (body?.comentario ?? existing.Comentario ?? string.Empty).Trim();
+            var mergedUrlFile = (body?.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
+            var mergedFileName = (body?.fileName ?? string.Empty).Trim();
+            var mergedOcrJson = body?.ocrJson ?? existing.OcrJson;
+            var mergedNormalizedJson = body?.normalizedJson ?? existing.NormalizedJson;
+            var statusValue = existing.Status ?? TicketStatusPending;
+            if (!IsValidTicketStatus(statusValue))
+                statusValue = TicketStatusPending;
+
+            if (string.IsNullOrWhiteSpace(mergedFileName))
+            {
+                if (!string.IsNullOrWhiteSpace(body?.fileExtension))
+                {
+                    var extension = NormalizeFileExtension(body.fileExtension, "jpg");
+                    mergedFileName = BuildTicketFileName(axUserId, fileId.Trim(), extension);
+                }
+                else
+                {
+                    mergedFileName = (existing.FileName ?? string.Empty).Trim();
+                }
+            }
+
+            try
+            {
+                var updateCon = ax.CreateContainer();
+                updateCon.Append(company);
+                updateCon.Append(axUserId);
+                updateCon.Append(fileId.Trim());
+                updateCon.Append(mergedDescription);
+                updateCon.Append(mergedCurrencyCode);
+                updateCon.Append(mergedTotalAmount);
+                updateCon.Append(statusValue);
+                updateCon.Append(mergedTransDate);
+                updateCon.Append(mergedComentario);
+                updateCon.Append(mergedUrlFile);
+                updateCon.Append(mergedFileName);
+                updateCon.Append(0);
+
+                var shouldAppendExtendedDocuRefJson =
+                    body?.gastoType.HasValue == true ||
+                    mergedOcrJson != null ||
+                    mergedNormalizedJson != null ||
+                    existing.GastoType.HasValue;
+                if (shouldAppendExtendedDocuRefJson)
+                {
+                    updateCon.Append(mergedGastoType);
+
+                    if (mergedOcrJson != null || mergedNormalizedJson != null)
+                    {
+                        updateCon.Append(mergedOcrJson ?? string.Empty);
+                        updateCon.Append(mergedNormalizedJson ?? string.Empty);
+                    }
+                }
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "updateExpenseSheetTicket",
+                    updateCon);
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    status = HttpStatusCode.InternalServerError;
+                    error = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    return false;
+                }
+
+                if (!success)
+                {
+                    error = BuildTicketActionError(message, traceId, out status);
+                    return false;
+                }
+
+                result = new TicketIaApplyResult
+                {
+                    FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
+                    TotalAmount = mergedTotalAmount,
+                    ProcessedByAI = extras.Count > 1 ? (ToNullableBool(extras[1]) ?? false) : false,
+                    GastoType = mergedGastoType,
+                    FileName = mergedFileName,
+                    LineRecIds = new List<long>()
+                };
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] TryApplyQuickCreateDraftHeaderCore: {ex}");
+                status = HttpStatusCode.InternalServerError;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno al actualizar la cabecera del ticket.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return false;
             }
         }
 

@@ -345,6 +345,8 @@ namespace IND_CRM_API.Services
                     }
 
                     ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
+                    ApplySingleLineTotalFallbackFromOcr(extracted, receiptAnalysis);
+                    extracted.gastoType = ResolveDraftGastoType(extracted.gastoType, extracted.lines);
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
@@ -1219,6 +1221,43 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(draft.Warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
         }
 
+        private static void ApplySingleLineTotalFallbackFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
+        {
+            var totalAmount = receiptAnalysis?.TotalAmount;
+            if (draft == null || !totalAmount.HasValue || totalAmount.Value <= 0m)
+                return;
+
+            if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
+                return;
+
+            var fallbackTypeValue = draft.gastoType.HasValue && AllowedTypeValues.Contains(draft.gastoType.Value)
+                ? draft.gastoType.Value
+                : 8;
+            var fallbackDescription = ResolveSingleLineFallbackDescription(draft, fallbackTypeValue);
+            var fallbackTransDate = draft.lines?.FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?.transDate;
+            if (string.IsNullOrWhiteSpace(fallbackTransDate))
+                fallbackTransDate = draft.transDate;
+
+            draft.lines = new List<CreateExpenseSheetLineRequest>
+            {
+                new CreateExpenseSheetLineRequest
+                {
+                    transDate = fallbackTransDate,
+                    typeValue = fallbackTypeValue,
+                    description = fallbackDescription,
+                    internacional = false,
+                    fileId = null,
+                    qty = 1m,
+                    price = totalAmount.Value,
+                    projId = draft.projId
+                }
+            };
+
+            draft.Warnings = EnsureWarnings(
+                draft.Warnings,
+                "No se detectaron lineas de detalle; se genero una linea unica con el total del ticket.");
+        }
+
         private static string TryExtractOpenAiPayloadJson(string responseBody)
         {
             if (string.IsNullOrWhiteSpace(responseBody))
@@ -1352,6 +1391,42 @@ namespace IND_CRM_API.Services
                 price = null,
                 projId = request?.projId
             };
+        }
+
+        private static string ResolveSingleLineFallbackDescription(ExpenseSheetDraftResponse draft, int fallbackTypeValue)
+        {
+            var firstLineDescription = draft?.lines?.Select(line => NormalizeText(line?.description, null))
+                .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text) && !string.Equals(text, "Ticket", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(firstLineDescription))
+                return firstLineDescription;
+
+            var headerDescription = NormalizeText(draft?.description, null);
+            if (!string.IsNullOrWhiteSpace(headerDescription) && !string.Equals(headerDescription, "Ticket", StringComparison.OrdinalIgnoreCase))
+                return headerDescription;
+
+            var merchant = NormalizeText(draft?.Merchant, null);
+            if (!string.IsNullOrWhiteSpace(merchant))
+                return merchant;
+
+            switch (fallbackTypeValue)
+            {
+                case 1:
+                    return "Peaje";
+                case 2:
+                    return "Parking";
+                case 4:
+                    return "Desayuno";
+                case 5:
+                    return "Comida";
+                case 6:
+                    return "Cena";
+                case 7:
+                    return "Hotel";
+                case 14:
+                    return "Taxi";
+                default:
+                    return "Ticket";
+            }
         }
 
         private static List<string> ExtractWarnings(JToken warningsToken)

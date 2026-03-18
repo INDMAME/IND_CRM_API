@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -173,6 +174,10 @@ namespace IND_CRM_API.Services
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            var fallbackTotalAmount = ReadProjectedAmount(totalToken) ?? TryExtractTotalAmountFromReceiptContent(receiptContent);
+            var effectiveTotalToken = totalToken;
+            if ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) && fallbackTotalAmount.HasValue)
+                effectiveTotalToken = BuildFallbackMoneyToken(fallbackTotalAmount.Value, resolvedCurrencyCode, resolvedRawCurrency);
             var projected = new JObject
             {
                 ["source"] = "azure-document-intelligence",
@@ -193,7 +198,7 @@ namespace IND_CRM_API.Services
                     ["subtotal"] = subtotalToken ?? JValue.CreateNull(),
                     ["tax"] = taxToken ?? JValue.CreateNull(),
                     ["tip"] = tipToken ?? JValue.CreateNull(),
-                    ["total"] = totalToken ?? JValue.CreateNull()
+                    ["total"] = effectiveTotalToken ?? JValue.CreateNull()
                 },
                 ["items"] = items,
                 ["itemCount"] = items.Count
@@ -207,7 +212,7 @@ namespace IND_CRM_API.Services
                 TransactionDate = transactionDate,
                 CurrencyCode = resolvedCurrencyCode,
                 RawCurrency = resolvedRawCurrency,
-                TotalAmount = ReadProjectedAmount(totalToken),
+                TotalAmount = fallbackTotalAmount,
                 ItemCount = items.Count,
                 Warnings = new List<string>(),
                 CurrencyHints = currencyHints
@@ -313,6 +318,16 @@ namespace IND_CRM_API.Services
             return value.HasValue ? new JValue(value.Value) : JValue.CreateNull();
         }
 
+        private static JToken BuildFallbackMoneyToken(decimal amount, string currencyCode, string rawCurrency)
+        {
+            return new JObject
+            {
+                ["amount"] = amount,
+                ["currencyCode"] = ToNullableValue(currencyCode),
+                ["rawCurrency"] = ToNullableValue(rawCurrency)
+            };
+        }
+
         private static string ReadProjectedCurrencyCode(JToken token)
         {
             if (!(token is JObject currencyObject))
@@ -344,6 +359,120 @@ namespace IND_CRM_API.Services
                 return amountToken.Value<decimal>();
 
             if (decimal.TryParse(amountToken.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return null;
+        }
+
+        private static decimal? TryExtractTotalAmountFromReceiptContent(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent))
+                return null;
+
+            var lines = receiptContent
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => (line ?? string.Empty).Trim())
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToList();
+            if (lines.Count == 0)
+                return null;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                if (!IsReceiptTotalCandidateLine(line))
+                    continue;
+
+                var amount = TryExtractAmountFromLine(line);
+                if (amount.HasValue && amount.Value > 0m)
+                    return amount.Value;
+
+                if (i + 1 < lines.Count)
+                {
+                    amount = TryExtractAmountFromLine(lines[i + 1]);
+                    if (amount.HasValue && amount.Value > 0m)
+                        return amount.Value;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool IsReceiptTotalCandidateLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return false;
+
+            if (line.IndexOf("importe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                line.IndexOf("zenbatekoa", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                line.IndexOf("amount due", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (line.IndexOf("total", StringComparison.OrdinalIgnoreCase) < 0 &&
+                line.IndexOf("amount", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return false;
+            }
+
+            var excludedKeywords = new[] { "subtotal", "tax", "iva", "vat", "tip", "propina", "%" };
+            return excludedKeywords.All(keyword => line.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0);
+        }
+
+        private static decimal? TryExtractAmountFromLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return null;
+
+            if (line.IndexOf('%') >= 0)
+                return null;
+
+            var matches = Regex.Matches(
+                line,
+                @"(?<!\d)(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2}|\d+)(?!\d)");
+            if (matches.Count == 0)
+                return null;
+
+            for (int i = matches.Count - 1; i >= 0; i--)
+            {
+                var parsed = TryParseAmountText(matches[i].Value);
+                if (parsed.HasValue && parsed.Value > 0m)
+                    return parsed.Value;
+            }
+
+            return null;
+        }
+
+        private static decimal? TryParseAmountText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var candidate = new string(raw
+                .Trim()
+                .Where(ch => char.IsDigit(ch) || ch == '.' || ch == ',' || ch == '-' || ch == '+')
+                .ToArray());
+            if (string.IsNullOrWhiteSpace(candidate))
+                return null;
+
+            var lastComma = candidate.LastIndexOf(',');
+            var lastDot = candidate.LastIndexOf('.');
+            if (lastComma >= 0 && lastDot >= 0)
+            {
+                candidate = lastComma > lastDot
+                    ? candidate.Replace(".", string.Empty).Replace(',', '.')
+                    : candidate.Replace(",", string.Empty);
+            }
+            else if (lastComma >= 0)
+            {
+                candidate = candidate.Replace(',', '.');
+            }
+
+            if (decimal.TryParse(candidate, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            if (decimal.TryParse(candidate, NumberStyles.Number, CultureInfo.GetCultureInfo("es-ES"), out parsed))
                 return parsed;
 
             return null;

@@ -70,6 +70,17 @@ Endpoints
   Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId.
   Draft IA incluye `gastoType` (tipo de gasto de cabecera) y mantiene `lines[].typeValue`.
   Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
+- POST /api/ia/service/expensesheets/ask (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `question`.
+  Body optional: `answerInstructions`, `listRequest`, `sourceJson`.
+  `listRequest` reutiliza los filtros de `POST /api/crm/expensesheets/list`: `filter`, `billedMode`, `createdDateFrom`, `createdDateTo`, `projId`, `currencyCode`, `expenseSheetStatus`, `includeSubordinates`.
+  Compatibilidad: `page` y `pageSize` pueden enviarse dentro de `listRequest`, pero este endpoint los ignora.
+  `sourceJson` acepta el JSON completo devuelto por `POST /api/crm/expensesheets/list` o un array directo de registros (`Items`).
+  Limites defensivos para `sourceJson`: maximo 4 MB por request y maximo 6000 registros inline.
+  Si llega `sourceJson`, el endpoint analiza ese JSON directamente y omite la carga server-side.
+  Si no llega `sourceJson`, el backend carga todos los registros filtrados server-side y decide si responde en modo `direct` o `chunked`.
+  Response data: `Answer`, `Model`, `SourceKey`, `FiltersApplied`, `TotalSourceRecords`, `RecordsSentToModel`, `RetrievalMode`, `Truncated`, `Warnings`.
+  Errores relevantes: 422 validacion, 429 rate limit IA, 500 error interno.
 
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
