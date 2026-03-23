@@ -53,8 +53,8 @@ namespace IND_CRM_API
             /// </summary>
             public void Start()
             {
-                // Si está configurada la URL en App.config, úsala. Si no, usa el puerto por defecto.
-                string baseUrl = AppSettingsHelper.GetSetting("BaseUrl", "INDCRM_BASE_URL") ?? "http://+:7776/";
+                // Si no hay URL explicita, construir un fallback con el puerto publico configurado.
+                string baseUrl = ResolveBaseUrl();
 
                 try
                 {
@@ -64,6 +64,7 @@ namespace IND_CRM_API
 
                     _webApp = WebApp.Start<Startup>(baseUrl);
                     Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] API iniciada correctamente en {baseUrl}");
+                    LogDeploymentContext(baseUrl);
                     Console.WriteLine("Presiona Ctrl+C para detener manualmente.");
                 }
                 catch (Exception ex)
@@ -71,6 +72,41 @@ namespace IND_CRM_API
                     Console.WriteLine($"Error al iniciar la API en {baseUrl}: {ex}");
                     throw;
                 }
+            }
+
+            private static string ResolveBaseUrl()
+            {
+                var configuredBaseUrl = AppSettingsHelper.GetSetting("BaseUrl", "INDCRM_BASE_URL");
+                if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
+                    return configuredBaseUrl;
+
+                var fallbackPort = AppSettingsHelper.GetIntSetting("PublicEndpoint:Port", 7776, "INDCRM_PUBLIC_PORT");
+                return $"http://+:{fallbackPort}/";
+            }
+
+            private static void LogDeploymentContext(string baseUrl)
+            {
+                var environmentName = AppSettingsHelper.GetSetting("Deployment:EnvironmentName", "IND_ENV") ?? "UNKNOWN";
+                var publicHost = AppSettingsHelper.GetSetting("PublicEndpoint:Host", "INDCRM_PUBLIC_HOST");
+                var publicIp = AppSettingsHelper.GetSetting("PublicEndpoint:Ip", "INDCRM_PUBLIC_IP");
+                var resolvedPort = ExtractPort(baseUrl);
+                var publicPort = AppSettingsHelper.GetIntSetting(
+                    "PublicEndpoint:Port",
+                    resolvedPort > 0 ? resolvedPort : 7776,
+                    "INDCRM_PUBLIC_PORT");
+
+                Console.WriteLine(
+                    $"[{DateTime.Now:HH:mm:ss}] Deployment={environmentName} PublicHost={DisplayValue(publicHost)} PublicIp={DisplayValue(publicIp)} PublicPort={publicPort}");
+
+                if (resolvedPort > 0 && publicPort > 0 && resolvedPort != publicPort)
+                {
+                    Console.WriteLine(
+                        $"WARNING: BaseUrl uses port {resolvedPort} but PublicEndpoint:Port is configured as {publicPort}.");
+                }
+
+                var publicUrl = BuildPublicUrl(publicHost, publicPort);
+                if (!string.IsNullOrWhiteSpace(publicUrl))
+                    Console.WriteLine($"Public endpoint hint: {publicUrl}");
             }
 
             /// <summary>
@@ -165,6 +201,19 @@ namespace IND_CRM_API
                 }
                 catch { }
                 return -1;
+            }
+
+            private static string BuildPublicUrl(string host, int port)
+            {
+                if (string.IsNullOrWhiteSpace(host) || port <= 0)
+                    return null;
+
+                return $"https://{host}:{port}/";
+            }
+
+            private static string DisplayValue(string value)
+            {
+                return string.IsNullOrWhiteSpace(value) ? "n/a" : value;
             }
 
             private static string RunProcess(string fileName, string arguments)

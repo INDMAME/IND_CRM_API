@@ -49,8 +49,31 @@ namespace IND_CRM_API.Helpers
             }
 
             if (string.IsNullOrWhiteSpace(value))
-                value = ConfigurationManager.AppSettings[key];
+                return GetConfigSetting(key, envVarNames);
 
+            return NormalizeExpandedValue(value, envVarNames);
+        }
+
+        /// <summary>
+        /// Obtiene un valor solo desde AppSettings, expandiendo variables de entorno y anulando placeholders sin resolver.
+        /// </summary>
+        /// <param name="key">Clave de AppSettings.</param>
+        /// <param name="envVarNames">Variables de entorno que pueden aparecer como placeholder en el valor.</param>
+        /// <returns>Valor resuelto o null si no existe o sigue sin resolver.</returns>
+        public static string GetConfigSetting(string key, params string[] envVarNames)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return null;
+
+            var value = ConfigurationManager.AppSettings[key];
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return NormalizeExpandedValue(value, envVarNames);
+        }
+
+        private static string NormalizeExpandedValue(string value, string[] envVarNames)
+        {
             if (string.IsNullOrWhiteSpace(value))
                 return null;
 

@@ -1118,12 +1118,12 @@ namespace IND_CRM_API.Controllers.System
                 if (!string.IsNullOrWhiteSpace(envValue))
                     return envValue;
 
-                var cfgPath = ConfigurationManager.AppSettings[DefaultPromptPathAppSettingKey];
+                var cfgPath = AppSettingsHelper.GetConfigSetting(DefaultPromptPathAppSettingKey, DefaultPromptPathEnvVar);
                 var fromCfgFile = TryReadPromptFromFile(cfgPath);
                 if (!string.IsNullOrWhiteSpace(fromCfgFile))
                     return fromCfgFile;
 
-                var cfgValue = ConfigurationManager.AppSettings[DefaultPromptAppSettingKey];
+                var cfgValue = AppSettingsHelper.GetConfigSetting(DefaultPromptAppSettingKey, DefaultPromptEnvVar);
                 return string.IsNullOrWhiteSpace(cfgValue) ? null : cfgValue;
             }
             catch
@@ -1154,13 +1154,7 @@ namespace IND_CRM_API.Controllers.System
         {
             try
             {
-                // En produccion, preferir variable de entorno.
-                var env = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                if (!string.IsNullOrWhiteSpace(env))
-                    return env.Trim();
-
-                var cfg = ConfigurationManager.AppSettings["OpenAI:ApiKey"];
-                return string.IsNullOrWhiteSpace(cfg) ? null : cfg.Trim();
+                return AppSettingsHelper.GetSetting("OpenAI:ApiKey", "OPENAI_API_KEY");
             }
             catch
             {

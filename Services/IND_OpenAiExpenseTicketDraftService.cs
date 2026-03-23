@@ -609,12 +609,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var env = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                if (!string.IsNullOrWhiteSpace(env))
-                    return env.Trim();
-
-                var cfg = ConfigurationManager.AppSettings["OpenAI:ApiKey"];
-                return string.IsNullOrWhiteSpace(cfg) ? null : cfg.Trim();
+                return AppSettingsHelper.GetSetting("OpenAI:ApiKey", "OPENAI_API_KEY");
             }
             catch
             {
