@@ -16,13 +16,37 @@ namespace IND_CRM_API.Helpers
         /// <returns>Valor resuelto o null si no existe.</returns>
         public static string GetSetting(string key, string envVarName = null)
         {
+            if (string.IsNullOrWhiteSpace(envVarName))
+                return GetSetting(key, Array.Empty<string>());
+
+            return GetSetting(key, new[] { envVarName });
+        }
+
+        /// <summary>
+        /// Obtiene un valor de AppSettings, priorizando la primera variable de entorno disponible.
+        /// </summary>
+        /// <param name="key">Clave de AppSettings.</param>
+        /// <param name="envVarNames">Variables de entorno candidatas en orden de prioridad.</param>
+        /// <returns>Valor resuelto o null si no existe.</returns>
+        public static string GetSetting(string key, params string[] envVarNames)
+        {
             if (string.IsNullOrWhiteSpace(key))
                 return null;
 
             string value = null;
 
-            if (!string.IsNullOrWhiteSpace(envVarName))
-                value = Environment.GetEnvironmentVariable(envVarName);
+            if (envVarNames != null)
+            {
+                foreach (var envVarName in envVarNames)
+                {
+                    if (string.IsNullOrWhiteSpace(envVarName))
+                        continue;
+
+                    value = Environment.GetEnvironmentVariable(envVarName);
+                    if (!string.IsNullOrWhiteSpace(value))
+                        break;
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(value))
                 value = ConfigurationManager.AppSettings[key];
@@ -34,14 +58,38 @@ namespace IND_CRM_API.Helpers
             if (string.IsNullOrWhiteSpace(expanded))
                 return null;
 
-            if (!string.IsNullOrWhiteSpace(envVarName))
+            if (envVarNames != null)
             {
-                var token = "%" + envVarName + "%";
-                if (string.Equals(expanded, token, StringComparison.OrdinalIgnoreCase))
-                    return null;
+                foreach (var envVarName in envVarNames)
+                {
+                    if (string.IsNullOrWhiteSpace(envVarName))
+                        continue;
+
+                    var token = "%" + envVarName + "%";
+                    if (string.Equals(expanded, token, StringComparison.OrdinalIgnoreCase))
+                        return null;
+                }
             }
 
             return expanded;
+        }
+
+        /// <summary>
+        /// Obtiene un booleano desde variables de entorno o AppSettings.
+        /// </summary>
+        public static bool GetBoolSetting(string key, bool defaultValue = false, params string[] envVarNames)
+        {
+            var raw = GetSetting(key, envVarNames);
+            return bool.TryParse(raw, out var parsed) ? parsed : defaultValue;
+        }
+
+        /// <summary>
+        /// Obtiene un entero desde variables de entorno o AppSettings.
+        /// </summary>
+        public static int GetIntSetting(string key, int defaultValue, params string[] envVarNames)
+        {
+            var raw = GetSetting(key, envVarNames);
+            return int.TryParse(raw, out var parsed) ? parsed : defaultValue;
         }
     }
 }

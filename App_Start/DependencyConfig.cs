@@ -1,5 +1,6 @@
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -70,8 +71,10 @@ namespace IND_CRM_API.App_Start
 
             // Register message handler to refresh tokens automatically
             var refreshThresholdMinutes = 5; // renovar cuando queden 5 minutos o menos
-            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["JwtSettings:RefreshThresholdMinutes"], out var cfg))
-                refreshThresholdMinutes = cfg;
+            refreshThresholdMinutes = AppSettingsHelper.GetIntSetting(
+                "JwtSettings:RefreshThresholdMinutes",
+                refreshThresholdMinutes,
+                "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES");
 
             var tokenHandler = new TokenRefreshHandler(jwtService, sessionManager, TimeSpan.FromMinutes(refreshThresholdMinutes));
             config.MessageHandlers.Add(tokenHandler);

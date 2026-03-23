@@ -4,6 +4,7 @@ using Topshelf;
 using Microsoft.Owin.Hosting;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using IND_CRM_API.Helpers;
 
 namespace IND_CRM_API
 {
@@ -53,7 +54,7 @@ namespace IND_CRM_API
             public void Start()
             {
                 // Si está configurada la URL en App.config, úsala. Si no, usa el puerto por defecto.
-                string baseUrl = ConfigurationManager.AppSettings["BaseUrl"] ?? "http://+:7776/";
+                string baseUrl = AppSettingsHelper.GetSetting("BaseUrl", "INDCRM_BASE_URL") ?? "http://+:7776/";
 
                 try
                 {

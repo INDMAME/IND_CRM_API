@@ -27,11 +27,11 @@ namespace IND_CRM_API.Services
             new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Configuracion de Axapta
-        private readonly string _configPath = ConfigurationManager.AppSettings["AxConfigFile"];
+        private readonly string _configPath = AppSettingsHelper.GetSetting("AxConfigFile", "INDCRM_AX_CONFIG_FILE");
         private readonly string _defaultUser = AppSettingsHelper.GetSetting("Axapta.User", "USER_DEFAULT");
         private readonly string _defaultPass = AppSettingsHelper.GetSetting("Axapta.Password", "USER_PASS_DEFAULT");
-        private readonly bool _verbose = bool.TryParse(ConfigurationManager.AppSettings["Axapta.VerboseLogging"], out var v) && v;
-        private readonly string _verbosePath = ConfigurationManager.AppSettings["Axapta.VerboseLogPath"] ?? @"C:\INDAxaptaLogs";
+        private readonly bool _verbose = AppSettingsHelper.GetBoolSetting("Axapta.VerboseLogging", false, "INDCRM_AX_VERBOSE_LOGGING");
+        private readonly string _verbosePath = AppSettingsHelper.GetSetting("Axapta.VerboseLogPath", "INDCRM_AX_VERBOSE_LOG_PATH") ?? @"C:\INDAxaptaLogs";
 
         // Flag para permitir o no el uso de credenciales por defecto
         private readonly bool _allowDefaultCredentials = true;
@@ -50,7 +50,7 @@ namespace IND_CRM_API.Services
             if (_verbose && !Directory.Exists(_verbosePath))
                 Directory.CreateDirectory(_verbosePath);
 
-            var allowDefaultSetting = ConfigurationManager.AppSettings["Axapta.AllowDefaultCredentials"];
+            var allowDefaultSetting = AppSettingsHelper.GetSetting("Axapta.AllowDefaultCredentials", "INDCRM_AX_ALLOW_DEFAULT_CREDENTIALS");
             if (!string.IsNullOrWhiteSpace(allowDefaultSetting))
             {
                 if (bool.TryParse(allowDefaultSetting, out var parsed))

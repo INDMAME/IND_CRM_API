@@ -3,6 +3,7 @@ using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using IND_CRM_API.Helpers;
 
 namespace IND_CRM_API.Services
 {
@@ -32,7 +33,7 @@ namespace IND_CRM_API.Services
         {
             _logPath = GetLogPath();
 
-            string levelSetting = ConfigurationManager.AppSettings["LogLevel"] ?? "Info";
+            string levelSetting = AppSettingsHelper.GetSetting("LogLevel", "INDCRM_LOG_LEVEL") ?? "Info";
             if (!Enum.TryParse(levelSetting, true, out AxaptaSessionManager.LogLevel parsed))
                 parsed = AxaptaSessionManager.LogLevel.Info;
 
@@ -183,7 +184,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings["LogPath"];
+                var configured = AppSettingsHelper.GetSetting("LogPath", "INDCRM_LOG_PATH");
                 if (!string.IsNullOrWhiteSpace(configured))
                 {
                     if (!Directory.Exists(configured))

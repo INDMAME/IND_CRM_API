@@ -34,3 +34,8 @@ certificados/
 
 # Postman collections (local)
 .codex/Postman/
+
+# Local machine scripts and secret helpers
+scripts/local/
+scripts/*.local.ps1
+scripts/*.secrets.ps1

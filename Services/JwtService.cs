@@ -63,8 +63,8 @@ namespace IND_CRM_API.Services
         {
             // Leer configuracion JWT desde App.config o variables de entorno
             var secretKey = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
-            var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
-            var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
+            var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
+            var audience = AppSettingsHelper.GetSetting("JwtSettings:Audience", "INDCRM_JWT_AUDIENCE");
 
             if (string.IsNullOrEmpty(secretKey) || string.IsNullOrEmpty(issuer) || string.IsNullOrEmpty(audience))
                 throw new Exception("Faltan valores JWT en App.config o variables de entorno.");
@@ -111,9 +111,7 @@ namespace IND_CRM_API.Services
         /// <returns>Duración del token en minutos.</returns>
         private int GetConfiguredExpirationMinutes()
         {
-            string minutes = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
-            return int.TryParse(minutes, out int result) ? result : 60;
+            return AppSettingsHelper.GetIntSetting("JwtSettings:ExpirationMinutes", 60, "INDCRM_JWT_EXPIRATION_MINUTES");
         }
     }
 }
-

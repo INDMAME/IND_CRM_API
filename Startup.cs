@@ -46,14 +46,11 @@ namespace IND_CRM_API
             INDSwaggerConfig.Configure(config);
 
             // Optional CORS config (disabled by default)
-            var corsEnabled = false;
-            var corsEnabledSetting = ConfigurationManager.AppSettings["CorsSettings:Enabled"];
-            if (!string.IsNullOrWhiteSpace(corsEnabledSetting))
-                bool.TryParse(corsEnabledSetting, out corsEnabled);
+            var corsEnabled = AppSettingsHelper.GetBoolSetting("CorsSettings:Enabled", false, "INDCRM_CORS_ENABLED");
 
             if (corsEnabled)
             {
-                var originsSetting = ConfigurationManager.AppSettings["CorsSettings:AllowedOrigins"] ?? string.Empty;
+                var originsSetting = AppSettingsHelper.GetSetting("CorsSettings:AllowedOrigins", "INDCRM_CORS_ALLOWED_ORIGINS") ?? string.Empty;
                 var origins = originsSetting
                     .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(o => o.Trim())
@@ -93,8 +90,8 @@ namespace IND_CRM_API
             // ===========================================
             //    JWT authentication
             // ===========================================
-            var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
-            var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
+            var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
+            var audience = AppSettingsHelper.GetSetting("JwtSettings:Audience", "INDCRM_JWT_AUDIENCE");
             var secret = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
 
             if (string.IsNullOrEmpty(secret))

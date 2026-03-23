@@ -18,10 +18,11 @@ namespace IND_CRM_API.Services
         private const string ConnectionEnvVar = "AZURE_BLOB_CONNECTION_STRING";
         private const string ContainerSettingKey = "AzureBlob:Container";
         private const string ContainerEnvVar = "AZURE_BLOB_CONTAINER";
-        private const string PrefixSettingKey = "AzureBlob:BasePrefix";
-        private const string PrefixEnvVar = "AZURE_BLOB_BASE_PREFIX";
+        private const string EnvironmentSettingKey = "AzureBlob:EnvironmentSegment";
+        private const string EnvironmentEnvVar = "AZURE_BLOB_ENVIRONMENT_SEGMENT";
         private const string DefaultContainer = "tickets";
-        private const string DefaultPrefix = "crmtickets";
+        private const string DefaultEnvironmentSegment = "DEV";
+        private const string TicketPathSegment = "TICKET";
         private const string TemporaryCompanySegment = "aitemp";
 
         private readonly IAxLogger _logger;
@@ -54,7 +55,7 @@ namespace IND_CRM_API.Services
                 throw new ArgumentException("fileName es obligatorio.", nameof(fileName));
 
             var context = ResolveStorageContext();
-            var blobName = BuildBlobName(context.BasePrefix, companyId, fileName);
+            var blobName = BuildBlobName(context.BlobBasePath, companyId, fileName);
             var blob = context.Container.GetBlockBlobReference(blobName);
 
             blob.Properties.ContentType = ResolveContentType(contentType, fileName);
@@ -92,7 +93,7 @@ namespace IND_CRM_API.Services
 
             var context = ResolveStorageContext();
             var safeFileName = NormalizeTemporaryFileName(fileName);
-            var blobName = BuildBlobName(context.BasePrefix, TemporaryCompanySegment, safeFileName);
+            var blobName = BuildBlobName(context.BlobBasePath, TemporaryCompanySegment, safeFileName);
             var blob = context.Container.GetBlockBlobReference(blobName);
 
             blob.Properties.ContentType = ResolveContentType(contentType, safeFileName);
@@ -192,8 +193,7 @@ namespace IND_CRM_API.Services
                 if (!IsValidContainerName(containerName))
                     throw new InvalidOperationException("El nombre de contenedor de Azure Blob no es valido.");
 
-                var prefixRaw = AppSettingsHelper.GetSetting(PrefixSettingKey, PrefixEnvVar);
-                var basePrefix = NormalizePrefix(prefixRaw, DefaultPrefix);
+                var blobBasePath = ResolveBlobBasePath();
 
                 var client = account.CreateCloudBlobClient();
                 var container = client.GetContainerReference(containerName);
@@ -201,7 +201,7 @@ namespace IND_CRM_API.Services
 
                 _storageContext = new StorageContext
                 {
-                    BasePrefix = basePrefix,
+                    BlobBasePath = blobBasePath,
                     Container = container
                 };
 
@@ -364,13 +364,27 @@ namespace IND_CRM_API.Services
             return string.Join(",", keys);
         }
 
-        private static string BuildBlobName(string basePrefix, string companyId, string fileName)
+        // Resuelve la raiz logica para tickets usando el entorno configurado.
+        private static string ResolveBlobBasePath()
+        {
+            var environmentRaw = AppSettingsHelper.GetSetting(EnvironmentSettingKey, EnvironmentEnvVar);
+            return BuildEnvironmentTicketPath(environmentRaw);
+        }
+
+        // Construye rutas como DEV/TICKET o PROD/TICKET.
+        private static string BuildEnvironmentTicketPath(string environmentSegment)
+        {
+            var safeEnvironment = NormalizePathSegment(environmentSegment, DefaultEnvironmentSegment);
+            return string.Concat(safeEnvironment, "/", TicketPathSegment);
+        }
+
+        private static string BuildBlobName(string blobBasePath, string companyId, string fileName)
         {
             var safeCompany = NormalizePathSegment(companyId, "company");
             var safeFileName = NormalizeFileName(fileName);
 
             return string.Concat(
-                basePrefix,
+                blobBasePath,
                 "/",
                 safeCompany,
                 "/",
@@ -439,21 +453,6 @@ namespace IND_CRM_API.Services
             return new string(value.Trim().Where(c => c >= 32 && c <= 126).ToArray());
         }
 
-        private static string NormalizePrefix(string value, string fallback)
-        {
-            var raw = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-            var segments = raw
-                .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => NormalizePathSegment(s, string.Empty))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .ToArray();
-
-            if (segments.Length == 0)
-                return fallback;
-
-            return string.Join("/", segments);
-        }
-
         private static string NormalizePathSegment(string value, string fallback)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -510,7 +509,7 @@ namespace IND_CRM_API.Services
         private sealed class StorageContext
         {
             public CloudBlobContainer Container { get; set; }
-            public string BasePrefix { get; set; }
+            public string BlobBasePath { get; set; }
         }
     }
 }

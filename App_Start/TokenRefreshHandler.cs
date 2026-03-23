@@ -78,7 +78,9 @@ namespace IND_CRM_API.App_Start
                             if (!string.IsNullOrWhiteSpace(username))
                             {
                                 int expirationMinutes = 60;
-                                var expirationSetting = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
+                                var expirationSetting = AppSettingsHelper.GetSetting(
+                                    "JwtSettings:ExpirationMinutes",
+                                    "INDCRM_JWT_EXPIRATION_MINUTES");
                                 if (int.TryParse(expirationSetting, out var cfg))
                                     expirationMinutes = cfg;
 
@@ -134,8 +136,8 @@ namespace IND_CRM_API.App_Start
 
         private static TokenValidationParameters BuildTokenValidationParameters()
         {
-            var issuer = ConfigurationManager.AppSettings["JwtSettings:Issuer"];
-            var audience = ConfigurationManager.AppSettings["JwtSettings:Audience"];
+            var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
+            var audience = AppSettingsHelper.GetSetting("JwtSettings:Audience", "INDCRM_JWT_AUDIENCE");
             var secret = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
 
             if (string.IsNullOrWhiteSpace(secret))

@@ -83,7 +83,9 @@ namespace IND_CRM_API.Controllers.System
             {
                 _logger.Log($"[AUTH] Login attempt for user {dto.Username}");
 
-                var expirationSetting = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
+                var expirationSetting = AppSettingsHelper.GetSetting(
+                    "JwtSettings:ExpirationMinutes",
+                    "INDCRM_JWT_EXPIRATION_MINUTES");
                 int expirationMinutes = int.TryParse(expirationSetting, out var exp) ? exp : 60;
 
                 // Primero validar credenciales contra Axapta, luego emitir el token.
@@ -184,7 +186,9 @@ namespace IND_CRM_API.Controllers.System
                 var authHeader = Request.Headers.Authorization;
                 var oldToken = authHeader != null && authHeader.Scheme == "Bearer" ? authHeader.Parameter : null;
 
-                var expirationSetting = ConfigurationManager.AppSettings["JwtSettings:ExpirationMinutes"];
+                var expirationSetting = AppSettingsHelper.GetSetting(
+                    "JwtSettings:ExpirationMinutes",
+                    "INDCRM_JWT_EXPIRATION_MINUTES");
                 int expirationMinutes = int.TryParse(expirationSetting, out var exp) ? exp : 60;
 
                 var tokenInfo = _jwt.GenerateToken(username, expirationMinutes);

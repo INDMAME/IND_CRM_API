@@ -1,0 +1,203 @@
+[CmdletBinding()]
+param(
+    [ValidateSet("DEV", "PROD")]
+    [string]$TargetEnvironment = "PROD",
+    [switch]$Apply
+)
+
+function New-CriticalSetting {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Category,
+        [bool]$Secret = $false,
+        [string]$DefaultValue = $null
+    )
+
+    return [pscustomobject]@{
+        Name = $Name
+        Category = $Category
+        Secret = $Secret
+        DefaultValue = $DefaultValue
+    }
+}
+
+function ConvertTo-PlainText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Security.SecureString]$SecureValue
+    )
+
+    # Only used in memory to write the final machine environment value.
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function Get-CriticalSettings {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EnvironmentName
+    )
+
+    $publicIpDefault = if ($EnvironmentName -eq "PROD") { "212.142.143.182" } else { $null }
+
+    return @(
+        New-CriticalSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "API_AXUSER"
+        New-CriticalSetting -Name "USER_PASS_DEFAULT" -Category "AX" -Secret $true
+        New-CriticalSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
+        New-CriticalSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
+        New-CriticalSetting -Name "AZURE_BLOB_CONNECTION_STRING" -Category "AzureBlob" -Secret $true
+        New-CriticalSetting -Name "AZURE_DOCS_IA_KEY" -Category "AzureDocs" -Secret $true
+        New-CriticalSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs"
+        New-CriticalSetting -Name "AZURE_DOCS_IA_MODEL" -Category "AzureDocs"
+        New-CriticalSetting -Name "INDCRM_PUBLIC_IP" -Category "Host" -DefaultValue $publicIpDefault
+    )
+}
+
+function Get-PreviewValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Setting
+    )
+
+    $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
+
+    if ($Setting.Secret) {
+        return $(if ([string]::IsNullOrWhiteSpace($currentValue)) { "Missing" } else { "Configured" })
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
+        return $currentValue
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+        return $Setting.DefaultValue
+    }
+
+    return "Missing"
+}
+
+function Read-PlainValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Setting
+    )
+
+    $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
+    $label = if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
+        "{0} (press Enter to keep current value: {1})" -f $Setting.Name, $currentValue
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+        "{0} (press Enter to use default value: {1})" -f $Setting.Name, $Setting.DefaultValue
+    }
+    else {
+        "{0} (required)" -f $Setting.Name
+    }
+
+    $inputValue = Read-Host -Prompt $label
+
+    if (-not [string]::IsNullOrWhiteSpace($inputValue)) {
+        return $inputValue.Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
+        return $currentValue
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+        return $Setting.DefaultValue
+    }
+
+    throw ("A value is required for {0}." -f $Setting.Name)
+}
+
+function Read-SecretValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Setting
+    )
+
+    $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
+    $prompt = if ([string]::IsNullOrWhiteSpace($currentValue)) {
+        "{0} (required, input hidden)" -f $Setting.Name
+    }
+    else {
+        "{0} (press Enter to keep current value, input hidden)" -f $Setting.Name
+    }
+
+    $secureValue = Read-Host -Prompt $prompt -AsSecureString
+    $plainValue = ConvertTo-PlainText -SecureValue $secureValue
+
+    if (-not [string]::IsNullOrWhiteSpace($plainValue)) {
+        return $plainValue
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
+        return $currentValue
+    }
+
+    throw ("A value is required for {0}." -f $Setting.Name)
+}
+
+function Set-MachineEnvSetting {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    [Environment]::SetEnvironmentVariable($Name, $Value, "Machine")
+    Write-Host ("Set machine variable {0}" -f $Name)
+}
+
+$settings = Get-CriticalSettings -EnvironmentName $TargetEnvironment
+
+if (-not $Apply) {
+    Write-Host ""
+    Write-Host ("IND CRM critical machine environment helper for {0}" -f $TargetEnvironment)
+    Write-Host "Preview values:"
+    Write-Host ""
+
+    $settings |
+        Sort-Object Category, Name |
+        Select-Object Category, Name, @{ Name = "CurrentOrDefault"; Expression = { Get-PreviewValue -Setting $_ } } |
+        Format-Table -AutoSize
+
+    Write-Host ""
+    Write-Host "Preview mode only. No machine variables were changed."
+    Write-Host "To set the real values interactively, run:"
+    Write-Host ""
+    Write-Host ("powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-critical-env.ps1 -TargetEnvironment {0} -Apply" -f $TargetEnvironment)
+    Write-Host ""
+    return
+}
+
+Write-Host ""
+Write-Host ("Applying critical machine environment values for {0}" -f $TargetEnvironment)
+Write-Host ""
+
+foreach ($setting in $settings) {
+    $value = if ($setting.Secret) {
+        Read-SecretValue -Setting $setting
+    }
+    else {
+        Read-PlainValue -Setting $setting
+    }
+
+    Set-MachineEnvSetting -Name $setting.Name -Value $value
+}
+
+Write-Host ""
+Write-Host "Done."
+Write-Host "Suggested next steps:"
+Write-Host "1. Run the bootstrap script if the machine does not have the base environment values yet."
+Write-Host "2. Restart the API service so the new machine variables are loaded."
+Write-Host "Suggested command: Restart-Service IND_CRM_API"
