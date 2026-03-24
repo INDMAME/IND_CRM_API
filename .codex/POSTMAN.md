@@ -1,11 +1,13 @@
 # IND_CRM_API Postman
 
 Colecciones
-- Principal: `.codex/Postman/IND_CRM_API V28.postman_collection.json`
-- Soporte: `Notes/IND_CRM_API V28.postman_collection.json`
+- DEV activa: `.codex/Postman/DEV/IND_CRM_API V01.postman_collection.json`
+- DEV soporte: `Notes/DEV/IND_CRM_API V01.postman_collection.json`
+- Historial PROD: `.codex/Postman/PROD/`
+- Historial soporte PROD: `Notes/PROD/`
 
 Ambiente (variables sugeridas)
-- `baseUrl` = `https://crm.insertec.biz:7776`
+- `baseUrl` = `https://dev.insertec.biz:7776`
 - `tokenId` = token JWT vigente
 - `companyId` = compania obtenida desde Entra Context
 - `axUserId` = usuario AX obtenido desde Entra Context
@@ -23,6 +25,7 @@ Ambiente (variables sugeridas)
 - `quickCreateProcessedByAI` = indica si `quick-create` finalizo con datos IA aplicados (autocompletado)
 
 Notas
+- La linea `PROD` conserva intacto el historico existente; la linea `DEV` arranca en `V01` basada en la `V30` mas reciente.
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
