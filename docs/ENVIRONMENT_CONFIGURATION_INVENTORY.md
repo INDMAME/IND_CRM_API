@@ -48,6 +48,23 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-critical-e
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-critical-env.ps1 -TargetEnvironment PROD -Apply
 ```
 
+### `scripts/set-indcrm-machine-all-env.ps1`
+
+Que hace:
+
+- Pide y actualiza todas las variables de entorno operativas en un solo flujo.
+- Usa defaults por entorno para URL, host, IP, AX config, blob y otras claves base.
+- Mantiene la logica interactiva de `Enter` para conservar el valor actual o usar el default.
+- Permite dejar vacias claves opcionales como `INDCRM_CORS_ALLOWED_ORIGINS` y `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT`.
+- Para vaciar una clave opcional existente, admite escribir `__CLEAR__`.
+
+Uso:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD
+powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
+```
+
 ## Uso rapido
 
 1. Cargar la base del entorno.
@@ -61,11 +78,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-critical-e
 Restart-Service IND_CRM_API
 ```
 
+Alternativa en un solo paso:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
+Restart-Service IND_CRM_API
+```
+
 ## Que esperar en consola
 
 - Script base: no pregunta nada; solo crea variables y salta placeholders.
 - Script critico sin `-Apply`: solo muestra preview.
 - Script critico con `-Apply`: pide los valores uno a uno.
+- Script all-env sin `-Apply`: muestra valor actual y default del entorno objetivo.
+- Script all-env con `-Apply`: pide todas las variables en un solo recorrido.
 
 ## Variables necesarias
 
@@ -89,6 +115,7 @@ Restart-Service IND_CRM_API
 - `INDCRM_JWT_EXPIRATION_MINUTES`
 - `INDCRM_JWT_REFRESH_THRESHOLD_MINUTES`
 - `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH`
+- `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT`
 - `AZURE_BLOB_CONTAINER`
 - `AZURE_BLOB_ENVIRONMENT_SEGMENT`
 - `COMPANY_ACCESS_CACHE_MINUTES`
