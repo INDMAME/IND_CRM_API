@@ -86,7 +86,14 @@ namespace IND_CRM_API
 
             private static void LogDeploymentContext(string baseUrl)
             {
-                var environmentName = AppSettingsHelper.GetSetting("Deployment:EnvironmentName", "IND_ENV") ?? "UNKNOWN";
+                var environmentName = AppSettingsHelper.GetSetting("Deployment:EnvironmentName", "IND_ENV");
+                if (string.IsNullOrWhiteSpace(environmentName))
+                {
+                    // Keep startup stable even when the deployment variable is missing.
+                    environmentName = "UNKNOWN";
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WARNING: IND_ENV is not configured. Using Deployment=UNKNOWN.");
+                }
+
                 var publicHost = AppSettingsHelper.GetSetting("PublicEndpoint:Host", "INDCRM_PUBLIC_HOST");
                 var publicIp = AppSettingsHelper.GetSetting("PublicEndpoint:Ip", "INDCRM_PUBLIC_IP");
                 var resolvedPort = ExtractPort(baseUrl);
