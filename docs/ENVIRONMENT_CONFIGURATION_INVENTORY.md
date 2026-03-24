@@ -13,7 +13,7 @@ Fecha: 2026-03-23
 
 | Entorno | URL | Host | IP | AX config | Blob |
 | --- | --- | --- | --- | --- | --- |
-| `DEV` | `https://dev.insertec.biz:7776/` | `dev.insertec.biz` | Pendiente | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
+| `DEV` | `https://dev.insertec.biz:7776/` | `dev.insertec.biz` | `192.168.0.146` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
 | `PROD` | `https://crm.insertec.biz:7776/` | `crm.insertec.biz` | `212.142.143.182` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig.axc` | `PROD` |
 
 ## Scripts
@@ -117,5 +117,6 @@ Esas rutas quedan ignoradas por Git.
 ## Notas
 
 - `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_IP` y `INDCRM_PUBLIC_PORT` son datos operativos para DNS, firewall y despliegue.
-- La IP de `DEV` queda pendiente hasta confirmarla.
+- La IP de `DEV` queda confirmada en `192.168.0.146`.
+- La web `DEV` se sirve en `https://dev.insertec.biz:7702/`; la API `DEV` mantiene `https://dev.insertec.biz:7776/`.
 - El cambio de `DEV` a `PROD` debe resolverse en despliegue, no en recompilacion.

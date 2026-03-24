@@ -17,7 +17,7 @@ function Get-EnvironmentDefaults {
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
                 BaseUrl = "https://dev.insertec.biz:7776/"
                 PublicHost = "dev.insertec.biz"
-                PublicIp = "<SET_ME_DEV_PUBLIC_IP>"
+                PublicIp = "192.168.0.146"
                 PublicPort = "7776"
                 BlobSegment = "DEV"
                 VerboseLogging = "true"
