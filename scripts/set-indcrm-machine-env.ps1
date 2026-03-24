@@ -25,13 +25,13 @@ function Get-EnvironmentDefaults {
                 HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "true"
                 LogLevel = "Info"
-                CorsEnabled = "true"
-                CorsAllowedOrigins = "https://dev.insertec.biz:7702"
+                CorsEnabled = "false"
+                CorsAllowedOrigins = ""
             }
         }
         default {
             return @{
-                AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig.axc"
+                AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc"
                 BaseUrl = "https://crm.insertec.biz:7776/"
                 PublicHost = "crm.insertec.biz"
                 PublicIp = "212.142.143.182"

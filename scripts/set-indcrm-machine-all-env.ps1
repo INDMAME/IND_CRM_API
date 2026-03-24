@@ -25,7 +25,7 @@ function Get-EnvironmentDefaults {
                 HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "true"
                 LogLevel = "Info"
-                CorsEnabled = "true"
+                CorsEnabled = "false"
                 CorsAllowedOrigins = ""
             }
         }
