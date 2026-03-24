@@ -4,7 +4,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -574,7 +573,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[settingKey];
+                var value = AppSettingsHelper.GetSetting(settingKey);
                 if (int.TryParse(value, out var parsed) && parsed >= minValue)
                     return parsed;
             }
@@ -590,7 +589,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[settingKey];
+                var configured = AppSettingsHelper.GetSetting(settingKey);
                 return string.IsNullOrWhiteSpace(configured) ? fallbackValue : configured.Trim();
             }
             catch

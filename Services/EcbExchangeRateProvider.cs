@@ -1,7 +1,7 @@
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -161,7 +161,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[key];
+                var value = AppSettingsHelper.GetSetting(key);
                 if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
                     return seconds;
             }

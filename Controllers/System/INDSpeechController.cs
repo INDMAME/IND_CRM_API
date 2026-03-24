@@ -8,7 +8,6 @@ using IND_CRM_API.Services.Interfaces;
 using Swashbuckle.Swagger.Annotations;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -251,7 +250,7 @@ namespace IND_CRM_API.Controllers.System
 
                 // Moderacion del texto resultante para bloquear contenido ofensivo/ilícito.
                 var moderationSw = Stopwatch.StartNew();
-                var moderationModel = ConfigurationManager.AppSettings["OpenAI:ModerationModel"];
+                var moderationModel = AppSettingsHelper.GetSetting("OpenAI:ModerationModel");
                 var modResult = await _moderation.ModerateAsync(text, openAiApiKey, moderationModel, cancellationToken);
                 moderationSw.Stop();
                 _logger.Log($"[SPEECH] OpenAI moderation ms={moderationSw.ElapsedMilliseconds} traceId={traceId}", AxaptaSessionManager.LogLevel.Info);
@@ -1109,12 +1108,12 @@ namespace IND_CRM_API.Controllers.System
             // Preferir leer desde fichero externo o variable de entorno en el servidor.
             try
             {
-                var envPath = Environment.GetEnvironmentVariable(DefaultPromptPathEnvVar);
+                var envPath = AppSettingsHelper.GetMachineEnvironmentVariable(DefaultPromptPathEnvVar);
                 var fromEnvFile = TryReadPromptFromFile(envPath);
                 if (!string.IsNullOrWhiteSpace(fromEnvFile))
                     return fromEnvFile;
 
-                var envValue = Environment.GetEnvironmentVariable(DefaultPromptEnvVar);
+                var envValue = AppSettingsHelper.GetMachineEnvironmentVariable(DefaultPromptEnvVar);
                 if (!string.IsNullOrWhiteSpace(envValue))
                     return envValue;
 
@@ -1166,7 +1165,7 @@ namespace IND_CRM_API.Controllers.System
         {
             try
             {
-                var cfg = ConfigurationManager.AppSettings[PromptMaxWordsAppSettingKey];
+                var cfg = AppSettingsHelper.GetSetting(PromptMaxWordsAppSettingKey);
                 if (int.TryParse(cfg, out var value) && value > 0)
                     return value;
             }

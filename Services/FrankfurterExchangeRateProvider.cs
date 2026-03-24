@@ -1,7 +1,7 @@
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Configuration;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -196,7 +196,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[key];
+                var value = AppSettingsHelper.GetSetting(key);
                 if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
                     return seconds;
             }
