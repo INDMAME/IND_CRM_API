@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)]
     [ValidateSet("DEV", "PROD")]
-    [string]$TargetEnvironment = "PROD",
+    [string]$TargetEnvironment,
     [switch]$Apply
 )
 
@@ -12,7 +13,8 @@ function New-CriticalSetting {
         [Parameter(Mandatory = $true)]
         [string]$Category,
         [bool]$Secret = $false,
-        [string]$DefaultValue = $null
+        [string]$DefaultValue = $null,
+        [bool]$Required = $true
     )
 
     return [pscustomobject]@{
@@ -20,6 +22,7 @@ function New-CriticalSetting {
         Category = $Category
         Secret = $Secret
         DefaultValue = $DefaultValue
+        Required = $Required
     }
 }
 
@@ -51,6 +54,7 @@ function Get-CriticalSettings {
     return @(
         New-CriticalSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "API_AXUSER"
         New-CriticalSetting -Name "USER_PASS_DEFAULT" -Category "AX" -Secret $true
+        New-CriticalSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
         New-CriticalSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
         New-CriticalSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
         New-CriticalSetting -Name "AZURE_BLOB_CONNECTION_STRING" -Category "AzureBlob" -Secret $true
@@ -58,6 +62,7 @@ function Get-CriticalSettings {
         New-CriticalSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs"
         New-CriticalSetting -Name "AZURE_DOCS_IA_MODEL" -Category "AzureDocs"
         New-CriticalSetting -Name "INDCRM_PUBLIC_IP" -Category "Host" -DefaultValue $publicIpDefault
+        New-CriticalSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PASSWORD") -Category "HTTPS" -Secret $true -Required $false
     )
 }
 
@@ -70,7 +75,19 @@ function Get-PreviewValue {
     $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
 
     if ($Setting.Secret) {
-        return $(if ([string]::IsNullOrWhiteSpace($currentValue)) { "Missing" } else { "Configured" })
+        if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
+            return "Configured"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+            return "Default available"
+        }
+
+        if (-not $Setting.Required) {
+            return "<empty>"
+        }
+
+        return "Missing"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
@@ -79,6 +96,10 @@ function Get-PreviewValue {
 
     if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
         return $Setting.DefaultValue
+    }
+
+    if (-not $Setting.Required) {
+        return "<empty>"
     }
 
     return "Missing"
@@ -96,6 +117,9 @@ function Read-PlainValue {
     }
     elseif (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
         "{0} (press Enter to use default value: {1})" -f $Setting.Name, $Setting.DefaultValue
+    }
+    elseif (-not $Setting.Required) {
+        "{0} (optional)" -f $Setting.Name
     }
     else {
         "{0} (required)" -f $Setting.Name
@@ -115,6 +139,10 @@ function Read-PlainValue {
         return $Setting.DefaultValue
     }
 
+    if (-not $Setting.Required) {
+        return $null
+    }
+
     throw ("A value is required for {0}." -f $Setting.Name)
 }
 
@@ -126,7 +154,12 @@ function Read-SecretValue {
 
     $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
     $prompt = if ([string]::IsNullOrWhiteSpace($currentValue)) {
-        "{0} (required, input hidden)" -f $Setting.Name
+        if (-not $Setting.Required) {
+            "{0} (optional, input hidden, press Enter to keep empty)" -f $Setting.Name
+        }
+        else {
+            "{0} (required, input hidden)" -f $Setting.Name
+        }
     }
     else {
         "{0} (press Enter to keep current value, input hidden)" -f $Setting.Name
@@ -143,6 +176,10 @@ function Read-SecretValue {
         return $currentValue
     }
 
+    if (-not $Setting.Required) {
+        return $null
+    }
+
     throw ("A value is required for {0}." -f $Setting.Name)
 }
 
@@ -150,9 +187,15 @@ function Set-MachineEnvSetting {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Name,
-        [Parameter(Mandatory = $true)]
+        [AllowNull()]
         [string]$Value
     )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        [Environment]::SetEnvironmentVariable($Name, $null, "Machine")
+        Write-Host ("Cleared machine variable {0}" -f $Name)
+        return
+    }
 
     [Environment]::SetEnvironmentVariable($Name, $Value, "Machine")
     Write-Host ("Set machine variable {0}" -f $Name)

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)]
     [ValidateSet("DEV", "PROD")]
-    [string]$TargetEnvironment = "PROD",
+    [string]$TargetEnvironment,
     [switch]$Apply
 )
 
@@ -20,6 +21,8 @@ function Get-EnvironmentDefaults {
                 PublicIp = "192.168.0.146"
                 PublicPort = "7776"
                 BlobSegment = "DEV"
+                ServiceUser = "INSERTEC\API_AXUSER"
+                HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "true"
                 LogLevel = "Info"
                 CorsEnabled = "true"
@@ -34,6 +37,8 @@ function Get-EnvironmentDefaults {
                 PublicIp = "212.142.143.182"
                 PublicPort = "7776"
                 BlobSegment = "PROD"
+                ServiceUser = "INSERTEC\API_AXUSER"
+                HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "false"
                 LogLevel = "Info"
                 CorsEnabled = "false"
@@ -146,16 +151,20 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_CORS_ALLOWED_ORIGINS" -Category "Host" -DefaultValue $defaults.CorsAllowedOrigins -Required $false
         New-InteractiveSetting -Name "INDCRM_LOG_LEVEL" -Category "Host" -DefaultValue $defaults.LogLevel
         New-InteractiveSetting -Name "INDCRM_LOG_PATH" -Category "Host" -DefaultValue "C:\INDAxaptaLogs"
+        New-InteractiveSetting -Name "INDCRM_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.ServiceUser
+        New-InteractiveSetting -Name "INDCRM_HTTP_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.HttpServiceUser
 
         New-InteractiveSetting -Name "INDCRM_JWT_ISSUER" -Category "JWT" -DefaultValue "IND_CRM_API"
         New-InteractiveSetting -Name "INDCRM_JWT_AUDIENCE" -Category "JWT" -DefaultValue "IND_CRM_APIUsers"
         New-InteractiveSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
         New-InteractiveSetting -Name "INDCRM_JWT_EXPIRATION_MINUTES" -Category "JWT" -DefaultValue "60"
         New-InteractiveSetting -Name "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES" -Category "JWT" -DefaultValue "5"
+        New-InteractiveSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
 
         New-InteractiveSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH" -Category "OpenAI" -DefaultValue "C:\INDAxaptaConfigAPI\Prompts\Wisper\prompt.txt"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT" -Category "OpenAI" -Required $false
+        New-InteractiveSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PASSWORD") -Category "HTTPS" -Secret $true -Required $false
 
         New-InteractiveSetting -Name "AZURE_BLOB_CONNECTION_STRING" -Category "AzureBlob" -Secret $true
         New-InteractiveSetting -Name "AZURE_BLOB_CONTAINER" -Category "AzureBlob" -DefaultValue "tickets"

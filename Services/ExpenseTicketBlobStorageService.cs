@@ -20,8 +20,10 @@ namespace IND_CRM_API.Services
         private const string ContainerEnvVar = "AZURE_BLOB_CONTAINER";
         private const string EnvironmentSettingKey = "AzureBlob:EnvironmentSegment";
         private const string EnvironmentEnvVar = "AZURE_BLOB_ENVIRONMENT_SEGMENT";
+        private const string DeploymentEnvironmentSettingKey = "Deployment:EnvironmentName";
+        private const string DeploymentEnvironmentEnvVar = "IND_ENV";
         private const string DefaultContainer = "tickets";
-        private const string DefaultEnvironmentSegment = "DEV";
+        private const string DefaultEnvironmentSegment = "UNSPECIFIED";
         private const string TicketPathSegment = "TICKET";
         private const string TemporaryCompanySegment = "aitemp";
 
@@ -368,6 +370,14 @@ namespace IND_CRM_API.Services
         private static string ResolveBlobBasePath()
         {
             var environmentRaw = AppSettingsHelper.GetSetting(EnvironmentSettingKey, EnvironmentEnvVar);
+            if (string.IsNullOrWhiteSpace(environmentRaw))
+            {
+                // Keep blob paths aligned with the deployment environment before using a protective fallback.
+                environmentRaw = AppSettingsHelper.GetSetting(
+                    DeploymentEnvironmentSettingKey,
+                    DeploymentEnvironmentEnvVar);
+            }
+
             return BuildEnvironmentTicketPath(environmentRaw);
         }
 

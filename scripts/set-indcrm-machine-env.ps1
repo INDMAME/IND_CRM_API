@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)]
     [ValidateSet("DEV", "PROD")]
-    [string]$TargetEnvironment = "PROD",
+    [string]$TargetEnvironment,
     [switch]$Apply
 )
 
@@ -20,6 +21,8 @@ function Get-EnvironmentDefaults {
                 PublicIp = "192.168.0.146"
                 PublicPort = "7776"
                 BlobSegment = "DEV"
+                ServiceUser = "INSERTEC\API_AXUSER"
+                HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "true"
                 LogLevel = "Info"
                 CorsEnabled = "true"
@@ -34,6 +37,8 @@ function Get-EnvironmentDefaults {
                 PublicIp = "212.142.143.182"
                 PublicPort = "7776"
                 BlobSegment = "PROD"
+                ServiceUser = "INSERTEC\API_AXUSER"
+                HttpServiceUser = "INSERTEC\API_AXUSER"
                 VerboseLogging = "false"
                 LogLevel = "Info"
                 CorsEnabled = "false"
@@ -117,6 +122,8 @@ $settings = @(
     New-EnvSetting -Name "INDCRM_CORS_ALLOWED_ORIGINS" -Value $defaults.CorsAllowedOrigins -Category "Host"
     New-EnvSetting -Name "INDCRM_LOG_LEVEL" -Value $defaults.LogLevel -Category "Host"
     New-EnvSetting -Name "INDCRM_LOG_PATH" -Value "C:\INDAxaptaLogs" -Category "Host"
+    New-EnvSetting -Name "INDCRM_SERVICE_USER" -Value $defaults.ServiceUser -Category "Ops"
+    New-EnvSetting -Name "INDCRM_HTTP_SERVICE_USER" -Value $defaults.HttpServiceUser -Category "Ops"
     New-EnvSetting -Name "INDCRM_JWT_ISSUER" -Value "IND_CRM_API" -Category "JWT"
     New-EnvSetting -Name "INDCRM_JWT_AUDIENCE" -Value "IND_CRM_APIUsers" -Category "JWT"
     New-EnvSetting -Name "JWT_SECRET_KEY" -Value "<SET_ME_JWT_SECRET_KEY>" -Secret $true -Category "JWT"
