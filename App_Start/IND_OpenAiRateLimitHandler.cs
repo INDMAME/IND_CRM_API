@@ -1,8 +1,8 @@
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
+using IND_CRM_API.Helpers;
 using System;
 using System.Collections.Concurrent;
-using System.Configuration;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -276,7 +276,7 @@ namespace IND_CRM_API.App_Start
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[key];
+                var value = AppSettingsHelper.GetSetting(key);
                 if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
                     return parsed;
             }
@@ -292,7 +292,7 @@ namespace IND_CRM_API.App_Start
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[key];
+                var value = AppSettingsHelper.GetSetting(key);
                 if (bool.TryParse(value, out var parsed))
                     return parsed;
             }

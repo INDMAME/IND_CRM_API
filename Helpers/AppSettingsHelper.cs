@@ -1,5 +1,6 @@
 using System;
 using System.Configuration;
+using System.Text.RegularExpressions;
 
 namespace IND_CRM_API.Helpers
 {
@@ -42,7 +43,7 @@ namespace IND_CRM_API.Helpers
                     if (string.IsNullOrWhiteSpace(envVarName))
                         continue;
 
-                    value = Environment.GetEnvironmentVariable(envVarName);
+                    value = ReadMachineEnvironmentVariable(envVarName);
                     if (!string.IsNullOrWhiteSpace(value))
                         break;
                 }
@@ -52,6 +53,29 @@ namespace IND_CRM_API.Helpers
                 return GetConfigSetting(key, envVarNames);
 
             return NormalizeExpandedValue(value, envVarNames);
+        }
+
+        /// <summary>
+        /// Obtiene el primer valor disponible desde variables de entorno de maquina.
+        /// </summary>
+        /// <param name="envVarNames">Variables de entorno candidatas en orden de prioridad.</param>
+        /// <returns>Valor resuelto o null si no existe.</returns>
+        public static string GetMachineEnvironmentVariable(params string[] envVarNames)
+        {
+            if (envVarNames == null || envVarNames.Length == 0)
+                return null;
+
+            foreach (var envVarName in envVarNames)
+            {
+                if (string.IsNullOrWhiteSpace(envVarName))
+                    continue;
+
+                var value = ReadMachineEnvironmentVariable(envVarName);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -77,8 +101,11 @@ namespace IND_CRM_API.Helpers
             if (string.IsNullOrWhiteSpace(value))
                 return null;
 
-            var expanded = Environment.ExpandEnvironmentVariables(value).Trim();
+            var expanded = ExpandMachineEnvironmentVariables(value)?.Trim();
             if (string.IsNullOrWhiteSpace(expanded))
+                return null;
+
+            if (Regex.IsMatch(expanded, "^%[A-Za-z0-9_().-]+%$"))
                 return null;
 
             if (envVarNames != null)
@@ -95,6 +122,30 @@ namespace IND_CRM_API.Helpers
             }
 
             return expanded;
+        }
+
+        private static string ReadMachineEnvironmentVariable(string envVarName)
+        {
+            if (string.IsNullOrWhiteSpace(envVarName))
+                return null;
+
+            return Environment.GetEnvironmentVariable(envVarName, EnvironmentVariableTarget.Machine);
+        }
+
+        private static string ExpandMachineEnvironmentVariables(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return value;
+
+            return Regex.Replace(
+                value,
+                "%(?<name>[A-Za-z0-9_().-]+)%",
+                match =>
+                {
+                    var envVarName = match.Groups["name"].Value;
+                    var machineValue = ReadMachineEnvironmentVariable(envVarName);
+                    return string.IsNullOrWhiteSpace(machineValue) ? match.Value : machineValue;
+                });
         }
 
         /// <summary>

@@ -1,7 +1,7 @@
 using IND_CRM_API.Services.Interfaces;
+using IND_CRM_API.Helpers;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -17,7 +17,7 @@ namespace IND_CRM_API.Services
     /// Implementacion de OpenAI para transcripcion de audio.
     /// Notas:
     /// - Usa Audio Transcriptions API: POST https://api.openai.com/v1/audio/transcriptions
-    /// - El modelo se lee desde App.config (OpenAI:AudioModel). Por defecto: "gpt-4o-transcribe".
+    /// - El modelo se lee desde configuracion/entorno. Por defecto: "gpt-4o-transcribe".
     /// </summary>
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
@@ -186,7 +186,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var model = ConfigurationManager.AppSettings["OpenAI:AudioModel"];
+                var model = AppSettingsHelper.GetSetting("OpenAI:AudioModel");
                 return string.IsNullOrWhiteSpace(model) ? DefaultModel : model.Trim();
             }
             catch
@@ -200,7 +200,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var cfg = ConfigurationManager.AppSettings["OpenAI:TimeoutSeconds"];
+                var cfg = AppSettingsHelper.GetSetting("OpenAI:TimeoutSeconds");
                 if (int.TryParse(cfg, out var value) && value > 0)
                     return value;
             }

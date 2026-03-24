@@ -7,7 +7,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Configuration;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -393,7 +392,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[TimeoutSettingKey];
+                var value = AppSettingsHelper.GetSetting(TimeoutSettingKey);
                 if (int.TryParse(value, out var parsed) && parsed > 0)
                     return parsed;
             }
@@ -409,7 +408,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[MaxImageBytesSettingKey];
+                var value = AppSettingsHelper.GetSetting(MaxImageBytesSettingKey);
                 if (int.TryParse(value, out var parsed) && parsed > 0)
                     return parsed;
             }
@@ -425,7 +424,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[MaxOutputTokensSettingKey];
+                var value = AppSettingsHelper.GetSetting(MaxOutputTokensSettingKey);
                 if (int.TryParse(value, out var parsed) && parsed >= 256)
                     return parsed;
             }
@@ -441,7 +440,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[QuickCreateMaxOutputTokensSettingKey];
+                var value = AppSettingsHelper.GetSetting(QuickCreateMaxOutputTokensSettingKey);
                 if (int.TryParse(value, out var parsed) && parsed >= 256)
                     return parsed;
             }
@@ -457,7 +456,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var value = ConfigurationManager.AppSettings[ModelSettingKey];
+                var value = AppSettingsHelper.GetSetting(ModelSettingKey);
                 return string.IsNullOrWhiteSpace(value) ? DefaultModel : value.Trim();
             }
             catch
@@ -470,7 +469,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[ImageDetailSettingKey];
+                var configured = AppSettingsHelper.GetSetting(ImageDetailSettingKey);
                 return NormalizeImageDetail(configured);
             }
             catch
@@ -483,7 +482,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[QuickCreateImageDetailSettingKey];
+                var configured = AppSettingsHelper.GetSetting(QuickCreateImageDetailSettingKey);
                 if (string.IsNullOrWhiteSpace(configured))
                     return DefaultQuickCreateImageDetail;
 
@@ -499,7 +498,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[ServiceTierSettingKey];
+                var configured = AppSettingsHelper.GetSetting(ServiceTierSettingKey);
                 return NormalizeServiceTier(configured);
             }
             catch
@@ -512,7 +511,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[QuickCreateServiceTierSettingKey];
+                var configured = AppSettingsHelper.GetSetting(QuickCreateServiceTierSettingKey);
                 if (string.IsNullOrWhiteSpace(configured))
                     return DefaultServiceTier;
 
@@ -528,7 +527,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[ProfileTagSettingKey];
+                var configured = AppSettingsHelper.GetSetting(ProfileTagSettingKey);
                 return string.IsNullOrWhiteSpace(configured) ? DefaultProfileTag : configured.Trim();
             }
             catch
@@ -541,7 +540,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[QuickCreateProfileTagSettingKey];
+                var configured = AppSettingsHelper.GetSetting(QuickCreateProfileTagSettingKey);
                 return string.IsNullOrWhiteSpace(configured) ? DefaultQuickCreateProfileTag : configured.Trim();
             }
             catch
@@ -554,7 +553,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[PromptCacheKeySettingKey];
+                var configured = AppSettingsHelper.GetSetting(PromptCacheKeySettingKey);
                 return string.IsNullOrWhiteSpace(configured) ? DefaultPromptCacheKey : configured.Trim();
             }
             catch
@@ -567,7 +566,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[QuickCreatePromptCacheKeySettingKey];
+                var configured = AppSettingsHelper.GetSetting(QuickCreatePromptCacheKeySettingKey);
                 return string.IsNullOrWhiteSpace(configured) ? DefaultQuickCreatePromptCacheKey : configured.Trim();
             }
             catch
@@ -580,7 +579,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[ReasoningEffortSettingKey];
+                var configured = AppSettingsHelper.GetSetting(ReasoningEffortSettingKey);
                 return NormalizeReasoningEffort(configured);
             }
             catch
@@ -593,7 +592,7 @@ namespace IND_CRM_API.Services
         {
             try
             {
-                var configured = ConfigurationManager.AppSettings[QuickCreateReasoningEffortSettingKey];
+                var configured = AppSettingsHelper.GetSetting(QuickCreateReasoningEffortSettingKey);
                 if (string.IsNullOrWhiteSpace(configured))
                     return _NormalizeQuickCreateReasoningFallback();
 

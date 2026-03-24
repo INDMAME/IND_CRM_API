@@ -1,13 +1,17 @@
 # Environment Configuration Inventory
 
-Fecha: 2026-03-23
+Fecha: 2026-03-24
 
 ## Resumen
 
 - Solo se soportan `DEV` y `PROD`.
 - `App.config` queda como fallback local.
 - La configuracion operativa se gestiona con variables de entorno de maquina.
+- Todas las claves consumidas por la API pueden resolverse desde variables de entorno de maquina.
 - Los secretos y valores criticos se cargan fuera del repo.
+- Los scripts de bootstrap exigen `TargetEnvironment` explicito para evitar defaults peligrosos.
+- Los scripts de bootstrap ya incluyen claves de servicio y HTTPS usadas por los `.bat`.
+- Los `.bat` versionados no deben guardar passwords, usuarios personales ni secretos de certificados.
 
 ## Entornos
 
@@ -25,6 +29,9 @@ Que hace:
 - Crea o actualiza la configuracion base del entorno.
 - No pide valores por consola.
 - Salta placeholders sensibles.
+- Configura tambien `INDCRM_SERVICE_USER` e `INDCRM_HTTP_SERVICE_USER`.
+- Incluye tambien defaults operativos de OpenAI, Azure Docs IA y tipos de cambio.
+- Requiere indicar `-TargetEnvironment` de forma explicita.
 
 Uso:
 
@@ -40,6 +47,8 @@ Que hace:
 - Pide y guarda los valores reales y sensibles.
 - Sin `-Apply` solo muestra preview.
 - Con `-Apply` solicita los valores uno a uno.
+- Incluye `INDCRM_SERVICE_PASSWORD` y la password PFX del entorno objetivo.
+- Requiere indicar `-TargetEnvironment` de forma explicita.
 
 Uso:
 
@@ -57,6 +66,8 @@ Que hace:
 - Mantiene la logica interactiva de `Enter` para conservar el valor actual o usar el default.
 - Permite dejar vacias claves opcionales como `INDCRM_CORS_ALLOWED_ORIGINS` y `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT`.
 - Para vaciar una clave opcional existente, admite escribir `__CLEAR__`.
+- Incluye tambien las claves de servicio y la password PFX del entorno objetivo.
+- Requiere indicar `-TargetEnvironment` de forma explicita.
 
 Uso:
 
@@ -110,26 +121,80 @@ Restart-Service IND_CRM_API
 - `INDCRM_CORS_ALLOWED_ORIGINS`
 - `INDCRM_LOG_LEVEL`
 - `INDCRM_LOG_PATH`
+- `INDCRM_SERVICE_USER`
+- `INDCRM_HTTP_SERVICE_USER`
 - `INDCRM_JWT_ISSUER`
 - `INDCRM_JWT_AUDIENCE`
 - `INDCRM_JWT_EXPIRATION_MINUTES`
 - `INDCRM_JWT_REFRESH_THRESHOLD_MINUTES`
 - `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH`
 - `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT`
+- `OPENAI_AUDIO_MODEL`
+- `OPENAI_TIMEOUT_SECONDS`
+- `OPENAI_MODERATION_MODEL`
+- `OPENAI_TRANSCRIPTION_PROMPT_MAX_WORDS`
+- `OPENAI_EXPENSE_TICKET_MODEL`
+- `OPENAI_EXPENSE_TICKET_TIMEOUT_SECONDS`
+- `OPENAI_EXPENSE_TICKET_MAX_IMAGE_BYTES`
+- `OPENAI_EXPENSE_TICKET_MAX_OUTPUT_TOKENS`
+- `OPENAI_EXPENSE_TICKET_IMAGE_DETAIL`
+- `OPENAI_EXPENSE_TICKET_SERVICE_TIER`
+- `OPENAI_EXPENSE_TICKET_PROFILE_TAG`
+- `OPENAI_EXPENSE_TICKET_PROMPT_CACHE_KEY`
+- `OPENAI_EXPENSE_TICKET_REASONING_EFFORT`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_MAX_OUTPUT_TOKENS`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_IMAGE_DETAIL`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_SERVICE_TIER`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_PROFILE_TAG`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_PROMPT_CACHE_KEY`
+- `OPENAI_EXPENSE_TICKET_QUICK_CREATE_REASONING_EFFORT`
+- `OPENAI_EXPENSE_SHEET_ASK_MODEL`
+- `OPENAI_EXPENSE_SHEET_ASK_TIMEOUT_SECONDS`
+- `OPENAI_EXPENSE_SHEET_ASK_MAX_OUTPUT_TOKENS`
+- `OPENAI_EXPENSE_SHEET_ASK_CHUNK_MAX_OUTPUT_TOKENS`
+- `OPENAI_EXPENSE_SHEET_ASK_DIRECT_RECORD_LIMIT`
+- `OPENAI_EXPENSE_SHEET_ASK_CHUNK_SIZE`
+- `OPENAI_EXPENSE_SHEET_ASK_MAX_CHUNKS`
+- `OPENAI_EXPENSE_SHEET_ASK_SERVICE_TIER`
+- `OPENAI_EXPENSE_SHEET_ASK_PROFILE_TAG`
+- `OPENAI_EXPENSE_SHEET_ASK_PROMPT_CACHE_KEY`
+- `OPENAI_EXPENSE_SHEET_ASK_REASONING_EFFORT`
+- `OPENAI_RATE_LIMIT_ENABLED`
+- `OPENAI_RATE_LIMIT_SPEECH_MAX_REQUESTS`
+- `OPENAI_RATE_LIMIT_SPEECH_WINDOW_SECONDS`
+- `OPENAI_RATE_LIMIT_EXPENSE_TICKET_MAX_REQUESTS`
+- `OPENAI_RATE_LIMIT_EXPENSE_TICKET_WINDOW_SECONDS`
+- `OPENAI_RATE_LIMIT_MAX_CONCURRENT_PER_USER`
+- `OPENAI_RATE_LIMIT_VALIDATION_MULTIPLIER`
 - `AZURE_BLOB_CONTAINER`
 - `AZURE_BLOB_ENVIRONMENT_SEGMENT`
+- `AZURE_DOCS_IA_API_VERSION`
+- `AZURE_DOCS_IA_POLL_INTERVAL_MS`
+- `AZURE_DOCS_IA_TIMEOUT_SECONDS`
+- `AZURE_DOCS_IA_BLOB_READ_SAS_MINUTES`
+- `EXCHANGE_RATE_ECB_TIMEOUT_SECONDS`
+- `EXCHANGE_RATE_FRANKFURTER_TIMEOUT_SECONDS`
+- `EXCHANGE_RATE_OPEN_ER_API_TIMEOUT_SECONDS`
+- `AXAPTA_CALL_TIMEOUT_SECONDS`
+- `CLIENT_SETTINGS_PROVIDER_SERVICE_URI`
 - `COMPANY_ACCESS_CACHE_MINUTES`
 
 ### Criticas
 
 - `USER_DEFAULT`
 - `USER_PASS_DEFAULT`
+- `INDCRM_SERVICE_PASSWORD`
 - `JWT_SECRET_KEY`
 - `OPENAI_API_KEY`
 - `AZURE_BLOB_CONNECTION_STRING`
 - `AZURE_DOCS_IA_KEY`
 - `AZURE_DOCS_IA_ENDPOINT`
 - `AZURE_DOCS_IA_MODEL`
+
+### HTTPS opcionales por ambiente
+
+- `INDCRM_DEV_PFX_PASSWORD`
+- `INDCRM_PROD_PFX_PASSWORD`
 
 ## Scripts locales no versionados
 
@@ -147,3 +212,7 @@ Esas rutas quedan ignoradas por Git.
 - La IP de `DEV` queda confirmada en `192.168.0.146`.
 - La web `DEV` se sirve en `https://dev.insertec.biz:7702/`; la API `DEV` mantiene `https://dev.insertec.biz:7776/`.
 - El cambio de `DEV` a `PROD` debe resolverse en despliegue, no en recompilacion.
+- Cuando se cambie una variable de maquina usada por la API, reiniciar `IND_CRM_API` para recargar la configuracion del proceso.
+- Blob usa `AZURE_BLOB_ENVIRONMENT_SEGMENT` y, si falta, hereda `IND_ENV` antes de usar un fallback neutro.
+- Un `git push` entre ramas no cambia el ambiente por si solo; el riesgo real es ejecutar scripts locales con variables equivocadas.
+- Los scripts `Bats/instalar_api_axapta.bat`, `Bats/enable_https_7776.bat` y `Bats/enable_https_7776_dev.bat` reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.

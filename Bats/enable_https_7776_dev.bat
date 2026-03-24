@@ -6,22 +6,30 @@ cd /d "%~dp0"
 REM ------------------------------------------------------
 REM Configure HTTP.sys for DEV HTTPS on port 7776.
 REM Run this script as Administrator.
-REM Adjust SERVICE_USER if the service runs with another account.
-REM The certificate will be imported into LocalMachine\My.
+REM Secrets must stay outside the repository.
 REM ------------------------------------------------------
 
 set "HOST=dev.insertec.biz"
 set "PORT=7776"
-set "SERVICE_USER=INSERTEC\MARCO.MEZA"
+set "SERVICE_USER=%INDCRM_HTTP_SERVICE_USER%"
 set "APP_ID={ABCBA743-3E22-4006-B8D1-4D7EA6B4F4ED}"
 
 REM Default DEV certificate values. Override with:
 REM   enable_https_7776_dev.bat "C:\path\to\dev.insertec.biz.pfx" "password"
 set "PFX_PATH=%~dp0..\certificados\dev.insertec.biz.pfx"
-set "PFX_PASSWORD=7pg39EQuB"
+set "PFX_PASSWORD=%INDCRM_DEV_PFX_PASSWORD%"
 
 if not "%~1"=="" set "PFX_PATH=%~1"
 if not "%~2"=="" set "PFX_PASSWORD=%~2"
+
+if "%SERVICE_USER%"=="" set "SERVICE_USER=%USERDOMAIN%\%USERNAME%"
+
+if "%PFX_PASSWORD%"=="" (
+    echo ERROR: Missing DEV PFX password.
+    echo Provide it as the second argument or define INDCRM_DEV_PFX_PASSWORD locally.
+    pause
+    exit /b 1
+)
 
 if not exist "%PFX_PATH%" (
     echo ERROR: PFX not found at %PFX_PATH%
@@ -30,7 +38,7 @@ if not exist "%PFX_PATH%" (
 )
 
 echo Habilitando HTTPS DEV para https://%HOST%:%PORT%/
-echo Usuario del servicio: %SERVICE_USER%
+echo Usuario para URL ACL: %SERVICE_USER%
 echo PFX: %PFX_PATH%
 echo AppId: %APP_ID%
 echo.
