@@ -32,8 +32,8 @@ appsettings.Development.json
 # Local certificates
 certificados/
 
-# Postman collections (local)
-.codex/Postman/
+# Postman local scratch files
+.codex/Postman/**/*.local.json
 
 # Local machine scripts and secret helpers
 scripts/local/
