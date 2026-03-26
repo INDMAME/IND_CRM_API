@@ -15,6 +15,7 @@ function Get-EnvironmentDefaults {
     switch ($EnvironmentName) {
         "DEV" {
             return @{
+                AspNetCoreEnvironment = "Development"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
                 BaseUrl = "https://dev.insertec.biz:7776/"
                 PublicHost = "dev.insertec.biz"
@@ -31,6 +32,7 @@ function Get-EnvironmentDefaults {
         }
         default {
             return @{
+                AspNetCoreEnvironment = "Production"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc"
                 BaseUrl = "https://crm.insertec.biz:7776/"
                 PublicHost = "crm.insertec.biz"
@@ -108,6 +110,7 @@ $defaults = Get-EnvironmentDefaults -EnvironmentName $TargetEnvironment
 
 $settings = @(
     New-EnvSetting -Name "IND_ENV" -Value $TargetEnvironment -Category "Core"
+    New-EnvSetting -Name "ASPNETCORE_ENVIRONMENT" -Value $defaults.AspNetCoreEnvironment -Category "Core"
     New-EnvSetting -Name "INDCRM_AX_CONFIG_FILE" -Value $defaults.AxConfigFile -Category "AX"
     New-EnvSetting -Name "USER_DEFAULT" -Value "API_AXUSER" -Secret $true -Category "AX"
     New-EnvSetting -Name "USER_PASS_DEFAULT" -Value "<SET_ME_AX_PASSWORD>" -Secret $true -Category "AX"
@@ -218,5 +221,6 @@ foreach ($setting in $settings) {
 Write-Host ""
 Write-Host "Done."
 Write-Host "Restart the API service so the new machine variables are loaded."
+Write-Host ("Reminder: IND_CRM_APP should run with ASPNETCORE_ENVIRONMENT={0} on the target machine." -f $defaults.AspNetCoreEnvironment)
 Write-Host ("Next, load the real critical values interactively with: powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-critical-env.ps1 -TargetEnvironment {0} -Apply" -f $TargetEnvironment)
 Write-Host "Suggested command: Restart-Service IND_CRM_API"

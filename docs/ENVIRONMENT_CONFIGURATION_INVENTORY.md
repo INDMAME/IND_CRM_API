@@ -1,6 +1,6 @@
 # Environment Configuration Inventory
 
-Fecha: 2026-03-24
+Fecha: 2026-03-26
 
 ## Resumen
 
@@ -18,7 +18,7 @@ Fecha: 2026-03-24
 | Entorno | URL | Host | IP | AX config | Blob |
 | --- | --- | --- | --- | --- | --- |
 | `DEV` | `https://dev.insertec.biz:7776/` | `dev.insertec.biz` | `192.168.0.146` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
-| `PROD` | `https://crm.insertec.biz:7776/` | `crm.insertec.biz` | `212.142.143.182` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig.axc` | `PROD` |
+| `PROD` | `https://crm.insertec.biz:7776/` | `crm.insertec.biz` | `212.142.143.182` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc` | `PROD` |
 
 ## Scripts
 
@@ -29,6 +29,7 @@ Que hace:
 - Crea o actualiza la configuracion base del entorno.
 - No pide valores por consola.
 - Salta placeholders sensibles.
+- Escribe tambien `ASPNETCORE_ENVIRONMENT` con `Development` para `DEV` y `Production` para `PROD`.
 - Configura tambien `INDCRM_SERVICE_USER` e `INDCRM_HTTP_SERVICE_USER`.
 - Incluye tambien defaults operativos de OpenAI, Azure Docs IA y tipos de cambio.
 - Requiere indicar `-TargetEnvironment` de forma explicita.
@@ -63,6 +64,7 @@ Que hace:
 
 - Pide y actualiza todas las variables de entorno operativas en un solo flujo.
 - Usa defaults por entorno para URL, host, IP, AX config, blob y otras claves base.
+- Incluye `ASPNETCORE_ENVIRONMENT` para que `IND_CRM_APP` no dependa del valor por defecto del host.
 - Mantiene la logica interactiva de `Enter` para conservar el valor actual o usar el default.
 - Permite dejar vacias claves opcionales como `INDCRM_CORS_ALLOWED_ORIGINS` y `OPENAI_TRANSCRIPTION_DEFAULT_PROMPT`.
 - Para vaciar una clave opcional existente, admite escribir `__CLEAR__`.
@@ -109,6 +111,7 @@ Restart-Service IND_CRM_API
 ### Base por ambiente
 
 - `IND_ENV`
+- `ASPNETCORE_ENVIRONMENT`
 - `INDCRM_AX_CONFIG_FILE`
 - `INDCRM_AX_VERBOSE_LOGGING`
 - `INDCRM_AX_VERBOSE_LOG_PATH`
