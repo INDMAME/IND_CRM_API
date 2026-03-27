@@ -15,6 +15,7 @@ function Get-EnvironmentDefaults {
     switch ($EnvironmentName) {
         "DEV" {
             return @{
+                AspNetCoreEnvironment = "Development"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
                 BaseUrl = "https://dev.insertec.biz:7776/"
                 PublicHost = "dev.insertec.biz"
@@ -31,6 +32,7 @@ function Get-EnvironmentDefaults {
         }
         default {
             return @{
+                AspNetCoreEnvironment = "Production"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc"
                 BaseUrl = "https://crm.insertec.biz:7776/"
                 PublicHost = "crm.insertec.biz"
@@ -135,6 +137,7 @@ function Get-AllSettings {
 
     return @(
         New-InteractiveSetting -Name "IND_ENV" -Category "Core" -DefaultValue $EnvironmentName
+        New-InteractiveSetting -Name "ASPNETCORE_ENVIRONMENT" -Category "Core" -DefaultValue $defaults.AspNetCoreEnvironment
 
         New-InteractiveSetting -Name "INDCRM_AX_CONFIG_FILE" -Category "AX" -DefaultValue $defaults.AxConfigFile
         New-InteractiveSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "API_AXUSER"
@@ -478,4 +481,5 @@ foreach ($setting in $settings) {
 Write-Host ""
 Write-Host "Done."
 Write-Host "Restart the API service so the new machine variables are loaded."
+Write-Host ("Reminder: IND_CRM_APP should run with ASPNETCORE_ENVIRONMENT={0} on the target machine." -f $defaults.AspNetCoreEnvironment)
 Write-Host "Suggested command: Restart-Service IND_CRM_API"
