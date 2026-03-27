@@ -1,6 +1,6 @@
 ---
 name: ind-crm-backend-guardrails
-description: Use when creating or modifying backend APIs, Axapta integrations, contracts, documentation, or production configuration in IND_CRM_API.
+description: Use when creating or modifying backend APIs, Axapta integrations, contracts, documentation, release flow, or production configuration in IND_CRM_API.
 ---
 
 # IND CRM Backend Guardrails
@@ -102,6 +102,38 @@ Before finishing:
 - Confirm any affected canonical documentation was updated.
 - Validate changes with the normal compile/run flow used by this repo.
 - State in the final summary which checks were performed and any residual risk.
+
+## Release to PROD workflow
+Apply this flow when the user explicitly asks for phrases such as `genera una release a PROD`, `publica DEV en PROD`, or equivalent release language.
+
+Release naming:
+- Compute the next release number as `last release number + 1`.
+- Look for the latest existing `Release <N>` identifier in the repo release trail first. Valid sources can include merged PR titles, release PR titles, tags, or merge commits.
+- If the next release number cannot be determined safely, stop and ask before continuing.
+- Use `Release <N>` as the canonical release label.
+- The PR title must use `Release <N>`.
+- If a direct merge is required, the merge commit message must use `Release <N>`.
+
+Execution order:
+1. Confirm the active working branch is `DEV`.
+2. Verify git status and ensure all intended release changes are committed.
+3. If there are unexpected local changes, unrelated files, conflicts, or an unclear release scope, stop and ask before publishing.
+4. Push `DEV` to `origin/DEV`.
+5. Create a PR from `DEV` to `PROD` using the canonical release label `Release <N>`.
+6. Try to approve the PR and enable auto-merge if the repository and permissions allow it.
+7. If GitHub blocks self-approval, report that limitation explicitly.
+8. If auto-merge is unavailable or self-approval is blocked, but the user explicitly asked to generate the release to PROD, treat that request as authorization to complete the release by controlled direct merge.
+9. Before any direct merge, update local `PROD` safely against `origin/PROD` and verify that no production-only commits would be lost.
+10. Merge `DEV` into `PROD` with the canonical release label `Release <N>` and push `PROD` to `origin/PROD`.
+11. Verify that the PR is merged or that `origin/PROD` points to the expected release commit.
+12. Return the local workspace to `DEV` when the release flow ends.
+
+Release output:
+- Report the release label `Release <N>`.
+- Report the commit pushed to `DEV`.
+- Report the PR URL and state when a PR exists.
+- Report whether the release finished by PR merge or controlled direct merge.
+- Report any GitHub limitation encountered, such as self-approval or auto-merge restrictions.
 
 ## Supporting skills
 Use the minimum applicable subset of supporting skills. Do not fan out to every backend skill by default.
