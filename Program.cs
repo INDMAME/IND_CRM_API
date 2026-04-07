@@ -34,7 +34,7 @@ namespace IND_CRM_API
                 // Configuración general del servicio Windows
                 x.RunAsLocalSystem();
                 x.SetServiceName("IND_CRM_API");
-                x.SetDisplayName("IND Test APIs (Axapta SelfHost)");
+                x.SetDisplayName("IND CRM API (Axapta SelfHost)");
                 x.SetDescription("Servicio OWIN SelfHost para Axapta 3.0");
             });
         }
