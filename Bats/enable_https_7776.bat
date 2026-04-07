@@ -18,14 +18,21 @@ set "HOST=crm.insertec.biz"
 set "PORT=7776"
 set "SERVICE_USER=%INDCRM_HTTP_SERVICE_USER%"
 set "APP_ID={ABCBA743-3E22-4006-B8D1-4D7EA6B4F4ED}"
-set "PFX_PATH=%~dp0..\certificados\dominio.pfx"
+set "PFX_PATH_ENV_VAR=INDCRM_PROD_PFX_PATH"
+set "PFX_PATH_SOURCE=default path"
+set "PFX_PATH=%INDCRM_PROD_PFX_PATH%"
+if not "%PFX_PATH%"=="" set "PFX_PATH_SOURCE=%PFX_PATH_ENV_VAR%"
+if "%PFX_PATH%"=="" set "PFX_PATH=%~dp0..\certificados\dominio.pfx"
 set "PFX_PASSWORD=%INDCRM_PROD_PFX_PASSWORD%"
 set "BACKUP_FILE=%TEMP%\IND_CRM_API_https_%TARGET_ENV%_%PORT%_backup.txt"
 
 REM Optional overrides:
 REM   enable_https_7776.bat "C:\custom\path\dominio.pfx"
 REM   enable_https_7776.bat "C:\custom\path\dominio.pfx" "password"
-if not "%~1"=="" set "PFX_PATH=%~1"
+if not "%~1"=="" (
+    set "PFX_PATH=%~1"
+    set "PFX_PATH_SOURCE=first argument"
+)
 if not "%~2"=="" set "PFX_PASSWORD=%~2"
 
 call :RequireAdmin || goto :fail
@@ -37,6 +44,8 @@ call :RequirePfxPath || goto :fail
 echo Configuring HTTPS for https://%HOST%:%PORT%/
 echo URL ACL user: %SERVICE_USER%
 echo PFX path: %PFX_PATH%
+echo PFX path source: %PFX_PATH_SOURCE%
+echo Certificate source mode: local file only, no automatic download.
 echo AppId: %APP_ID%
 echo.
 
@@ -127,7 +136,9 @@ exit /b 0
 :RequirePfxPath
 if not exist "%PFX_PATH%" (
     echo ERROR: PFX not found at %PFX_PATH%
-    echo Pass a custom path as the first argument if needed.
+    echo This script expects a local PFX file and does not download it automatically.
+    echo For Git checkouts, remember that certificados\ is ignored by .gitignore.
+    echo Define %PFX_PATH_ENV_VAR% or pass a custom path as the first argument.
     exit /b 1
 )
 exit /b 0
