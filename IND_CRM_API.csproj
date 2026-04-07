@@ -8,7 +8,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>IND_CRM_API</RootNamespace>
     <AssemblyName>IND_CRM_API</AssemblyName>
-	<PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -35,7 +35,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <PlatformTarget>x86</PlatformTarget>	
+    <PlatformTarget>x86</PlatformTarget>
     <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
     <Prefer32Bit>true</Prefer32Bit>
@@ -276,6 +276,8 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="Bats\desinstalar_api_axapta.bat" />
+    <None Include="Bats\enable_https_7776.bat" />
+    <None Include="Bats\enable_https_7776_dev.bat" />
     <None Include="Bats\instalar_api_axapta.bat" />
     <None Include="Bats\reiniciar_api_axapta.bat" />
     <None Include="packages.config" />
@@ -304,6 +306,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Bats\TerminarProceso.txt" />
     <Content Include="Notes\FinishMigrationPrompt.txt" />
     <Content Include="Notes\Info.txt" />
   </ItemGroup>

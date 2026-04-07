@@ -3,6 +3,11 @@ setlocal
 title Instalador de IND_CRM_API
 cd /d "%~dp0"
 
+REM Build the Windows service display name from the current machine environment.
+set "SERVICE_ENV=%IND_ENV%"
+set "SERVICE_DISPLAY_NAME=CRM API"
+if not "%SERVICE_ENV%"=="" set "SERVICE_DISPLAY_NAME=CRM API %SERVICE_ENV%"
+
 echo ======================================================
 echo   Instalando servicio IND_CRM_API  (Axapta CRM API)
 echo ======================================================
@@ -46,6 +51,7 @@ if "%SERVICE_PASSWORD%"=="" (
 echo Public host: %PUBLIC_HOST%
 echo Public port: %PORT%
 echo Service user: %SERVICE_USER%
+echo Service display name: %SERVICE_DISPLAY_NAME%
 echo.
 
 REM ------------------------------------------------------
@@ -71,7 +77,7 @@ echo Instalando servicio Windows...
 
 sc create IND_CRM_API ^
     binPath= "%~dp0IND_CRM_API.exe" ^
-    DisplayName= "IND CRM API" ^
+    DisplayName= "%SERVICE_DISPLAY_NAME%" ^
     start= auto ^
     obj= "%SERVICE_USER%" ^
     password= "%SERVICE_PASSWORD%" >nul 2>&1
