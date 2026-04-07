@@ -1,6 +1,6 @@
 # Environment Configuration Inventory
 
-Fecha: 2026-03-26
+Fecha: 2026-04-07
 
 ## Resumen
 
@@ -77,6 +77,51 @@ Uso:
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
 ```
+
+### `Bats/enable_https_7776_dev.bat`
+
+Que hace:
+
+- Configura HTTPS de `HTTP.sys` para `https://dev.insertec.biz:7776/`.
+- Exige una maquina ya configurada como `DEV` con `IND_ENV`, `INDCRM_BASE_URL`, `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_PORT` e `INDCRM_HTTP_SERVICE_USER` coherentes.
+- Usa por defecto el PFX operativo `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx`.
+- Permite override de ruta por `INDCRM_DEV_PFX_PATH` o por el primer argumento.
+- Si no recibe password por argumento ni existe `INDCRM_DEV_PFX_PASSWORD`, pide la password por consola de forma segura.
+- Importa el certificado en `Cert:\LocalMachine\My`, valida que el certificado corresponde al host `dev.insertec.biz`, guarda backup del `sslcert` actual en `%TEMP%` y reaplica `urlacl` + `sslcert`.
+
+Uso:
+
+```bat
+cmd /c .\Bats\enable_https_7776_dev.bat
+cmd /c .\Bats\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
+```
+
+Nota:
+
+- Evitar pasar la password como segundo argumento salvo automatizacion controlada.
+- El script no descarga el PFX: espera un archivo local ya provisionado.
+
+### `Bats/enable_https_7776.bat`
+
+Que hace:
+
+- Configura HTTPS de `HTTP.sys` para `https://crm.insertec.biz:7776/`.
+- Exige una maquina ya configurada como `PROD` con `IND_ENV`, `INDCRM_BASE_URL`, `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_PORT` e `INDCRM_HTTP_SERVICE_USER` coherentes.
+- Usa por defecto `certificados\dominio.pfx` dentro del arbol local del repo.
+- Permite override de ruta por `INDCRM_PROD_PFX_PATH` o por el primer argumento.
+- Si no recibe password por argumento ni existe `INDCRM_PROD_PFX_PASSWORD`, pide la password por consola de forma segura.
+- Importa el certificado en `Cert:\LocalMachine\My`, valida que el certificado corresponde al host `crm.insertec.biz`, guarda backup del `sslcert` actual en `%TEMP%` y reaplica `urlacl` + `sslcert`.
+
+Uso:
+
+```bat
+cmd /c .\Bats\enable_https_7776.bat
+cmd /c .\Bats\enable_https_7776.bat "C:\otra\ruta\dominio.pfx"
+```
+
+Nota:
+
+- El script no descarga el PFX. Ademas, `certificados/` esta ignorado por Git, asi que ese secreto no viaja al capturar cambios.
 
 ## Uso rapido
 
@@ -196,7 +241,9 @@ Restart-Service IND_CRM_API
 
 ### HTTPS opcionales por ambiente
 
+- `INDCRM_DEV_PFX_PATH`
 - `INDCRM_DEV_PFX_PASSWORD`
+- `INDCRM_PROD_PFX_PATH`
 - `INDCRM_PROD_PFX_PASSWORD`
 
 ## Scripts locales no versionados
