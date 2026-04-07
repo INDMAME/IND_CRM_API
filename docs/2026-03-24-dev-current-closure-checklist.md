@@ -1,6 +1,7 @@
 # DEV Current Closure Checklist
 
 Fecha: 2026-03-24
+Actualizado: 2026-04-07
 
 ## Objetivo
 
@@ -22,7 +23,7 @@ Cerrar el `DEV` actual en esta maquina con:
 - `AZURE_BLOB_ENVIRONMENT_SEGMENT=DEV`
 - El servicio `IND_CRM_API` no esta instalado actualmente (`sc query` devuelve 1060).
 - El binding SSL de `0.0.0.0:7776` existe, pero hoy usa un certificado `CN=crm.insertec.biz`.
-- El archivo `certificados/dev.insertec.biz.pfx` no existe en este repo.
+- El PFX operativo esperado para DEV queda fuera del repo en `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx`, salvo override explicito.
 - El artefacto ejecutable verificado hoy es `bin\x86\Debug\IND_CRM_API.exe`.
 - El build `Release` falla en esta maquina porque falta `AxImp.exe` del SDK/Build Tools para la referencia COM de Axapta.
 
@@ -64,8 +65,12 @@ Comando:
 netsh http show sslcert ipport=0.0.0.0:7776
 netsh http show urlacl url=https://dev.insertec.biz:7776/
 
-# Sustituir la ruta y password reales del PFX de DEV.
-cmd /c .\Bats\enable_https_7776_dev.bat "C:\path\to\dev.insertec.biz.pfx" "<password>"
+# El .bat usa por defecto C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx
+# y pide la password por consola si INDCRM_DEV_PFX_PASSWORD no existe.
+cmd /c .\Bats\enable_https_7776_dev.bat
+
+# Solo si hace falta override de ruta:
+cmd /c .\Bats\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
 
 netsh http show sslcert ipport=0.0.0.0:7776
 ```
@@ -125,7 +130,7 @@ sc.exe delete IND_CRM_API | Out-Null
 
 sc.exe create IND_CRM_API `
   binPath= "`"$exe`"" `
-  DisplayName= "IND CRM API" `
+  DisplayName= "CRM API DEV" `
   start= auto `
   obj= "$user" `
   password= "$pass"
@@ -183,7 +188,7 @@ Evidencia esperada:
 
 Checklist:
 
-- [ ] Tener un PFX real de `dev.insertec.biz` fuera del repo o en una ruta operativa controlada.
+- [ ] Tener un PFX real de `dev.insertec.biz` en `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx` o usar un override de ruta controlado.
 - [ ] Corregir la discrepancia `CRM_API_AxConfig.axc` vs `CRM_API_AxConfig_PROD.axc` en scripts y documentacion.
 - [ ] Completar la maquina de build con SDK/Build Tools para que `Release/x86` compile sin depender de `Debug`.
 - [ ] Mantener Postman separado por entorno y usar la coleccion `DEV V01` por defecto para pruebas.

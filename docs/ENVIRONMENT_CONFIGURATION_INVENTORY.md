@@ -1,6 +1,6 @@
 # Environment Configuration Inventory
 
-Fecha: 2026-03-26
+Fecha: 2026-04-07
 
 ## Resumen
 
@@ -76,6 +76,43 @@ Uso:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
+```
+
+### `Bats/enable_https_7776_dev.bat`
+
+Que hace:
+
+- Configura HTTPS de `HTTP.sys` para `https://dev.insertec.biz:7776/`.
+- Exige una maquina ya configurada como `DEV` con `IND_ENV`, `INDCRM_BASE_URL`, `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_PORT` e `INDCRM_HTTP_SERVICE_USER` coherentes.
+- Usa por defecto el PFX operativo `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx`.
+- Si no recibe password por argumento ni existe `INDCRM_DEV_PFX_PASSWORD`, pide la password por consola de forma segura.
+- Importa el certificado en `Cert:\LocalMachine\My`, valida que el certificado corresponde al host `dev.insertec.biz`, guarda backup del `sslcert` actual en `%TEMP%` y reaplica `urlacl` + `sslcert`.
+
+Uso:
+
+```bat
+cmd /c .\Bats\enable_https_7776_dev.bat
+cmd /c .\Bats\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
+```
+
+Nota:
+
+- Evitar pasar la password como segundo argumento salvo automatizacion controlada.
+
+### `Bats/enable_https_7776.bat`
+
+Que hace:
+
+- Configura HTTPS de `HTTP.sys` para `https://crm.insertec.biz:7776/`.
+- Exige una maquina ya configurada como `PROD` con `IND_ENV`, `INDCRM_BASE_URL`, `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_PORT` e `INDCRM_HTTP_SERVICE_USER` coherentes.
+- Si no recibe password por argumento ni existe `INDCRM_PROD_PFX_PASSWORD`, pide la password por consola de forma segura.
+- Importa el certificado en `Cert:\LocalMachine\My`, valida que el certificado corresponde al host `crm.insertec.biz`, guarda backup del `sslcert` actual en `%TEMP%` y reaplica `urlacl` + `sslcert`.
+
+Uso:
+
+```bat
+cmd /c .\Bats\enable_https_7776.bat
+cmd /c .\Bats\enable_https_7776.bat "C:\otra\ruta\dominio.pfx"
 ```
 
 ## Uso rapido
