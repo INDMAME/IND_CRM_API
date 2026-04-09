@@ -2255,8 +2255,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(fileId))
                 validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
 
-            if (lineRecId.HasValue && lineRecId.Value <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId debe ser mayor que cero." });
+            AddOptionalLineRecIdValidation(validationErrors, lineRecId);
 
             if (validationErrors.Any())
             {
@@ -2487,8 +2486,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (string.IsNullOrWhiteSpace(fileId))
                 validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
-            if (lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio." });
+            AddLineRecIdValidation(validationErrors, lineRecId);
 
             ValidateTicketLineBody(body, "body", validationErrors);
 
@@ -2612,8 +2610,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (string.IsNullOrWhiteSpace(fileId))
                 validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
-            if (lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio." });
+            AddLineRecIdValidation(validationErrors, lineRecId);
 
             if (validationErrors.Any())
             {

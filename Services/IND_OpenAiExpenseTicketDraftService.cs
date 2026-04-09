@@ -35,7 +35,7 @@ namespace IND_CRM_API.Services
         private const string DefaultPromptCacheKey = "expense-ticket-draft-v2";
         private const string DefaultQuickCreateProfileTag = "ticket-quick-create-v1";
         private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v1";
-        private const string DefaultReasoningEffort = "minimal";
+        private const string DefaultReasoningEffort = "low";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
         private const string TimeoutSettingKey = "OpenAI:ExpenseTicketTimeoutSeconds";
@@ -680,7 +680,7 @@ namespace IND_CRM_API.Services
                 ProfileTag = profileTag,
                 PromptCacheKey = promptCacheKey,
                 ServiceTier = normalizedServiceTier,
-                ReasoningEffort = reasoningEffort
+                ReasoningEffort = NormalizeReasoningEffort(reasoningEffort)
             };
         }
 
@@ -959,10 +959,14 @@ namespace IND_CRM_API.Services
             var normalized = configuredValue.Trim().ToLowerInvariant();
             switch (normalized)
             {
+                // Preserve backward compatibility with legacy env values.
                 case "minimal":
+                    return DefaultReasoningEffort;
+                case "none":
                 case "low":
                 case "medium":
                 case "high":
+                case "xhigh":
                     return normalized;
                 default:
                     return DefaultReasoningEffort;
@@ -972,7 +976,7 @@ namespace IND_CRM_API.Services
         private static string _NormalizeQuickCreateReasoningFallback()
         {
             return string.IsNullOrWhiteSpace(DefaultReasoningEffort)
-                ? "minimal"
+                ? "low"
                 : DefaultReasoningEffort;
         }
 

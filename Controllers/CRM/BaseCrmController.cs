@@ -121,6 +121,24 @@ namespace IND_CRM_API.Controllers
             return axUserId.Trim();
         }
 
+        /// <summary>
+        /// Validates line RecIds while allowing temporary negative values returned by AX.
+        /// </summary>
+        protected static void AddLineRecIdValidation(List<IndValidationError> validationErrors, long lineRecId)
+        {
+            if (lineRecId == 0)
+                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId debe ser distinto de cero." });
+        }
+
+        /// <summary>
+        /// Validates optional line RecIds while allowing temporary negative values returned by AX.
+        /// </summary>
+        protected static void AddOptionalLineRecIdValidation(List<IndValidationError> validationErrors, long? lineRecId)
+        {
+            if (lineRecId.HasValue && lineRecId.Value == 0)
+                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId debe ser distinto de cero." });
+        }
+
         private string GetHeaderValue(string headerName)
         {
             try

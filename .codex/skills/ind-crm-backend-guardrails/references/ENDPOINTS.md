@@ -106,9 +106,11 @@ Endpoints
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId
+  Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
   Legacy: deleteWholeSheet=0|1 sigue soportado si no se envia deleteMode. AX procesa 1 y 2 como deleteWholeSheet.
+  Nota: si deleteMode es LineOnly, `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
@@ -176,12 +178,15 @@ Endpoints
 - DELETE /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina ticket completo.
   Query opcional: lineRecId (si se envia, elimina solo esa linea granular usando el metodo unificado de AX).
+  Nota: si se envia `lineRecId`, debe ser distinto de 0 y puede ser negativo para lineas temporales.
 - POST /api/crm/expensesheets/tickets/{fileId}/lines (Authorize + X-IND-Company + X-IND-AxUserId)
   Crea una linea granular en `INDTicketInfoLine`.
 - PUT /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza una linea granular de `INDTicketInfoLine`.
+  Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
 - DELETE /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina una linea granular de `INDTicketInfoLine`.
+  Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
 
 ## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

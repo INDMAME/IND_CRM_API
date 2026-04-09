@@ -824,8 +824,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
-            if (lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio." });
+            AddLineRecIdValidation(validationErrors, lineRecId);
 
             if (body == null)
             {
@@ -991,8 +990,8 @@ namespace IND_CRM_API.Controllers.CRM
                     Message = "deleteMode invalido. Valores permitidos: 0 LineOnly, 1 HeaderOnly, 2 WholeSheet."
                 });
             }
-            if (effectiveDeleteMode == ExpenseSheetDeleteMode.LineOnly && lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId es obligatorio cuando deleteMode es LineOnly." });
+            if (effectiveDeleteMode == ExpenseSheetDeleteMode.LineOnly)
+                AddLineRecIdValidation(validationErrors, lineRecId);
 
             if (validationErrors.Count > 0)
             {
