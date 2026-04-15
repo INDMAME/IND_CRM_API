@@ -80,10 +80,22 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Error en llamada COM o contenedor de Axapta.</summary>
         public const string AxComError = "AX_COM_ERROR";
 
+        /// <summary>Axapta no respondio dentro del tiempo configurado.</summary>
+        public const string AxTimeout = "AX_TIMEOUT";
+
         /// <summary>OpenAI rate limit exceeded for the current user and endpoint.</summary>
         public const string AiRateLimitExceeded = "AI_RATE_LIMIT_EXCEEDED";
 
         /// <summary>OpenAI concurrency limit exceeded for the current user.</summary>
         public const string AiConcurrencyLimitExceeded = "AI_CONCURRENCY_LIMIT_EXCEEDED";
+
+        /// <summary>Servicio de IA externo no disponible temporalmente.</summary>
+        public const string AiServiceUnavailable = "AI_SERVICE_UNAVAILABLE";
+
+        /// <summary>Dependencia externa no disponible temporalmente.</summary>
+        public const string ExternalServiceUnavailable = "EXTERNAL_SERVICE_UNAVAILABLE";
+
+        /// <summary>Dependencia externa agoto su tiempo de espera.</summary>
+        public const string ExternalServiceTimeout = "EXTERNAL_SERVICE_TIMEOUT";
     }
 }

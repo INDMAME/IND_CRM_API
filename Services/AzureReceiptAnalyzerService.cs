@@ -1,4 +1,5 @@
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -6,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -60,7 +62,14 @@ namespace IND_CRM_API.Services
                 throw new ArgumentException("blobReadUrl es obligatorio.", nameof(blobReadUrl));
 
             if (string.IsNullOrWhiteSpace(_endpoint) || string.IsNullOrWhiteSpace(_apiKey))
-                throw new InvalidOperationException("Azure Document Intelligence no esta configurado.");
+            {
+                throw new IND_ExternalServiceException(
+                    "Azure Document Intelligence",
+                    "El servicio de analisis OCR no esta disponible porque no esta configurado correctamente.",
+                    IndErrorCodes.ExternalServiceUnavailable,
+                    HttpStatusCode.ServiceUnavailable,
+                    "not-configured");
+            }
 
             var analyzeUri = BuildAnalyzeUri();
             var analyzeRequestBody = JsonConvert.SerializeObject(new JObject
@@ -68,77 +77,113 @@ namespace IND_CRM_API.Services
                 ["urlSource"] = blobReadUrl.Trim()
             });
 
-            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            try
             {
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(_timeoutSeconds));
-
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                _logger.Log(
-                    $"[AZDOCS] AnalyzeReceipt start model={_modelId} apiVersion={_apiVersion} blobUrlLength={blobReadUrl.Length}",
-                    AxaptaSessionManager.LogLevel.Info);
-
-                using (var request = new HttpRequestMessage(HttpMethod.Post, analyzeUri))
+                using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    request.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", _apiKey);
-                    request.Content = new StringContent(analyzeRequestBody, Encoding.UTF8, "application/json");
+                    timeoutCts.CancelAfter(TimeSpan.FromSeconds(_timeoutSeconds));
 
-                    using (var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false))
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    _logger.Log(
+                        $"[AZDOCS] AnalyzeReceipt start model={_modelId} apiVersion={_apiVersion} blobUrlLength={blobReadUrl.Length}",
+                        AxaptaSessionManager.LogLevel.Info);
+
+                    using (var request = new HttpRequestMessage(HttpMethod.Post, analyzeUri))
                     {
-                        var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.Accepted)
-                            throw BuildAzureDocsException("POST", responseBody, (int)response.StatusCode);
+                        request.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", _apiKey);
+                        request.Content = new StringContent(analyzeRequestBody, Encoding.UTF8, "application/json");
 
-                        var operationLocation = response.Headers.Contains("Operation-Location")
-                            ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
-                            : null;
-
-                        if (response.StatusCode != System.Net.HttpStatusCode.Accepted || string.IsNullOrWhiteSpace(operationLocation))
+                        using (var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false))
                         {
-                            var directResult = TryBuildAnalysisResult(responseBody);
-                            if (directResult != null)
+                            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.Accepted)
+                                throw BuildAzureDocsException("POST", responseBody, (int)response.StatusCode);
+
+                            var operationLocation = response.Headers.Contains("Operation-Location")
+                                ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
+                                : null;
+
+                            if (response.StatusCode != System.Net.HttpStatusCode.Accepted || string.IsNullOrWhiteSpace(operationLocation))
                             {
-                                _logger.Log($"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount}", AxaptaSessionManager.LogLevel.Info);
-                                return directResult;
+                                var directResult = TryBuildAnalysisResult(responseBody);
+                                if (directResult != null)
+                                {
+                                    _logger.Log($"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount}", AxaptaSessionManager.LogLevel.Info);
+                                    return directResult;
+                                }
+
+                                throw new IND_ExternalServiceException(
+                                    "Azure Document Intelligence",
+                                    "El servicio de analisis OCR devolvio una respuesta incompleta.",
+                                    IndErrorCodes.ExternalServiceUnavailable,
+                                    HttpStatusCode.ServiceUnavailable,
+                                    "missing-operation-location");
                             }
 
-                            throw new InvalidOperationException("Azure Document Intelligence no devolvio Operation-Location.");
-                        }
-
-                        while (true)
-                        {
-                            timeoutCts.Token.ThrowIfCancellationRequested();
-                            await Task.Delay(_pollIntervalMs, timeoutCts.Token).ConfigureAwait(false);
-
-                            using (var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation))
+                            while (true)
                             {
-                                pollRequest.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", _apiKey);
+                                timeoutCts.Token.ThrowIfCancellationRequested();
+                                await Task.Delay(_pollIntervalMs, timeoutCts.Token).ConfigureAwait(false);
 
-                                using (var pollResponse = await HttpClient.SendAsync(pollRequest, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false))
+                                using (var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation))
                                 {
-                                    var pollBody = await pollResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                                    if (!pollResponse.IsSuccessStatusCode)
-                                        throw BuildAzureDocsException("GET", pollBody, (int)pollResponse.StatusCode);
+                                    pollRequest.Headers.TryAddWithoutValidation("Ocp-Apim-Subscription-Key", _apiKey);
 
-                                    var status = TryReadStatus(pollBody);
-                                    if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
+                                    using (var pollResponse = await HttpClient.SendAsync(pollRequest, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false))
                                     {
-                                        var result = TryBuildAnalysisResult(pollBody);
-                                        if (result == null)
-                                            throw new InvalidOperationException("Azure Document Intelligence devolvio un resultado vacio.");
+                                        var pollBody = await pollResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                        if (!pollResponse.IsSuccessStatusCode)
+                                            throw BuildAzureDocsException("GET", pollBody, (int)pollResponse.StatusCode);
 
-                                        _logger.Log(
-                                            $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
-                                            AxaptaSessionManager.LogLevel.Info);
-                                        return result;
+                                        var status = TryReadStatus(pollBody);
+                                        if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            var result = TryBuildAnalysisResult(pollBody);
+                                            if (result == null)
+                                                throw new IND_ExternalServiceException(
+                                                    "Azure Document Intelligence",
+                                                    "El servicio de analisis OCR devolvio un resultado vacio.",
+                                                    IndErrorCodes.ExternalServiceUnavailable,
+                                                    HttpStatusCode.ServiceUnavailable,
+                                                    "empty-result");
+
+                                            _logger.Log(
+                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
+                                                AxaptaSessionManager.LogLevel.Info);
+                                            return result;
+                                        }
+
+                                        if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
+                                            throw BuildAzureDocsException("GET", pollBody, 200);
                                     }
-
-                                    if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
-                                        throw BuildAzureDocsException("GET", pollBody, 200);
                                 }
                             }
                         }
                     }
                 }
+            }
+            catch (OperationCanceledException ex)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+
+                throw new IND_ExternalServiceException(
+                    "Azure Document Intelligence",
+                    "El analisis OCR tardo demasiado y el servicio externo no respondio a tiempo.",
+                    IndErrorCodes.ExternalServiceTimeout,
+                    HttpStatusCode.GatewayTimeout,
+                    "timeout",
+                    ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new IND_ExternalServiceException(
+                    "Azure Document Intelligence",
+                    "No se pudo conectar con el servicio de analisis OCR.",
+                    IndErrorCodes.ExternalServiceUnavailable,
+                    HttpStatusCode.ServiceUnavailable,
+                    ex.Message,
+                    ex);
             }
         }
 
@@ -612,8 +657,12 @@ namespace IND_CRM_API.Services
                 }
             }
 
-            return new InvalidOperationException(
-                $"Azure Document Intelligence fallo en {operation} status={statusCode} detail={summary}".Trim());
+            return new IND_ExternalServiceException(
+                "Azure Document Intelligence",
+                "El servicio de analisis OCR devolvio un error y no pudo completar la operacion.",
+                IndErrorCodes.ExternalServiceUnavailable,
+                HttpStatusCode.ServiceUnavailable,
+                $"operation={operation} status={statusCode} detail={summary}".Trim());
         }
 
         private static string NormalizeEndpoint(string endpoint)

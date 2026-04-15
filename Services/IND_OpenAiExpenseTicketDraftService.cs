@@ -1,6 +1,7 @@
-﻿using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -109,7 +110,14 @@ namespace IND_CRM_API.Services
 
             var openAiApiKey = GetOpenAiApiKey();
             if (string.IsNullOrWhiteSpace(openAiApiKey))
-                throw new InvalidOperationException("OpenAI API key no esta configurada.");
+            {
+                throw new IND_ExternalServiceException(
+                    "OpenAI",
+                    "La extraccion del ticket no esta disponible porque el servicio de IA no esta configurado correctamente.",
+                    IndErrorCodes.AiServiceUnavailable,
+                    HttpStatusCode.ServiceUnavailable,
+                    "api-key-missing");
+            }
 
             var imageBase64 = Convert.ToBase64String(imageBytes);
             var normalizedContentType = GetNormalizedDataContentType(contentType);
@@ -176,7 +184,12 @@ namespace IND_CRM_API.Services
                                 summary);
                         }
 
-                        throw new Exception("Error en servicio de extraccion de ticket.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo extraer el borrador porque el servicio de IA devolvio un error.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            summary);
                     }
 
                     var incompleteReason = TryExtractIncompleteReason(responseBody);
@@ -198,14 +211,24 @@ namespace IND_CRM_API.Services
                         _logger.Log(
                             $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
                             AxaptaSessionManager.LogLevel.Warning);
-                        throw new Exception("OpenAI recorto el draft por max_output_tokens.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo completar el borrador porque el servicio de IA recorto la respuesta antes de terminar.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            "max_output_tokens");
                     }
 
                     var extracted = TryParseExpenseDraft(responseBody);
                     if (extracted == null)
                     {
                         _logger.Log("[OPENAI] Respuesta sin json valido de draft de ticket.", AxaptaSessionManager.LogLevel.Warning);
-                        throw new Exception("OpenAI no devolvio un JSON valido para el draft.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo extraer el borrador porque el servicio de IA devolvio una respuesta invalida.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            "invalid-json");
                     }
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
@@ -218,11 +241,23 @@ namespace IND_CRM_API.Services
             catch (TaskCanceledException ex)
             {
                 _logger.Log("[OPENAI] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
-                throw;
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+
+                throw new IND_ExternalServiceException(
+                    "OpenAI",
+                    "La extraccion del ticket tardo demasiado y el servicio de IA no respondio a tiempo.",
+                    IndErrorCodes.ExternalServiceTimeout,
+                    HttpStatusCode.GatewayTimeout,
+                    "timeout",
+                    ex);
             }
             catch (Exception ex) when (!(ex is InvalidOperationException))
             {
                 _logger.Log("[OPENAI] Error extrayendo draft: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                if (ex is IND_OpenAiRateLimitException || ex is IND_ExternalServiceException)
+                    throw;
+
                 throw;
             }
             finally
@@ -245,7 +280,14 @@ namespace IND_CRM_API.Services
 
             var openAiApiKey = GetOpenAiApiKey();
             if (string.IsNullOrWhiteSpace(openAiApiKey))
-                throw new InvalidOperationException("OpenAI API key no esta configurada.");
+            {
+                throw new IND_ExternalServiceException(
+                    "OpenAI",
+                    "La normalizacion del ticket no esta disponible porque el servicio de IA no esta configurado correctamente.",
+                    IndErrorCodes.AiServiceUnavailable,
+                    HttpStatusCode.ServiceUnavailable,
+                    "api-key-missing");
+            }
 
             var safeFileName = string.IsNullOrWhiteSpace(fileName) ? "ticket" : fileName.Trim();
             var promptText = BuildStructuredOcrPayloadPromptText(profile);
@@ -311,7 +353,12 @@ namespace IND_CRM_API.Services
                                 summary);
                         }
 
-                        throw new Exception("Error en servicio de normalizacion de ticket.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo normalizar el ticket porque el servicio de IA devolvio un error.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            summary);
                     }
 
                     var incompleteReason = TryExtractIncompleteReason(responseBody);
@@ -333,14 +380,24 @@ namespace IND_CRM_API.Services
                         _logger.Log(
                             $"[OPENAI-NORMALIZE] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)}",
                             AxaptaSessionManager.LogLevel.Warning);
-                        throw new Exception("OpenAI recorto el draft por max_output_tokens.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo normalizar el ticket porque el servicio de IA recorto la respuesta antes de terminar.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            "max_output_tokens");
                     }
 
                     var extracted = TryParseExpenseDraft(responseBody);
                     if (extracted == null)
                     {
                         _logger.Log("[OPENAI-NORMALIZE] Respuesta sin json valido de normalizacion de ticket.", AxaptaSessionManager.LogLevel.Warning);
-                        throw new Exception("OpenAI no devolvio un JSON valido para la normalizacion del ticket.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "No se pudo normalizar el ticket porque el servicio de IA devolvio una respuesta invalida.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            "invalid-json");
                     }
 
                     ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
@@ -364,11 +421,23 @@ namespace IND_CRM_API.Services
             catch (TaskCanceledException ex)
             {
                 _logger.Log("[OPENAI-NORMALIZE] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
-                throw;
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+
+                throw new IND_ExternalServiceException(
+                    "OpenAI",
+                    "La normalizacion del ticket tardo demasiado y el servicio de IA no respondio a tiempo.",
+                    IndErrorCodes.ExternalServiceTimeout,
+                    HttpStatusCode.GatewayTimeout,
+                    "timeout",
+                    ex);
             }
             catch (Exception ex) when (!(ex is InvalidOperationException))
             {
                 _logger.Log("[OPENAI-NORMALIZE] Error normalizando OCR: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                if (ex is IND_OpenAiRateLimitException || ex is IND_ExternalServiceException)
+                    throw;
+
                 throw;
             }
             finally

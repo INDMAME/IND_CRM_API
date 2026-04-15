@@ -8,8 +8,11 @@ using AxaptaCOMConnector;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Net;
+using System.Threading;
 using System.Web.Http;
 using System.Web.Http.Description;
 using Swashbuckle.Swagger.Annotations;
@@ -50,8 +53,21 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerOperation(Tags = new[] { "Autenticacion" })]
         public IHttpActionResult Login([FromBody] LoginRequest dto)
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var correlationId = IndRequestDiagnosticsHelper.GetOrCreateCorrelationId(Request);
+            var traceId = IndRequestDiagnosticsHelper.GetOrCreateTraceId(Request);
+            var authSw = Stopwatch.StartNew();
             var errors = new global::System.Collections.Generic.List<IndValidationError>();
+            var requestedUser = dto?.Username?.Trim() ?? string.Empty;
+
+            LogAuthTrace(
+                "login",
+                "request-received",
+                traceId,
+                correlationId,
+                requestedUser,
+                null,
+                $"dtoNull={dto == null} passwordProvided={!string.IsNullOrWhiteSpace(dto?.Password)} passwordLength={dto?.Password?.Length ?? 0}",
+                authSw);
 
             if (dto == null)
             {
@@ -67,6 +83,17 @@ namespace IND_CRM_API.Controllers.System
 
             if (errors.Count > 0)
             {
+                LogAuthTrace(
+                    "login",
+                    "validation-failed",
+                    traceId,
+                    correlationId,
+                    requestedUser,
+                    null,
+                    $"errorCount={errors.Count}",
+                    authSw,
+                    AxaptaSessionManager.LogLevel.Warning);
+
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
@@ -81,18 +108,40 @@ namespace IND_CRM_API.Controllers.System
 
             try
             {
+                LogAuthTrace("login", "validation-ok", traceId, correlationId, dto.Username, null, null, authSw);
                 _logger.Log($"[AUTH] Login attempt for user {dto.Username}");
 
                 var expirationSetting = AppSettingsHelper.GetSetting(
                     "JwtSettings:ExpirationMinutes",
                     "INDCRM_JWT_EXPIRATION_MINUTES");
                 int expirationMinutes = int.TryParse(expirationSetting, out var exp) ? exp : 60;
+                LogAuthTrace(
+                    "login",
+                    "expiration-resolved",
+                    traceId,
+                    correlationId,
+                    dto.Username,
+                    null,
+                    $"expirationSetting={expirationSetting ?? string.Empty} expirationMinutes={expirationMinutes}",
+                    authSw);
 
                 // Primero validar credenciales contra Axapta, luego emitir el token.
+                LogAuthTrace("login", "before-create-or-get-session", traceId, correlationId, dto.Username, null, "tokenInfoPresent=false", authSw);
                 var sessionCreated = _sessionManager.CreateOrGetSession(dto.Username, dto.Password, null);
+                LogAuthTrace(
+                    "login",
+                    "after-create-or-get-session",
+                    traceId,
+                    correlationId,
+                    dto.Username,
+                    null,
+                    "sessionCreated=" + sessionCreated,
+                    authSw,
+                    sessionCreated ? AxaptaSessionManager.LogLevel.Info : AxaptaSessionManager.LogLevel.Warning);
 
                 if (!sessionCreated)
                 {
+                    LogAuthTrace("login", "session-create-failed", traceId, correlationId, dto.Username, null, null, authSw, AxaptaSessionManager.LogLevel.Warning);
                     _logger.Log($"[AUTH-FAIL] Could not create Axapta session for {dto.Username}");
                     var failResponse = new IndApiResponse<object>
                     {
@@ -106,9 +155,22 @@ namespace IND_CRM_API.Controllers.System
                     return Content(HttpStatusCode.Unauthorized, failResponse);
                 }
 
+                LogAuthTrace("login", "before-generate-token", traceId, correlationId, dto.Username, null, null, authSw);
                 var tokenInfo = _jwt.GenerateToken(dto.Username, expirationMinutes);
+                LogAuthTrace(
+                    "login",
+                    "after-generate-token",
+                    traceId,
+                    correlationId,
+                    dto.Username,
+                    null,
+                    $"tokenExpiresUtc={tokenInfo.Expiration:o}",
+                    authSw);
+
+                LogAuthTrace("login", "before-refresh-session-token", traceId, correlationId, dto.Username, null, "oldTokenPresent=false", authSw);
                 if (!_sessionManager.RefreshSessionToken(dto.Username, tokenInfo, null))
                 {
+                    LogAuthTrace("login", "refresh-session-token-failed", traceId, correlationId, dto.Username, null, null, authSw, AxaptaSessionManager.LogLevel.Error);
                     _logger.Log($"[AUTH-ERROR] Could not bind token to session for {dto.Username}");
                     var errorResponse = new IndApiResponse<object>
                     {
@@ -121,8 +183,10 @@ namespace IND_CRM_API.Controllers.System
                     };
                     return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
+                LogAuthTrace("login", "after-refresh-session-token", traceId, correlationId, dto.Username, null, "refreshResult=true", authSw);
 
                 _logger.Log($"[AUTH-SUCCESS] Token issued for {dto.Username}");
+                LogAuthTrace("login", "completed", traceId, correlationId, dto.Username, null, null, authSw);
 
                 var okResponse = new IndApiResponse<object>
                 {
@@ -135,8 +199,24 @@ namespace IND_CRM_API.Controllers.System
                 };
                 return Ok(okResponse);
             }
+            catch (IND_AxCallTimeoutException ex)
+            {
+                LogAuthTrace("login", "timeout", traceId, correlationId, dto?.Username, null, ex.Detail, authSw, AxaptaSessionManager.LogLevel.Error, ex);
+                _logger.Log($"[AUTH-TIMEOUT] {dto?.Username} -> {ex.Message}");
+                var timeoutResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.UserMessage,
+                    ErrorCode = IndErrorCodes.AxTimeout,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content(HttpStatusCode.ServiceUnavailable, timeoutResponse);
+            }
             catch (Exception ex)
             {
+                LogAuthTrace("login", "exception", traceId, correlationId, dto?.Username, null, null, authSw, AxaptaSessionManager.LogLevel.Error, ex);
                 _logger.Log($"[AUTH-ERROR] {dto?.Username} -> {ex.Message}");
                 var errorResponse = new IndApiResponse<object>
                 {
@@ -165,12 +245,16 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerOperation(Tags = new[] { "Autenticacion" })]
         public IHttpActionResult Refresh()
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var correlationId = IndRequestDiagnosticsHelper.GetOrCreateCorrelationId(Request);
+            var traceId = IndRequestDiagnosticsHelper.GetOrCreateTraceId(Request);
+            var authSw = Stopwatch.StartNew();
             try
             {
                 var username = User?.Identity?.Name;
+                LogAuthTrace("refresh", "request-received", traceId, correlationId, username, null, null, authSw);
                 if (string.IsNullOrWhiteSpace(username))
                 {
+                    LogAuthTrace("refresh", "auth-required", traceId, correlationId, username, null, null, authSw, AxaptaSessionManager.LogLevel.Warning);
                     var authResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -192,9 +276,21 @@ namespace IND_CRM_API.Controllers.System
                 int expirationMinutes = int.TryParse(expirationSetting, out var exp) ? exp : 60;
 
                 var tokenInfo = _jwt.GenerateToken(username, expirationMinutes);
+                LogAuthTrace(
+                    "refresh",
+                    "token-generated",
+                    traceId,
+                    correlationId,
+                    username,
+                    null,
+                    $"oldTokenPresent={!string.IsNullOrWhiteSpace(oldToken)} tokenExpiresUtc={tokenInfo.Expiration:o}",
+                    authSw);
+
                 _sessionManager.RefreshSessionToken(username, tokenInfo, oldToken);
+                LogAuthTrace("refresh", "session-token-refreshed", traceId, correlationId, username, null, null, authSw);
 
                 _logger.Log("[AUTH-REFRESH] Token refreshed for " + username);
+                LogAuthTrace("refresh", "completed", traceId, correlationId, username, null, null, authSw);
 
                 var okResponse = new IndApiResponse<object>
                 {
@@ -209,6 +305,7 @@ namespace IND_CRM_API.Controllers.System
             }
             catch (Exception ex)
             {
+                LogAuthTrace("refresh", "exception", traceId, correlationId, User?.Identity?.Name, null, null, authSw, AxaptaSessionManager.LogLevel.Error, ex);
                 _logger.Log("[AUTH-ERROR] Refresh -> " + ex.Message);
                 var errorResponse = new IndApiResponse<object>
                 {
@@ -239,11 +336,34 @@ namespace IND_CRM_API.Controllers.System
         [ResponseType(typeof(IndPagedResponse<EntraContextDto>))]
         public IHttpActionResult EntraContext([FromBody] EntraContextRequest body)
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var correlationId = IndRequestDiagnosticsHelper.GetOrCreateCorrelationId(Request);
+            var traceId = IndRequestDiagnosticsHelper.GetOrCreateTraceId(Request);
+            var authSw = Stopwatch.StartNew();
             var errors = new List<IndValidationError>();
+            var currentUsername = User?.Identity?.Name ?? string.Empty;
+
+            LogAuthTrace(
+                "entra-context",
+                "request-received",
+                traceId,
+                correlationId,
+                currentUsername,
+                body?.appCode,
+                $"bodyNull={body == null} entraOidProvided={!string.IsNullOrWhiteSpace(body?.entraOid)} entraOidLength={body?.entraOid?.Trim().Length ?? 0}",
+                authSw);
 
             void LogOut(HttpStatusCode statusCode)
             {
+                LogAuthTrace(
+                    "entra-context",
+                    "response",
+                    traceId,
+                    correlationId,
+                    currentUsername,
+                    body?.appCode,
+                    "status=" + (int)statusCode,
+                    authSw,
+                    statusCode == HttpStatusCode.OK ? AxaptaSessionManager.LogLevel.Info : AxaptaSessionManager.LogLevel.Warning);
                 _logger.Log($"[AUTH-ENTRA-OUT] {(int)statusCode} traceId={traceId}");
             }
 
@@ -265,6 +385,17 @@ namespace IND_CRM_API.Controllers.System
 
             if (errors.Count > 0)
             {
+                LogAuthTrace(
+                    "entra-context",
+                    "validation-failed",
+                    traceId,
+                    correlationId,
+                    currentUsername,
+                    body?.appCode,
+                    $"errorCount={errors.Count}",
+                    authSw,
+                    AxaptaSessionManager.LogLevel.Warning);
+
                 var validationResponse = new IndApiResponse<object>
                 {
                     Success = false,
@@ -281,8 +412,10 @@ namespace IND_CRM_API.Controllers.System
             try
             {
                 var username = User?.Identity?.Name;
+                currentUsername = username ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(username))
                 {
+                    LogAuthTrace("entra-context", "auth-required", traceId, correlationId, currentUsername, body?.appCode, null, authSw, AxaptaSessionManager.LogLevel.Warning);
                     var authResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -297,21 +430,53 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 _logger.Log($"[AUTH-ENTRA-IN] user={username} appCode={body.appCode} traceId={traceId}");
+                LogAuthTrace("entra-context", "before-get-ax-instance", traceId, correlationId, username, body.appCode, null, authSw);
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
-                var con = ax.CreateContainer();
-                con.Append(body.entraOid?.Trim() ?? string.Empty);
-                con.Append(body.appCode?.Trim() ?? string.Empty);
+                LogAuthTrace(
+                    "entra-context",
+                    "after-get-ax-instance",
+                    traceId,
+                    correlationId,
+                    username,
+                    body.appCode,
+                    "axType=" + (ax == null ? "null" : ax.GetType().FullName),
+                    authSw);
 
-                object resultObj = ax.CallStaticClassMethod(
-                    "INDCRMUtilityService",
+                object resultObj = ExecuteAxWithTimeout(
+                    () =>
+                    {
+                        LogAuthTrace("entra-context", "before-create-container", traceId, correlationId, username, body.appCode, null, authSw);
+                        var con = ax.CreateContainer();
+                        LogAuthTrace("entra-context", "after-create-container", traceId, correlationId, username, body.appCode, "containerType=" + (con == null ? "null" : con.GetType().FullName), authSw);
+                        con.Append(body.entraOid?.Trim() ?? string.Empty);
+                        con.Append(body.appCode?.Trim() ?? string.Empty);
+                        LogAuthTrace("entra-context", "container-populated", traceId, correlationId, username, body.appCode, "appendCount=2", authSw);
+
+                        LogAuthTrace("entra-context", "before-login-entra-context-call", traceId, correlationId, username, body.appCode, null, authSw);
+                        var callResult = ax.CallStaticClassMethod(
+                            "INDCRMUtilityService",
+                            "loginEntraContext",
+                            con
+                        );
+                        LogAuthTrace(
+                            "entra-context",
+                            "after-login-entra-context-call",
+                            traceId,
+                            correlationId,
+                            username,
+                            body.appCode,
+                            "resultType=" + (callResult == null ? "null" : callResult.GetType().FullName),
+                            authSw);
+                        return callResult;
+                    },
                     "loginEntraContext",
-                    con
-                );
+                    "user=" + username + " appCode=" + (body?.appCode ?? string.Empty));
 
                 var root = resultObj as IAxaptaContainer;
                 if (root == null)
                 {
+                    LogAuthTrace("entra-context", "invalid-root-container", traceId, correlationId, username, body.appCode, null, authSw, AxaptaSessionManager.LogLevel.Error);
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -328,6 +493,7 @@ namespace IND_CRM_API.Controllers.System
                 var header = MapEntraHeader(root);
                 if (header == null)
                 {
+                    LogAuthTrace("entra-context", "invalid-header", traceId, correlationId, username, body.appCode, null, authSw, AxaptaSessionManager.LogLevel.Error);
                     var invalidResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -340,6 +506,16 @@ namespace IND_CRM_API.Controllers.System
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, invalidResponse);
                 }
+                LogAuthTrace(
+                    "entra-context",
+                    "header-mapped",
+                    traceId,
+                    correlationId,
+                    username,
+                    body.appCode,
+                    $"headerSuccess={header.Success} appActive={header.AppActive} userActive={header.UserActive} defaultCompany={header.DefaultCompany}",
+                    authSw,
+                    header.Success ? AxaptaSessionManager.LogLevel.Info : AxaptaSessionManager.LogLevel.Warning);
 
                 if (!header.Success)
                 {
@@ -361,11 +537,21 @@ namespace IND_CRM_API.Controllers.System
                     Header = header,
                     Companies = MapEntraCompanies(root)
                 };
+                LogAuthTrace(
+                    "entra-context",
+                    "companies-mapped",
+                    traceId,
+                    correlationId,
+                    username,
+                    body.appCode,
+                    "companyCount=" + (context.Companies == null ? 0 : context.Companies.Count),
+                    authSw);
 
                 UserCompanyAccessCache.SetAllowedCompanies(
                     username,
                     context.Companies == null ? null : context.Companies.ConvertAll(c => c.CompanyId)
                 );
+                LogAuthTrace("entra-context", "company-cache-updated", traceId, correlationId, username, body.appCode, null, authSw);
 
                 var okResponse = new IndPagedResponse<EntraContextDto>
                 {
@@ -377,8 +563,25 @@ namespace IND_CRM_API.Controllers.System
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
             }
+            catch (IND_AxCallTimeoutException ex)
+            {
+                LogAuthTrace("entra-context", "timeout", traceId, correlationId, currentUsername, body?.appCode, ex.Detail, authSw, AxaptaSessionManager.LogLevel.Error, ex);
+                _logger.Log($"[AUTH-ENTRA-TIMEOUT] {ex.Message}");
+                var timeoutResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.UserMessage,
+                    ErrorCode = IndErrorCodes.AxTimeout,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.ServiceUnavailable);
+                return Content(HttpStatusCode.ServiceUnavailable, timeoutResponse);
+            }
             catch (Exception ex)
             {
+                LogAuthTrace("entra-context", "exception", traceId, correlationId, currentUsername, body?.appCode, null, authSw, AxaptaSessionManager.LogLevel.Error, ex);
                 _logger.Log($"[AUTH-ENTRA-ERROR] {ex}");
                 var errorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError;
                 var errorResponse = new IndApiResponse<object>
@@ -392,6 +595,117 @@ namespace IND_CRM_API.Controllers.System
                 };
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, errorResponse);
+            }
+        }
+
+        // Emits structured auth traces so stuck COM calls leave a clear last stage in the log.
+        private void LogAuthTrace(
+            string flow,
+            string stage,
+            string traceId,
+            string correlationId,
+            string username,
+            string appCode,
+            string detail,
+            Stopwatch stopwatch,
+            AxaptaSessionManager.LogLevel level = AxaptaSessionManager.LogLevel.Info,
+            Exception ex = null)
+        {
+            var parts = new List<string>
+            {
+                "[AUTH-TRACE]",
+                "flow=" + (flow ?? string.Empty),
+                "stage=" + (stage ?? string.Empty),
+                "correlationId=" + (correlationId ?? "-"),
+                "traceId=" + (traceId ?? "-"),
+                "requestUser=" + (User?.Identity?.Name ?? string.Empty),
+                "targetUser=" + (username ?? string.Empty),
+                "appCode=" + (appCode ?? string.Empty),
+                "method=" + (Request?.Method?.Method ?? "UNKNOWN"),
+                "path=" + (Request?.RequestUri?.AbsolutePath ?? string.Empty),
+                "threadId=" + Environment.CurrentManagedThreadId,
+                "apartment=" + Thread.CurrentThread.GetApartmentState(),
+                "processId=" + Process.GetCurrentProcess().Id,
+                "elapsedMs=" + (stopwatch == null ? 0 : stopwatch.ElapsedMilliseconds)
+            };
+
+            if (!string.IsNullOrWhiteSpace(detail))
+                parts.Add("detail=" + Truncate(detail, 3000));
+
+            if (ex != null)
+            {
+                parts.Add("error=" + ex.GetType().Name);
+                parts.Add("message=" + Truncate(ex.Message, 2000));
+                if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+                    parts.Add("stack=" + Truncate(ex.StackTrace, 4000));
+            }
+
+            _logger.Log(string.Join(" ", parts), level);
+        }
+
+        private static string Truncate(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+                return value;
+
+            return value.Substring(0, maxLength);
+        }
+
+        // Executes a small AX COM block under the configured timeout so auth endpoints fail fast on hangs.
+        private static T ExecuteAxWithTimeout<T>(Func<T> action, string operationName, string detail)
+        {
+            var timeoutSeconds = ReadAxCallTimeoutSeconds();
+            T result = default(T);
+            Exception error = null;
+            using (var done = new ManualResetEventSlim(false))
+            {
+                var worker = new Thread(() =>
+                {
+                    try
+                    {
+                        result = action();
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex;
+                    }
+                    finally
+                    {
+                        done.Set();
+                    }
+                });
+
+                worker.IsBackground = true;
+                TryCopyApartmentState(worker);
+                worker.Start();
+
+                if (!done.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
+                    throw new IND_AxCallTimeoutException(operationName, timeoutSeconds, detail);
+            }
+
+            if (error != null)
+                ExceptionDispatchInfo.Capture(error).Throw();
+
+            return result;
+        }
+
+        private static int ReadAxCallTimeoutSeconds()
+        {
+            var raw = AppSettingsHelper.GetSetting("Axapta.CallTimeoutSeconds", "AXAPTA_CALL_TIMEOUT_SECONDS");
+            return int.TryParse(raw, out var parsed) && parsed > 0 ? parsed : 90;
+        }
+
+        private static void TryCopyApartmentState(Thread worker)
+        {
+            try
+            {
+                var apartmentState = Thread.CurrentThread.GetApartmentState();
+                if (apartmentState == ApartmentState.STA || apartmentState == ApartmentState.MTA)
+                    worker.SetApartmentState(apartmentState);
+            }
+            catch
+            {
+                // Best effort only.
             }
         }
 

@@ -229,7 +229,7 @@ namespace IND_CRM_API.Controllers.System
                 if (string.IsNullOrWhiteSpace(openAiApiKey))
                 {
                     _logger.Log("[SPEECH] OpenAI API key no esta configurada.", AxaptaSessionManager.LogLevel.Error);
-                    return ReturnError(HttpStatusCode.InternalServerError, traceId, "Error interno del servidor.", IndErrorCodes.InternalError, null);
+                    return ReturnError(HttpStatusCode.ServiceUnavailable, traceId, "El servicio de transcripcion IA no esta disponible en este momento.", IndErrorCodes.AiServiceUnavailable, null);
                 }
 
                 string text;
@@ -290,6 +290,16 @@ namespace IND_CRM_API.Controllers.System
                     "Se excedio el limite de solicitudes de IA. Intente de nuevo en unos segundos.",
                     IndErrorCodes.AiRateLimitExceeded,
                     ex.RetryAfterSeconds);
+            }
+            catch (IND_ExternalServiceException ex)
+            {
+                totalSw.Stop();
+                _logger.Log("[SPEECH] External dependency error: " + ex.ServiceName + " " + ex.Message + " summary=" + (ex.ProviderSummary ?? string.Empty) + " totalMs=" + totalSw.ElapsedMilliseconds + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
+                LogApiOut(ex.StatusCode, traceId, AxaptaSessionManager.LogLevel.Error);
+
+                return Content(
+                    ex.StatusCode,
+                    BuildError<string>(traceId, ex.UserMessage, ex.ErrorCode, null));
             }
             catch (Exception ex)
             {
@@ -502,6 +512,12 @@ namespace IND_CRM_API.Controllers.System
                     "Se excedio el limite de solicitudes de IA. Intente de nuevo en unos segundos.",
                     IndErrorCodes.AiRateLimitExceeded,
                     ex.RetryAfterSeconds);
+            }
+            catch (IND_ExternalServiceException ex)
+            {
+                _logger.Log("[IA-DRAFT] External dependency error: " + ex.ServiceName + " " + ex.Message + " summary=" + (ex.ProviderSummary ?? string.Empty), AxaptaSessionManager.LogLevel.Error);
+                LogApiOut(ex.StatusCode, traceId, AxaptaSessionManager.LogLevel.Error);
+                return ReturnError(ex.StatusCode, traceId, ex.UserMessage, ex.ErrorCode, null);
             }
             catch (TaskCanceledException ex)
             {

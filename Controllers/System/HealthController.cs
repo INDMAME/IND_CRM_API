@@ -88,6 +88,20 @@ namespace IND_CRM_API.Controllers.System
                 };
                 return Ok(okResponse);
             }
+            catch (IND_AxCallTimeoutException ex)
+            {
+                _logger.Log("[HEALTH-TIMEOUT] " + ex.Message);
+                var timeoutResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.UserMessage,
+                    ErrorCode = IndErrorCodes.AxTimeout,
+                    Errors = null,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content(HttpStatusCode.ServiceUnavailable, timeoutResponse);
+            }
             catch (Exception ex)
             {
                 _logger.Log("[HEALTH-ERROR] " + ex);

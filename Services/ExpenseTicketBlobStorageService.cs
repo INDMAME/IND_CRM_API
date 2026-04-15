@@ -1,8 +1,10 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services.Interfaces;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Blob;
@@ -70,7 +72,11 @@ namespace IND_CRM_API.Services
 
             var contentLength = TryGetStreamLength(content);
             var uploadSw = System.Diagnostics.Stopwatch.StartNew();
-            blob.UploadFromStream(content);
+            ExecuteStorageOperation(
+                "upload-ticket-file",
+                "No se pudo cargar el archivo porque Azure Blob Storage no respondio correctamente.",
+                IndErrorCodes.CrmExpenseSheetTicketFileUploadFailed,
+                () => blob.UploadFromStream(content));
             _logger?.Log(
                 $"[BLOB] UploadTicketFile fileId={fileId} blob={blobName} bytes={(contentLength.HasValue ? contentLength.Value.ToString() : "na")} contentType={blob.Properties.ContentType} ms={uploadSw.ElapsedMilliseconds}");
 
@@ -108,7 +114,11 @@ namespace IND_CRM_API.Services
 
             var contentLength = TryGetStreamLength(content);
             var uploadSw = System.Diagnostics.Stopwatch.StartNew();
-            blob.UploadFromStream(content);
+            ExecuteStorageOperation(
+                "upload-temporary-ticket-file",
+                "No se pudo cargar temporalmente el archivo porque Azure Blob Storage no respondio correctamente.",
+                IndErrorCodes.ExternalServiceUnavailable,
+                () => blob.UploadFromStream(content));
             _logger?.Log(
                 $"[BLOB] UploadTemporaryTicketFile blob={blobName} bytes={(contentLength.HasValue ? contentLength.Value.ToString() : "na")} contentType={blob.Properties.ContentType} ms={uploadSw.ElapsedMilliseconds}");
 
@@ -144,7 +154,11 @@ namespace IND_CRM_API.Services
                 Permissions = SharedAccessBlobPermissions.Read
             };
 
-            var sas = blob.GetSharedAccessSignature(accessPolicy);
+            var sas = ExecuteStorageOperation(
+                "create-readonly-blob-url",
+                "No se pudo generar el acceso temporal al archivo porque Azure Blob Storage no respondio correctamente.",
+                IndErrorCodes.ExternalServiceUnavailable,
+                () => blob.GetSharedAccessSignature(accessPolicy));
             return blob.Uri.AbsoluteUri + sas;
         }
 
@@ -164,7 +178,11 @@ namespace IND_CRM_API.Services
                 return false;
 
             var blob = context.Container.GetBlockBlobReference(blobName);
-            var deleted = blob.DeleteIfExists();
+            var deleted = ExecuteStorageOperation(
+                "delete-ticket-file",
+                "No se pudo eliminar el archivo porque Azure Blob Storage no respondio correctamente.",
+                IndErrorCodes.CrmExpenseSheetTicketFileDeleteFailed,
+                () => blob.DeleteIfExists());
             _logger?.Log($"[BLOB] DeleteTicketFile blob={blobName} deleted={deleted}");
             return deleted;
         }
@@ -199,7 +217,11 @@ namespace IND_CRM_API.Services
 
                 var client = account.CreateCloudBlobClient();
                 var container = client.GetContainerReference(containerName);
-                container.CreateIfNotExists();
+                ExecuteStorageOperation(
+                    "ensure-blob-container",
+                    "Azure Blob Storage no esta disponible en este momento.",
+                    IndErrorCodes.ExternalServiceUnavailable,
+                    () => container.CreateIfNotExists());
 
                 _storageContext = new StorageContext
                 {
@@ -514,6 +536,43 @@ namespace IND_CRM_API.Services
             }
 
             return !containerName.Contains("--");
+        }
+
+        // Wraps Azure SDK calls so API endpoints can distinguish provider errors from local validation issues.
+        private void ExecuteStorageOperation(string operationName, string userMessage, string errorCode, Action action)
+        {
+            ExecuteStorageOperation<object>(
+                operationName,
+                userMessage,
+                errorCode,
+                () =>
+                {
+                    action();
+                    return null;
+                });
+        }
+
+        private T ExecuteStorageOperation<T>(string operationName, string userMessage, string errorCode, Func<T> action)
+        {
+            try
+            {
+                return action();
+            }
+            catch (IND_ExternalServiceException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (!(ex is ArgumentException) && !(ex is InvalidOperationException))
+            {
+                _logger?.Log("[BLOB] Operation failed operation=" + operationName + " message=" + ex.Message, AxaptaSessionManager.LogLevel.Warning);
+                throw new IND_ExternalServiceException(
+                    "Azure Blob Storage",
+                    userMessage,
+                    string.IsNullOrWhiteSpace(errorCode) ? IndErrorCodes.ExternalServiceUnavailable : errorCode,
+                    HttpStatusCode.ServiceUnavailable,
+                    "operation=" + operationName + " detail=" + ex.Message,
+                    ex);
+            }
         }
 
         private sealed class StorageContext

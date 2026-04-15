@@ -1,5 +1,6 @@
 using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
@@ -50,7 +51,15 @@ namespace IND_CRM_API.Services
             if (audioStream == null) throw new ArgumentNullException(nameof(audioStream));
             if (!audioStream.CanRead) throw new ArgumentException("audioStream debe ser legible.", nameof(audioStream));
             if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("fileName es obligatorio.", nameof(fileName));
-            if (string.IsNullOrWhiteSpace(openAiApiKey)) throw new ArgumentException("OpenAI API key es obligatoria.", nameof(openAiApiKey));
+            if (string.IsNullOrWhiteSpace(openAiApiKey))
+            {
+                throw new IND_ExternalServiceException(
+                    "OpenAI",
+                    "El servicio de transcripcion IA no esta disponible en este momento.",
+                    IndErrorCodes.AiServiceUnavailable,
+                    HttpStatusCode.ServiceUnavailable,
+                    "api-key-missing");
+            }
             if (string.IsNullOrWhiteSpace(languageId)) throw new ArgumentException("languageId es obligatorio.", nameof(languageId));
             if (temperature < 0 || temperature > 1) throw new ArgumentOutOfRangeException(nameof(temperature), "temperature debe estar entre 0 y 1.");
 
@@ -138,12 +147,24 @@ namespace IND_CRM_API.Services
                                 summary);
                         }
 
-                        throw new Exception("Fallo al transcribir con OpenAI.");
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "La transcripcion no pudo completarse porque el servicio de IA devolvio un error.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            summary);
                     }
 
                     var text = TryExtractText(responseBody);
                     if (string.IsNullOrWhiteSpace(text))
-                        throw new Exception("OpenAI devolvio texto vacio.");
+                    {
+                        throw new IND_ExternalServiceException(
+                            "OpenAI",
+                            "La transcripcion no pudo completarse porque el servicio de IA devolvio una respuesta vacia.",
+                            IndErrorCodes.AiServiceUnavailable,
+                            HttpStatusCode.ServiceUnavailable,
+                            "empty-text");
+                    }
 
                     return text;
                 }
@@ -152,18 +173,36 @@ namespace IND_CRM_API.Services
                     totalSw.Stop();
                     var reason = cancellationToken.IsCancellationRequested ? "token" : "timeout";
                     _logger.Log("[OPENAI] Peticion cancelada reason=" + reason + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds + " msg=" + ex.Message, AxaptaSessionManager.LogLevel.Warning);
-                    throw;
+                    if (cancellationToken.IsCancellationRequested)
+                        throw;
+
+                    throw new IND_ExternalServiceException(
+                        "OpenAI",
+                        "La transcripcion tardo demasiado y el servicio de IA no respondio a tiempo.",
+                        IndErrorCodes.ExternalServiceTimeout,
+                        HttpStatusCode.GatewayTimeout,
+                        "timeout",
+                        ex);
                 }
                 catch (HttpRequestException ex)
                 {
                     totalSw.Stop();
                     _logger.Log("[OPENAI] Error HTTP: " + ex.Message + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds, AxaptaSessionManager.LogLevel.Error);
-                    throw;
+                    throw new IND_ExternalServiceException(
+                        "OpenAI",
+                        "La transcripcion no pudo completarse porque no se pudo conectar con el servicio de IA.",
+                        IndErrorCodes.AiServiceUnavailable,
+                        HttpStatusCode.ServiceUnavailable,
+                        ex.Message,
+                        ex);
                 }
                 catch (Exception ex)
                 {
                     totalSw.Stop();
                     _logger.Log("[OPENAI] Error inesperado: " + ex.Message + " sendMs=" + sendMs + " readMs=" + readMs + " totalMs=" + totalSw.ElapsedMilliseconds, AxaptaSessionManager.LogLevel.Error);
+                    if (ex is IND_OpenAiRateLimitException || ex is IND_ExternalServiceException)
+                        throw;
+
                     throw;
                 }
                 finally

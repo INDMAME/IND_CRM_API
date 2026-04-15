@@ -1,6 +1,6 @@
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services.Interfaces;
-using IND_CRM_API.Services; // <-- Agregue esta línea si 'IAxLogger' está en este espacio de nombres
+using IND_CRM_API.Services; // <-- Agregue esta lÃ­nea si 'IAxLogger' estÃ¡ en este espacio de nombres
 using System;
 using System.Diagnostics;
 using System.Net;
@@ -26,17 +26,31 @@ namespace IND_CRM_API.App_Start
             var traceId = Guid.NewGuid().ToString("N");
             TryLogException(context, traceId);
 
+            var statusCode = HttpStatusCode.InternalServerError;
+            var message = "Error interno del servidor";
+            var errorCode = IndErrorCodes.InternalError;
+            var retryAfterSeconds = default(int?);
+            if (IND_KnownExceptionMapper.TryMap(context.Exception, out var mappedStatus, out var mappedMessage, out var mappedErrorCode, out var mappedRetryAfter))
+            {
+                statusCode = mappedStatus;
+                message = mappedMessage;
+                errorCode = mappedErrorCode;
+                retryAfterSeconds = mappedRetryAfter;
+            }
+
             var response = new IndApiResponse<object>
             {
                 Success = false,
-                Message = "Error interno del servidor",
-                ErrorCode = IndErrorCodes.InternalError,
+                Message = message,
+                ErrorCode = errorCode,
                 Errors = null,
                 Data = null,
                 TraceId = traceId
             };
 
-            context.Response = context.Request.CreateResponse(HttpStatusCode.InternalServerError, response);
+            context.Response = context.Request.CreateResponse(statusCode, response);
+            if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0)
+                context.Response.Headers.Add("Retry-After", retryAfterSeconds.Value.ToString());
         }
 
         private static void TryLogException(HttpActionExecutedContext context, string traceId)

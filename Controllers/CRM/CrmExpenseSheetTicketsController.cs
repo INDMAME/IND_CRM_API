@@ -578,6 +578,19 @@ namespace IND_CRM_API.Controllers.CRM
                         ex.RetryAfterSeconds,
                         resultData);
                 }
+                catch (IND_ExternalServiceException ex)
+                {
+                    draftMs = draftSw.ElapsedMilliseconds;
+                    LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.UserMessage);
+                    Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft external service={ex.ServiceName} summary={ex.ProviderSummary} traceId={traceId}");
+                    LogOut(ex.StatusCode);
+                    return Content(ex.StatusCode, BuildQuickCreateErrorResponse(
+                        traceId,
+                        ex.UserMessage,
+                        ex.ErrorCode,
+                        resultData,
+                        null));
+                }
                 catch (OperationCanceledException)
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
@@ -2143,6 +2156,19 @@ namespace IND_CRM_API.Controllers.CRM
                     TraceId = traceId
                 });
             }
+            catch (IND_ExternalServiceException ex)
+            {
+                Logger.Log($"[ERROR] UploadExpenseSheetTicketFile external service={ex.ServiceName} summary={ex.ProviderSummary}");
+                LogOut(ex.StatusCode);
+                return Content(ex.StatusCode, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.UserMessage,
+                    ErrorCode = ex.ErrorCode,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] UploadExpenseSheetTicketFile: {ex}");
@@ -2281,6 +2307,19 @@ namespace IND_CRM_API.Controllers.CRM
                     Success = false,
                     Message = "No se pudo acceder a la configuracion de Azure Blob Storage.",
                     ErrorCode = IndErrorCodes.CrmExpenseSheetTicketFileStorageNotConfigured,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+            catch (IND_ExternalServiceException ex)
+            {
+                Logger.Log($"[ERROR] DeleteExpenseSheetTicketFile external service={ex.ServiceName} summary={ex.ProviderSummary}");
+                LogOut(ex.StatusCode);
+                return Content(ex.StatusCode, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.UserMessage,
+                    ErrorCode = ex.ErrorCode,
                     Data = null,
                     TraceId = traceId
                 });
@@ -3494,6 +3533,14 @@ namespace IND_CRM_API.Controllers.CRM
                 status = HttpStatusCode.InternalServerError;
                 message = "No se pudo acceder a la configuracion de Azure Blob Storage.";
                 errorCode = IndErrorCodes.CrmExpenseSheetTicketFileStorageNotConfigured;
+                return false;
+            }
+            catch (IND_ExternalServiceException ex)
+            {
+                Logger.Log($"[ERROR] QuickCreate upload external service={ex.ServiceName} summary={ex.ProviderSummary} traceId={traceId}");
+                status = ex.StatusCode;
+                message = ex.UserMessage;
+                errorCode = ex.ErrorCode;
                 return false;
             }
             catch (Exception ex)

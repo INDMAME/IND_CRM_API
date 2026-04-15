@@ -3,8 +3,11 @@ using IND_CRM_API.Helpers;
 using IND_CRM_API.Services.Interfaces;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Configuration;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
 namespace IND_CRM_API.Services
 {
@@ -78,6 +81,7 @@ namespace IND_CRM_API.Services
         public void BeginRequestScope(string correlationId, string traceId, string endpoint, string company)
         {
             IND_AxRequestContext.Start(correlationId, traceId, endpoint, company);
+            LogSessionTrace("begin-request-scope", null, IND_AxRequestContext.Current, "endpoint=" + endpoint + " company=" + company);
         }
 
         // Ends request scope and disposes the Axapta instance if any.
@@ -87,6 +91,7 @@ namespace IND_CRM_API.Services
             if (ctx == null)
                 return;
 
+            LogSessionTrace("end-request-scope", ctx.Username, ctx, "hasAxInstance=" + (ctx.AxInstance != null));
             if (ctx.AxInstance != null)
                 _sessionGuard.SafeLogoffAndDispose(ctx.AxInstance, ctx, "request-end");
 
@@ -98,18 +103,36 @@ namespace IND_CRM_API.Services
         // ---------------------------------------------------------
         public bool CreateOrGetSession(string username, string password, JwtService.JwtTokenInfo tokenInfo)
         {
+            var ctx = IND_AxRequestContext.Current;
+            var sw = Stopwatch.StartNew();
             try
             {
+                LogSessionTrace(
+                    "create-or-get-session-begin",
+                    username,
+                    ctx,
+                    $"providedUserEmpty={string.IsNullOrWhiteSpace(username)} providedPassword={(!string.IsNullOrWhiteSpace(password))} tokenInfoPresent={tokenInfo != null}",
+                    durationMs: sw.ElapsedMilliseconds);
+
                 var resolvedUser = string.IsNullOrWhiteSpace(username) ? _defaultUser : username;
                 if (string.IsNullOrWhiteSpace(resolvedUser))
                 {
+                    LogSessionTrace("create-or-get-session-missing-user", username, ctx, null, LogLevel.Warning, durationMs: sw.ElapsedMilliseconds);
                     Log("[AUTH] Missing Axapta username.", LogLevel.Warning);
                     return false;
                 }
 
                 var resolvedPassword = ResolvePassword(resolvedUser, password, out var passwordSource);
+                LogSessionTrace(
+                    "create-or-get-session-password-resolved",
+                    resolvedUser,
+                    ctx,
+                    $"passwordSource={passwordSource} passwordAvailable={!string.IsNullOrWhiteSpace(resolvedPassword)} allowDefaultCredentials={_allowDefaultCredentials}",
+                    durationMs: sw.ElapsedMilliseconds);
+
                 if (string.IsNullOrWhiteSpace(resolvedPassword))
                 {
+                    LogSessionTrace("create-or-get-session-missing-password", resolvedUser, ctx, "passwordSource=" + passwordSource, LogLevel.Warning, durationMs: sw.ElapsedMilliseconds);
                     Log($"[AUTH] Missing Axapta password for {resolvedUser}.", LogLevel.Warning);
                     return false;
                 }
@@ -117,11 +140,20 @@ namespace IND_CRM_API.Services
                 if (!string.IsNullOrWhiteSpace(password) && _passwordByUser.TryGetValue(resolvedUser, out var stored) &&
                     !string.Equals(stored, password, StringComparison.Ordinal))
                 {
+                    LogSessionTrace("create-or-get-session-password-rotation", resolvedUser, ctx, "cachedPasswordMismatch=true", LogLevel.Warning, durationMs: sw.ElapsedMilliseconds);
                     Log($"[SESSION-PASSWORD-ROTATION] {resolvedUser} -> password mismatch, forcing relogon.", LogLevel.Warning);
                 }
 
-                var ctx = IND_AxRequestContext.Current;
+                LogSessionTrace("create-or-get-session-before-smoke-test", resolvedUser, ctx, "passwordSource=" + passwordSource, durationMs: sw.ElapsedMilliseconds);
                 var smokeOk = _sessionGuard.SmokeTest(resolvedUser, resolvedPassword, ctx);
+                LogSessionTrace(
+                    "create-or-get-session-after-smoke-test",
+                    resolvedUser,
+                    ctx,
+                    "smokeOk=" + smokeOk,
+                    smokeOk ? LogLevel.Info : LogLevel.Warning,
+                    durationMs: sw.ElapsedMilliseconds);
+
                 if (!smokeOk)
                 {
                     Log($"[AUTH-FAIL] Axapta smoke test failed for {resolvedUser}.", LogLevel.Warning);
@@ -129,15 +161,27 @@ namespace IND_CRM_API.Services
                 }
 
                 _passwordByUser[resolvedUser] = resolvedPassword;
+                LogSessionTrace("create-or-get-session-password-cached", resolvedUser, ctx, "cacheUpdated=true", durationMs: sw.ElapsedMilliseconds);
 
                 if (tokenInfo != null)
+                {
                     _tokenToUser[tokenInfo.Token] = resolvedUser;
+                    LogSessionTrace("create-or-get-session-token-bound", resolvedUser, ctx, "tokenBound=true", durationMs: sw.ElapsedMilliseconds);
+                }
 
                 Log($"[AUTH-OK] Axapta session validated for {resolvedUser} source={passwordSource}.", LogLevel.Info);
+                LogSessionTrace("create-or-get-session-success", resolvedUser, ctx, "passwordSource=" + passwordSource, durationMs: sw.ElapsedMilliseconds);
                 return true;
+            }
+            catch (IND_AxCallTimeoutException ex)
+            {
+                LogSessionTrace("create-or-get-session-timeout", username, ctx, null, LogLevel.Error, ex, sw.ElapsedMilliseconds);
+                Log($"[ERROR-SESSION-TIMEOUT] {username} -> {ex.Message}", LogLevel.Error);
+                throw;
             }
             catch (Exception ex)
             {
+                LogSessionTrace("create-or-get-session-exception", username, ctx, null, LogLevel.Error, ex, sw.ElapsedMilliseconds);
                 Log($"[ERROR-SESSION] {username} -> {ex.Message}", LogLevel.Error);
                 return false;
             }
@@ -172,21 +216,35 @@ namespace IND_CRM_API.Services
         // Updates token mapping after login/refresh.
         public bool RefreshSessionToken(string username, JwtService.JwtTokenInfo tokenInfo, string oldToken)
         {
+            var ctx = IND_AxRequestContext.Current;
             if (string.IsNullOrWhiteSpace(username) || tokenInfo == null)
+            {
+                LogSessionTrace(
+                    "refresh-session-token-invalid-input",
+                    username,
+                    ctx,
+                    $"usernameMissing={string.IsNullOrWhiteSpace(username)} tokenInfoNull={tokenInfo == null}",
+                    LogLevel.Warning);
                 return false;
+            }
 
             if (!string.IsNullOrEmpty(oldToken) &&
                 _tokenToUser.TryGetValue(oldToken, out var mappedUser) &&
                 !string.Equals(mappedUser, username, StringComparison.OrdinalIgnoreCase))
             {
+                LogSessionTrace("refresh-session-token-mismatch", username, ctx, "oldTokenBelongsTo=" + mappedUser, LogLevel.Warning);
                 return false; // token no pertenece al usuario autenticado
             }
 
             if (!string.IsNullOrEmpty(oldToken))
+            {
                 _tokenToUser.TryRemove(oldToken, out _);
+                LogSessionTrace("refresh-session-token-old-removed", username, ctx, "oldTokenPresent=true");
+            }
 
             _tokenToUser[tokenInfo.Token] = username;
             Log($"[SESSION-REFRESH-TOKEN] {username}", LogLevel.Info);
+            LogSessionTrace("refresh-session-token-success", username, ctx, "oldTokenPresent=" + (!string.IsNullOrEmpty(oldToken)));
             return true;
         }
 
@@ -200,24 +258,37 @@ namespace IND_CRM_API.Services
                 throw new Exception("Usuario no valido.");
 
             var ctx = IND_AxRequestContext.Current;
+            LogSessionTrace("get-ax-instance-begin", username, ctx, "hasContext=" + (ctx != null));
             if (ctx == null)
             {
                 Log("[AX-SESSION] Missing request scope; creating transient context.", LogLevel.Warning);
                 var fallbackCorrelationId = Guid.NewGuid().ToString("N");
                 IND_AxRequestContext.Start(fallbackCorrelationId, Guid.NewGuid().ToString("N"), "unknown", string.Empty);
                 ctx = IND_AxRequestContext.Current;
+                LogSessionTrace("get-ax-instance-created-transient-context", username, ctx, null, LogLevel.Warning);
             }
 
             ctx.Username = username;
 
             if (ctx.AxInstance != null)
+            {
+                LogSessionTrace("get-ax-instance-reuse-existing", username, ctx, "hasAxInstance=true");
                 return ctx.AxInstance;
+            }
 
             var resolvedPassword = ResolvePassword(username, null, out var source);
+            LogSessionTrace(
+                "get-ax-instance-password-resolved",
+                username,
+                ctx,
+                $"passwordSource={source} passwordAvailable={!string.IsNullOrWhiteSpace(resolvedPassword)}");
+
             if (string.IsNullOrWhiteSpace(resolvedPassword))
                 throw new Exception("No hay credenciales disponibles para Axapta.");
 
+            LogSessionTrace("get-ax-instance-before-ensure-logged-on", username, ctx, "passwordSource=" + source);
             ctx.AxInstance = _sessionGuard.EnsureLoggedOn(username, resolvedPassword, ctx);
+            LogSessionTrace("get-ax-instance-after-ensure-logged-on", username, ctx, "passwordSource=" + source + " axInstanceCreated=" + (ctx.AxInstance != null));
             Log($"[AX-SESSION] Session created user={username} source={source}.", LogLevel.Info);
             return ctx.AxInstance;
         }
@@ -289,13 +360,50 @@ namespace IND_CRM_API.Services
             if (ax == null)
                 throw new Exception("Instancia Axapta no valida.");
 
-            if (args == null)
-                return ax.CallStaticClassMethod(className, methodName);
+            var ctx = IND_AxRequestContext.Current;
+            var sw = Stopwatch.StartNew();
+            var argsDescription = DescribeArgs(args);
+            LogSessionTrace("invoke-ax-method-before-call", ctx?.Username, ctx, $"class={className} method={methodName} args={argsDescription}", durationMs: sw.ElapsedMilliseconds);
 
-            if (args is object[] arr)
-                return ax.CallStaticClassMethod(className, methodName, arr);
+            try
+            {
+                var operationName = className + "." + methodName;
+                var detail = "class=" + className + " method=" + methodName + " args=" + argsDescription;
+                var result = _sessionGuard.ExecuteComCall(
+                    () =>
+                    {
+                        if (args == null)
+                            return ax.CallStaticClassMethod(className, methodName);
 
-            return ax.CallStaticClassMethod(className, methodName, new object[] { args });
+                        if (args is object[] arr)
+                            return ax.CallStaticClassMethod(className, methodName, arr);
+
+                        return ax.CallStaticClassMethod(className, methodName, new object[] { args });
+                    },
+                    ctx,
+                    operationName,
+                    detail);
+
+                LogSessionTrace(
+                    "invoke-ax-method-after-call",
+                    ctx?.Username,
+                    ctx,
+                    $"class={className} method={methodName} resultType={(result == null ? "null" : result.GetType().FullName)}",
+                    durationMs: sw.ElapsedMilliseconds);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                LogSessionTrace(
+                    "invoke-ax-method-exception",
+                    ctx?.Username,
+                    ctx,
+                    $"class={className} method={methodName} args={argsDescription}",
+                    LogLevel.Error,
+                    ex,
+                    sw.ElapsedMilliseconds);
+                throw;
+            }
         }
 
         // Disposes the current request session so it can be recreated on retry.
@@ -305,8 +413,73 @@ namespace IND_CRM_API.Services
             if (ctx == null || ctx.AxInstance == null)
                 return;
 
+            LogSessionTrace("reset-request-session", ctx.Username, ctx, "reason=" + reason, LogLevel.Warning);
             _sessionGuard.SafeLogoffAndDispose(ctx.AxInstance, ctx, reason);
             ctx.AxInstance = null;
+        }
+
+        // Emits detailed session traces to correlate auth stages with Axapta COM activity.
+        private void LogSessionTrace(
+            string stage,
+            string username,
+            IND_AxRequestContext ctx,
+            string detail,
+            LogLevel level = LogLevel.Info,
+            Exception ex = null,
+            long? durationMs = null)
+        {
+            var activeContext = ctx ?? IND_AxRequestContext.Current;
+            var ctxAgeMs = activeContext == null ? 0 : (long)Math.Max(0, (DateTime.UtcNow - activeContext.StartedUtc).TotalMilliseconds);
+            var parts = new List<string>
+            {
+                "[AX-SESSION-TRACE]",
+                "component=AxaptaSessionManager",
+                "stage=" + (stage ?? string.Empty),
+                "correlationId=" + (activeContext?.CorrelationId ?? "-"),
+                "traceId=" + (activeContext?.TraceId ?? "-"),
+                "axUser=" + (username ?? activeContext?.Username ?? string.Empty),
+                "company=" + (activeContext?.Company ?? string.Empty),
+                "endpoint=" + (activeContext?.Endpoint ?? string.Empty),
+                "threadId=" + Environment.CurrentManagedThreadId,
+                "apartment=" + Thread.CurrentThread.GetApartmentState(),
+                "processId=" + Process.GetCurrentProcess().Id,
+                "ctxAgeMs=" + ctxAgeMs
+            };
+
+            if (durationMs.HasValue)
+                parts.Add("durationMs=" + durationMs.Value);
+
+            if (!string.IsNullOrWhiteSpace(detail))
+                parts.Add("detail=" + Truncate(detail, 3000));
+
+            if (ex != null)
+            {
+                parts.Add("error=" + ex.GetType().Name);
+                parts.Add("message=" + Truncate(ex.Message, 2000));
+                if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+                    parts.Add("stack=" + Truncate(ex.StackTrace, 4000));
+            }
+
+            _logger.Log(string.Join(" ", parts), level);
+        }
+
+        private static string DescribeArgs(object args)
+        {
+            if (args == null)
+                return "null";
+
+            if (args is object[] arr)
+                return "array:" + arr.Length;
+
+            return args.GetType().FullName;
+        }
+
+        private static string Truncate(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+                return value;
+
+            return value.Substring(0, maxLength);
         }
 
         // ---------------------------------------------------------
