@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMUtilityService descargados en Domingo 3/8/2026
+; Navision Axapta Class: INDCRMUtilityService descargados en Martes 14/04/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -92,7 +92,7 @@ Formatversion: 1
       SOURCE #getEnvironmentName
         #static container getEnvironmentName()
         #{
-        #    return [["TEST"]];
+        #    return [["PROD"]];
         #}
         #
       ENDSOURCE
@@ -339,7 +339,8 @@ Formatversion: 1
         #                        modulesCon
         #                      ];
         #
-        #        companiesCon = conIns(companiesCon, conLen(companiesCon) + 1, companyItem);
+        #        if(crmUsuarioTable)
+        #            companiesCon = conIns(companiesCon, conLen(companiesCon) + 1, companyItem);
         #    }
         #
         #    // 5) Si no hay ninguna compania con acceso, devolver contexto sin companies
