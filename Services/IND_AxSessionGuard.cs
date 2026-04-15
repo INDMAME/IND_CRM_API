@@ -59,7 +59,8 @@ namespace IND_CRM_API.Services
             var createdContext = false;
             if (ctx == null)
             {
-                IND_AxRequestContext.Start(Guid.NewGuid().ToString("N"), "smoke", string.Empty);
+                var correlationId = Guid.NewGuid().ToString("N");
+                IND_AxRequestContext.Start(correlationId, Guid.NewGuid().ToString("N"), "smoke", string.Empty);
                 ctx = IND_AxRequestContext.Current;
                 createdContext = true;
             }
@@ -117,18 +118,23 @@ namespace IND_CRM_API.Services
             if (ax == null)
                 return;
 
+            var sw = Stopwatch.StartNew();
             try
             {
                 ax.Logoff();
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 Log("logoff", ctx, AxaptaSessionManager.LogLevel.Warning, reason, ex: ex);
             }
             finally
             {
+                if (sw.IsRunning)
+                    sw.Stop();
+
                 SafeReleaseCom(ax);
-                Log("logoff", ctx, AxaptaSessionManager.LogLevel.Info, reason);
+                Log("logoff", ctx, AxaptaSessionManager.LogLevel.Info, reason, durationMs: (int)sw.ElapsedMilliseconds);
             }
         }
 
@@ -159,6 +165,7 @@ namespace IND_CRM_API.Services
                 "[AX-SESSION]",
                 "action=" + (action ?? string.Empty),
                 "correlationId=" + (ctx?.CorrelationId ?? "-"),
+                "traceId=" + (ctx?.TraceId ?? "-"),
                 "axUser=" + (ctx?.Username ?? "-"),
                 "company=" + (ctx?.Company ?? "-"),
                 "endpoint=" + (ctx?.Endpoint ?? "-")

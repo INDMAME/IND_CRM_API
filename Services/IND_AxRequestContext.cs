@@ -14,9 +14,9 @@ namespace IND_CRM_API.Services
 
         public static IND_AxRequestContext Current => _current.Value;
 
-        public static void Start(string correlationId, string endpoint, string company)
+        public static void Start(string correlationId, string traceId, string endpoint, string company)
         {
-            _current.Value = new IND_AxRequestContext(correlationId, endpoint, company);
+            _current.Value = new IND_AxRequestContext(correlationId, traceId, endpoint, company);
         }
 
         public static void Clear()
@@ -24,15 +24,17 @@ namespace IND_CRM_API.Services
             _current.Value = null;
         }
 
-        private IND_AxRequestContext(string correlationId, string endpoint, string company)
+        private IND_AxRequestContext(string correlationId, string traceId, string endpoint, string company)
         {
             CorrelationId = string.IsNullOrWhiteSpace(correlationId) ? Guid.NewGuid().ToString("N") : correlationId.Trim();
+            TraceId = string.IsNullOrWhiteSpace(traceId) ? Guid.NewGuid().ToString("N") : traceId.Trim();
             Endpoint = endpoint ?? string.Empty;
             Company = company ?? string.Empty;
             StartedUtc = DateTime.UtcNow;
         }
 
         public string CorrelationId { get; }
+        public string TraceId { get; }
         public string Endpoint { get; }
         public string Company { get; }
         public string Username { get; set; }

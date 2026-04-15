@@ -1,7 +1,10 @@
 using IND_CRM_API.Services;
+using IND_CRM_API.Helpers;
 using System;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Formatting;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
@@ -25,35 +28,46 @@ namespace IND_CRM_API.App_Start
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var correlationId = GetHeader(request, "X-Correlation-Id") ?? Guid.NewGuid().ToString("N");
+            var correlationId = IndRequestDiagnosticsHelper.GetOrCreateCorrelationId(request);
+            var traceId = IndRequestDiagnosticsHelper.GetOrCreateTraceId(request);
             var company = GetHeader(request, "X-IND-Company") ?? string.Empty;
+            var axUserId = GetHeader(request, "X-IND-AxUserId") ?? string.Empty;
             var endpoint = request == null
                 ? "unknown"
                 : string.Format("{0} {1}", request.Method, request.RequestUri?.AbsolutePath ?? string.Empty);
             var user = request?.GetRequestContext()?.Principal?.Identity?.Name ?? string.Empty;
             var contentType = request?.Content?.Headers?.ContentType?.MediaType ?? string.Empty;
             var contentLength = request?.Content?.Headers?.ContentLength?.ToString() ?? "0";
+            var boundary = IndRequestDiagnosticsHelper.GetMultipartBoundary(request?.Content) ?? string.Empty;
+
+            IndRequestDiagnosticsHelper.SetRequestIds(request, correlationId, traceId);
 
             _logger.Log(
-                $"[API-PIPE-IN] correlationId={correlationId} endpoint={endpoint} company={company} user={user} contentType={contentType} contentLength={contentLength}");
+                $"[API-PIPE-IN] timestamp={DateTime.UtcNow:o} correlationId={correlationId} traceId={traceId} " +
+                $"method={request?.Method?.Method ?? "UNKNOWN"} path={request?.RequestUri?.AbsolutePath ?? string.Empty} " +
+                $"company={company} axUserId={axUserId} authenticatedUser={user} contentLength={contentLength} " +
+                $"contentType={contentType} multipartBoundary={boundary}");
 
             var preRouteData = TryResolveRouteData(request);
             var preRouteTemplate = preRouteData?.Route?.RouteTemplate ?? "unresolved";
             var preRouteValues = FormatRouteValues(preRouteData);
             _logger.Log(
-                $"[API-PIPE-MATCH] correlationId={correlationId} endpoint={endpoint} routeTemplate={preRouteTemplate} routeValues={preRouteValues}");
+                $"[API-PIPE-MATCH] correlationId={correlationId} traceId={traceId} endpoint={endpoint} " +
+                $"routeTemplate={preRouteTemplate} routeValues={preRouteValues}");
 
-            _sessionManager.BeginRequestScope(correlationId, endpoint, company);
+            _sessionManager.BeginRequestScope(correlationId, traceId, endpoint, company);
 
             try
             {
                 var response = await base.SendAsync(request, cancellationToken);
+                AssignTraceIdToEnvelope(response, traceId);
+                IndRequestDiagnosticsHelper.ApplyResponseIds(response, correlationId, traceId);
                 var statusCode = response == null ? "null" : ((int)response.StatusCode).ToString();
                 var postRouteData = request?.GetRequestContext()?.RouteData ?? preRouteData;
                 var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
                 var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
-                    $"[API-PIPE-OUT] correlationId={correlationId} endpoint={endpoint} status={statusCode} " +
+                    $"[API-PIPE-OUT] correlationId={correlationId} traceId={traceId} endpoint={endpoint} status={statusCode} " +
                     $"preRouteTemplate={preRouteTemplate} preRouteValues={preRouteValues} " +
                     $"routeTemplate={routeTemplate} routeValues={routeValues}");
 
@@ -63,7 +77,7 @@ namespace IND_CRM_API.App_Start
                     var responseLength = response.Content?.Headers?.ContentLength?.ToString() ?? "unknown";
                     var reasonPhrase = response.ReasonPhrase ?? string.Empty;
                     _logger.Log(
-                        $"[API-PIPE-500] correlationId={correlationId} endpoint={endpoint} status={statusCode} " +
+                        $"[API-PIPE-500] correlationId={correlationId} traceId={traceId} endpoint={endpoint} status={statusCode} " +
                         $"reason={reasonPhrase} responseType={responseType} responseLength={responseLength} " +
                         $"preRouteTemplate={preRouteTemplate} preRouteValues={preRouteValues} " +
                         $"routeTemplate={routeTemplate} routeValues={routeValues}",
@@ -77,7 +91,7 @@ namespace IND_CRM_API.App_Start
                 var routeTemplate = postRouteData?.Route?.RouteTemplate ?? "unresolved";
                 var routeValues = FormatRouteValues(postRouteData);
                 _logger.Log(
-                    $"[API-PIPE-EX] correlationId={correlationId} endpoint={endpoint} routeTemplate={routeTemplate} " +
+                    $"[API-PIPE-EX] correlationId={correlationId} traceId={traceId} endpoint={endpoint} routeTemplate={routeTemplate} " +
                     $"routeValues={routeValues} ex={ex.GetType().Name} {ex.Message}",
                     AxaptaSessionManager.LogLevel.Error);
                 throw;
@@ -90,20 +104,7 @@ namespace IND_CRM_API.App_Start
 
         private static string GetHeader(HttpRequestMessage request, string name)
         {
-            if (request == null || request.Headers == null)
-                return null;
-
-            try
-            {
-                if (request.Headers.TryGetValues(name, out var values))
-                    return values == null ? null : string.Join(",", values);
-            }
-            catch
-            {
-                // ignore header errors
-            }
-
-            return null;
+            return IndRequestDiagnosticsHelper.GetHeaderValue(request, name);
         }
 
         private static IHttpRouteData TryResolveRouteData(HttpRequestMessage request)
@@ -134,6 +135,28 @@ namespace IND_CRM_API.App_Start
                     .Where(kvp => kvp.Key != null)
                     .Select(kvp => kvp.Key + "=" + (kvp.Value == null ? "null" : kvp.Value.ToString()))
                     .ToArray());
+        }
+
+        private static void AssignTraceIdToEnvelope(HttpResponseMessage response, string traceId)
+        {
+            if (response?.Content == null || string.IsNullOrWhiteSpace(traceId))
+                return;
+
+            try
+            {
+                if (!(response.Content is ObjectContent objectContent) || objectContent.Value == null)
+                    return;
+
+                var property = objectContent.Value.GetType().GetProperty("TraceId", BindingFlags.Public | BindingFlags.Instance);
+                if (property == null || property.PropertyType != typeof(string) || !property.CanWrite)
+                    return;
+
+                property.SetValue(objectContent.Value, traceId.Trim());
+            }
+            catch
+            {
+                // Best effort only.
+            }
         }
     }
 }

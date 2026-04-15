@@ -100,7 +100,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> CreateExpenseSheetTicket()
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var traceId = GetOrCreateTraceId();
             var validationErrors = new List<IndValidationError>();
             var modeValue = ModeCreateHeaderAndLines;
             string company;
@@ -402,16 +402,38 @@ namespace IND_CRM_API.Controllers.CRM
                 return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "na";
             }
 
+            void LogQuickCreateStage(string stage, string stageTraceId, string result, long? durationMs, string message)
+            {
+                Logger.Log(
+                    $"[QUICKCREATE-STAGE] traceId={traceId} stage={stage} stageTraceId={ToLogValue(stageTraceId)} " +
+                    $"result={result} durationMs={PerfValue(durationMs)} fileId={ToLogValue(resultData.FileId)} " +
+                    $"hojaGastosId={ToLogValue(resultData.HojaGastosId)} message={ToLogValue(message)}");
+            }
+
             try
             {
+                var readFormStageTraceId = Guid.NewGuid().ToString("N");
                 var readFormSw = DiagnosticsStopwatch.StartNew();
                 var quickCreateForm = await ReadQuickCreateFormAsync(cancellationToken, traceId).ConfigureAwait(false);
                 readFormMs = readFormSw.ElapsedMilliseconds;
                 if (!quickCreateForm.Success)
                 {
+                    LogQuickCreateStage(
+                        "read-form",
+                        readFormStageTraceId,
+                        "deny",
+                        readFormMs,
+                        quickCreateForm.ErrorResponse?.Message ?? "No se pudo leer el multipart.");
                     LogOut(quickCreateForm.StatusCode);
                     return Content(quickCreateForm.StatusCode, quickCreateForm.ErrorResponse);
                 }
+
+                LogQuickCreateStage(
+                    "read-form",
+                    readFormStageTraceId,
+                    "allow",
+                    readFormMs,
+                    $"multipart-ok fileName={quickCreateForm.OriginalFileName} imageBytes={quickCreateForm.ImageBytes?.Length ?? 0}");
 
                 var username = GetAuthenticatedUsername();
                 var createStepTraceId = Guid.NewGuid().ToString("N");
@@ -455,10 +477,18 @@ namespace IND_CRM_API.Controllers.CRM
                         out var createError,
                         out var createStatus))
                 {
+                    createMs = createSw.ElapsedMilliseconds;
+                    LogQuickCreateStage(
+                        "ticket-create",
+                        createStepTraceId,
+                        "deny",
+                        createMs,
+                        createError?.Message ?? "No se pudo crear el ticket provisional.");
                     LogOut(createStatus);
                     return Content(createStatus, createError);
                 }
                 createMs = createSw.ElapsedMilliseconds;
+                LogQuickCreateStage("ticket-create", createStepTraceId, "allow", createMs, "Ticket provisional creado.");
 
                 resultData.FileId = createResult.FileId;
                 resultData.FileName = createResult.FileName;
@@ -484,6 +514,13 @@ namespace IND_CRM_API.Controllers.CRM
                         out var uploadErrorCode,
                         out var uploadStatus))
                 {
+                    uploadMs = uploadSw.ElapsedMilliseconds;
+                    LogQuickCreateStage(
+                        "file-upload",
+                        uploadStepTraceId,
+                        "deny",
+                        uploadMs,
+                        uploadMessage);
                     LogOut(uploadStatus);
                     return Content(uploadStatus, BuildQuickCreateErrorResponse(
                         traceId,
@@ -493,6 +530,12 @@ namespace IND_CRM_API.Controllers.CRM
                         null));
                 }
                 uploadMs = uploadSw.ElapsedMilliseconds;
+                LogQuickCreateStage(
+                    "file-upload",
+                    uploadStepTraceId,
+                    "allow",
+                    uploadMs,
+                    $"Archivo cargado bytes={quickCreateForm.ImageBytes?.Length ?? 0} contentType={quickCreateForm.ContentType}");
 
                 resultData.UrlFile = fileUploadResult.UrlFile;
                 resultData.FileName = fileUploadResult.FileName;
@@ -525,6 +568,8 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 catch (IND_OpenAiRateLimitException ex)
                 {
+                    draftMs = draftSw.ElapsedMilliseconds;
+                    LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
                     LogOut((HttpStatusCode)429);
                     return BuildQuickCreateTooManyRequests(
                         traceId,
@@ -535,6 +580,8 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 catch (OperationCanceledException)
                 {
+                    draftMs = draftSw.ElapsedMilliseconds;
+                    LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, "Timeout o cancelacion.");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -545,6 +592,8 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 catch (Exception ex)
                 {
+                    draftMs = draftSw.ElapsedMilliseconds;
+                    LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
                     Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft: {ex}");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
@@ -555,6 +604,7 @@ namespace IND_CRM_API.Controllers.CRM
                         null));
                 }
                 draftMs = draftSw.ElapsedMilliseconds;
+                LogQuickCreateStage("draft-extract", draftStepTraceId, "allow", draftMs, "Borrador IA generado.");
 
                 if (draft == null)
                 {
@@ -594,8 +644,15 @@ namespace IND_CRM_API.Controllers.CRM
                                 traceId,
                                 out var headerApplyResult,
                                 out var headerApplyError,
-                                out var headerApplyStatus))
+                        out var headerApplyStatus))
                         {
+                            finalizeMs = 0;
+                            LogQuickCreateStage(
+                                "ticket-finalize-header-only",
+                                draftStepTraceId,
+                                "deny",
+                                finalizeMs,
+                                headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.");
                             LogOut(headerApplyStatus);
                             return Content(headerApplyStatus, BuildQuickCreateErrorResponse(
                                 traceId,
@@ -612,6 +669,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                         Logger.Log(
                             $"[QUICKCREATE-HEADER-ONLY] fileId={ToLogValue(resultData.FileId)} requestedSheet={ToLogValue(quickCreateForm.ExistingHojaGastosId)} linkedToSheet={resultData.LinkedToSheet} processedByAI={resultData.ProcessedByAI} traceId={traceId}");
+                        LogQuickCreateStage("ticket-finalize-header-only", draftStepTraceId, "allow", 0, headerOnlyMessage);
 
                         LogOut(HttpStatusCode.Created);
                         return Content(HttpStatusCode.Created, new IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>
@@ -649,6 +707,13 @@ namespace IND_CRM_API.Controllers.CRM
                         out var applyError,
                         out var applyStatus))
                 {
+                    finalizeMs = finalizeSw.ElapsedMilliseconds;
+                    LogQuickCreateStage(
+                        "ticket-finalize",
+                        finalizeStepTraceId,
+                        "deny",
+                        finalizeMs,
+                        applyError?.Message ?? "No se pudo finalizar el ticket.");
                     LogOut(applyStatus);
                     return Content(applyStatus, BuildQuickCreateErrorResponse(
                         traceId,
@@ -658,6 +723,7 @@ namespace IND_CRM_API.Controllers.CRM
                         applyError?.Errors));
                 }
                 finalizeMs = finalizeSw.ElapsedMilliseconds;
+                LogQuickCreateStage("ticket-finalize", finalizeStepTraceId, "allow", finalizeMs, "Ticket finalizado.");
 
                 resultData.FileName = string.IsNullOrWhiteSpace(applyResult.FileName) ? resultData.FileName : applyResult.FileName;
                 resultData.ProcessedByAI = applyResult.ProcessedByAI;
@@ -679,6 +745,8 @@ namespace IND_CRM_API.Controllers.CRM
                             out var linkedTicketMessage,
                             out var linkedTicketStatus))
                     {
+                        linkMs = linkSw.ElapsedMilliseconds;
+                        LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkedTicketMessage);
                         LogOut(linkedTicketStatus);
                         return Content(linkedTicketStatus, BuildQuickCreateErrorResponse(
                             traceId,
@@ -699,6 +767,8 @@ namespace IND_CRM_API.Controllers.CRM
                             out var linkMessage,
                             out var linkStatus))
                     {
+                        linkMs = linkSw.ElapsedMilliseconds;
+                        LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkMessage);
                         var linkError = BuildExpenseSheetActionError(linkMessage, traceId, out _);
                         LogOut(linkStatus);
                         return Content(linkStatus, BuildQuickCreateErrorResponse(
@@ -710,6 +780,7 @@ namespace IND_CRM_API.Controllers.CRM
                     }
 
                     linkMs = linkSw.ElapsedMilliseconds;
+                    LogQuickCreateStage("sheet-link", linkStepTraceId, "allow", linkMs, "Ticket vinculado a hoja.");
                     resultData.LinkedToSheet = true;
                     resultData.HojaGastosId = quickCreateForm.ExistingHojaGastosId;
                     resultData.CompletedStage = QuickCreateStageSheetLinked;
@@ -2774,8 +2845,21 @@ namespace IND_CRM_API.Controllers.CRM
         // Reads and validates the multipart contract for the quick-create flow.
         private async Task<QuickCreateFormReadResult> ReadQuickCreateFormAsync(CancellationToken cancellationToken, string traceId)
         {
+            var requestContentType = Request?.Content?.Headers?.ContentType?.MediaType ?? string.Empty;
+            var requestContentLength = Request?.Content?.Headers?.ContentLength;
+            var multipartBoundary = IndRequestDiagnosticsHelper.GetMultipartBoundary(Request?.Content) ?? string.Empty;
+
             if (Request?.Content == null || !Request.Content.IsMimeMultipartContent())
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "unsupported-content-type",
+                    requestContentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    null,
+                    "Se requiere multipart/form-data.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2793,11 +2877,42 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             var provider = new MultipartMemoryStreamProvider();
-            await Request.Content.ReadAsMultipartAsync(provider, cancellationToken).ConfigureAwait(false);
+            Logger.Log(
+                $"[QUICKCREATE-MULTIPART] traceId={traceId} result=start reason=read-multipart " +
+                $"provider={provider.GetType().Name} requestContentLength={ToLogValue(requestContentLength?.ToString())} " +
+                $"requestContentType={ToLogValue(requestContentType)} boundary={ToLogValue(multipartBoundary)} " +
+                $"maxImageBytes={ExpenseTicketImageHelper.MaxImageBytes}");
+
+            try
+            {
+                await Request.Content.ReadAsMultipartAsync(provider, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    ClassifyQuickCreateMultipartException(ex, requestContentLength),
+                    requestContentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    null,
+                    ex.GetType().Name + ": " + ex.Message);
+                throw;
+            }
 
             var filePart = FindFilePart(provider, "ticketImage");
             if (filePart == null)
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "ticketimage-missing",
+                    requestContentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    null,
+                    "ticketImage es obligatorio.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2817,6 +2932,15 @@ namespace IND_CRM_API.Controllers.CRM
             var originalFileName = GetFileName(filePart);
             if (string.IsNullOrWhiteSpace(originalFileName))
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "filename-missing",
+                    requestContentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    null,
+                    "ticketImage debe incluir nombre de archivo.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2836,6 +2960,15 @@ namespace IND_CRM_API.Controllers.CRM
             var extension = Path.GetExtension(originalFileName);
             if (!ExpenseTicketImageHelper.IsAllowedExtension(extension))
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "file-extension-not-allowed",
+                    requestContentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    filePart.Headers?.ContentLength,
+                    "Formato de imagen no soportado.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2855,6 +2988,15 @@ namespace IND_CRM_API.Controllers.CRM
             var contentType = filePart.Headers?.ContentType?.MediaType;
             if (!string.IsNullOrWhiteSpace(contentType) && !ExpenseTicketImageHelper.IsAllowedContentType(contentType))
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "file-content-type-not-allowed",
+                    contentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    filePart.Headers?.ContentLength,
+                    "Content-Type de imagen no soportado.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2874,6 +3016,15 @@ namespace IND_CRM_API.Controllers.CRM
             var contentLength = filePart.Headers?.ContentLength;
             if (contentLength.HasValue && contentLength.Value > ExpenseTicketImageHelper.MaxImageBytes)
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "file-size-limit-header",
+                    contentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    contentLength,
+                    "ticketImage supera el limite de 50 MB.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2893,6 +3044,15 @@ namespace IND_CRM_API.Controllers.CRM
             var imageBytes = await filePart.ReadAsByteArrayAsync().ConfigureAwait(false);
             if (imageBytes == null || imageBytes.Length <= 0)
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "file-empty",
+                    contentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    contentLength,
+                    "ticketImage esta vacio.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2911,6 +3071,15 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (imageBytes.Length > ExpenseTicketImageHelper.MaxImageBytes)
             {
+                LogQuickCreateMultipart(
+                    traceId,
+                    "deny",
+                    "file-size-limit-buffered",
+                    contentType,
+                    multipartBoundary,
+                    requestContentLength,
+                    imageBytes.Length,
+                    "ticketImage supera el limite de 50 MB.");
                 return new QuickCreateFormReadResult
                 {
                     Success = false,
@@ -2927,6 +3096,16 @@ namespace IND_CRM_API.Controllers.CRM
                 };
             }
 
+            LogQuickCreateMultipart(
+                traceId,
+                "allow",
+                "multipart-read-ok",
+                contentType,
+                multipartBoundary,
+                requestContentLength,
+                imageBytes.Length,
+                "Multipart leido correctamente.");
+
             return new QuickCreateFormReadResult
             {
                 Success = true,
@@ -2941,6 +3120,51 @@ namespace IND_CRM_API.Controllers.CRM
                 ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
                 ProjectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim()
             };
+        }
+
+        private void LogQuickCreateMultipart(
+            string traceId,
+            string result,
+            string reason,
+            string contentType,
+            string boundary,
+            long? requestContentLength,
+            long? fileSizeBytes,
+            string message)
+        {
+            Logger.Log(
+                $"[QUICKCREATE-MULTIPART] traceId={traceId} result={result} reason={reason} " +
+                $"requestContentLength={ToLogValue(requestContentLength?.ToString(CultureInfo.InvariantCulture))} " +
+                $"contentType={ToLogValue(contentType)} boundary={ToLogValue(boundary)} " +
+                $"fileSizeBytes={ToLogValue(fileSizeBytes?.ToString(CultureInfo.InvariantCulture))} " +
+                $"maxImageBytes={ExpenseTicketImageHelper.MaxImageBytes} provider={nameof(MultipartMemoryStreamProvider)} " +
+                $"message={ToLogValue(message)}");
+        }
+
+        private static string ClassifyQuickCreateMultipartException(Exception ex, long? requestContentLength)
+        {
+            if (ex == null)
+                return "multipart-read-failed";
+
+            var message = ex.Message ?? string.Empty;
+            var lower = message.ToLowerInvariant();
+
+            if (ex is OperationCanceledException)
+                return "multipart-read-cancelled";
+
+            if (requestContentLength.HasValue && requestContentLength.Value > ExpenseTicketImageHelper.MaxImageBytes)
+                return "request-size-limit";
+
+            if (lower.Contains("boundary"))
+                return "multipart-boundary-parse";
+
+            if (lower.Contains("multipart"))
+                return "multipart-parse";
+
+            if (lower.Contains("buffer") || lower.Contains("memory") || lower.Contains("stream"))
+                return "multipart-buffering";
+
+            return "multipart-read-failed";
         }
 
         // Builds the standard quick-create error envelope, preserving partial data when available.

@@ -168,6 +168,7 @@
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
     <Compile Include="App_Start\IndGlobalExceptionLogger.cs" />
+    <Compile Include="App_Start\IndAuthorizationDiagnosticsFilter.cs" />
     <Compile Include="App_Start\IndRouteDiagnosticsActionFilter.cs" />
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
@@ -221,6 +222,7 @@
     <Compile Include="Helpers\CurrencyCodeHelper.cs" />
     <Compile Include="Helpers\ExpenseSheetListQueryHelper.cs" />
     <Compile Include="Helpers\ExpenseTicketImageHelper.cs" />
+    <Compile Include="Helpers\IndRequestDiagnosticsHelper.cs" />
     <Compile Include="Controllers\System\EnvironmentController.cs" />
     <Compile Include="Controllers\System\HealthController.cs" />
     <Compile Include="Controllers\System\SystemController.cs" />

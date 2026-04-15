@@ -75,9 +75,9 @@ namespace IND_CRM_API.Services
         // REQUEST SCOPE
         // ---------------------------------------------------------
         // Starts request scope in AsyncLocal for this request.
-        public void BeginRequestScope(string correlationId, string endpoint, string company)
+        public void BeginRequestScope(string correlationId, string traceId, string endpoint, string company)
         {
-            IND_AxRequestContext.Start(correlationId, endpoint, company);
+            IND_AxRequestContext.Start(correlationId, traceId, endpoint, company);
         }
 
         // Ends request scope and disposes the Axapta instance if any.
@@ -203,7 +203,8 @@ namespace IND_CRM_API.Services
             if (ctx == null)
             {
                 Log("[AX-SESSION] Missing request scope; creating transient context.", LogLevel.Warning);
-                IND_AxRequestContext.Start(Guid.NewGuid().ToString("N"), "unknown", string.Empty);
+                var fallbackCorrelationId = Guid.NewGuid().ToString("N");
+                IND_AxRequestContext.Start(fallbackCorrelationId, Guid.NewGuid().ToString("N"), "unknown", string.Empty);
                 ctx = IND_AxRequestContext.Current;
             }
 

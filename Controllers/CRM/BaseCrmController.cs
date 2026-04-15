@@ -29,15 +29,24 @@ namespace IND_CRM_API.Controllers
             return username;
         }
 
+        protected string GetOrCreateTraceId()
+        {
+            return IndRequestDiagnosticsHelper.GetOrCreateTraceId(Request);
+        }
+
         /// <summary>
         /// Validates company header and user access (422 if missing, 403 if forbidden).
         /// </summary>
         protected string RequireCompanyOrReturn422(out IHttpActionResult errorResult, string traceId)
         {
+            var effectiveTraceId = GetOrCreateTraceId();
             errorResult = null;
             var company = GetHeaderValue("X-IND-Company");
+            var axUserId = GetHeaderValue("X-IND-AxUserId");
+            var username = User?.Identity?.Name;
             if (string.IsNullOrWhiteSpace(company))
             {
+                LogCompanyAuthorization("deny", "missing-company-header", null, axUserId, username, null, effectiveTraceId);
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
@@ -48,16 +57,16 @@ namespace IND_CRM_API.Controllers
                         new IndValidationError { Field = "company", Message = "Header X-IND-Company requerido." }
                     },
                     Data = null,
-                    TraceId = traceId
+                    TraceId = effectiveTraceId
                 };
                 errorResult = Content((HttpStatusCode)422, response);
                 return null;
             }
 
             // Validate that the user has access to the selected company.
-            var username = User?.Identity?.Name;
             if (string.IsNullOrWhiteSpace(username))
             {
+                LogCompanyAuthorization("deny", "missing-authenticated-user", company, axUserId, username, null, effectiveTraceId);
                 var authResponse = new IndApiResponse<object>
                 {
                     Success = false,
@@ -65,17 +74,29 @@ namespace IND_CRM_API.Controllers
                     ErrorCode = IndErrorCodes.AuthRequired,
                     Errors = null,
                     Data = null,
-                    TraceId = traceId
+                    TraceId = effectiveTraceId
                 };
                 errorResult = Content(HttpStatusCode.Unauthorized, authResponse);
                 return null;
             }
 
-            if (!UserCompanyAccessCache.IsCompanyAllowed(username, company, out var cacheMissing))
+            var accessEvaluation = UserCompanyAccessCache.EvaluateCompanyAccess(username, company);
+            var cacheSnapshot = accessEvaluation.Snapshot ?? UserCompanyAccessCache.GetSnapshot(username);
+            if (!accessEvaluation.Allowed)
             {
-                var message = cacheMissing
+                var message = accessEvaluation.CacheMissing
                     ? "Contexto de companias no inicializado. Consulte /api/auth/entra/context."
-                    : "Compania no permitida para el usuario.";
+                    : accessEvaluation.CacheExpired
+                        ? "Contexto de companias expirado. Consulte /api/auth/entra/context."
+                        : "Compania no permitida para el usuario.";
+
+                var reason = accessEvaluation.CacheMissing
+                    ? "company-cache-missing"
+                    : accessEvaluation.CacheExpired
+                        ? "company-cache-expired"
+                        : "company-not-allowed";
+
+                LogCompanyAuthorization("deny", reason, company, axUserId, username, cacheSnapshot, effectiveTraceId);
 
                 var forbiddenResponse = new IndApiResponse<object>
                 {
@@ -84,12 +105,20 @@ namespace IND_CRM_API.Controllers
                     ErrorCode = IndErrorCodes.AuthForbidden,
                     Errors = null,
                     Data = null,
-                    TraceId = traceId
+                    TraceId = effectiveTraceId
                 };
                 errorResult = Content(HttpStatusCode.Forbidden, forbiddenResponse);
                 return null;
             }
 
+            LogCompanyAuthorization(
+                "allow",
+                accessEvaluation.UsedGraceWindow ? "company-allowed-grace-window" : "company-allowed",
+                company,
+                axUserId,
+                username,
+                accessEvaluation.Snapshot ?? cacheSnapshot,
+                effectiveTraceId);
             return company.Trim();
         }
 
@@ -98,10 +127,14 @@ namespace IND_CRM_API.Controllers
         /// </summary>
         protected string RequireAxUserIdOrReturn422(out IHttpActionResult errorResult, string traceId, string errorCode = null)
         {
+            var effectiveTraceId = GetOrCreateTraceId();
             errorResult = null;
             var axUserId = GetHeaderValue("X-IND-AxUserId");
             if (string.IsNullOrWhiteSpace(axUserId))
             {
+                Logger.Log(
+                    $"[AUTHZ-AXUSER] gate=BaseCrmController.RequireAxUserIdOrReturn422 result=deny reason=missing-axuserid-header " +
+                    $"axUserId=- authenticatedUser={ToLogValue(User?.Identity?.Name)} traceId={effectiveTraceId}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
@@ -112,12 +145,15 @@ namespace IND_CRM_API.Controllers
                         new IndValidationError { Field = "axUserId", Message = "Header X-IND-AxUserId requerido." }
                     },
                     Data = null,
-                    TraceId = traceId
+                    TraceId = effectiveTraceId
                 };
                 errorResult = Content((HttpStatusCode)422, response);
                 return null;
             }
 
+            Logger.Log(
+                $"[AUTHZ-AXUSER] gate=BaseCrmController.RequireAxUserIdOrReturn422 result=allow reason=axuserid-present " +
+                $"axUserId={axUserId.Trim()} authenticatedUser={ToLogValue(User?.Identity?.Name)} traceId={effectiveTraceId}");
             return axUserId.Trim();
         }
 
@@ -153,6 +189,37 @@ namespace IND_CRM_API.Controllers
             }
 
             return null;
+        }
+
+        private void LogCompanyAuthorization(
+            string result,
+            string reason,
+            string company,
+            string axUserId,
+            string username,
+            UserCompanyAccessCache.Snapshot cacheSnapshot,
+            string traceId)
+        {
+            var cacheCompanies = cacheSnapshot?.Companies == null || cacheSnapshot.Companies.Length == 0
+                ? "-"
+                : string.Join("|", cacheSnapshot.Companies);
+            var cacheExpiresUtc = cacheSnapshot?.ExpiresUtc.HasValue == true
+                ? cacheSnapshot.ExpiresUtc.Value.ToString("o")
+                : "-";
+            var cacheGraceUntilUtc = cacheSnapshot?.GraceUntilUtc.HasValue == true
+                ? cacheSnapshot.GraceUntilUtc.Value.ToString("o")
+                : "-";
+
+            Logger.Log(
+                $"[AUTHZ-COMPANY] gate=BaseCrmController.RequireCompanyOrReturn422 result={result} reason={reason} " +
+                $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} authenticatedUser={ToLogValue(username)} " +
+                $"cacheExists={(cacheSnapshot?.Exists ?? false)} cacheExpired={(cacheSnapshot?.Expired ?? false)} " +
+                $"cacheCompanies={cacheCompanies} cacheExpiresUtc={cacheExpiresUtc} cacheGraceUntilUtc={cacheGraceUntilUtc} traceId={traceId}");
+        }
+
+        private static string ToLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
         }
     }
 }

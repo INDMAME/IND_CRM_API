@@ -71,7 +71,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult CreateExpenseSheet([FromBody] CreateExpenseSheetRequest body)
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var traceId = GetOrCreateTraceId();
             var validationErrors = new List<IndValidationError>();
             var modeValue = ResolveCreateExpenseMode(body);
 
@@ -241,7 +241,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetExpenseSheetCurrencies()
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var traceId = GetOrCreateTraceId();
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
@@ -324,7 +324,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetExpenseSheetSubordinates()
         {
-            var traceId = Guid.NewGuid().ToString("N");
+            var traceId = GetOrCreateTraceId();
 
             // Validate company header.
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
