@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -94,7 +95,7 @@ namespace IND_CRM_API.Services
             {
                 effectiveRecords = effectiveRecords.Take(maxSupportedRecords).ToList();
                 truncated = true;
-                warnings.Add("The dataset was trimmed to the safe chunk processing limit.");
+                warnings.Add(BuildLocalizedWarning(request, "dataset-trimmed"));
             }
 
             try
@@ -118,11 +119,13 @@ namespace IND_CRM_API.Services
                 var retrievalMode = effectiveRecords.Count <= _directRecordLimit ? "direct" : "chunked";
                 var fallbackWarnings = MergeWarnings(warnings, new List<string>
                 {
-                    "A safe structured fallback was returned because the OpenAI response could not be completed."
+                    BuildLocalizedWarning(request, "safe-fallback")
                 });
 
                 _logger.Log(
                     "[OPENAI-DATASET] Falling back to structured markdown retrievalMode=" + retrievalMode +
+                    " locale=" + ResolveRequestLocale(request) +
+                    " fallbackKind=execution-failed" +
                     " reason=" + ex.Message,
                     AxaptaSessionManager.LogLevel.Warning);
 
@@ -210,11 +213,16 @@ namespace IND_CRM_API.Services
             if (!validation.IsValid)
             {
                 var fallbackWarnings = MergeWarnings(baseWarnings, validation.Warnings);
-                fallbackWarnings = MergeWarnings(fallbackWarnings, validation.Errors.Select(item => "Structured validation: " + item).ToList());
                 fallbackWarnings = MergeWarnings(fallbackWarnings, new List<string>
                 {
-                    "The model output did not match the structured UI contract."
+                    BuildLocalizedWarning(request, "invalid-structured-output")
                 });
+
+                _logger.Log(
+                    "[OPENAI-DATASET] Structured validation failed retrievalMode=" + retrievalMode +
+                    " locale=" + ResolveRequestLocale(request) +
+                    " errors=" + string.Join(" | ", validation.Errors ?? new List<string>()),
+                    AxaptaSessionManager.LogLevel.Warning);
 
                 return BuildSafeFallbackResult(request, retrievalMode, recordsSentToModel, fallbackWarnings, "invalid-structured-output");
             }
@@ -225,8 +233,13 @@ namespace IND_CRM_API.Services
             {
                 mergedWarnings = MergeWarnings(mergedWarnings, new List<string>
                 {
-                    "Chunked final answers cannot emit chart or table payloads because exact final rows are not available."
+                    BuildLocalizedWarning(request, "chunked-visualization-blocked")
                 });
+
+                _logger.Log(
+                    "[OPENAI-DATASET] Visualization blocked retrievalMode=chunked locale=" + ResolveRequestLocale(request) +
+                    " reason=exact-final-rows-unavailable",
+                    AxaptaSessionManager.LogLevel.Warning);
 
                 return BuildSafeFallbackResult(request, retrievalMode, recordsSentToModel, mergedWarnings, "chunked-visualization-blocked");
             }
@@ -590,7 +603,7 @@ namespace IND_CRM_API.Services
         {
             return new JObject
             {
-                ["oneOf"] = new JArray
+                ["anyOf"] = new JArray
                 {
                     BuildMarkdownMessageSchema(),
                     BuildChartMessageSchema(),
@@ -637,7 +650,7 @@ namespace IND_CRM_API.Services
                     },
                     ["payload"] = new JObject
                     {
-                        ["oneOf"] = new JArray
+                        ["anyOf"] = new JArray
                         {
                             BuildBarOrLineChartPayloadSchema("bar"),
                             BuildBarOrLineChartPayloadSchema("line"),
@@ -968,7 +981,7 @@ namespace IND_CRM_API.Services
             {
                 outcome.Warnings = MergeWarnings(outcome.Warnings, new List<string>
                 {
-                    "The assistant schemaVersion was normalized to expense-chat-v2."
+                    BuildLocalizedWarning(request, "schema-normalized")
                 });
             }
 
@@ -1432,7 +1445,7 @@ namespace IND_CRM_API.Services
                 ["type"] = "question-to-choose-chart-type",
                 ["question"] = question,
                 ["originalPrompt"] = originalPrompt,
-                ["options"] = BuildFixedPickerOptions(IsSpanishRequest(request)),
+                ["options"] = BuildFixedPickerOptions(ResolveRequestLocale(request)),
                 ["selectedType"] = string.IsNullOrWhiteSpace(selectedType) ? (JToken)JValue.CreateNull() : selectedType
             };
 
@@ -1588,13 +1601,13 @@ namespace IND_CRM_API.Services
             }
         }
 
-        private static JArray BuildFixedPickerOptions(bool useSpanish)
+        private static JArray BuildFixedPickerOptions(string locale)
         {
             return new JArray(
-                BuildFixedPickerOption("bar", useSpanish ? "Barras" : "Bars", useSpanish ? "Compara categorias rapidamente." : "Compare categories quickly."),
-                BuildFixedPickerOption("line", useSpanish ? "Lineas" : "Lines", useSpanish ? "Muestra una secuencia o evolucion temporal." : "Show a sequence or time trend."),
-                BuildFixedPickerOption("pie", "Pie", useSpanish ? "Muestra proporcion entre pocas categorias." : "Show proportions across a few categories."),
-                BuildFixedPickerOption("table", useSpanish ? "Tabla" : "Table", useSpanish ? "Prioriza detalle exacto y comparacion." : "Prioritize exact detail and comparison.")
+                BuildFixedPickerOption("bar", LocalizeFixedPickerText(locale, "bar-label"), LocalizeFixedPickerText(locale, "bar-description")),
+                BuildFixedPickerOption("line", LocalizeFixedPickerText(locale, "line-label"), LocalizeFixedPickerText(locale, "line-description")),
+                BuildFixedPickerOption("pie", LocalizeFixedPickerText(locale, "pie-label"), LocalizeFixedPickerText(locale, "pie-description")),
+                BuildFixedPickerOption("table", LocalizeFixedPickerText(locale, "table-label"), LocalizeFixedPickerText(locale, "table-description"))
             );
         }
 
@@ -1644,31 +1657,47 @@ namespace IND_CRM_API.Services
 
         private static string ResolveFallbackMarkdown(AiDatasetAnswerRequest request, string fallbackKind)
         {
-            var useSpanish = IsSpanishRequest(request);
+            var locale = ResolveRequestLocale(request);
             switch (fallbackKind)
             {
                 case "chunked-visualization-blocked":
-                    return useSpanish
-                        ? "## No pude renderizar un grafico fiable\n- Solo habia resumenes parciales del dataset completo.\n- Prueba a acotar mas los filtros o pide un resumen breve."
-                        : "## I could not render a reliable chart\n- Only partial summaries of the full dataset were available.\n- Try narrowing the filters or ask for a short summary.";
+                    return LocalizeVisibleText(locale,
+                        "## No pude renderizar un grafico fiable\n- Solo habia resumenes parciales del dataset completo.\n- Prueba a acotar mas los filtros o pide un resumen breve.",
+                        "## I could not render a reliable chart\n- Only partial summaries of the full dataset were available.\n- Try narrowing the filters or ask for a short summary.",
+                        "## Ezin izan dut grafiko fidagarri bat erakutsi\n- Dataset osoaren laburpen partzialak besterik ez zeuden.\n- Saiatu filtroak gehiago murrizten edo eskatu laburpen labur bat.",
+                        "## Nao consegui renderizar um grafico fiavel\n- So estavam disponiveis resumos parciais do dataset completo.\n- Tenta limitar mais os filtros ou pede um resumo curto.",
+                        "## Non sono riuscito a renderizzare un grafico affidabile\n- Erano disponibili solo riepiloghi parziali del dataset completo.\n- Prova a restringere i filtri o chiedi un breve riepilogo.",
+                        "## \\u65e0\\u6cd5\\u751f\\u6210\\u53ef\\u9760\\u7684\\u56fe\\u8868\\n- \\u76ee\\u524d\\u53ea\\u6709\\u5b8c\\u6574\\u6570\\u636e\\u96c6\\u7684\\u90e8\\u5206\\u6458\\u8981\\u3002\\n- \\u8bf7\\u5c1d\\u8bd5\\u7f29\\u5c0f\\u7b5b\\u9009\\u6761\\u4ef6\\uff0c\\u6216\\u8bf7\\u6c42\\u4e00\\u4e2a\\u7b80\\u77ed\\u6458\\u8981\\u3002");
                 case "no-records":
-                    return useSpanish
-                        ? "## Sin datos\n- No se encontraron registros para los filtros enviados."
-                        : "## No data\n- No records were found for the current filters.";
+                    return LocalizeVisibleText(locale,
+                        "## Sin datos\n- No se encontraron registros para los filtros enviados.",
+                        "## No data\n- No records were found for the current filters.",
+                        "## Daturik ez\n- Ez da erregistrorik aurkitu bidalitako filtroekin.",
+                        "## Sem dados\n- Nao foram encontrados registos para os filtros enviados.",
+                        "## Nessun dato\n- Non sono stati trovati record per i filtri inviati.",
+                        "## \\u65e0\\u6570\\u636e\\n- \\u672a\\u627e\\u5230\\u7b26\\u5408\\u5f53\\u524d\\u7b5b\\u9009\\u6761\\u4ef6\\u7684\\u8bb0\\u5f55\\u3002");
                 case "invalid-structured-output":
-                    return useSpanish
-                        ? "## No pude generar una visualizacion segura\n- La salida estructurada no fue valida.\n- Prueba a pedir un resumen breve o una tabla."
-                        : "## I could not build a safe visualization\n- The structured output was not valid.\n- Try asking for a short summary or a table.";
+                    return LocalizeVisibleText(locale,
+                        "## No pude generar una visualizacion segura\n- La salida estructurada no fue valida.\n- Prueba a pedir un resumen breve o una tabla.",
+                        "## I could not build a safe visualization\n- The structured output was not valid.\n- Try asking for a short summary or a table.",
+                        "## Ezin izan dut bistaratze seguru bat sortu\n- Irteera egituratua ez zen baliozkoa.\n- Saiatu laburpen labur bat edo taula bat eskatzen.",
+                        "## Nao consegui gerar uma visualizacao segura\n- A saida estruturada nao era valida.\n- Tenta pedir um resumo curto ou uma tabela.",
+                        "## Non sono riuscito a creare una visualizzazione sicura\n- L'output strutturato non era valido.\n- Prova a chiedere un breve riepilogo o una tabella.",
+                        "## \\u65e0\\u6cd5\\u751f\\u6210\\u5b89\\u5168\\u7684\\u53ef\\u89c6\\u5316\\n- \\u7ed3\\u6784\\u5316\\u8f93\\u51fa\\u65e0\\u6548\\u3002\\n- \\u8bf7\\u5c1d\\u8bd5\\u8be2\\u95ee\\u7b80\\u77ed\\u6458\\u8981\\u6216\\u8868\\u683c\\u3002");
                 default:
-                    return useSpanish
-                        ? "## No pude completar la respuesta\n- Devuelvo un mensaje seguro porque no hubo una salida estructurada valida.\n- Puedes reformular la pregunta o pedir una tabla simple."
-                        : "## I could not complete the response\n- I am returning a safe message because no valid structured output was available.\n- You can rephrase the question or ask for a simple table.";
+                    return LocalizeVisibleText(locale,
+                        "## No pude completar la respuesta\n- Devuelvo un mensaje seguro porque no hubo una salida estructurada valida.\n- Puedes reformular la pregunta o pedir una tabla simple.",
+                        "## I could not complete the response\n- I am returning a safe message because no valid structured output was available.\n- You can rephrase the question or ask for a simple table.",
+                        "## Ezin izan dut erantzuna osatu\n- Mezu seguru bat itzultzen dut, ez delako irteera egituratu baliodunik egon.\n- Galdera birformulatu edo taula soil bat eska dezakezu.",
+                        "## Nao consegui completar a resposta\n- Estou a devolver uma mensagem segura porque nao havia uma saida estruturada valida disponivel.\n- Podes reformular a pergunta ou pedir uma tabela simples.",
+                        "## Non sono riuscito a completare la risposta\n- Sto restituendo un messaggio sicuro perche non era disponibile un output strutturato valido.\n- Puoi riformulare la domanda o chiedere una tabella semplice.",
+                        "## \\u65e0\\u6cd5\\u5b8c\\u6210\\u56de\\u7b54\\n- \\u7531\\u4e8e\\u6ca1\\u6709\\u53ef\\u7528\\u7684\\u6709\\u6548\\u7ed3\\u6784\\u5316\\u8f93\\u51fa\\uff0c\\u6211\\u8fd4\\u56de\\u4e00\\u6761\\u5b89\\u5168\\u6d88\\u606f\\u3002\\n- \\u4f60\\u53ef\\u4ee5\\u91cd\\u65b0\\u8868\\u8ff0\\u95ee\\u9898\\uff0c\\u6216\\u8bf7\\u6c42\\u4e00\\u4e2a\\u7b80\\u5355\\u8868\\u683c\\u3002");
             }
         }
 
         private static bool IsVisualizationRequested(AiDatasetAnswerRequest request)
         {
-            var answerInstructions = NormalizeText(request?.AnswerInstructions, string.Empty).ToLowerInvariant();
+            var answerInstructions = StripDiacritics(NormalizeText(request?.AnswerInstructions, string.Empty)).ToLowerInvariant();
             if (answerInstructions.Contains("one compact markdown msg") ||
                 answerInstructions.Contains("exactly 1 markdown") ||
                 answerInstructions.Contains("text only"))
@@ -1685,16 +1714,13 @@ namespace IND_CRM_API.Services
                 return true;
             }
 
-            var sample = ((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty)).ToLowerInvariant();
+            var sample = StripDiacritics((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty)).ToLowerInvariant();
             return sample.Contains("grafico") ||
-                   sample.Contains("gráfico") ||
                    sample.Contains("grafica") ||
-                   sample.Contains("gráfica") ||
                    sample.Contains("chart") ||
                    sample.Contains("graph") ||
                    sample.Contains("plot") ||
                    sample.Contains("lineas") ||
-                   sample.Contains("líneas") ||
                    sample.Contains("barras") ||
                    sample.Contains("pie") ||
                    sample.Contains("tabla") ||
@@ -1703,25 +1729,166 @@ namespace IND_CRM_API.Services
 
         private static bool IsSpanishRequest(AiDatasetAnswerRequest request)
         {
-            var sample = ((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty)).ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(sample))
-                return true;
+            return string.Equals(ResolveRequestLocale(request), "es", StringComparison.Ordinal);
+        }
 
-            var padded = " " + sample + " ";
-            var spanishHints = new[]
+        private static string ResolveRequestLocale(AiDatasetAnswerRequest request)
+        {
+            var originalSample = NormalizeText((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty), string.Empty);
+            if (string.IsNullOrWhiteSpace(originalSample))
+                return "es";
+
+            foreach (var ch in originalSample)
             {
-                " el ", " la ", " los ", " las ", " que ", " para ", " con ", " grafico ", " grafica ", " tabla ", " resumen ",
-                " gasto ", " gastos ", " hoja ", " hojas ", " quiero ", " necesito ", " mostrar ", " comparar "
-            };
-            var englishHints = new[]
+                if (ch >= 0x4E00 && ch <= 0x9FFF)
+                    return "zhHans";
+            }
+
+            var sample = " " + StripDiacritics(originalSample).ToLowerInvariant() + " ";
+            var scores = new Dictionary<string, int>(StringComparer.Ordinal)
             {
-                " the ", " and ", " for ", " with ", " chart ", " table ", " summary ", " expense ", " expenses ", " please ",
-                " show ", " compare ", " display ", " total "
+                ["es"] = ScoreLocale(sample, " el ", " la ", " los ", " las ", " que ", " para ", " con ", " grafico ", " grafica ", " tabla ", " resumen ", " gasto ", " gastos ", " hoja ", " hojas ", " quiero ", " necesito ", " mostrar ", " comparar ", " analisis ", " analitica "),
+                ["en"] = ScoreLocale(sample, " the ", " and ", " for ", " with ", " chart ", " table ", " summary ", " expense ", " expenses ", " please ", " show ", " compare ", " display ", " total ", " analysis "),
+                ["eu"] = ScoreLocale(sample, " eta ", " taula ", " grafiko ", " gastu ", " gastuak ", " laburpen ", " erakutsi ", " alderatu "),
+                ["pt"] = ScoreLocale(sample, " o ", " a ", " os ", " as ", " para ", " com ", " grafico ", " tabela ", " resumo ", " despesa ", " despesas ", " mostrar ", " comparar "),
+                ["it"] = ScoreLocale(sample, " il ", " lo ", " gli ", " le ", " per ", " con ", " grafico ", " tabella ", " riepilogo ", " spesa ", " spese ", " mostra ", " confronta ")
             };
 
-            var spanishScore = spanishHints.Count(padded.Contains);
-            var englishScore = englishHints.Count(padded.Contains);
-            return spanishScore >= englishScore;
+            var bestMatch = scores
+                .OrderByDescending(item => item.Value)
+                .ThenBy(item => item.Key, StringComparer.Ordinal)
+                .FirstOrDefault();
+
+            if (bestMatch.Value > 0)
+                return bestMatch.Key;
+
+            return sample.Contains(" chart ") || sample.Contains(" table ") || sample.Contains(" summary ") ? "en" : "es";
+        }
+
+        private static int ScoreLocale(string sample, params string[] hints)
+        {
+            return (hints ?? new string[0]).Count(sample.Contains);
+        }
+
+        private static string StripDiacritics(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var ch in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    builder.Append(ch);
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        private static string BuildLocalizedWarning(AiDatasetAnswerRequest request, string key)
+        {
+            return LocalizeWarning(ResolveRequestLocale(request), key);
+        }
+
+        private static string LocalizeWarning(string locale, string key)
+        {
+            switch (key)
+            {
+                case "dataset-trimmed":
+                    return LocalizeVisibleText(locale,
+                        "El dataset se recorto al limite seguro de procesamiento por chunks.",
+                        "The dataset was trimmed to the safe chunk processing limit.",
+                        "Dataseta chunk bidez prozesatzeko muga segurura moztu da.",
+                        "O dataset foi reduzido ao limite seguro de processamento por chunks.",
+                        "Il dataset e stato ridotto al limite sicuro di elaborazione a blocchi.",
+                        "\\u6570\\u636e\\u96c6\\u5df2\\u88ab\\u88c1\\u526a\\u5230\\u5206\\u5757\\u5904\\u7406\\u7684\\u5b89\\u5168\\u4e0a\\u9650\\u3002");
+                case "safe-fallback":
+                    return LocalizeVisibleText(locale,
+                        "Se devolvio un fallback estructurado seguro porque la respuesta de OpenAI no pudo completarse.",
+                        "A safe structured fallback was returned because the OpenAI response could not be completed.",
+                        "Fallback egituratu seguru bat itzuli da, OpenAIren erantzuna ezin izan delako osatu.",
+                        "Foi devolvido um fallback estruturado seguro porque a resposta da OpenAI nao conseguiu ser concluida.",
+                        "E stato restituito un fallback strutturato sicuro perche la risposta di OpenAI non ha potuto essere completata.",
+                        "\\u7531\\u4e8e OpenAI \\u54cd\\u5e94\\u65e0\\u6cd5\\u5b8c\\u6210\\uff0c\\u5df2\\u8fd4\\u56de\\u4e00\\u4e2a\\u5b89\\u5168\\u7684\\u7ed3\\u6784\\u5316 fallback\\u3002");
+                case "invalid-structured-output":
+                    return LocalizeVisibleText(locale,
+                        "La salida del modelo no coincidio con el contrato estructurado de la UI.",
+                        "The model output did not match the structured UI contract.",
+                        "Modeloaren irteera ez dator bat UIaren kontratu egituratuarekin.",
+                        "A saida do modelo nao correspondeu ao contrato estruturado da UI.",
+                        "L'output del modello non corrispondeva al contratto strutturato della UI.",
+                        "\\u6a21\\u578b\\u8f93\\u51fa\\u4e0e UI \\u7684\\u7ed3\\u6784\\u5316\\u5951\\u7ea6\\u4e0d\\u5339\\u914d\\u3002");
+                case "chunked-visualization-blocked":
+                    return LocalizeVisibleText(locale,
+                        "No se puede emitir un grafico o tabla final en modo chunked porque no hay filas finales exactas disponibles.",
+                        "A final chart or table cannot be emitted in chunked mode because exact final rows are not available.",
+                        "Ezin da azken grafiko edo taularik sortu chunked moduan, ez daudelako azken errenkada zehatzak eskuragarri.",
+                        "Nao e possivel emitir um grafico ou tabela final em modo chunked porque nao existem linhas finais exatas disponiveis.",
+                        "Non e possibile emettere un grafico o una tabella finale in modalita chunked perche non sono disponibili le righe finali esatte.",
+                        "\\u5728 chunked \\u6a21\\u5f0f\\u4e0b\\u65e0\\u6cd5\\u751f\\u6210\\u6700\\u7ec8\\u56fe\\u8868\\u6216\\u8868\\u683c\\uff0c\\u56e0\\u4e3a\\u6ca1\\u6709\\u53ef\\u7528\\u7684\\u7cbe\\u786e\\u6700\\u7ec8\\u884c\\u3002");
+                case "schema-normalized":
+                    return LocalizeVisibleText(locale,
+                        "La schemaVersion del asistente se normalizo a expense-chat-v2.",
+                        "The assistant schemaVersion was normalized to expense-chat-v2.",
+                        "Laguntzailearen schemaVersion expense-chat-v2 baliora normalizatu da.",
+                        "A schemaVersion do assistente foi normalizada para expense-chat-v2.",
+                        "La schemaVersion dell'assistente e stata normalizzata a expense-chat-v2.",
+                        "\\u52a9\\u624b\\u7684 schemaVersion \\u5df2\\u88ab\\u89c4\\u8303\\u5316\\u4e3a expense-chat-v2\\u3002");
+                default:
+                    return LocalizeVisibleText(locale,
+                        "Se genero una advertencia interna del asistente.",
+                        "An internal assistant warning was generated.",
+                        "Laguntzailearen barne abisu bat sortu da.",
+                        "Foi gerado um aviso interno do assistente.",
+                        "E stato generato un avviso interno dell'assistente.",
+                        "\\u5df2\\u751f\\u6210\\u4e00\\u6761\\u52a9\\u624b\\u5185\\u90e8\\u8b66\\u544a\\u3002");
+            }
+        }
+
+        private static string LocalizeFixedPickerText(string locale, string key)
+        {
+            switch (key)
+            {
+                case "bar-label":
+                    return LocalizeVisibleText(locale, "Barras", "Bars", "Barrak", "Barras", "Barre", "\\u67f1\\u72b6\\u56fe");
+                case "bar-description":
+                    return LocalizeVisibleText(locale, "Compara categorias rapidamente.", "Compare categories quickly.", "Kategoriak azkar alderatzen ditu.", "Compara categorias rapidamente.", "Confronta rapidamente le categorie.", "\\u5feb\\u901f\\u6bd4\\u8f83\\u5404\\u7c7b\\u522b\\u3002");
+                case "line-label":
+                    return LocalizeVisibleText(locale, "Lineas", "Lines", "Lerroak", "Linhas", "Linee", "\\u6298\\u7ebf\\u56fe");
+                case "line-description":
+                    return LocalizeVisibleText(locale, "Muestra una secuencia o evolucion temporal.", "Show a sequence or time trend.", "Denborazko segida edo bilakaera erakusten du.", "Mostra uma sequencia ou evolucao temporal.", "Mostra una sequenza o un andamento temporale.", "\\u663e\\u793a\\u5e8f\\u5217\\u6216\\u65f6\\u95f4\\u8d8b\\u52bf\\u3002");
+                case "pie-label":
+                    return LocalizeVisibleText(locale, "Pie", "Pie", "Pie", "Pie", "Torta", "\\u997c\\u56fe");
+                case "pie-description":
+                    return LocalizeVisibleText(locale, "Muestra proporcion entre pocas categorias.", "Show proportions across a few categories.", "Kategoria gutxiren arteko proportzioa erakusten du.", "Mostra proporcao entre poucas categorias.", "Mostra la proporzione tra poche categorie.", "\\u5c55\\u793a\\u5c11\\u91cf\\u7c7b\\u522b\\u4e4b\\u95f4\\u7684\\u5360\\u6bd4\\u3002");
+                case "table-label":
+                    return LocalizeVisibleText(locale, "Tabla", "Table", "Taula", "Tabela", "Tabella", "\\u8868\\u683c");
+                case "table-description":
+                    return LocalizeVisibleText(locale, "Prioriza detalle exacto y comparacion.", "Prioritize exact detail and comparison.", "Xehetasun zehatza eta konparazioa lehenesten ditu.", "Prioriza detalhe exato e comparacao.", "Privilegia il dettaglio esatto e il confronto.", "\\u4f18\\u5148\\u663e\\u793a\\u7cbe\\u786e\\u7ec6\\u8282\\u4e0e\\u5bf9\\u6bd4\\u3002");
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string LocalizeVisibleText(string locale, string es, string en, string eu, string pt, string it, string zhHans)
+        {
+            switch (locale)
+            {
+                case "en":
+                    return en;
+                case "eu":
+                    return eu;
+                case "pt":
+                    return pt;
+                case "it":
+                    return it;
+                case "zhHans":
+                    return Regex.Unescape(zhHans);
+                case "es":
+                default:
+                    return es;
+            }
         }
 
         private static List<string> ExtractStringList(JToken token)
@@ -1757,7 +1924,8 @@ namespace IND_CRM_API.Services
                 "You are a UI answer composer for the expense sheet assistant.",
                 "Return only valid JSON that matches the provided schema.",
                 "Do not wrap the JSON in markdown fences.",
-                "All visible text must be in the same language used by the user question and answerInstructions.",
+                "All visible text must be in the same language as the user question.",
+                "If answerInstructions uses a different language, ignore that and follow the user question language.",
                 "Use only the provided data and never invent fields, keys, ids, amounts, currencies, dates, categories, or conclusions.",
                 "Do not embed raw JSON inside markdown.",
                 "Do not embed ASCII tables or pipe tables inside markdown.",
