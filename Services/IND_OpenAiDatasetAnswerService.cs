@@ -136,11 +136,12 @@ namespace IND_CRM_API.Services
             List<string> baseWarnings,
             CancellationToken cancellationToken)
         {
+            var visualizationRequested = IsVisualizationRequested(request);
             var payload = await ExecuteStructuredRequestAsync(
-                BuildStructuredAnswerInstructions(false),
+                BuildStructuredAnswerInstructions(false, visualizationRequested),
                 BuildDirectInputJson(request, records),
-                BuildFinalAnswerSchema(),
-                "expense_sheet_answer_direct",
+                BuildFinalAnswerSchema(visualizationRequested),
+                visualizationRequested ? "expense_sheet_answer_direct" : "expense_sheet_answer_direct_markdown",
                 _maxOutputTokens,
                 cancellationToken).ConfigureAwait(false);
 
@@ -153,6 +154,7 @@ namespace IND_CRM_API.Services
             List<string> baseWarnings,
             CancellationToken cancellationToken)
         {
+            var visualizationRequested = IsVisualizationRequested(request);
             var chunkCount = (int)Math.Ceiling((double)records.Count / _chunkSize);
             var partialSummaries = new JArray();
             var warnings = MergeWarnings(baseWarnings, null);
@@ -187,10 +189,10 @@ namespace IND_CRM_API.Services
             }
 
             var finalPayload = await ExecuteStructuredRequestAsync(
-                BuildStructuredAnswerInstructions(true),
+                BuildStructuredAnswerInstructions(true, visualizationRequested),
                 BuildFinalChunkInputJson(request, partialSummaries),
-                BuildFinalAnswerSchema(),
-                "expense_sheet_answer_final",
+                BuildFinalAnswerSchema(visualizationRequested),
+                visualizationRequested ? "expense_sheet_answer_final" : "expense_sheet_answer_final_markdown",
                 _maxOutputTokens,
                 cancellationToken).ConfigureAwait(false);
 
@@ -204,7 +206,7 @@ namespace IND_CRM_API.Services
             int recordsSentToModel,
             List<string> baseWarnings)
         {
-            var validation = ValidateStructuredAnswerPayload(payload);
+            var validation = ValidateStructuredAnswerPayload(payload, request);
             if (!validation.IsValid)
             {
                 var fallbackWarnings = MergeWarnings(baseWarnings, validation.Warnings);
@@ -526,7 +528,14 @@ namespace IND_CRM_API.Services
         }
 
         // Builds the exact final UI contract enforced by Structured Outputs.
-        private static JObject BuildFinalAnswerSchema()
+        private static JObject BuildFinalAnswerSchema(bool visualizationRequested)
+        {
+            return visualizationRequested
+                ? BuildVisualizationAnswerSchema()
+                : BuildMarkdownOnlyAnswerSchema();
+        }
+
+        private static JObject BuildVisualizationAnswerSchema()
         {
             return new JObject
             {
@@ -544,6 +553,32 @@ namespace IND_CRM_API.Services
                         ["type"] = "array",
                         ["minItems"] = 1,
                         ["items"] = BuildMessageSchema()
+                    },
+                    ["warnings"] = BuildStringArrayOrNullSchema()
+                },
+                ["required"] = new JArray("schemaVersion", "messages", "warnings")
+            };
+        }
+
+        private static JObject BuildMarkdownOnlyAnswerSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["schemaVersion"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray(StructuredAnswerSchemaVersion)
+                    },
+                    ["messages"] = new JObject
+                    {
+                        ["type"] = "array",
+                        ["minItems"] = 1,
+                        ["maxItems"] = 1,
+                        ["items"] = BuildMarkdownMessageSchema()
                     },
                     ["warnings"] = BuildStringArrayOrNullSchema()
                 },
@@ -657,8 +692,8 @@ namespace IND_CRM_API.Services
                     ["options"] = new JObject
                     {
                         ["type"] = "array",
-                        ["minItems"] = 2,
-                        ["maxItems"] = 3,
+                        ["minItems"] = 4,
+                        ["maxItems"] = 4,
                         ["items"] = BuildPickerOptionSchema()
                     },
                     ["selectedType"] = new JObject
@@ -911,7 +946,7 @@ namespace IND_CRM_API.Services
         }
 
         // Validates and normalizes the assistant payload before it reaches the frontend.
-        private static StructuredAnswerValidationOutcome ValidateStructuredAnswerPayload(JObject payload)
+        private static StructuredAnswerValidationOutcome ValidateStructuredAnswerPayload(JObject payload, AiDatasetAnswerRequest request)
         {
             var outcome = new StructuredAnswerValidationOutcome
             {
@@ -947,7 +982,7 @@ namespace IND_CRM_API.Services
             var normalizedMessages = new JArray();
             for (var index = 0; index < messagesToken.Count; index++)
             {
-                var normalizedMessage = NormalizeStructuredMessage(messagesToken[index], index, outcome.Errors);
+                var normalizedMessage = NormalizeStructuredMessage(messagesToken[index], index, outcome.Errors, request);
                 if (normalizedMessage != null)
                     normalizedMessages.Add(normalizedMessage);
             }
@@ -965,7 +1000,7 @@ namespace IND_CRM_API.Services
             return outcome;
         }
 
-        private static JObject NormalizeStructuredMessage(JToken token, int messageIndex, List<string> errors)
+        private static JObject NormalizeStructuredMessage(JToken token, int messageIndex, List<string> errors, AiDatasetAnswerRequest request)
         {
             var message = token as JObject;
             if (message == null)
@@ -990,7 +1025,7 @@ namespace IND_CRM_API.Services
                 case "table":
                     return NormalizeTableMessage(message, messageIndex, errors);
                 case "question-to-choose-chart-type":
-                    return NormalizePickerMessage(message, messageIndex, errors);
+                    return NormalizePickerMessage(message, messageIndex, errors, request);
                 default:
                     errors.Add("Message " + (messageIndex + 1).ToString(CultureInfo.InvariantCulture) + " has unsupported type '" + type + "'.");
                     return null;
@@ -1365,7 +1400,7 @@ namespace IND_CRM_API.Services
             return normalizedPayload;
         }
 
-        private static JObject NormalizePickerMessage(JObject message, int messageIndex, List<string> errors)
+        private static JObject NormalizePickerMessage(JObject message, int messageIndex, List<string> errors, AiDatasetAnswerRequest request)
         {
             string question;
             string originalPrompt;
@@ -1373,56 +1408,6 @@ namespace IND_CRM_API.Services
                 !TryReadRequiredString(message, "originalPrompt", messageIndex, errors, out originalPrompt))
             {
                 return null;
-            }
-
-            var optionsToken = message["options"] as JArray;
-            if (optionsToken == null || optionsToken.Count < 2 || optionsToken.Count > 3)
-            {
-                errors.Add("Message " + (messageIndex + 1).ToString(CultureInfo.InvariantCulture) + " picker requires 2 or 3 options.");
-                return null;
-            }
-
-            var normalizedOptions = new JArray();
-            var seenValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var index = 0; index < optionsToken.Count; index++)
-            {
-                var option = optionsToken[index] as JObject;
-                if (option == null)
-                {
-                    errors.Add("Message " + (messageIndex + 1).ToString(CultureInfo.InvariantCulture) + " picker option " + (index + 1).ToString(CultureInfo.InvariantCulture) + " must be an object.");
-                    continue;
-                }
-
-                string value;
-                string label;
-                string description;
-                if (!TryReadRequiredString(option, "value", messageIndex, errors, out value) ||
-                    !TryReadRequiredString(option, "label", messageIndex, errors, out label) ||
-                    !TryReadOptionalString(option, "description", messageIndex, errors, out description))
-                {
-                    continue;
-                }
-
-                value = value.Trim().ToLowerInvariant();
-                if (value != "bar" && value != "line" && value != "pie" && value != "table")
-                {
-                    errors.Add("Message " + (messageIndex + 1).ToString(CultureInfo.InvariantCulture) + " picker option '" + value + "' is not supported.");
-                    continue;
-                }
-
-                if (!seenValues.Add(value))
-                {
-                    errors.Add("Message " + (messageIndex + 1).ToString(CultureInfo.InvariantCulture) + " picker options must be unique.");
-                    continue;
-                }
-
-                var normalizedOption = new JObject
-                {
-                    ["value"] = value,
-                    ["label"] = label
-                };
-                AddOptionalString(normalizedOption, "description", description);
-                normalizedOptions.Add(normalizedOption);
             }
 
             string selectedType;
@@ -1447,7 +1432,7 @@ namespace IND_CRM_API.Services
                 ["type"] = "question-to-choose-chart-type",
                 ["question"] = question,
                 ["originalPrompt"] = originalPrompt,
-                ["options"] = normalizedOptions,
+                ["options"] = BuildFixedPickerOptions(IsSpanishRequest(request)),
                 ["selectedType"] = string.IsNullOrWhiteSpace(selectedType) ? (JToken)JValue.CreateNull() : selectedType
             };
 
@@ -1590,7 +1575,7 @@ namespace IND_CRM_API.Services
             try
             {
                 var payload = JObject.Parse(serializedAnswer);
-                var validation = ValidateStructuredAnswerPayload(payload);
+                var validation = ValidateStructuredAnswerPayload(payload, request);
                 if (!validation.IsValid)
                     return SerializeStructuredAnswerPayload(BuildSafeMarkdownFallback(request, "invalid-structured-output", MergeWarnings(warnings, validation.Errors)));
 
@@ -1601,6 +1586,28 @@ namespace IND_CRM_API.Services
             {
                 return SerializeStructuredAnswerPayload(BuildSafeMarkdownFallback(request, "execution-failed", warnings));
             }
+        }
+
+        private static JArray BuildFixedPickerOptions(bool useSpanish)
+        {
+            return new JArray(
+                BuildFixedPickerOption("bar", useSpanish ? "Barras" : "Bars", useSpanish ? "Compara categorias rapidamente." : "Compare categories quickly."),
+                BuildFixedPickerOption("line", useSpanish ? "Lineas" : "Lines", useSpanish ? "Muestra una secuencia o evolucion temporal." : "Show a sequence or time trend."),
+                BuildFixedPickerOption("pie", "Pie", useSpanish ? "Muestra proporcion entre pocas categorias." : "Show proportions across a few categories."),
+                BuildFixedPickerOption("table", useSpanish ? "Tabla" : "Table", useSpanish ? "Prioriza detalle exacto y comparacion." : "Prioritize exact detail and comparison.")
+            );
+        }
+
+        private static JObject BuildFixedPickerOption(string value, string label, string description)
+        {
+            var option = new JObject
+            {
+                ["value"] = value,
+                ["label"] = label
+            };
+
+            AddOptionalString(option, "description", description);
+            return option;
         }
 
         // Returns a safe markdown-only payload when the model output cannot be trusted.
@@ -1659,6 +1666,41 @@ namespace IND_CRM_API.Services
             }
         }
 
+        private static bool IsVisualizationRequested(AiDatasetAnswerRequest request)
+        {
+            var answerInstructions = NormalizeText(request?.AnswerInstructions, string.Empty).ToLowerInvariant();
+            if (answerInstructions.Contains("one compact markdown msg") ||
+                answerInstructions.Contains("exactly 1 markdown") ||
+                answerInstructions.Contains("text only"))
+            {
+                return false;
+            }
+
+            if (answerInstructions.Contains("md+") ||
+                answerInstructions.Contains("chart") ||
+                answerInstructions.Contains("graph") ||
+                answerInstructions.Contains("table") ||
+                answerInstructions.Contains("tabla"))
+            {
+                return true;
+            }
+
+            var sample = ((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty)).ToLowerInvariant();
+            return sample.Contains("grafico") ||
+                   sample.Contains("gráfico") ||
+                   sample.Contains("grafica") ||
+                   sample.Contains("gráfica") ||
+                   sample.Contains("chart") ||
+                   sample.Contains("graph") ||
+                   sample.Contains("plot") ||
+                   sample.Contains("lineas") ||
+                   sample.Contains("líneas") ||
+                   sample.Contains("barras") ||
+                   sample.Contains("pie") ||
+                   sample.Contains("tabla") ||
+                   sample.Contains("table");
+        }
+
         private static bool IsSpanishRequest(AiDatasetAnswerRequest request)
         {
             var sample = ((request?.Question ?? string.Empty) + " " + (request?.AnswerInstructions ?? string.Empty)).ToLowerInvariant();
@@ -1708,7 +1750,7 @@ namespace IND_CRM_API.Services
                 .ToList();
         }
 
-        private static string BuildStructuredAnswerInstructions(bool fromChunkSummaries)
+        private static string BuildStructuredAnswerInstructions(bool fromChunkSummaries, bool visualizationRequested)
         {
             var lines = new List<string>
             {
@@ -1717,22 +1759,33 @@ namespace IND_CRM_API.Services
                 "Do not wrap the JSON in markdown fences.",
                 "All visible text must be in the same language used by the user question and answerInstructions.",
                 "Use only the provided data and never invent fields, keys, ids, amounts, currencies, dates, categories, or conclusions.",
-                "If information is missing, say so clearly in markdown and do not invent a chart.",
-                "If visualization was not requested, return exactly 1 markdown message.",
-                "If visualization was requested and the data is valid for it, return exactly 2 messages: one markdown summary and one chart or table.",
-                "If the requested visualization would be misleading, unsupported, or not backed by exact data, return exactly 2 messages: one short markdown explanation and one question-to-choose-chart-type message with 2 or 3 better options.",
-                "Do not force a chart only because the user mentioned a chart.",
-                "Never invent xKey, yKey, nameKey, or dataKey. These keys must exist exactly in the returned rows.",
                 "Do not embed raw JSON inside markdown.",
                 "Do not embed ASCII tables or pipe tables inside markdown.",
                 "Keep markdown short and useful: one short heading or sentence, plus 2 to 4 bullets at most.",
-                "Use readable labels instead of bare numeric codes whenever readable labels are available in the data.",
-                "Pie charts: only for part-to-whole, maximum 6 categories, and never with negative values.",
-                "Bar charts: use for comparisons across categories.",
-                "Line charts: use only for ordered or temporal sequences.",
-                "Tables: use when precision matters or when there are too many details for a safe chart.",
                 "After the final JSON object, output nothing else."
             };
+
+            if (!visualizationRequested)
+            {
+                lines.Add("The user asked for a textual analysis only.");
+                lines.Add("Return exactly 1 markdown message.");
+                lines.Add("Do not return chart, table, or question-to-choose-chart-type messages.");
+                lines.Add("If information is missing, say so clearly inside the markdown answer.");
+                return string.Join("\n", lines);
+            }
+
+            lines.Add("If information is missing, say so clearly in markdown and do not invent a chart.");
+            lines.Add("If visualization was requested and the data is valid for it, return exactly 2 messages: one markdown summary and one chart or table.");
+            lines.Add("If the requested visualization would be misleading, unsupported, or missing the minimum variables, return exactly 2 messages: one short markdown explanation asking only for the minimum missing data, and one question-to-choose-chart-type message.");
+            lines.Add("The minimum missing data means one grouping or time field and one metric. Do not list multiple candidate analyses or many example charts.");
+            lines.Add("The question-to-choose-chart-type message must keep exactly these 4 options in this order: bar, line, pie, table.");
+            lines.Add("Do not force a chart only because the user mentioned a chart.");
+            lines.Add("Never invent xKey, yKey, nameKey, or dataKey. These keys must exist exactly in the returned rows.");
+            lines.Add("Use readable labels instead of bare numeric codes whenever readable labels are available in the data.");
+            lines.Add("Pie charts: only for part-to-whole, maximum 6 categories, and never with negative values.");
+            lines.Add("Bar charts: use for comparisons across categories.");
+            lines.Add("Line charts: use only for ordered or temporal sequences.");
+            lines.Add("Tables: use when precision matters or when there are too many details for a safe chart.");
 
             if (fromChunkSummaries)
             {
@@ -1900,6 +1953,13 @@ namespace IND_CRM_API.Services
             try
             {
                 var root = JObject.Parse(responseBody);
+                var nestedResponse = root["response"] as JObject;
+                var directJson = TrySerializeJsonToken(root["output_json"]) ??
+                                 TrySerializeJsonToken(root["parsed"]) ??
+                                 TrySerializeJsonToken(nestedResponse != null ? nestedResponse["output_json"] : null);
+                if (!string.IsNullOrWhiteSpace(directJson))
+                    return directJson;
+
                 var direct = root["output_text"]?.ToString();
                 if (!string.IsNullOrWhiteSpace(direct))
                     return TrimJsonBlock(direct);
@@ -1915,6 +1975,12 @@ namespace IND_CRM_API.Services
 
                         foreach (var part in content)
                         {
+                            var structuredPart = TrySerializeJsonToken(part["json"]) ??
+                                                 TrySerializeJsonToken(part["parsed"]) ??
+                                                 TrySerializeJsonToken(part["value"]);
+                            if (!string.IsNullOrWhiteSpace(structuredPart))
+                                return structuredPart;
+
                             var type = part["type"]?.ToString();
                             if (!string.Equals(type, "output_text", StringComparison.OrdinalIgnoreCase) &&
                                 !string.Equals(type, "text", StringComparison.OrdinalIgnoreCase))
@@ -1951,6 +2017,20 @@ namespace IND_CRM_API.Services
                 trimmed = trimmed.Substring(0, trimmed.Length - 3).Trim();
 
             return trimmed;
+        }
+
+        private static string TrySerializeJsonToken(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+                return null;
+
+            if (token.Type == JTokenType.Object || token.Type == JTokenType.Array)
+                return token.ToString(Formatting.None);
+
+            if (token.Type == JTokenType.String)
+                return TrimJsonBlock(token.ToString());
+
+            return null;
         }
 
         private sealed class DatasetAnswerRequestOptions
