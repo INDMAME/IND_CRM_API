@@ -323,6 +323,7 @@ namespace IND_CRM_API.Services
                     _logger.Log(
                         "[OPENAI-DATASET] Request attempt=" + attempt.ToString(CultureInfo.InvariantCulture) +
                         " name=" + responseFormatName +
+                        " schemaKind=" + DescribeResponseSchemaKind(responseFormatName) +
                         " model=" + _model +
                         " maxOut=" + requestOptions.MaxOutputTokens.ToString(CultureInfo.InvariantCulture) +
                         " tier=" + (requestOptions.ServiceTier ?? "auto"),
@@ -351,8 +352,14 @@ namespace IND_CRM_API.Services
                     {
                         var summary = TryExtractOpenAiErrorSummary(responseBody);
                         var retryAfterSeconds = IND_OpenAiErrorHandling.GetRetryAfterSeconds(response);
+                        var invalidSchemaContext = TryExtractInvalidSchemaContext(summary);
+                        var invalidSchemaMissingProperty = TryExtractInvalidSchemaMissingProperty(summary);
                         _logger.Log(
                             "[OPENAI-DATASET] Failure status=" + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) +
+                            " name=" + responseFormatName +
+                            " schemaKind=" + DescribeResponseSchemaKind(responseFormatName) +
+                            " invalidSchemaContext=" + (string.IsNullOrWhiteSpace(invalidSchemaContext) ? "-" : invalidSchemaContext) +
+                            " missingProperty=" + (string.IsNullOrWhiteSpace(invalidSchemaMissingProperty) ? "-" : invalidSchemaMissingProperty) +
                             " summary=" + summary,
                             AxaptaSessionManager.LogLevel.Warning);
 
@@ -715,7 +722,7 @@ namespace IND_CRM_API.Services
                         ["enum"] = new JArray("bar", "line", "pie", "table", null)
                     }
                 },
-                ["required"] = new JArray("type", "question", "originalPrompt", "options")
+                ["required"] = new JArray("type", "question", "originalPrompt", "options", "selectedType")
             };
         }
 
@@ -732,18 +739,9 @@ namespace IND_CRM_API.Services
                         ["type"] = "string",
                         ["enum"] = new JArray(chartType)
                     },
-                    ["title"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["subtitle"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["emptyStateLabel"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
+                    ["title"] = BuildNullableStringSchema(),
+                    ["subtitle"] = BuildNullableStringSchema(),
+                    ["emptyStateLabel"] = BuildNullableStringSchema(),
                     ["data"] = new JObject
                     {
                         ["type"] = "array",
@@ -759,7 +757,7 @@ namespace IND_CRM_API.Services
                         ["type"] = "string"
                     }
                 },
-                ["required"] = new JArray("chartType", "data", "xKey", "yKey")
+                ["required"] = new JArray("chartType", "title", "subtitle", "emptyStateLabel", "data", "xKey", "yKey")
             };
         }
 
@@ -776,18 +774,9 @@ namespace IND_CRM_API.Services
                         ["type"] = "string",
                         ["enum"] = new JArray("pie")
                     },
-                    ["title"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["subtitle"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["emptyStateLabel"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
+                    ["title"] = BuildNullableStringSchema(),
+                    ["subtitle"] = BuildNullableStringSchema(),
+                    ["emptyStateLabel"] = BuildNullableStringSchema(),
                     ["data"] = new JObject
                     {
                         ["type"] = "array",
@@ -804,7 +793,7 @@ namespace IND_CRM_API.Services
                         ["type"] = "string"
                     }
                 },
-                ["required"] = new JArray("chartType", "data", "nameKey", "dataKey")
+                ["required"] = new JArray("chartType", "title", "subtitle", "emptyStateLabel", "data", "nameKey", "dataKey")
             };
         }
 
@@ -828,18 +817,9 @@ namespace IND_CRM_API.Services
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["title"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["subtitle"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
-                    ["emptyStateLabel"] = new JObject
-                    {
-                        ["type"] = "string"
-                    },
+                    ["title"] = BuildNullableStringSchema(),
+                    ["subtitle"] = BuildNullableStringSchema(),
+                    ["emptyStateLabel"] = BuildNullableStringSchema(),
                     ["columns"] = new JObject
                     {
                         ["type"] = "array",
@@ -852,7 +832,7 @@ namespace IND_CRM_API.Services
                         ["items"] = BuildTableRowSchema()
                     }
                 },
-                ["required"] = new JArray("columns", "rows")
+                ["required"] = new JArray("title", "subtitle", "emptyStateLabel", "columns", "rows")
             };
         }
 
@@ -872,13 +852,9 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = "string"
                     },
-                    ["align"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JArray("left", "center", "right")
-                    }
+                    ["align"] = BuildNullableEnumSchema("left", "center", "right")
                 },
-                ["required"] = new JArray("key", "header")
+                ["required"] = new JArray("key", "header", "align")
             };
         }
 
@@ -911,12 +887,34 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = "string"
                     },
-                    ["description"] = new JObject
-                    {
-                        ["type"] = "string"
-                    }
+                    ["description"] = BuildNullableStringSchema()
                 },
-                ["required"] = new JArray("value", "label")
+                ["required"] = new JArray("value", "label", "description")
+            };
+        }
+
+        // OpenAI strict schemas require every declared property to be present.
+        private static JObject BuildNullableStringSchema()
+        {
+            return new JObject
+            {
+                ["type"] = new JArray("string", "null")
+            };
+        }
+
+        // Enum-like optional fields stay deterministic by accepting null explicitly.
+        private static JObject BuildNullableEnumSchema(params string[] values)
+        {
+            var enumValues = new JArray();
+            foreach (var value in values ?? new string[0])
+                enumValues.Add(value);
+
+            enumValues.Add(JValue.CreateNull());
+
+            return new JObject
+            {
+                ["type"] = new JArray("string", "null"),
+                ["enum"] = enumValues
             };
         }
 
@@ -2111,6 +2109,39 @@ namespace IND_CRM_API.Services
             {
                 return string.Empty;
             }
+        }
+
+        private static string DescribeResponseSchemaKind(string responseFormatName)
+        {
+            var normalized = NormalizeText(responseFormatName, string.Empty);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return "unknown";
+
+            if (normalized.IndexOf("chunk", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "chunk-summary";
+
+            if (normalized.IndexOf("markdown", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "markdown-only";
+
+            return "visual-structured";
+        }
+
+        private static string TryExtractInvalidSchemaContext(string summary)
+        {
+            if (string.IsNullOrWhiteSpace(summary))
+                return null;
+
+            var match = Regex.Match(summary, @"In context=(?<context>\([^)]+\))", RegexOptions.CultureInvariant);
+            return match.Success ? match.Groups["context"].Value : null;
+        }
+
+        private static string TryExtractInvalidSchemaMissingProperty(string summary)
+        {
+            if (string.IsNullOrWhiteSpace(summary))
+                return null;
+
+            var match = Regex.Match(summary, @"Missing '(?<property>[^']+)'", RegexOptions.CultureInvariant);
+            return match.Success ? match.Groups["property"].Value : null;
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)
