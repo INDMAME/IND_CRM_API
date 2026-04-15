@@ -8,7 +8,7 @@ namespace IND_CRM_API.Contracts.Responses
     public class AskExpenseSheetsAiResponse
     {
         /// <summary>
-        /// Final natural-language answer returned to the caller.
+        /// Final assistant payload serialized as a JSON string for the chat UI.
         /// </summary>
         public string Answer { get; set; }
 

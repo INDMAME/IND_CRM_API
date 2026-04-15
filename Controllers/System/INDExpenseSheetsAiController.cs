@@ -59,6 +59,7 @@ namespace IND_CRM_API.Controllers.System
         /// - page and pageSize are ignored in this AI endpoint.
         /// - createdDateFrom and createdDateTo accept DDMMYYYY or DD.MM.YYYY.
         /// - when sourceJson is sent, the endpoint analyzes that JSON directly and skips the server-side query.
+        /// - Data.Answer returns a serialized structured JSON payload for the chat renderer.
         /// </remarks>
         [HttpPost, Route("ask")]
         [ResponseType(typeof(IndApiResponse<AskExpenseSheetsAiResponse>))]
