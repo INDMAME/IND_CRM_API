@@ -2,37 +2,46 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using IND_CRM_API.Services;
 
 namespace IND_CRM_API.Helpers
 {
     /// <summary>
-    /// Simple cache of allowed companies per authenticated user.
-    /// Populated by the Entra context endpoint.
+    /// Stores the latest authorization snapshot per real Entra user.
     /// </summary>
     public static class UserCompanyAccessCache
     {
-        public sealed class Evaluation
-        {
-            public bool Allowed { get; set; }
-            public bool CacheMissing { get; set; }
-            public bool CacheExpired { get; set; }
-            public bool UsedGraceWindow { get; set; }
-            public Snapshot Snapshot { get; set; }
-        }
-
         public sealed class Snapshot
         {
             public bool Exists { get; set; }
             public bool Expired { get; set; }
+            public string SnapshotKey { get; set; }
+            public string TenantId { get; set; }
+            public string EntraOid { get; set; }
+            public string AxUserId { get; set; }
+            public string DefaultCompany { get; set; }
+            public string AppCode { get; set; }
+            public long ContextVersion { get; set; }
+            public string PermissionsRevision { get; set; }
+            public DateTime? IssuedUtc { get; set; }
             public DateTime? ExpiresUtc { get; set; }
-            public DateTime? GraceUntilUtc { get; set; }
             public string[] Companies { get; set; }
         }
 
-        private class CacheEntry
+        private sealed class CacheEntry
         {
+            public string SnapshotKey { get; set; }
+            public string TenantId { get; set; }
+            public string EntraOid { get; set; }
+            public string AxUserId { get; set; }
+            public string DefaultCompany { get; set; }
+            public string AppCode { get; set; }
+            public long ContextVersion { get; set; }
+            public string PermissionsRevision { get; set; }
             public HashSet<string> Companies { get; set; }
+            public DateTime IssuedUtc { get; set; }
             public DateTime ExpiresUtc { get; set; }
         }
 
@@ -40,181 +49,172 @@ namespace IND_CRM_API.Helpers
             new ConcurrentDictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
 
         private static readonly TimeSpan DefaultTtl = ResolveTtl();
-        private static readonly TimeSpan GraceTtl = TimeSpan.FromMinutes(120);
 
-        public static void SetAllowedCompanies(string username, IEnumerable<string> companyIds)
+        /// <summary>
+        /// Builds a stable cache key from tenant and Entra OID.
+        /// </summary>
+        public static string BuildSnapshotKey(string tenantId, string entraOid)
         {
-            if (string.IsNullOrWhiteSpace(username))
-                return;
+            var normalizedTenantId = NormalizeTokenPart(tenantId);
+            var normalizedEntraOid = NormalizeTokenPart(entraOid);
+            if (string.IsNullOrWhiteSpace(normalizedTenantId) || string.IsNullOrWhiteSpace(normalizedEntraOid))
+                return null;
 
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (companyIds != null)
+            return normalizedTenantId + ":" + normalizedEntraOid;
+        }
+
+        /// <summary>
+        /// Stores a fresh snapshot for the real Entra user.
+        /// </summary>
+        public static Snapshot SetSnapshot(
+            string tenantId,
+            string entraOid,
+            string axUserId,
+            string defaultCompany,
+            string appCode,
+            IEnumerable<string> companyIds,
+            long contextVersion)
+        {
+            var snapshotKey = BuildSnapshotKey(tenantId, entraOid);
+            if (string.IsNullOrWhiteSpace(snapshotKey))
             {
-                foreach (var company in companyIds)
-                {
-                    var trimmed = (company ?? string.Empty).Trim();
-                    if (!string.IsNullOrWhiteSpace(trimmed))
-                        set.Add(trimmed);
-                }
+                LogCacheEvent("set-invalid-key", null, null, null, "TenantId or EntraOid missing.");
+                return CreateMissingSnapshot();
             }
 
-            if (set.Count == 0)
+            var companies = NormalizeCompanies(companyIds);
+            if (companies.Count == 0)
             {
-                _cache.TryRemove(username, out _);
-                LogCacheEvent("set-empty", username, null, null, "No companies returned; cache entry removed.");
-                return;
+                _cache.TryRemove(snapshotKey, out _);
+                LogCacheEvent("set-empty", snapshotKey, null, null, "No companies returned; cache entry removed.");
+                return CreateMissingSnapshot(snapshotKey, tenantId, entraOid);
             }
 
+            var issuedUtc = DateTime.UtcNow;
+            var permissionsRevision = CreatePermissionsRevision(
+                tenantId,
+                entraOid,
+                axUserId,
+                defaultCompany,
+                appCode,
+                companies);
             var entry = new CacheEntry
             {
-                Companies = set,
-                ExpiresUtc = DateTime.UtcNow.Add(DefaultTtl)
+                SnapshotKey = snapshotKey,
+                TenantId = NormalizeTokenPart(tenantId),
+                EntraOid = NormalizeTokenPart(entraOid),
+                AxUserId = NormalizeText(axUserId),
+                DefaultCompany = NormalizeText(defaultCompany),
+                AppCode = NormalizeText(appCode),
+                ContextVersion = contextVersion > 0 ? contextVersion : issuedUtc.Ticks,
+                PermissionsRevision = permissionsRevision,
+                Companies = companies,
+                IssuedUtc = issuedUtc,
+                ExpiresUtc = issuedUtc.Add(DefaultTtl)
             };
 
-            _cache[username] = entry;
+            _cache[snapshotKey] = entry;
+
             LogCacheEvent(
                 "set",
-                username,
+                snapshotKey,
                 null,
                 entry.ExpiresUtc,
-                "Cache loaded from Entra context. companies=" + string.Join("|", set.OrderBy(company => company, StringComparer.OrdinalIgnoreCase)));
+                "Snapshot loaded. contextVersion=" + entry.ContextVersion + " permissionsRevision=" + entry.PermissionsRevision + " companies=" + string.Join("|", entry.Companies.OrderBy(company => company, StringComparer.OrdinalIgnoreCase)));
+
+            return CreateSnapshot(entry);
         }
 
-        public static bool IsCompanyAllowed(string username, string companyId, out bool cacheMissing)
+        /// <summary>
+        /// Gets the latest snapshot for a real Entra user.
+        /// </summary>
+        public static Snapshot GetSnapshot(string tenantId, string entraOid)
         {
-            var evaluation = EvaluateCompanyAccess(username, companyId);
-            cacheMissing = evaluation.CacheMissing;
-            return evaluation.Allowed;
+            return GetSnapshotByKey(BuildSnapshotKey(tenantId, entraOid));
         }
 
-        public static Evaluation EvaluateCompanyAccess(string username, string companyId)
+        /// <summary>
+        /// Gets the latest snapshot by pre-built snapshot key.
+        /// </summary>
+        public static Snapshot GetSnapshotByKey(string snapshotKey)
         {
-            var evaluation = new Evaluation
+            if (string.IsNullOrWhiteSpace(snapshotKey))
+                return CreateMissingSnapshot();
+
+            if (!_cache.TryGetValue(snapshotKey, out var entry) || entry == null)
             {
-                Allowed = false,
-                CacheMissing = true,
-                CacheExpired = false,
-                UsedGraceWindow = false,
-                Snapshot = null
-            };
-
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(companyId))
-            {
-                LogCacheEvent("invalid-input", username, companyId, null, "Username or company is empty.");
-                return evaluation;
-            }
-
-            if (!_cache.TryGetValue(username, out var entry) || entry == null)
-            {
-                LogCacheEvent("miss", username, companyId, null, "No cache entry found.");
-                return evaluation;
-            }
-
-            var nowUtc = DateTime.UtcNow;
-            var normalizedCompanyId = companyId.Trim();
-            var snapshot = CreateSnapshot(entry);
-            evaluation.Snapshot = snapshot;
-            evaluation.CacheMissing = false;
-            evaluation.CacheExpired = snapshot.Expired;
-
-            if (entry.Companies == null || !entry.Companies.Contains(normalizedCompanyId))
-            {
-                LogCacheEvent(
-                    "deny-company-not-found",
-                    username,
-                    normalizedCompanyId,
-                    snapshot.ExpiresUtc,
-                    "Company not present in cached company list.");
-                return evaluation;
-            }
-
-            if (!snapshot.Expired)
-            {
-                RefreshEntry(username, entry);
-                evaluation.Allowed = true;
-                evaluation.Snapshot = CreateSnapshot(_cache[username]);
-                LogCacheEvent(
-                    "allow-refresh",
-                    username,
-                    normalizedCompanyId,
-                    evaluation.Snapshot.ExpiresUtc,
-                    "Allowed by active cache entry. Sliding expiration refreshed.");
-                return evaluation;
-            }
-
-            if (GraceTtl > TimeSpan.Zero && snapshot.GraceUntilUtc.HasValue && snapshot.GraceUntilUtc.Value > nowUtc)
-            {
-                RefreshEntry(username, entry);
-                evaluation.Allowed = true;
-                evaluation.UsedGraceWindow = true;
-                evaluation.Snapshot = CreateSnapshot(_cache[username]);
-                LogCacheEvent(
-                    "allow-grace-window",
-                    username,
-                    normalizedCompanyId,
-                    evaluation.Snapshot.ExpiresUtc,
-                    "Allowed by fixed grace window of " + (int)GraceTtl.TotalMinutes + " minutes; cache refreshed.");
-                return evaluation;
-            }
-
-            LogCacheEvent(
-                "deny-expired",
-                username,
-                normalizedCompanyId,
-                snapshot.ExpiresUtc,
-                "Cache expired and fixed grace window exhausted.");
-            return evaluation;
-        }
-
-        public static Snapshot GetSnapshot(string username)
-        {
-            if (string.IsNullOrWhiteSpace(username))
-            {
-                return new Snapshot
-                {
-                    Exists = false,
-                    Expired = false,
-                    ExpiresUtc = null,
-                    GraceUntilUtc = null,
-                    Companies = Array.Empty<string>()
-                };
-            }
-
-            if (!_cache.TryGetValue(username, out var entry) || entry == null)
-            {
-                return new Snapshot
-                {
-                    Exists = false,
-                    Expired = false,
-                    ExpiresUtc = null,
-                    GraceUntilUtc = null,
-                    Companies = Array.Empty<string>()
-                };
+                LogCacheEvent("miss", snapshotKey, null, null, "No snapshot entry found.");
+                return CreateMissingSnapshot(snapshotKey, null, null);
             }
 
             return CreateSnapshot(entry);
         }
 
+        /// <summary>
+        /// Creates a new monotonic version for refreshed context snapshots.
+        /// </summary>
+        public static long CreateContextVersion()
+        {
+            return DateTime.UtcNow.Ticks;
+        }
+
+        /// <summary>
+        /// Builds a stable revision from the real-user permission footprint.
+        /// </summary>
+        public static string CreatePermissionsRevision(
+            string tenantId,
+            string entraOid,
+            string axUserId,
+            string defaultCompany,
+            string appCode,
+            IEnumerable<string> companyIds)
+        {
+            var normalizedCompanies = NormalizeCompanies(companyIds)
+                .OrderBy(company => company, StringComparer.OrdinalIgnoreCase)
+                .Select(NormalizeTokenPart);
+
+            var fingerprint = string.Join(
+                "\n",
+                new[]
+                {
+                    NormalizeTokenPart(tenantId),
+                    NormalizeTokenPart(entraOid),
+                    NormalizeTokenPart(axUserId),
+                    NormalizeTokenPart(defaultCompany),
+                    NormalizeTokenPart(appCode)
+                }.Concat(normalizedCompanies));
+
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(fingerprint));
+                return string.Concat(bytes.Select(b => b.ToString("x2")));
+            }
+        }
+
+        public static int GetConfiguredSnapshotMinutes()
+        {
+            return (int)Math.Max(1, DefaultTtl.TotalMinutes);
+        }
+
         private static Snapshot CreateSnapshot(CacheEntry entry)
         {
             if (entry == null)
-            {
-                return new Snapshot
-                {
-                    Exists = false,
-                    Expired = false,
-                    ExpiresUtc = null,
-                    GraceUntilUtc = null,
-                    Companies = Array.Empty<string>()
-                };
-            }
+                return CreateMissingSnapshot();
 
             return new Snapshot
             {
                 Exists = true,
                 Expired = entry.ExpiresUtc <= DateTime.UtcNow,
+                SnapshotKey = entry.SnapshotKey,
+                TenantId = entry.TenantId,
+                EntraOid = entry.EntraOid,
+                AxUserId = entry.AxUserId,
+                DefaultCompany = entry.DefaultCompany,
+                AppCode = entry.AppCode,
+                ContextVersion = entry.ContextVersion,
+                PermissionsRevision = entry.PermissionsRevision ?? string.Empty,
+                IssuedUtc = entry.IssuedUtc,
                 ExpiresUtc = entry.ExpiresUtc,
-                GraceUntilUtc = GraceTtl > TimeSpan.Zero ? entry.ExpiresUtc.Add(GraceTtl) : (DateTime?)null,
                 Companies = entry.Companies == null
                     ? Array.Empty<string>()
                     : entry.Companies
@@ -223,18 +223,51 @@ namespace IND_CRM_API.Helpers
             };
         }
 
-        private static void RefreshEntry(string username, CacheEntry entry)
+        private static Snapshot CreateMissingSnapshot(string snapshotKey = null, string tenantId = null, string entraOid = null)
         {
-            if (string.IsNullOrWhiteSpace(username) || entry?.Companies == null)
-                return;
-
-            var refreshedEntry = new CacheEntry
+            return new Snapshot
             {
-                Companies = new HashSet<string>(entry.Companies, StringComparer.OrdinalIgnoreCase),
-                ExpiresUtc = DateTime.UtcNow.Add(DefaultTtl)
+                Exists = false,
+                Expired = false,
+                SnapshotKey = snapshotKey ?? string.Empty,
+                TenantId = NormalizeTokenPart(tenantId),
+                EntraOid = NormalizeTokenPart(entraOid),
+                AxUserId = string.Empty,
+                DefaultCompany = string.Empty,
+                AppCode = string.Empty,
+                ContextVersion = 0,
+                PermissionsRevision = string.Empty,
+                IssuedUtc = null,
+                ExpiresUtc = null,
+                Companies = Array.Empty<string>()
             };
+        }
 
-            _cache[username] = refreshedEntry;
+        private static HashSet<string> NormalizeCompanies(IEnumerable<string> companyIds)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (companyIds == null)
+                return result;
+
+            foreach (var companyId in companyIds)
+            {
+                var normalized = NormalizeText(companyId);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                    result.Add(normalized);
+            }
+
+            return result;
+        }
+
+        private static string NormalizeTokenPart(string value)
+        {
+            var normalized = NormalizeText(value);
+            return string.IsNullOrWhiteSpace(normalized) ? string.Empty : normalized.ToLowerInvariant();
+        }
+
+        private static string NormalizeText(string value)
+        {
+            return (value ?? string.Empty).Trim();
         }
 
         private static TimeSpan ResolveTtl()
@@ -247,7 +280,7 @@ namespace IND_CRM_API.Helpers
             }
             catch
             {
-                // On error, use the default value.
+                // Use the default value when configuration cannot be read.
             }
 
             return TimeSpan.FromMinutes(30);
@@ -255,20 +288,26 @@ namespace IND_CRM_API.Helpers
 
         private static void LogCacheEvent(
             string action,
-            string username,
+            string snapshotKey,
             string companyId,
             DateTime? expiresUtc,
-            string message)
+            string detail)
         {
-            AxaptaSessionManager.LogStatic(
-                $"[COMPANY-CACHE] action={action} user={ToLogValue(username)} company={ToLogValue(companyId)} " +
-                $"ttlMinutes={(int)DefaultTtl.TotalMinutes} fixedGraceMinutes={(int)GraceTtl.TotalMinutes} " +
-                $"expiresUtc={(expiresUtc.HasValue ? expiresUtc.Value.ToString("o") : "-")} message={ToLogValue(message)}");
-        }
+            try
+            {
+                var message =
+                    "[COMPANY-CACHE] action=" + (action ?? string.Empty) +
+                    " snapshotKey=" + (snapshotKey ?? string.Empty) +
+                    " company=" + (companyId ?? string.Empty) +
+                    " expiresUtc=" + (expiresUtc.HasValue ? expiresUtc.Value.ToString("o") : string.Empty) +
+                    " detail=" + (detail ?? string.Empty);
 
-        private static string ToLogValue(string value)
-        {
-            return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+                AxaptaSessionManager.LogStatic(message);
+            }
+            catch
+            {
+                // Cache logging must never break the request flow.
+            }
         }
     }
 }

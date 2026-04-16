@@ -43,10 +43,14 @@ namespace IND_CRM_API.Controllers
             errorResult = null;
             var company = GetHeaderValue("X-IND-Company");
             var axUserId = GetHeaderValue("X-IND-AxUserId");
+            var entraOid = GetHeaderValue("X-IND-EntraOid");
+            var rawContextVersion = GetHeaderValue("X-IND-Context-Version");
+            var permissionsRevision = GetHeaderValue("X-IND-Permissions-Revision");
+            var contextToken = GetHeaderValue("X-IND-Context-Token");
             var username = User?.Identity?.Name;
             if (string.IsNullOrWhiteSpace(company))
             {
-                LogCompanyAuthorization("deny", "missing-company-header", null, axUserId, username, null, effectiveTraceId);
+                LogCompanyAuthorization("deny", "missing-company-header", null, axUserId, username, entraOid, 0, null, effectiveTraceId);
                 var response = new IndApiResponse<object>
                 {
                     Success = false,
@@ -66,7 +70,7 @@ namespace IND_CRM_API.Controllers
             // Validate that the user has access to the selected company.
             if (string.IsNullOrWhiteSpace(username))
             {
-                LogCompanyAuthorization("deny", "missing-authenticated-user", company, axUserId, username, null, effectiveTraceId);
+                LogCompanyAuthorization("deny", "missing-authenticated-user", company, axUserId, username, entraOid, 0, null, effectiveTraceId);
                 var authResponse = new IndApiResponse<object>
                 {
                     Success = false,
@@ -80,29 +84,65 @@ namespace IND_CRM_API.Controllers
                 return null;
             }
 
-            var accessEvaluation = UserCompanyAccessCache.EvaluateCompanyAccess(username, company);
-            var cacheSnapshot = accessEvaluation.Snapshot ?? UserCompanyAccessCache.GetSnapshot(username);
-            if (!accessEvaluation.Allowed)
+            if (!TryParseContextVersion(rawContextVersion, out var contextVersion) ||
+                string.IsNullOrWhiteSpace(entraOid) ||
+                string.IsNullOrWhiteSpace(permissionsRevision) ||
+                string.IsNullOrWhiteSpace(contextToken))
             {
-                var message = accessEvaluation.CacheMissing
-                    ? "Contexto de companias no inicializado. Consulte /api/auth/entra/context."
-                    : accessEvaluation.CacheExpired
-                        ? "Contexto de companias expirado. Consulte /api/auth/entra/context."
-                        : "Compania no permitida para el usuario.";
+                var contextRequiredResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Contexto de companias no inicializado. Consulte /api/auth/entra/context.",
+                    ErrorCode = IndErrorCodes.AuthContextRequired,
+                    Errors = null,
+                    Data = null,
+                    TraceId = effectiveTraceId
+                };
+                LogCompanyAuthorization("deny", "missing-context-headers", company, axUserId, username, entraOid, contextVersion, null, effectiveTraceId);
+                errorResult = Content(HttpStatusCode.Forbidden, contextRequiredResponse);
+                return null;
+            }
 
-                var reason = accessEvaluation.CacheMissing
-                    ? "company-cache-missing"
-                    : accessEvaluation.CacheExpired
-                        ? "company-cache-expired"
-                        : "company-not-allowed";
+            var tenantId = ResolveTenantId();
+            var latestSnapshot = UserCompanyAccessCache.GetSnapshot(tenantId, entraOid);
+            var validation = UserContextTokenService.Validate(
+                contextToken,
+                tenantId,
+                entraOid,
+                contextVersion,
+                permissionsRevision,
+                company,
+                latestSnapshot);
 
-                LogCompanyAuthorization("deny", reason, company, axUserId, username, cacheSnapshot, effectiveTraceId);
+            if (!validation.IsValid)
+            {
+                var snapshot = validation.Snapshot ?? latestSnapshot;
+                string message;
+                string errorCode;
+
+                if (validation.IsMissing)
+                {
+                    message = "Contexto de companias no inicializado. Consulte /api/auth/entra/context.";
+                    errorCode = IndErrorCodes.AuthContextRequired;
+                }
+                else if (validation.IsExpired || validation.IsStale)
+                {
+                    message = "Contexto de companias expirado o desincronizado. Consulte /api/auth/entra/context.";
+                    errorCode = IndErrorCodes.AuthContextStale;
+                }
+                else
+                {
+                    message = "Compania no permitida para el usuario.";
+                    errorCode = IndErrorCodes.AuthForbidden;
+                }
+
+                LogCompanyAuthorization("deny", validation.Reason, company, axUserId, username, entraOid, contextVersion, snapshot, effectiveTraceId);
 
                 var forbiddenResponse = new IndApiResponse<object>
                 {
                     Success = false,
                     Message = message,
-                    ErrorCode = IndErrorCodes.AuthForbidden,
+                    ErrorCode = errorCode,
                     Errors = null,
                     Data = null,
                     TraceId = effectiveTraceId
@@ -113,11 +153,13 @@ namespace IND_CRM_API.Controllers
 
             LogCompanyAuthorization(
                 "allow",
-                accessEvaluation.UsedGraceWindow ? "company-allowed-grace-window" : "company-allowed",
+                validation.Reason,
                 company,
                 axUserId,
                 username,
-                accessEvaluation.Snapshot ?? cacheSnapshot,
+                entraOid,
+                contextVersion,
+                validation.Snapshot ?? latestSnapshot,
                 effectiveTraceId);
             return company.Trim();
         }
@@ -191,12 +233,59 @@ namespace IND_CRM_API.Controllers
             return null;
         }
 
+        private static bool TryParseContextVersion(string rawContextVersion, out long contextVersion)
+        {
+            contextVersion = 0;
+            var normalized = (rawContextVersion ?? string.Empty).Trim();
+            return !string.IsNullOrWhiteSpace(normalized) && long.TryParse(normalized, out contextVersion) && contextVersion > 0;
+        }
+
+        private static string ResolveTenantId()
+        {
+            var tenantId = AppSettingsHelper.GetMachineEnvironmentVariable("CRM_TENANT_ID");
+            if (!string.IsNullOrWhiteSpace(tenantId))
+                return tenantId.Trim();
+
+            var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
+            if (!string.IsNullOrWhiteSpace(issuer))
+                return issuer.Trim();
+
+            return "default-tenant";
+        }
+
         private void LogCompanyAuthorization(
             string result,
             string reason,
             string company,
             string axUserId,
             string username,
+            string entraOid,
+            long contextVersion,
+            UserCompanyAccessCache.Snapshot cacheSnapshot,
+            string traceId)
+        {
+            LogCompanyAuthorization(
+                result,
+                reason,
+                company,
+                axUserId,
+                username,
+                entraOid,
+                contextVersion,
+                cacheSnapshot?.PermissionsRevision,
+                cacheSnapshot,
+                traceId);
+        }
+
+        private void LogCompanyAuthorization(
+            string result,
+            string reason,
+            string company,
+            string axUserId,
+            string username,
+            string entraOid,
+            long contextVersion,
+            string permissionsRevision,
             UserCompanyAccessCache.Snapshot cacheSnapshot,
             string traceId)
         {
@@ -206,15 +295,16 @@ namespace IND_CRM_API.Controllers
             var cacheExpiresUtc = cacheSnapshot?.ExpiresUtc.HasValue == true
                 ? cacheSnapshot.ExpiresUtc.Value.ToString("o")
                 : "-";
-            var cacheGraceUntilUtc = cacheSnapshot?.GraceUntilUtc.HasValue == true
-                ? cacheSnapshot.GraceUntilUtc.Value.ToString("o")
+            var cacheIssuedUtc = cacheSnapshot?.IssuedUtc.HasValue == true
+                ? cacheSnapshot.IssuedUtc.Value.ToString("o")
                 : "-";
 
             Logger.Log(
                 $"[AUTHZ-COMPANY] gate=BaseCrmController.RequireCompanyOrReturn422 result={result} reason={reason} " +
                 $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} authenticatedUser={ToLogValue(username)} " +
+                $"entraOid={ToLogValue(entraOid)} contextVersion={contextVersion} permissionsRevision={ToLogValue(permissionsRevision)} snapshotKey={ToLogValue(cacheSnapshot?.SnapshotKey)} " +
                 $"cacheExists={(cacheSnapshot?.Exists ?? false)} cacheExpired={(cacheSnapshot?.Expired ?? false)} " +
-                $"cacheCompanies={cacheCompanies} cacheExpiresUtc={cacheExpiresUtc} cacheGraceUntilUtc={cacheGraceUntilUtc} traceId={traceId}");
+                $"cachePermissionsRevision={ToLogValue(cacheSnapshot?.PermissionsRevision)} cacheCompanies={cacheCompanies} cacheIssuedUtc={cacheIssuedUtc} cacheExpiresUtc={cacheExpiresUtc} traceId={traceId}");
         }
 
         private static string ToLogValue(string value)

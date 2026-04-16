@@ -163,6 +163,9 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
         New-InteractiveSetting -Name "INDCRM_JWT_EXPIRATION_MINUTES" -Category "JWT" -DefaultValue "60"
         New-InteractiveSetting -Name "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES" -Category "JWT" -DefaultValue "5"
+        New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_ISSUER" -Category "JWT" -DefaultValue "IND_CRM_CONTEXT"
+        New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_AUDIENCE" -Category "JWT" -DefaultValue "IND_CRM_WEB_CONTEXT"
+        New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -Required $false
         New-InteractiveSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
 
         New-InteractiveSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true

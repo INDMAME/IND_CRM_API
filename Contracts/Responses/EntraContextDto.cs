@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace IND_CRM_API.Contracts.Responses
@@ -7,6 +8,27 @@ namespace IND_CRM_API.Contracts.Responses
     /// </summary>
     public class EntraContextDto
     {
+        /// <summary>Tenant id used to isolate the user snapshot.</summary>
+        public string TenantId { get; set; }
+
+        /// <summary>Real Entra OID of the signed-in business user.</summary>
+        public string EntraOid { get; set; }
+
+        /// <summary>Monotonic version of the current authorization snapshot.</summary>
+        public long ContextVersion { get; set; }
+
+        /// <summary>Stable revision of the current company permission set.</summary>
+        public string PermissionsRevision { get; set; }
+
+        /// <summary>UTC instant when the snapshot was generated.</summary>
+        public DateTime ContextIssuedUtc { get; set; }
+
+        /// <summary>UTC instant when the snapshot expires.</summary>
+        public DateTime ContextExpiresUtc { get; set; }
+
+        /// <summary>Signed context token used by the web app on downstream API calls.</summary>
+        public string ContextToken { get; set; }
+
         /// <summary>Header de estado del contexto.</summary>
         public EntraContextHeaderDto Header { get; set; }
 

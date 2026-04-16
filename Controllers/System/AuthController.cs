@@ -532,10 +532,33 @@ namespace IND_CRM_API.Controllers.System
                     return Content(HttpStatusCode.Forbidden, forbiddenResponse);
                 }
 
+                var companies = MapEntraCompanies(root);
+                var normalizedEntraOid = (body.entraOid ?? string.Empty).Trim();
+                var tenantId = ResolveTenantId();
+                var contextVersion = UserCompanyAccessCache.CreateContextVersion();
+                var snapshot = UserCompanyAccessCache.SetSnapshot(
+                    tenantId,
+                    normalizedEntraOid,
+                    header.AxUserId,
+                    header.DefaultCompany,
+                    body.appCode,
+                    companies == null ? null : companies.ConvertAll(c => c.CompanyId),
+                    contextVersion);
+                var contextToken = snapshot.Exists
+                    ? UserContextTokenService.CreateToken(snapshot)
+                    : string.Empty;
+
                 var context = new EntraContextDto
                 {
+                    TenantId = snapshot.TenantId,
+                    EntraOid = normalizedEntraOid,
+                    ContextVersion = snapshot.ContextVersion,
+                    PermissionsRevision = snapshot.PermissionsRevision,
+                    ContextIssuedUtc = snapshot.IssuedUtc ?? DateTime.UtcNow,
+                    ContextExpiresUtc = snapshot.ExpiresUtc ?? DateTime.UtcNow,
+                    ContextToken = contextToken,
                     Header = header,
-                    Companies = MapEntraCompanies(root)
+                    Companies = companies
                 };
                 LogAuthTrace(
                     "entra-context",
@@ -544,14 +567,9 @@ namespace IND_CRM_API.Controllers.System
                     correlationId,
                     username,
                     body.appCode,
-                    "companyCount=" + (context.Companies == null ? 0 : context.Companies.Count),
+                    "companyCount=" + (context.Companies == null ? 0 : context.Companies.Count) + " contextVersion=" + context.ContextVersion + " permissionsRevision=" + (context.PermissionsRevision ?? string.Empty),
                     authSw);
-
-                UserCompanyAccessCache.SetAllowedCompanies(
-                    username,
-                    context.Companies == null ? null : context.Companies.ConvertAll(c => c.CompanyId)
-                );
-                LogAuthTrace("entra-context", "company-cache-updated", traceId, correlationId, username, body.appCode, null, authSw);
+                LogAuthTrace("entra-context", "company-cache-updated", traceId, correlationId, username, body.appCode, "snapshotKey=" + (snapshot.SnapshotKey ?? string.Empty), authSw);
 
                 var okResponse = new IndPagedResponse<EntraContextDto>
                 {
@@ -596,6 +614,20 @@ namespace IND_CRM_API.Controllers.System
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, errorResponse);
             }
+        }
+
+        // Resolves the tenant id used to isolate user authorization snapshots.
+        private static string ResolveTenantId()
+        {
+            var tenantId = AppSettingsHelper.GetMachineEnvironmentVariable("CRM_TENANT_ID");
+            if (!string.IsNullOrWhiteSpace(tenantId))
+                return tenantId.Trim();
+
+            var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
+            if (!string.IsNullOrWhiteSpace(issuer))
+                return issuer.Trim();
+
+            return "default-tenant";
         }
 
         // Emits structured auth traces so stuck COM calls leave a clear last stage in the log.

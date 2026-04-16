@@ -23,6 +23,12 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Acceso denegado por permisos.</summary>
         public const string AuthForbidden = "AUTH_FORBIDDEN";
 
+        /// <summary>Contexto de autorizacion requerido o no inicializado.</summary>
+        public const string AuthContextRequired = "AUTH_CONTEXT_REQUIRED";
+
+        /// <summary>Contexto de autorizacion caducado o desincronizado.</summary>
+        public const string AuthContextStale = "AUTH_CONTEXT_STALE";
+
         /// <summary>Campos obligatorios faltantes en actividad CRM.</summary>
         public const string CrmActivityMissingFields = "CRM_ACTIVITY_MISSING_FIELDS";
 

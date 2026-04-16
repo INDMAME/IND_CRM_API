@@ -230,6 +230,7 @@
     <Compile Include="Helpers\McpToolsLoader.cs" />
     <Compile Include="Helpers\PagingHelper.cs" />
     <Compile Include="Helpers\UserCompanyAccessCache.cs" />
+    <Compile Include="Helpers\UserContextTokenService.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
