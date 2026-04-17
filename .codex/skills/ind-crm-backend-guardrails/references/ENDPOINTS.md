@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-02-27)
+# IND_CRM_API Endpoints (actualizado 2026-04-16)
 
 Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
 
@@ -6,12 +6,18 @@ Autenticacion y headers comunes
 - Authorization: Bearer {{tokenId}} (requerido en todo endpoint salvo login y health/ping)
 - X-IND-Company: {{companyId}} (requerido en endpoints CRM: /api/crm/*)
 - X-IND-AxUserId: {{axUserId}} (requerido en endpoints que envian userId a AX; se obtiene de /api/auth/entra/context -> Header.AxUserId)
+- X-IND-EntraOid: {{entraOid}} (requerido en endpoints que validan el contexto firmado de companias)
+- X-IND-Context-Version: {{contextVersion}} (requerido en endpoints que validan el contexto firmado de companias)
+- X-IND-Permissions-Revision: {{permissionsRevision}} (requerido en endpoints que validan el contexto firmado de companias)
+- X-IND-Context-Token: {{contextToken}} (requerido en endpoints que validan el contexto firmado de companias)
 - companyId se obtiene de /api/auth/entra/context (Items[0].Header.DefaultCompany o Items[0].Companies[*].CompanyId)
+- contextVersion, permissionsRevision y contextToken se obtienen de /api/auth/entra/context (Items[0].ContextVersion, Items[0].PermissionsRevision, Items[0].ContextToken)
 - baseUrl se define en la collection Postman como variable compartida.
 
 Reglas
 - Todo endpoint que requiera userId debe tomarlo desde el header X-IND-AxUserId.
 - Los endpoints de negocio CRM deben exigir companyId por header X-IND-Company.
+- Los endpoints que derivan de BaseCrmController validan ademas el contexto firmado de companias usando X-IND-EntraOid, X-IND-Context-Version, X-IND-Permissions-Revision y X-IND-Context-Token.
 - Swagger debe documentar resumen, parametros, respuestas y errores.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request admite `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` para `transDate`, `createdDateFrom`, `createdDateTo` y `createdDate`.
 
@@ -25,7 +31,7 @@ Endpoints
   Headers: Authorization
 - POST /api/auth/entra/context (Authorize)
   Body: { "entraOid": "GUID", "appCode": "APP" }
-  Response context fields include: Header.DefaultCurrencyCode, Companies[].CurrencyCode, Companies[].AllowSelfManagement, Companies[].CrmUserId
+  Response context fields include: ContextToken, ContextVersion, PermissionsRevision, ContextIssuedUtc, ContextExpiresUtc, Header.DefaultCurrencyCode, Companies[].CurrencyCode, Companies[].AllowSelfManagement, Companies[].CrmUserId
 
 ## Health
 - GET /api/health/ping (AllowAnonymous)
@@ -67,7 +73,7 @@ Endpoints
 - POST /api/ia/service/expensefromticket (Authorize)
   Content-Type: multipart/form-data
   Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
-  Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId.
+  Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId, X-IND-EntraOid, X-IND-Context-Version, X-IND-Permissions-Revision, X-IND-Context-Token.
   Draft IA incluye `gastoType` (tipo de gasto de cabecera) y mantiene `lines[].typeValue`.
   Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
 - POST /api/ia/service/expensesheets/ask (Authorize + X-IND-Company + X-IND-AxUserId)

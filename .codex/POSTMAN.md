@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- DEV activa: `.codex/Postman/DEV/IND_CRM_API V01.postman_collection.json`
-- DEV soporte: `Notes/DEV/IND_CRM_API V01.postman_collection.json`
+- DEV activa: `.codex/Postman/DEV/IND_CRM_API V02.postman_collection.json`
+- DEV soporte: `Notes/DEV/IND_CRM_API V02.postman_collection.json`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -10,7 +10,14 @@ Ambiente (variables sugeridas)
 - `baseUrl` = `https://dev.insertec.biz:7776`
 - `tokenId` = token JWT vigente
 - `companyId` = compania obtenida desde Entra Context
+- `defaultCompanyId` = compania por defecto devuelta por Entra Context
 - `axUserId` = usuario AX obtenido desde Entra Context
+- `contextToken` = token firmado de contexto devuelto por Entra Context
+- `contextVersion` = version monotona del snapshot de permisos
+- `permissionsRevision` = revision estable del snapshot de permisos
+- `contextIssuedUtc` = fecha UTC de emision del contexto
+- `contextExpiresUtc` = fecha UTC de expiracion del contexto
+- `availableCompaniesJson` = JSON con las companias disponibles devueltas por Entra Context
 - `fileId` = se autocompleta desde respuestas de tickets
 - `expenseSheetId` = hoja de gastos destino para pruebas de vinculacion bulk
 - `lineRecId` = se autocompleta desde respuestas de lineas de tickets
@@ -29,6 +36,8 @@ Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
+- La coleccion `DEV V02` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
+- `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
@@ -63,3 +72,4 @@ Notas
 - V25 actualiza contratos de tickets con `gastoType` y filtros de fecha en `tickets/list` (ahora opcionales).
 - V26 normaliza contratos completos en request body para endpoints con payload JSON, alinea `tickets/list` al contrato reducido, agrega `tickets/link/list`, agrega `tickets/link/bulk` y mantiene `TransDate` basado en `ticketHeader.createdDate`.
 - V28 se basa en la V27 mas reciente, incorpora `tickets/quick-create` y documenta `ocrJson`/`normalizedJson` en contratos de tickets sin romper compatibilidad.
+- V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
