@@ -148,6 +148,7 @@ Que hace:
 - Instala el servicio Windows `IND_CRM_API` usando las credenciales de servicio de maquina.
 - Exige `IND_ENV`, `INDCRM_PUBLIC_HOST` e `INDCRM_PUBLIC_PORT`; no asume `localhost:7776`.
 - Muestra el endpoint local/publico solo despues de resolver las claves de maquina.
+- La fuente versionada esta en `Bats`; MSBuild la copia a `bin\x86\Release` al compilar.
 
 ## Uso rapido
 
@@ -330,4 +331,4 @@ Esas rutas quedan ignoradas por Git.
 - Cuando se cambie una variable de maquina usada por la API, reiniciar `IND_CRM_API` para recargar la configuracion del proceso.
 - Blob usa `AZURE_BLOB_ENVIRONMENT_SEGMENT` y, si falta, hereda `IND_ENV` antes de usar un fallback neutro.
 - Un `git push` entre ramas no cambia el ambiente por si solo; el riesgo real es ejecutar scripts locales con variables equivocadas.
-- Los scripts generados en `bin\x86\Release`, como `instalar_api_axapta.bat`, `enable_https_17776_dev.bat`, `enable_https_7776_dev.bat` y `enable_https_7776.bat`, reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.
+- Los scripts versionados en `Bats` se copian a `bin\x86\Release` al compilar. `instalar_api_axapta.bat`, `enable_https_17776_dev.bat`, `enable_https_7776_dev.bat` y `enable_https_7776.bat` reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.

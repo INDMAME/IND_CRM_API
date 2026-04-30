@@ -278,6 +278,30 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <Content Include="Bats\desinstalar_api_axapta.bat">
+      <TargetPath>desinstalar_api_axapta.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Bats\enable_https_17776_dev.bat">
+      <TargetPath>enable_https_17776_dev.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Bats\enable_https_7776.bat">
+      <TargetPath>enable_https_7776.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Bats\enable_https_7776_dev.bat">
+      <TargetPath>enable_https_7776_dev.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Bats\instalar_api_axapta.bat">
+      <TargetPath>instalar_api_axapta.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Bats\reiniciar_api_axapta.bat">
+      <TargetPath>reiniciar_api_axapta.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
