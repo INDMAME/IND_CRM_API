@@ -1,6 +1,9 @@
 # IND_CRM_API Endpoints (actualizado 2026-04-16)
 
-Base URL: {{baseUrl}} (por defecto https://crm.insertec.biz:7776)
+Base URL: `{{baseUrl}}`
+
+- DEV: `https://dev.insertec.biz:17776`
+- PROD: `https://crm.insertec.biz:7776`
 
 Autenticacion y headers comunes
 - Authorization: Bearer {{tokenId}} (requerido en todo endpoint salvo login y health/ping)

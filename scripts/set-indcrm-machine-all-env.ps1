@@ -15,12 +15,16 @@ function Get-EnvironmentDefaults {
     switch ($EnvironmentName) {
         "DEV" {
             return @{
-                AspNetCoreEnvironment = "Development"
+                AspNetCoreEnvironment = "Production"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
-                BaseUrl = "https://dev.insertec.biz:7776/"
+                BaseUrl = "https://dev.insertec.biz:17776/"
                 PublicHost = "dev.insertec.biz"
                 PublicIp = "192.168.0.146"
-                PublicPort = "7776"
+                PublicPort = "17776"
+                WebBaseUrl = "https://dev.insertec.biz:17702/"
+                WebPublicHost = "dev.insertec.biz"
+                WebPublicPort = "17702"
+                PfxPath = "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
                 BlobSegment = "DEV"
                 ServiceUser = "INSERTEC\API_AXUSER"
                 HttpServiceUser = "INSERTEC\API_AXUSER"
@@ -38,6 +42,10 @@ function Get-EnvironmentDefaults {
                 PublicHost = "crm.insertec.biz"
                 PublicIp = "212.142.143.182"
                 PublicPort = "7776"
+                WebBaseUrl = "https://crm.insertec.biz:7702/"
+                WebPublicHost = "crm.insertec.biz"
+                WebPublicPort = "7702"
+                PfxPath = "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx"
                 BlobSegment = "PROD"
                 ServiceUser = "INSERTEC\API_AXUSER"
                 HttpServiceUser = "INSERTEC\API_AXUSER"
@@ -69,6 +77,23 @@ function New-InteractiveSetting {
         DefaultValue = $DefaultValue
         Required = $Required
     }
+}
+
+function New-RandomSecret {
+    param(
+        [int]$ByteCount = 64
+    )
+
+    $bytes = New-Object byte[] $ByteCount
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+
+    return [Convert]::ToBase64String($bytes)
 }
 
 function ConvertTo-PlainText {
@@ -138,9 +163,13 @@ function Get-AllSettings {
     return @(
         New-InteractiveSetting -Name "IND_ENV" -Category "Core" -DefaultValue $EnvironmentName
         New-InteractiveSetting -Name "ASPNETCORE_ENVIRONMENT" -Category "Core" -DefaultValue $defaults.AspNetCoreEnvironment
+        New-InteractiveSetting -Name "CRM_TENANT_ID" -Category "WebAuth"
+        New-InteractiveSetting -Name "CRM_CLIENT_ID" -Category "WebAuth"
+        New-InteractiveSetting -Name "CRM_CLIENT_SECRET" -Category "WebAuth" -Secret $true
+        New-InteractiveSetting -Name "CRM_AUTHORITY" -Category "WebAuth"
 
         New-InteractiveSetting -Name "INDCRM_AX_CONFIG_FILE" -Category "AX" -DefaultValue $defaults.AxConfigFile
-        New-InteractiveSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "API_AXUSER"
+        New-InteractiveSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "APIAX"
         New-InteractiveSetting -Name "USER_PASS_DEFAULT" -Category "AX" -Secret $true
         New-InteractiveSetting -Name "INDCRM_AX_VERBOSE_LOGGING" -Category "AX" -DefaultValue $defaults.VerboseLogging
         New-InteractiveSetting -Name "INDCRM_AX_VERBOSE_LOG_PATH" -Category "AX" -DefaultValue "C:\INDAxaptaLogs"
@@ -155,6 +184,11 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_CORS_ALLOWED_ORIGINS" -Category "Host" -DefaultValue $defaults.CorsAllowedOrigins -Required $false
         New-InteractiveSetting -Name "INDCRM_LOG_LEVEL" -Category "Host" -DefaultValue $defaults.LogLevel
         New-InteractiveSetting -Name "INDCRM_LOG_PATH" -Category "Host" -DefaultValue "C:\INDAxaptaLogs"
+        New-InteractiveSetting -Name "ApiSettings__BaseUrl" -Category "Web" -DefaultValue $defaults.BaseUrl
+        New-InteractiveSetting -Name "INDCRM_WEB_BASE_URL" -Category "Web" -DefaultValue $defaults.WebBaseUrl
+        New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_HOST" -Category "Web" -DefaultValue $defaults.WebPublicHost
+        New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_PORT" -Category "Web" -DefaultValue $defaults.WebPublicPort
+        New-InteractiveSetting -Name "IND_E2E_BASE_URL" -Category "Web" -DefaultValue $defaults.WebBaseUrl
         New-InteractiveSetting -Name "INDCRM_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.ServiceUser
         New-InteractiveSetting -Name "INDCRM_HTTP_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.HttpServiceUser
 
@@ -165,7 +199,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES" -Category "JWT" -DefaultValue "5"
         New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_ISSUER" -Category "JWT" -DefaultValue "IND_CRM_CONTEXT"
         New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_AUDIENCE" -Category "JWT" -DefaultValue "IND_CRM_WEB_CONTEXT"
-        New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -Required $false
+        New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
         New-InteractiveSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
 
         New-InteractiveSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
@@ -175,7 +209,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_PROMPT_MAX_WORDS" -Category "OpenAI" -DefaultValue "500"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH" -Category "OpenAI" -DefaultValue "C:\INDAxaptaConfigAPI\Prompts\Wisper\prompt.txt"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT" -Category "OpenAI" -Required $false
-        New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MODEL" -Category "OpenAI" -DefaultValue "gpt-5-nano"
+        New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MODEL" -Category "OpenAI" -DefaultValue "gpt-5.4-nano"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_TIMEOUT_SECONDS" -Category "OpenAI" -DefaultValue "180"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MAX_IMAGE_BYTES" -Category "OpenAI" -DefaultValue "52428800"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MAX_OUTPUT_TOKENS" -Category "OpenAI" -DefaultValue "1024"
@@ -190,7 +224,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_QUICK_CREATE_PROFILE_TAG" -Category "OpenAI" -DefaultValue "ticket-quick-create-v1"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_QUICK_CREATE_PROMPT_CACHE_KEY" -Category "OpenAI" -DefaultValue "expense-ticket-quick-create-v1"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_QUICK_CREATE_REASONING_EFFORT" -Category "OpenAI" -DefaultValue "low"
-        New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_MODEL" -Category "OpenAI" -DefaultValue "gpt-5-mini"
+        New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_MODEL" -Category "OpenAI" -DefaultValue "gpt-5.4-mini"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_TIMEOUT_SECONDS" -Category "OpenAI" -DefaultValue "180"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_MAX_OUTPUT_TOKENS" -Category "OpenAI" -DefaultValue "2200"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_CHUNK_MAX_OUTPUT_TOKENS" -Category "OpenAI" -DefaultValue "1200"
@@ -200,7 +234,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_SERVICE_TIER" -Category "OpenAI" -DefaultValue "priority"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_PROFILE_TAG" -Category "OpenAI" -DefaultValue "dataset-answer-v1"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_PROMPT_CACHE_KEY" -Category "OpenAI" -DefaultValue "dataset-answer-v1"
-        New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_REASONING_EFFORT" -Category "OpenAI" -DefaultValue "minimal"
+        New-InteractiveSetting -Name "OPENAI_EXPENSE_SHEET_ASK_REASONING_EFFORT" -Category "OpenAI" -DefaultValue "low"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_ENABLED" -Category "OpenAI" -DefaultValue "false"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_SPEECH_MAX_REQUESTS" -Category "OpenAI" -DefaultValue "5"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_SPEECH_WINDOW_SECONDS" -Category "OpenAI" -DefaultValue "300"
@@ -208,6 +242,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_EXPENSE_TICKET_WINDOW_SECONDS" -Category "OpenAI" -DefaultValue "600"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_MAX_CONCURRENT_PER_USER" -Category "OpenAI" -DefaultValue "1"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_VALIDATION_MULTIPLIER" -Category "OpenAI" -DefaultValue "4"
+        New-InteractiveSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PATH") -Category "HTTPS" -DefaultValue $defaults.PfxPath -Required $false
         New-InteractiveSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PASSWORD") -Category "HTTPS" -Secret $true -Required $false
 
         New-InteractiveSetting -Name "AZURE_BLOB_CONNECTION_STRING" -Category "AzureBlob" -Secret $true
@@ -215,7 +250,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT" -Category "AzureBlob" -DefaultValue $defaults.BlobSegment
 
         New-InteractiveSetting -Name "AZURE_DOCS_IA_KEY" -Category "AzureDocs" -Secret $true
-        New-InteractiveSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs"
+        New-InteractiveSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs" -DefaultValue "https://westeurope.api.cognitive.microsoft.com/"
         New-InteractiveSetting -Name "AZURE_DOCS_IA_MODEL" -Category "AzureDocs" -DefaultValue "prebuilt-receipt"
         New-InteractiveSetting -Name "AZURE_DOCS_IA_API_VERSION" -Category "AzureDocs" -DefaultValue "2023-07-31"
         New-InteractiveSetting -Name "AZURE_DOCS_IA_POLL_INTERVAL_MS" -Category "AzureDocs" -DefaultValue "1000"
@@ -241,6 +276,10 @@ function Get-PreviewValue {
     if ($Setting.Secret) {
         if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
             return "Configured"
+        }
+
+        if ((Has-DefaultValue -Setting $Setting) -and -not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+            return "Default available"
         }
 
         if (-not $Setting.Required) {

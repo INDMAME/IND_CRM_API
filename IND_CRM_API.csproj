@@ -279,6 +279,7 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="Bats\desinstalar_api_axapta.bat" />
+    <None Include="Bats\enable_https_17776_dev.bat" />
     <None Include="Bats\enable_https_7776.bat" />
     <None Include="Bats\enable_https_7776_dev.bat" />
     <None Include="Bats\instalar_api_axapta.bat" />

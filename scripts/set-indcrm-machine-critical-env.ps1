@@ -26,6 +26,23 @@ function New-CriticalSetting {
     }
 }
 
+function New-RandomSecret {
+    param(
+        [int]$ByteCount = 64
+    )
+
+    $bytes = New-Object byte[] $ByteCount
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+
+    return [Convert]::ToBase64String($bytes)
+}
+
 function ConvertTo-PlainText {
     param(
         [Parameter(Mandatory = $true)]
@@ -50,18 +67,25 @@ function Get-CriticalSettings {
     )
 
     $publicIpDefault = if ($EnvironmentName -eq "PROD") { "212.142.143.182" } else { $null }
+    $pfxPathDefault = if ($EnvironmentName -eq "DEV") { "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx" } else { "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx" }
 
     return @(
-        New-CriticalSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "API_AXUSER"
+        New-CriticalSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "APIAX"
         New-CriticalSetting -Name "USER_PASS_DEFAULT" -Category "AX" -Secret $true
+        New-CriticalSetting -Name "CRM_TENANT_ID" -Category "WebAuth"
+        New-CriticalSetting -Name "CRM_CLIENT_ID" -Category "WebAuth"
+        New-CriticalSetting -Name "CRM_CLIENT_SECRET" -Category "WebAuth" -Secret $true
+        New-CriticalSetting -Name "CRM_AUTHORITY" -Category "WebAuth"
         New-CriticalSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
         New-CriticalSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
+        New-CriticalSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
         New-CriticalSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
         New-CriticalSetting -Name "AZURE_BLOB_CONNECTION_STRING" -Category "AzureBlob" -Secret $true
         New-CriticalSetting -Name "AZURE_DOCS_IA_KEY" -Category "AzureDocs" -Secret $true
-        New-CriticalSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs"
+        New-CriticalSetting -Name "AZURE_DOCS_IA_ENDPOINT" -Category "AzureDocs" -DefaultValue "https://westeurope.api.cognitive.microsoft.com/"
         New-CriticalSetting -Name "AZURE_DOCS_IA_MODEL" -Category "AzureDocs"
         New-CriticalSetting -Name "INDCRM_PUBLIC_IP" -Category "Host" -DefaultValue $publicIpDefault
+        New-CriticalSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PATH") -Category "HTTPS" -DefaultValue $pfxPathDefault -Required $false
         New-CriticalSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PASSWORD") -Category "HTTPS" -Secret $true -Required $false
     )
 }
@@ -154,7 +178,10 @@ function Read-SecretValue {
 
     $currentValue = [Environment]::GetEnvironmentVariable($Setting.Name, "Machine")
     $prompt = if ([string]::IsNullOrWhiteSpace($currentValue)) {
-        if (-not $Setting.Required) {
+        if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+            "{0} (press Enter to use generated default, input hidden)" -f $Setting.Name
+        }
+        elseif (-not $Setting.Required) {
             "{0} (optional, input hidden, press Enter to keep empty)" -f $Setting.Name
         }
         else {
@@ -174,6 +201,10 @@ function Read-SecretValue {
 
     if (-not [string]::IsNullOrWhiteSpace($currentValue)) {
         return $currentValue
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Setting.DefaultValue)) {
+        return $Setting.DefaultValue
     }
 
     if (-not $Setting.Required) {

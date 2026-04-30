@@ -49,7 +49,7 @@ namespace IND_CRM_API
 
             /// <summary>
             /// Inicia el servicio OWIN en la URL configurada.
-            /// Si no hay configuración en App.config, usa el puerto por defecto (7776).
+            /// Para DEV/PROD publicos exige INDCRM_BASE_URL para evitar bindings accidentales.
             /// </summary>
             public void Start()
             {
@@ -76,12 +76,73 @@ namespace IND_CRM_API
 
             private static string ResolveBaseUrl()
             {
+                var environmentName = AppSettingsHelper.GetSetting("Deployment:EnvironmentName", "IND_ENV");
                 var configuredBaseUrl = AppSettingsHelper.GetSetting("BaseUrl", "INDCRM_BASE_URL");
                 if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
+                {
+                    ValidatePublicBaseUrl(environmentName, configuredBaseUrl);
                     return configuredBaseUrl;
+                }
+
+                if (IsPublicDeploymentEnvironment(environmentName))
+                {
+                    throw new ConfigurationErrorsException(
+                        "INDCRM_BASE_URL is required when IND_ENV is DEV or PROD.");
+                }
 
                 var fallbackPort = AppSettingsHelper.GetIntSetting("PublicEndpoint:Port", 7776, "INDCRM_PUBLIC_PORT");
                 return $"http://+:{fallbackPort}/";
+            }
+
+            private static void ValidatePublicBaseUrl(string environmentName, string configuredBaseUrl)
+            {
+                if (!IsPublicDeploymentEnvironment(environmentName))
+                    return;
+
+                if (!Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var baseUri))
+                {
+                    throw new ConfigurationErrorsException(
+                        "INDCRM_BASE_URL must be an absolute URL when IND_ENV is DEV or PROD.");
+                }
+
+                if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ConfigurationErrorsException(
+                        "INDCRM_BASE_URL must use HTTPS when IND_ENV is DEV or PROD.");
+                }
+
+                var publicHost = AppSettingsHelper.GetSetting("PublicEndpoint:Host", "INDCRM_PUBLIC_HOST");
+                if (string.IsNullOrWhiteSpace(publicHost))
+                {
+                    throw new ConfigurationErrorsException(
+                        "INDCRM_PUBLIC_HOST is required when IND_ENV is DEV or PROD.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(publicHost)
+                    && !string.Equals(baseUri.Host, publicHost, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ConfigurationErrorsException(
+                        $"INDCRM_BASE_URL host '{baseUri.Host}' does not match INDCRM_PUBLIC_HOST '{publicHost}'.");
+                }
+
+                var publicPort = AppSettingsHelper.GetIntSetting("PublicEndpoint:Port", -1, "INDCRM_PUBLIC_PORT");
+                if (publicPort <= 0)
+                {
+                    throw new ConfigurationErrorsException(
+                        "INDCRM_PUBLIC_PORT is required when IND_ENV is DEV or PROD.");
+                }
+
+                if (publicPort > 0 && baseUri.Port != publicPort)
+                {
+                    throw new ConfigurationErrorsException(
+                        $"INDCRM_BASE_URL port '{baseUri.Port}' does not match INDCRM_PUBLIC_PORT '{publicPort}'.");
+                }
+            }
+
+            private static bool IsPublicDeploymentEnvironment(string environmentName)
+            {
+                return string.Equals(environmentName, "DEV", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(environmentName, "PROD", StringComparison.OrdinalIgnoreCase);
             }
 
             private static void LogDeploymentContext(string baseUrl)

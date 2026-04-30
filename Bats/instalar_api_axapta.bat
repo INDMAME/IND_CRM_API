@@ -20,8 +20,26 @@ REM ------------------------------------------------------
 set "PORT=%INDCRM_PUBLIC_PORT%"
 set "PUBLIC_HOST=%INDCRM_PUBLIC_HOST%"
 
-if "%PORT%"=="" set "PORT=7776"
-if "%PUBLIC_HOST%"=="" set "PUBLIC_HOST=localhost"
+if "%SERVICE_ENV%"=="" (
+    echo ERROR: IND_ENV is not defined.
+    echo Run scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment DEV/PROD -Apply first.
+    pause
+    exit /b 1
+)
+
+if "%PORT%"=="" (
+    echo ERROR: INDCRM_PUBLIC_PORT is not defined.
+    echo Run scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment %SERVICE_ENV% -Apply first.
+    pause
+    exit /b 1
+)
+
+if "%PUBLIC_HOST%"=="" (
+    echo ERROR: INDCRM_PUBLIC_HOST is not defined.
+    echo Run scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment %SERVICE_ENV% -Apply first.
+    pause
+    exit /b 1
+)
 
 REM ------------------------------------------------------
 REM Service credentials must stay outside the repository.
