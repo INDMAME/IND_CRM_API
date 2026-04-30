@@ -67,10 +67,10 @@ netsh http show urlacl url=https://dev.insertec.biz:7776/
 
 # El .bat usa por defecto C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx
 # y pide la password por consola si INDCRM_DEV_PFX_PASSWORD no existe.
-cmd /c .\Bats\enable_https_7776_dev.bat
+cmd /c .\bin\x86\Release\enable_https_7776_dev.bat
 
 # Solo si hace falta override de ruta:
-cmd /c .\Bats\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
 
 netsh http show sslcert ipport=0.0.0.0:7776
 ```

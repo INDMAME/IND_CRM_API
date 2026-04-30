@@ -38,13 +38,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps
 3. Instalar o actualizar el servicio API.
 
 ```bat
-cmd /c .\Bats\instalar_api_axapta.bat
+cmd /c .\bin\x86\Release\instalar_api_axapta.bat
 ```
 
 4. Configurar HTTPS de HTTP.sys para `17776`.
 
 ```bat
-cmd /c .\Bats\enable_https_17776_dev.bat "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_17776_dev.bat "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
 ```
 
 5. Reiniciar el servicio.

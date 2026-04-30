@@ -95,7 +95,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
 ```
 
-### `Bats/enable_https_17776_dev.bat`
+### `bin\x86\Release\enable_https_17776_dev.bat`
 
 Que hace:
 
@@ -109,17 +109,17 @@ Que hace:
 Uso:
 
 ```bat
-cmd /c .\Bats\enable_https_17776_dev.bat
-cmd /c .\Bats\enable_https_17776_dev.bat "C:\otra\ruta\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_17776_dev.bat
+cmd /c .\bin\x86\Release\enable_https_17776_dev.bat "C:\otra\ruta\dominio.pfx"
 ```
 
 Nota:
 
 - Evitar pasar la password como segundo argumento salvo automatizacion controlada.
 - El script no descarga el PFX: espera un archivo local ya provisionado.
-- `Bats/enable_https_7776_dev.bat` queda como wrapper de compatibilidad y redirige al script de `17776`.
+- `bin\x86\Release\enable_https_7776_dev.bat` queda como wrapper de compatibilidad y redirige al script de `17776`.
 
-### `Bats/enable_https_7776.bat`
+### `bin\x86\Release\enable_https_7776.bat`
 
 Que hace:
 
@@ -133,15 +133,15 @@ Que hace:
 Uso:
 
 ```bat
-cmd /c .\Bats\enable_https_7776.bat
-cmd /c .\Bats\enable_https_7776.bat "C:\otra\ruta\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_7776.bat
+cmd /c .\bin\x86\Release\enable_https_7776.bat "C:\otra\ruta\dominio.pfx"
 ```
 
 Nota:
 
 - El script no descarga el PFX. Ademas, `certificados/` esta ignorado por Git, asi que ese secreto no viaja al capturar cambios.
 
-### `Bats/instalar_api_axapta.bat`
+### `bin\x86\Release\instalar_api_axapta.bat`
 
 Que hace:
 
@@ -330,4 +330,4 @@ Esas rutas quedan ignoradas por Git.
 - Cuando se cambie una variable de maquina usada por la API, reiniciar `IND_CRM_API` para recargar la configuracion del proceso.
 - Blob usa `AZURE_BLOB_ENVIRONMENT_SEGMENT` y, si falta, hereda `IND_ENV` antes de usar un fallback neutro.
 - Un `git push` entre ramas no cambia el ambiente por si solo; el riesgo real es ejecutar scripts locales con variables equivocadas.
-- Los scripts `Bats/instalar_api_axapta.bat`, `Bats/enable_https_17776_dev.bat`, `Bats/enable_https_7776_dev.bat` y `Bats/enable_https_7776.bat` reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.
+- Los scripts generados en `bin\x86\Release`, como `instalar_api_axapta.bat`, `enable_https_17776_dev.bat`, `enable_https_7776_dev.bat` y `enable_https_7776.bat`, reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.
