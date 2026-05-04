@@ -287,6 +287,10 @@
       <TargetPath>enable_https_17776_dev.bat</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Bats\enable_https_2083_dev.bat">
+      <TargetPath>enable_https_2083_dev.bat</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Bats\enable_https_7776.bat">
       <TargetPath>enable_https_7776.bat</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -20,14 +20,14 @@ Fecha: 2026-04-07
 
 | Entorno | URL | Host | IP | AX config | Blob |
 | --- | --- | --- | --- | --- | --- |
-| `DEV` | `https://dev.insertec.biz:17776/` | `dev.insertec.biz` | `192.168.0.146` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
+| `DEV` | `https://dev.insertec.biz:2083/` | `dev.insertec.biz` | `192.168.0.146` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
 | `PROD` | `https://crm.insertec.biz:7776/` | `crm.insertec.biz` | `212.142.143.182` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc` | `PROD` |
 
 ## Endpoints web
 
 | Entorno | WEB URL | WEB host | WEB port | API URL |
 | --- | --- | --- | --- | --- |
-| `DEV` | `https://dev.insertec.biz:17702/` | `dev.insertec.biz` | `17702` | `https://dev.insertec.biz:17776/` |
+| `DEV` | `https://dev.insertec.biz:2053/` | `dev.insertec.biz` | `2053` | `https://dev.insertec.biz:2083/` |
 | `PROD` | `https://crm.insertec.biz:7702/` | `crm.insertec.biz` | `7702` | `https://crm.insertec.biz:7776/` |
 
 ## Scripts
@@ -95,11 +95,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps
 powershell -ExecutionPolicy Bypass -File .\scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment PROD -Apply
 ```
 
-### `bin\x86\Release\enable_https_17776_dev.bat`
+### `bin\x86\Release\enable_https_2083_dev.bat`
 
 Que hace:
 
-- Configura HTTPS de `HTTP.sys` para `https://dev.insertec.biz:17776/`.
+- Configura HTTPS de `HTTP.sys` para `https://dev.insertec.biz:2083/`.
 - Exige una maquina ya configurada como `DEV` con `IND_ENV`, `INDCRM_BASE_URL`, `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_PORT` e `INDCRM_HTTP_SERVICE_USER` coherentes.
 - Usa por defecto el PFX operativo `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx`.
 - Permite override de ruta por `INDCRM_DEV_PFX_PATH` o por el primer argumento.
@@ -109,15 +109,15 @@ Que hace:
 Uso:
 
 ```bat
-cmd /c .\bin\x86\Release\enable_https_17776_dev.bat
-cmd /c .\bin\x86\Release\enable_https_17776_dev.bat "C:\otra\ruta\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_2083_dev.bat
+cmd /c .\bin\x86\Release\enable_https_2083_dev.bat "C:\otra\ruta\dominio.pfx"
 ```
 
 Nota:
 
 - Evitar pasar la password como segundo argumento salvo automatizacion controlada.
 - El script no descarga el PFX: espera un archivo local ya provisionado.
-- `bin\x86\Release\enable_https_7776_dev.bat` queda como wrapper de compatibilidad y redirige al script de `17776`.
+- `bin\x86\Release\enable_https_17776_dev.bat` y `bin\x86\Release\enable_https_7776_dev.bat` quedan como wrappers de compatibilidad y redirigen al script de `2083`.
 
 ### `bin\x86\Release\enable_https_7776.bat`
 
@@ -293,9 +293,9 @@ Restart-Service IND_CRM_API
 - `INDCRM_CONTEXT_TOKEN_AUDIENCE`: `IND_CRM_WEB_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_ISSUER`: `IND_CRM_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_SECRET_KEY`: generado por el script al aplicar si la maquina no tiene valor previo; debe quedar distinto entre DEV y PROD.
-- `INDCRM_WEB_BASE_URL`: `DEV` -> `https://dev.insertec.biz:17702/`, `PROD` -> `https://crm.insertec.biz:7702/`
+- `INDCRM_WEB_BASE_URL`: `DEV` -> `https://dev.insertec.biz:2053/`, `PROD` -> `https://crm.insertec.biz:7702/`
 - `INDCRM_WEB_PUBLIC_HOST`: `DEV` -> `dev.insertec.biz`, `PROD` -> `crm.insertec.biz`
-- `INDCRM_WEB_PUBLIC_PORT`: `DEV` -> `17702`, `PROD` -> `7702`
+- `INDCRM_WEB_PUBLIC_PORT`: `DEV` -> `2053`, `PROD` -> `7702`
 - `ApiSettings__BaseUrl`: mismo valor que `INDCRM_BASE_URL` para evitar overrides antiguos de la web.
 
 ### HTTPS opcionales por ambiente
@@ -324,11 +324,11 @@ Esas rutas quedan ignoradas por Git.
 
 - `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_IP` y `INDCRM_PUBLIC_PORT` son datos operativos para DNS, firewall y despliegue.
 - La IP de `DEV` queda confirmada en `192.168.0.146`.
-- La web `DEV` se sirve en `https://dev.insertec.biz:17702/`; la API `DEV` se sirve en `https://dev.insertec.biz:17776/`.
+- La web `DEV` se sirve en `https://dev.insertec.biz:2053/`; la API `DEV` se sirve en `https://dev.insertec.biz:2083/`.
 - La web `PROD` se sirve en `https://crm.insertec.biz:7702/`; la API `PROD` se sirve en `https://crm.insertec.biz:7776/`.
 - El puerto web se aplica realmente en IIS, pero `INDCRM_WEB_BASE_URL`, `INDCRM_WEB_PUBLIC_HOST` e `INDCRM_WEB_PUBLIC_PORT` quedan como contrato de maquina y son validados por `IND_CRM_APP\publish.ps1`.
 - El cambio de `DEV` a `PROD` debe resolverse en despliegue, no en recompilacion.
 - Cuando se cambie una variable de maquina usada por la API, reiniciar `IND_CRM_API` para recargar la configuracion del proceso.
 - Blob usa `AZURE_BLOB_ENVIRONMENT_SEGMENT` y, si falta, hereda `IND_ENV` antes de usar un fallback neutro.
 - Un `git push` entre ramas no cambia el ambiente por si solo; el riesgo real es ejecutar scripts locales con variables equivocadas.
-- Los scripts versionados en `Bats` se copian a `bin\x86\Release` al compilar. `instalar_api_axapta.bat`, `enable_https_17776_dev.bat`, `enable_https_7776_dev.bat` y `enable_https_7776.bat` reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.
+- Los scripts versionados en `Bats` se copian a `bin\x86\Release` al compilar. `instalar_api_axapta.bat`, `enable_https_2083_dev.bat`, `enable_https_17776_dev.bat`, `enable_https_7776_dev.bat` y `enable_https_7776.bat` reciben sus claves desde las variables de maquina provisionadas por los `.ps1`.
