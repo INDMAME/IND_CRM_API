@@ -1,8 +1,8 @@
-﻿{
+{
     "info":  {
                  "_postman_id":  "55a84e0f-41d3-4ff9-91f3-da21513538aa",
                  "name":  "IND_CRM_API DEV V01",
-                 "description":  "Coleccion DEV V01 basada en la V30 historica de PROD. Ajusta baseUrl a dev.insertec.biz:7776 y mantiene el contrato mas reciente.",
+                 "description":  "Coleccion DEV V01 basada en la V30 historica de PROD. Ajusta baseUrl a dev.insertec.biz:2083 y mantiene el contrato mas reciente.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
                  "_exporter_id":  "12158298"
              },
@@ -3110,7 +3110,7 @@
     "variable":  [
                      {
                          "key":  "baseUrl",
-                         "value":  "https://dev.insertec.biz:7776"
+                         "value":  "https://dev.insertec.biz:2083"
                      },
                      {
                          "key":  "tokenId",

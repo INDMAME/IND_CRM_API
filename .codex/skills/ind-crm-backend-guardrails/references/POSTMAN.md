@@ -7,7 +7,7 @@ Colecciones
 - Historial soporte PROD: `Notes/PROD/`
 
 Ambiente (variables sugeridas)
-- `baseUrl` = `https://dev.insertec.biz:17776`
+- `baseUrl` = `https://dev.insertec.biz:2083`
 - `tokenId` = token JWT vigente
 - `companyId` = compania obtenida desde Entra Context
 - `defaultCompanyId` = compania por defecto devuelta por Entra Context
@@ -73,4 +73,4 @@ Notas
 - V26 normaliza contratos completos en request body para endpoints con payload JSON, alinea `tickets/list` al contrato reducido, agrega `tickets/link/list`, agrega `tickets/link/bulk` y mantiene `TransDate` basado en `ticketHeader.createdDate`.
 - V28 se basa en la V27 mas reciente, incorpora `tickets/quick-create` y documenta `ocrJson`/`normalizedJson` en contratos de tickets sin romper compatibilidad.
 - V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
-- V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:17776` para el nuevo despliegue publico separado por host y puerto.
+- V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:2083` para el nuevo despliegue publico separado por host y puerto.

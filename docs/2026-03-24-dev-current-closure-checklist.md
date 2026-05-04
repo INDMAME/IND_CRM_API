@@ -8,7 +8,7 @@ Actualizado: 2026-04-07
 Cerrar el `DEV` actual en esta maquina con:
 
 - Variables de entorno ya apuntando a `DEV`.
-- HTTPS de `https://dev.insertec.biz:7776/` con certificado correcto.
+- HTTPS de `https://dev.insertec.biz:2083/` con certificado correcto.
 - Servicio Windows `IND_CRM_API` instalado y arrancando.
 - Validaciones minimas de `ping`, `health` y `getEnvironmentName`.
 
@@ -16,13 +16,13 @@ Cerrar el `DEV` actual en esta maquina con:
 
 - `IND_ENV=DEV`
 - `INDCRM_AX_CONFIG_FILE=C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc`
-- `INDCRM_BASE_URL=https://dev.insertec.biz:7776/`
+- `INDCRM_BASE_URL=https://dev.insertec.biz:2083/`
 - `INDCRM_PUBLIC_HOST=dev.insertec.biz`
 - `INDCRM_PUBLIC_IP=192.168.0.146`
-- `INDCRM_PUBLIC_PORT=7776`
+- `INDCRM_PUBLIC_PORT=2083`
 - `AZURE_BLOB_ENVIRONMENT_SEGMENT=DEV`
 - El servicio `IND_CRM_API` no esta instalado actualmente (`sc query` devuelve 1060).
-- El binding SSL de `0.0.0.0:7776` existe, pero hoy usa un certificado `CN=crm.insertec.biz`.
+- El binding SSL de `0.0.0.0:2083` existe, pero hoy usa un certificado `CN=crm.insertec.biz`.
 - El PFX operativo esperado para DEV queda fuera del repo en `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx`, salvo override explicito.
 - El artefacto ejecutable verificado hoy es `bin\x86\Debug\IND_CRM_API.exe`.
 - El build `Release` falla en esta maquina porque falta `AxImp.exe` del SDK/Build Tools para la referencia COM de Axapta.
@@ -62,23 +62,23 @@ Evidencia esperada:
 Comando:
 
 ```powershell
-netsh http show sslcert ipport=0.0.0.0:7776
-netsh http show urlacl url=https://dev.insertec.biz:7776/
+netsh http show sslcert ipport=0.0.0.0:2083
+netsh http show urlacl url=https://dev.insertec.biz:2083/
 
 # El .bat usa por defecto C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx
 # y pide la password por consola si INDCRM_DEV_PFX_PASSWORD no existe.
-cmd /c .\bin\x86\Release\enable_https_7776_dev.bat
+cmd /c .\bin\x86\Release\enable_https_2083_dev.bat
 
 # Solo si hace falta override de ruta:
-cmd /c .\bin\x86\Release\enable_https_7776_dev.bat "C:\otra\ruta\dominio.pfx"
+cmd /c .\bin\x86\Release\enable_https_2083_dev.bat "C:\otra\ruta\dominio.pfx"
 
-netsh http show sslcert ipport=0.0.0.0:7776
+netsh http show sslcert ipport=0.0.0.0:2083
 ```
 
 Comprobacion del certificado cargado:
 
 ```powershell
-$ssl = netsh http show sslcert ipport=0.0.0.0:7776
+$ssl = netsh http show sslcert ipport=0.0.0.0:2083
 $hashLine = $ssl | Select-String 'Certificate Hash'
 $thumb = ($hashLine -split ':')[1].Trim()
 
@@ -89,7 +89,7 @@ Get-ChildItem Cert:\LocalMachine\My |
 
 Evidencia esperada:
 
-- La reserva `https://dev.insertec.biz:7776/` debe existir.
+- La reserva `https://dev.insertec.biz:2083/` debe existir.
 - El certificado final debe ser `CN=dev.insertec.biz` o equivalente valido para ese host.
 - Si sigue apareciendo `CN=crm.insertec.biz`, no pasar al paso siguiente.
 
@@ -156,7 +156,7 @@ Get-ChildItem 'C:\INDAxaptaLogs' -File -ErrorAction SilentlyContinue |
 Comando:
 
 ```powershell
-curl.exe -k https://dev.insertec.biz:7776/api/health/ping
+curl.exe -k https://dev.insertec.biz:2083/api/health/ping
 
 $username = [Environment]::GetEnvironmentVariable('USER_DEFAULT', 'Machine')
 $password = [Environment]::GetEnvironmentVariable('USER_PASS_DEFAULT', 'Machine')
@@ -165,17 +165,17 @@ $loginBody = (@{ Username = $username; Password = $password } | ConvertTo-Json -
 $loginRaw = curl.exe -k -s `
   -H "Content-Type: application/json" `
   -d $loginBody `
-  https://dev.insertec.biz:7776/api/auth/login
+  https://dev.insertec.biz:2083/api/auth/login
 
 $token = ($loginRaw | ConvertFrom-Json).data.token
 
 curl.exe -k -s `
   -H "Authorization: Bearer $token" `
-  https://dev.insertec.biz:7776/api/health/health
+  https://dev.insertec.biz:2083/api/health/health
 
 curl.exe -k -s `
   -H "Authorization: Bearer $token" `
-  https://dev.insertec.biz:7776/api/system/getEnvironmentName
+  https://dev.insertec.biz:2083/api/system/getEnvironmentName
 ```
 
 Evidencia esperada:
@@ -195,7 +195,7 @@ Checklist:
 
 ## Definicion de terminado
 
-- [ ] El binding `:7776` usa certificado valido de `DEV`.
+- [ ] El binding `:2083` usa certificado valido de `DEV`.
 - [ ] El servicio `IND_CRM_API` esta instalado y en `RUNNING`.
 - [ ] `GET /api/health/ping` responde en DEV.
 - [ ] `GET /api/health/health` responde autenticado en DEV.

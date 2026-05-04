@@ -1,8 +1,8 @@
-﻿{
+{
     "info":  {
                  "_postman_id":  "9b064e7a-ddcf-4020-877e-1304e355854d",
                  "name":  "IND_CRM_API DEV V03",
-                 "description":  "Coleccion DEV V03 basada en la V02 activa. Actualiza el baseUrl DEV a https://dev.insertec.biz:17776 para la separacion publica por host y puerto, manteniendo los headers automaticos de contexto firmado de Entra.",
+                 "description":  "Coleccion DEV V03 basada en la V02 activa. Actualiza el baseUrl DEV a https://dev.insertec.biz:2083 para la separacion publica por host y puerto, manteniendo los headers automaticos de contexto firmado de Entra.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
                  "_exporter_id":  "12158298"
              },
@@ -3209,7 +3209,7 @@
     "variable":  [
                      {
                          "key":  "baseUrl",
-                         "value":  "https://dev.insertec.biz:17776"
+                         "value":  "https://dev.insertec.biz:2083"
                      },
                      {
                          "key":  "tokenId",

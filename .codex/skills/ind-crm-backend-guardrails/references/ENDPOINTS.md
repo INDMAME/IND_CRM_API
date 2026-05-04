@@ -2,7 +2,7 @@
 
 Base URL: `{{baseUrl}}`
 
-- DEV: `https://dev.insertec.biz:17776`
+- DEV: `https://dev.insertec.biz:2083`
 - PROD: `https://crm.insertec.biz:7776`
 
 Autenticacion y headers comunes

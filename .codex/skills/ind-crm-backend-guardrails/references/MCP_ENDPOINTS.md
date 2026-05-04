@@ -4,7 +4,7 @@ Fuentes: `.codex/ENDPOINTS.md` + Postman V28.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
 
 Convenciones globales
-- Base URL: `{{baseUrl}}` (`DEV` = `https://dev.insertec.biz:17776`, `PROD` = `https://crm.insertec.biz:7776`).
+- Base URL: `{{baseUrl}}` (`DEV` = `https://dev.insertec.biz:2083`, `PROD` = `https://crm.insertec.biz:7776`).
 - Variables: `baseUrl`, `tokenId`, `companyId`, `axUserId`.
 - Auth: `Authorization: Bearer {{tokenId}}`.
 - Header empresa: `X-IND-Company: {{companyId}}` (obligatorio en endpoints CRM).
