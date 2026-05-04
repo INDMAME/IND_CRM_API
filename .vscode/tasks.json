@@ -36,7 +36,7 @@
             ],
             "group": "build",
             "problemMatcher": "$msCompile",
-            "detail": "Compila IND_CRM_API.sln en Release|x86 y publica en C:\\inetpub\\wwwroot\\IND_CRM_APP."
+            "detail": "Compila IND_CRM_API.sln en Release|x86 y publica en C:\\inetpub\\wwwroot\\IND_CRM_API."
         }
     ]
 }

@@ -9,7 +9,7 @@ installed with Visual Studio or Visual Studio Build Tools and avoids the legacy
 .NET Framework MSBuild because it cannot import the Axapta COM reference here.
 
 When Configuration is Release, a successful build is also published by copying
-all files from bin\x86\Release to C:\inetpub\wwwroot\IND_CRM_APP.
+all files from bin\x86\Release to C:\inetpub\wwwroot\IND_CRM_API.
 
 .PARAMETER Configuration
 Build configuration. Use Debug for local compilation only, or Release to compile
@@ -28,7 +28,7 @@ Compiles Debug|x86 and writes the output to bin\x86\Debug.
 .\scripts\build-api.ps1 -Configuration Release
 
 Compiles Release|x86 and publishes bin\x86\Release to
-C:\inetpub\wwwroot\IND_CRM_APP.
+C:\inetpub\wwwroot\IND_CRM_API.
 
 .NOTES
 Publishing to C:\inetpub usually requires VS Code or PowerShell to run as an
@@ -49,7 +49,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $solutionPath = Join-Path $repoRoot "IND_CRM_API.sln"
 
 # IIS target folder used when Release builds are published.
-$publishPath = "C:\inetpub\wwwroot\IND_CRM_APP"
+$publishPath = "C:\inetpub\wwwroot\IND_CRM_API"
 
 $vsRoots = @(
     "${env:ProgramFiles}\Microsoft Visual Studio",
