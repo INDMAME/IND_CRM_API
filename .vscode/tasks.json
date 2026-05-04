@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build: Debug x86",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\scripts\\build-api.ps1",
+                "-Configuration",
+                "Debug"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Compila IND_CRM_API.sln en Debug|x86 con MSBuild de Visual Studio."
+        },
+        {
+            "label": "build: Release x86",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\scripts\\build-api.ps1",
+                "-Configuration",
+                "Release"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile",
+            "detail": "Compila IND_CRM_API.sln en Release|x86 y publica en C:\\inetpub\\wwwroot\\IND_CRM_API."
+        }
+    ]
+}
