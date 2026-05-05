@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "f897752b-2ba0-401f-9e1c-5dd7819c0681",
-    "name": "IND_CRM_API V24",
-    "description": "Coleccion V24 basada en V23. Refuerza validaciones de persistencia IA para ProcessedByAI.",
+    "_postman_id": "5264b930-6cf7-48e4-acdc-523be53d7aea",
+    "name": "IND_CRM_API_DEV",
+    "description": "Coleccion DEV V03 basada en la V02 activa. Actualiza el baseUrl DEV a https://dev.insertec.biz:2083 para la separacion publica por host y puerto, manteniendo los headers automaticos de contexto firmado de Entra.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "12158298"
   },
@@ -18,7 +18,7 @@
               "script": {
                 "exec": [
                   "// Normaliza credenciales desde multiples nombres/scopes para evitar fallos de deteccion.",
-                  "(function () {",
+                  "( function () {",
                   "  function pick(keys) {",
                   "    for (var i = 0; i < keys.length; i++) {",
                   "      var k = keys[i];",
@@ -45,7 +45,9 @@
                   "  }",
                   "})();"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             },
             {
@@ -53,79 +55,109 @@
               "script": {
                 "exec": [
                   "try {",
+                  "  ['axUserId', 'axUserName', 'defaultCompanyId', 'defaultCurrencyCode', 'defaultLanguageId', 'defaultCompanyName', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc', 'availableCompaniesJson'].forEach(function (key) { pm.collectionVariables.set(key, key === 'availableCompaniesJson' ? '[]' : ''); });",
                   "  var json = pm.response.json();",
                   "  var data = json.data || json.Data;",
                   "  if (!(data && data.token)) {",
-                  "    console.warn('Login sin token en la respuesta.');",
+                  "    console.warn(\"Login sin token en la respuesta.\");",
                   "  } else {",
                   "    var token = data.token;",
-                  "    pm.collectionVariables.set('tokenId', token);",
+                  "    pm.collectionVariables.set(\"tokenId\", token);",
+                  "    try { pm.environment.set(\"tokenId\", token); } catch (envErr) {}",
                   "",
-                  "    var baseUrl = pm.collectionVariables.get('baseUrl');",
-                  "    var entraOid = pm.collectionVariables.get('entraOid');",
-                  "    var appCode = pm.collectionVariables.get('appCode') || 'CRM';",
+                  "    var baseUrl = pm.variables.replaceIn(pm.variables.get(\"baseUrl\") || pm.collectionVariables.get(\"baseUrl\") || pm.environment.get(\"baseUrl\") || \"\");",
+                  "    var entraOid = pm.variables.get(\"entraOid\") || pm.collectionVariables.get(\"entraOid\") || pm.environment.get(\"entraOid\") || \"\";",
+                  "    var appCode = pm.variables.get(\"appCode\") || pm.collectionVariables.get(\"appCode\") || pm.environment.get(\"appCode\") || \"CRM\";",
                   "",
                   "    if (!baseUrl || !entraOid) {",
-                  "      console.warn('Auto Entra Context omitido: faltan baseUrl o entraOid.');",
+                  "      console.warn(\"Auto Entra Context omitido: faltan baseUrl o entraOid.\");",
                   "    } else {",
                   "      pm.sendRequest({",
-                  "        url: baseUrl + '/api/auth/entra/context',",
-                  "        method: 'POST',",
+                  "        url: baseUrl + \"/api/auth/entra/context\",",
+                  "        method: \"POST\",",
                   "        header: {",
-                  "          'Authorization': 'Bearer ' + token,",
-                  "          'Content-Type': 'application/json'",
+                  "          \"Authorization\": \"Bearer \" + token,",
+                  "          \"Content-Type\": \"application/json\"",
                   "        },",
                   "        body: {",
-                  "          mode: 'raw',",
+                  "          mode: \"raw\",",
                   "          raw: JSON.stringify({ entraOid: entraOid, appCode: appCode })",
                   "        }",
                   "      }, function (err, res) {",
                   "        if (err || !res) {",
-                  "          console.error('Auto Entra Context error:', err);",
+                  "          console.error(\"Auto Entra Context error:\", err);",
                   "          return;",
                   "        }",
-                  "",
                   "        if (res.code < 200 || res.code >= 300) {",
-                  "          console.error('Auto Entra Context HTTP ' + res.code + ': ' + res.text());",
+                  "          console.error(\"Auto Entra Context HTTP \" + res.code + \": \" + res.text());",
                   "          return;",
                   "        }",
-                  "",
                   "        try {",
+                  "          var rawContextBody = res.text ? res.text() : \"\";",
+                  "          function rawField(raw, name) {",
+                  "            var match = new RegExp('\"' + name + '\"\\\\s*:\\\\s*(?:\"([^\"]*)\"|([0-9]+))', 'i').exec(raw || \"\");",
+                  "            return match ? (match[1] || match[2] || \"\") : \"\";",
+                  "          }",
                   "          var entraJson = res.json();",
+                  "          console.log(\"entraJson raw:\", JSON.stringify(entraJson));",
                   "          var items = entraJson.items || entraJson.Items || [];",
                   "          if (!items.length) {",
-                  "            console.warn('Auto Entra Context sin items.');",
+                  "            console.warn(\"Auto Entra Context sin items.\");",
                   "            return;",
                   "          }",
-                  "",
                   "          var first = items[0] || {};",
                   "          var header = first.Header || first.header || {};",
-                  "          var axUserId = header.AxUserId || header.axUserId;",
-                  "          if (axUserId) {",
-                  "            pm.collectionVariables.set('axUserId', axUserId);",
+                  "          var companies = first.Companies || first.companies || [];",
+                  "          var currentCompanyId = pm.collectionVariables.get(\"companyId\");",
+                  "          var selected = null;",
+                  "          if (currentCompanyId) {",
+                  "            selected = companies.find(function (c) {",
+                  "              return String(c.CompanyId || c.companyId || \"\").toUpperCase() === String(currentCompanyId).toUpperCase();",
+                  "            }) || null;",
+                  "          }",
+                  "          if (!selected && companies.length) selected = companies[0];",
+                  "",
+                  "          var axUserId = String(header.AxUserId || header.axUserId || \"\").split(\"^\").join(\"\");",
+                  "          var axUserName = header.AxUserName || header.axUserName || \"\";",
+                  "          var defaultCurrencyCode = String(header.DefaultCurrencyCode || header.defaultCurrencyCode || \"\").split(\"^\").join(\"\");",
+                  "          var defaultLanguageId = header.DefaultLanguageId || header.defaultLanguageId || \"\";",
+                  "          var defaultCompanyId = String(header.DefaultCompany || header.defaultCompany || (selected && (selected.CompanyId || selected.companyId)) || \"\").split(\"^\").join(\"\");",
+                  "          var defaultCompanyName = header.DefaultCompanyName || header.defaultCompanyName || (selected && (selected.CompanyName || selected.companyName)) || \"\";",
+                  "",
+                  "          if (selected) {",
+                  "            pm.collectionVariables.set(\"companyId\", String(selected.CompanyId || selected.companyId).split(\"^\").join(\"\"));",
                   "          }",
                   "",
-                  "          var defaultCompany = header.DefaultCompany || header.defaultCompany;",
-                  "          if (defaultCompany) {",
-                  "            pm.collectionVariables.set('companyId', defaultCompany);",
-                  "          } else {",
-                  "            var companies = first.Companies || first.companies || [];",
-                  "            if (companies.length > 0) {",
-                  "              var selected = companies.find(function(c){ return c.IsDefault || c.isDefault; }) || companies[0];",
-                  "              var companyId = selected.CompanyId || selected.companyId;",
-                  "              if (companyId) {",
-                  "                pm.collectionVariables.set('companyId', companyId);",
-                  "              }",
-                  "            }",
-                  "          }",
-                  "        } catch (parseErr) {",
-                  "          console.error('Auto Entra Context parse error:', parseErr);",
+                  "          var contextToken = String(first.ContextToken || first.contextToken || \"\").split(\"^\").join(\"\");",
+                  "          pm.collectionVariables.set(\"contextToken\", contextToken);",
+                  "          var contextVersion = String(rawField(rawContextBody, \"ContextVersion\") || first.ContextVersion || first.contextVersion || \"\").split(\"^\").join(\"\");",
+                  "          pm.collectionVariables.set(\"contextVersion\", contextVersion);",
+                  "          var permissionsRevision = String(first.PermissionsRevision || first.permissionsRevision || \"\").split(\"^\").join(\"\");",
+                  "          pm.collectionVariables.set(\"permissionsRevision\", permissionsRevision);",
+                  "          var contextIssuedUtc = String(first.ContextIssuedUtc || first.contextIssuedUtc || \"\").split(\"^\").join(\"\");",
+                  "          pm.collectionVariables.set(\"contextIssuedUtc\", contextIssuedUtc);",
+                  "          var contextExpiresUtc = String(first.ContextExpiresUtc || first.contextExpiresUtc || \"\").split(\"^\").join(\"\");",
+                  "          pm.collectionVariables.set(\"contextExpiresUtc\", contextExpiresUtc);",
+                  "",
+                  "          pm.collectionVariables.set(\"availableCompaniesJson\", JSON.stringify(companies, null, 2).split(\"^\").join(\"\"));",
+                  "          pm.collectionVariables.set(\"axUserId\", axUserId);",
+                  "          pm.collectionVariables.set(\"axUserName\", axUserName);",
+                  "          pm.collectionVariables.set(\"defaultCurrencyCode\", defaultCurrencyCode);",
+                  "          pm.collectionVariables.set(\"defaultLanguageId\", defaultLanguageId);",
+                  "          pm.collectionVariables.set(\"defaultCompanyId\", defaultCompanyId);",
+                  "          pm.collectionVariables.set(\"defaultCompanyName\", defaultCompanyName);",
+                  "          ['companyId', 'axUserId', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc'].forEach(function (key) { try { pm.environment.set(key, pm.collectionVariables.get(key) || ''); } catch (envErr) {} });",
+                  "          console.log(\"IND context vars\", { companyId: pm.collectionVariables.get(\"companyId\"), axUserId: pm.collectionVariables.get(\"axUserId\"), entraOid: entraOid, contextVersion: pm.collectionVariables.get(\"contextVersion\"), permissionsRevision: pm.collectionVariables.get(\"permissionsRevision\"), contextTokenSet: !!pm.collectionVariables.get(\"contextToken\") });",
+                  "",
+                  "          console.log(\"Auto Entra Context OK. contextToken:\", contextToken, \"companyId:\", pm.collectionVariables.get(\"companyId\"));",
+                  "        } catch (innerErr) {",
+                  "          console.error(\"Auto Entra Context parse error:\", innerErr);",
                   "        }",
                   "      });",
                   "    }",
                   "  }",
                   "} catch (e) {",
-                  "  console.error('Login test script error:', e);",
+                  "  console.warn(\"Login test script error:\", e);",
                   "}"
                 ],
                 "type": "text/javascript",
@@ -192,36 +224,49 @@
               "script": {
                 "exec": [
                   "try {",
+                  "  var rawContextBody = pm.response.text ? pm.response.text() : \"\";",
+                  "  function rawField(raw, name) {",
+                  "    var match = new RegExp('\"' + name + '\"\\\\s*:\\\\s*(?:\"([^\"]*)\"|([0-9]+))', 'i').exec(raw || \"\");",
+                  "    return match ? (match[1] || match[2] || \"\") : \"\";",
+                  "  }",
                   "  var json = pm.response.json();",
                   "  var items = json.items || json.Items;",
+                  "  ['axUserId', 'axUserName', 'defaultCompanyId', 'defaultCurrencyCode', 'defaultLanguageId', 'defaultCompanyName', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc', 'availableCompaniesJson'].forEach(function (key) { pm.collectionVariables.set(key, key === 'availableCompaniesJson' ? '[]' : ''); });",
                   "  if (!items || !items.length) return;",
-                  "  var first = items[0];",
+                  "  var first = items[0] || {};",
                   "  var header = first.Header || first.header || {};",
-                  "  var axUserId = header.AxUserId || header.axUserId;",
-                  "  if (axUserId) {",
-                  "    pm.collectionVariables.set('axUserId', axUserId);",
-                  "  }",
-                  "  var defaultCurrencyCode = header.DefaultCurrencyCode || header.defaultCurrencyCode;",
-                  "  if (defaultCurrencyCode) {",
-                  "    pm.collectionVariables.set('defaultCurrencyCode', defaultCurrencyCode);",
-                  "  }",
-                  "  var defaultCompany = header.DefaultCompany || header.defaultCompany;",
-                  "  if (defaultCompany) {",
-                  "    pm.collectionVariables.set('companyId', defaultCompany);",
-                  "    return;",
-                  "  }",
                   "  var companies = first.Companies || first.companies || [];",
-                  "  if (companies.length > 0) {",
-                  "    var selected = companies.find(function(c){ return c.IsDefault || c.isDefault; }) || companies[0];",
-                  "    var companyId = selected.CompanyId || selected.companyId;",
-                  "    if (companyId) {",
-                  "      pm.collectionVariables.set('companyId', companyId);",
-                  "    }",
-                  "    var companyCurrencyCode = selected.CurrencyCode || selected.currencyCode;",
-                  "    if (companyCurrencyCode && !pm.collectionVariables.get('defaultCurrencyCode')) {",
-                  "      pm.collectionVariables.set('defaultCurrencyCode', companyCurrencyCode);",
-                  "    }",
+                  "  var currentCompanyId = pm.collectionVariables.get(\"companyId\");",
+                  "  var selected = null;",
+                  "  if (currentCompanyId) {",
+                  "    selected = companies.find(function (c) {",
+                  "      return String(c.CompanyId || c.companyId || \"\").toUpperCase() === String(currentCompanyId).toUpperCase();",
+                  "    }) || null;",
                   "  }",
+                  "  if (!selected && companies.length > 0) {",
+                  "    selected = companies.find(function(c){ return !!(c.IsDefault || c.isDefault); }) || companies[0];",
+                  "  }",
+                  "  var axUserId = header.AxUserId || header.axUserId;",
+                  "  if (axUserId) pm.collectionVariables.set(\"axUserId\", axUserId);",
+                  "  var defaultCurrencyCode = header.DefaultCurrencyCode || header.defaultCurrencyCode;",
+                  "  if (defaultCurrencyCode) pm.collectionVariables.set(\"defaultCurrencyCode\", defaultCurrencyCode);",
+                  "  var defaultCompany = header.DefaultCompany || header.defaultCompany || (selected && (selected.CompanyId || selected.companyId));",
+                  "  if (defaultCompany) pm.collectionVariables.set(\"defaultCompanyId\", defaultCompany);",
+                  "  if (!currentCompanyId && defaultCompany) pm.collectionVariables.set(\"companyId\", defaultCompany);",
+                  "  else if (selected && (selected.CompanyId || selected.companyId)) pm.collectionVariables.set(\"companyId\", selected.CompanyId || selected.companyId);",
+                  "  var contextToken = first.ContextToken || first.contextToken;",
+                  "  if (contextToken) pm.collectionVariables.set(\"contextToken\", contextToken);",
+                  "  var contextVersion = rawField(rawContextBody, \"ContextVersion\") || first.ContextVersion || first.contextVersion;",
+                  "  if (contextVersion !== undefined && contextVersion !== null && String(contextVersion) !== \"\") pm.collectionVariables.set(\"contextVersion\", String(contextVersion));",
+                  "  var permissionsRevision = first.PermissionsRevision || first.permissionsRevision;",
+                  "  if (permissionsRevision) pm.collectionVariables.set(\"permissionsRevision\", permissionsRevision);",
+                  "  var contextIssuedUtc = first.ContextIssuedUtc || first.contextIssuedUtc;",
+                  "  if (contextIssuedUtc) pm.collectionVariables.set(\"contextIssuedUtc\", contextIssuedUtc);",
+                  "  var contextExpiresUtc = first.ContextExpiresUtc || first.contextExpiresUtc;",
+                  "  if (contextExpiresUtc) pm.collectionVariables.set(\"contextExpiresUtc\", contextExpiresUtc);",
+                  "  pm.collectionVariables.set(\"availableCompaniesJson\", JSON.stringify(companies, null, 2));",
+                  "  ['companyId', 'axUserId', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc'].forEach(function (key) { try { pm.environment.set(key, pm.collectionVariables.get(key) || ''); } catch (envErr) {} });",
+                  "  console.log(\"IND context vars\", { companyId: pm.collectionVariables.get(\"companyId\"), axUserId: pm.collectionVariables.get(\"axUserId\"), entraOid: pm.variables.get(\"entraOid\") || pm.collectionVariables.get(\"entraOid\") || pm.environment.get(\"entraOid\"), contextVersion: pm.collectionVariables.get(\"contextVersion\"), permissionsRevision: pm.collectionVariables.get(\"permissionsRevision\"), contextTokenSet: !!pm.collectionVariables.get(\"contextToken\") });",
                   "} catch (e) {}"
                 ],
                 "type": "text/javascript",
@@ -539,6 +584,221 @@
       "name": "IA Services",
       "item": [
         {
+          "name": "Expense Sheets AI Examples",
+          "item": [
+            {
+              "name": "Ask Expense Sheets AI - Summary",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const json = pm.response.json();",
+                      "  pm.collectionVariables.set(\"expenseSheetsAiLastResponseJson\", JSON.stringify(json, null, 2));",
+                      "  const traceId = json && (json.TraceId || json.traceId);",
+                      "  if (traceId) {",
+                      "    pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+                      "  }",
+                      "} catch (e) {",
+                      "  console.warn(\"No fue posible capturar la respuesta de Ask Expense Sheets AI.\", e);",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Resume las hojas de gasto cargadas. Indica total global, usuarios principales, periodos y observaciones relevantes.\",\n  \"answerInstructions\": \"Responde en espanol claro. Usa secciones cortas: Resumen, Totales y Observaciones. Si faltan datos, dilo.\",\n  \"listRequest\": {{expenseSheetsListRequestJson}},\n  \"sourceJson\": {{expenseSheetsListResponseJson}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/ia/service/expensesheets/ask",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "ia",
+                    "service",
+                    "expensesheets",
+                    "ask"
+                  ]
+                },
+                "description": "Resumen ejecutivo sobre el JSON capturado desde List Expense Sheets."
+              },
+              "response": []
+            },
+            {
+              "name": "Ask Expense Sheets AI - Analytics",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const json = pm.response.json();",
+                      "  pm.collectionVariables.set(\"expenseSheetsAiLastResponseJson\", JSON.stringify(json, null, 2));",
+                      "  const traceId = json && (json.TraceId || json.traceId);",
+                      "  if (traceId) {",
+                      "    pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+                      "  }",
+                      "} catch (e) {",
+                      "  console.warn(\"No fue posible capturar la respuesta de Ask Expense Sheets AI.\", e);",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Analiza las hojas de gasto cargadas y extrae patrones: gasto total, top usuarios, top proyectos, top monedas y distribucion por estado.\",\n  \"answerInstructions\": \"Responde en espanol. Devuelve metricas concretas, listas cortas y conclusiones accionables.\",\n  \"listRequest\": {{expenseSheetsListRequestJson}},\n  \"sourceJson\": {{expenseSheetsListResponseJson}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/ia/service/expensesheets/ask",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "ia",
+                    "service",
+                    "expensesheets",
+                    "ask"
+                  ]
+                },
+                "description": "Analitica rapida sobre gasto, usuarios, proyectos, monedas y estados."
+              },
+              "response": []
+            },
+            {
+              "name": "Ask Expense Sheets AI - Anomalies",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "try {",
+                      "  const json = pm.response.json();",
+                      "  pm.collectionVariables.set(\"expenseSheetsAiLastResponseJson\", JSON.stringify(json, null, 2));",
+                      "  const traceId = json && (json.TraceId || json.traceId);",
+                      "  if (traceId) {",
+                      "    pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+                      "  }",
+                      "} catch (e) {",
+                      "  console.warn(\"No fue posible capturar la respuesta de Ask Expense Sheets AI.\", e);",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Revisa las hojas de gasto cargadas y detecta posibles anomalias, inconsistencias o valores atipicos en importes, fechas, usuarios, proyectos, estados y tipos de gasto.\",\n  \"answerInstructions\": \"Responde en espanol. Prioriza hallazgos reales del JSON. Si no encuentras anomalias claras, indicalo. No inventes datos.\",\n  \"listRequest\": {{expenseSheetsListRequestJson}},\n  \"sourceJson\": {{expenseSheetsListResponseJson}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/ia/service/expensesheets/ask",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "ia",
+                    "service",
+                    "expensesheets",
+                    "ask"
+                  ]
+                },
+                "description": "Busqueda orientada a anomalias y posibles inconsistencias en el dataset de hojas de gasto."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Transcribe",
           "request": {
             "method": "POST",
@@ -594,7 +854,6 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
                   "pm.test('Status success', function () {",
                   "  pm.expect(pm.response.code).to.eql(200);",
@@ -623,7 +882,10 @@
                   "",
                   "var traceId = j.traceId || j.TraceId;",
                   "if (traceId) pm.collectionVariables.set('lastTraceId', String(traceId));"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -641,7 +903,7 @@
                 {
                   "key": "ticketImage",
                   "type": "file",
-                  "value": null
+                  "src": "postman-cloud:///1f108d70-4268-4460-9df1-b1e5c57a1c66"
                 },
                 {
                   "key": "persistTicket",
@@ -773,6 +1035,76 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Ask Expense Sheets AI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set(\"expenseSheetsAiLastResponseJson\", JSON.stringify(json, null, 2));",
+                  "  const traceId = json && (json.TraceId || json.traceId);",
+                  "  if (traceId) {",
+                  "    pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+                  "  }",
+                  "} catch (e) {",
+                  "  console.warn(\"No fue posible capturar la respuesta de Ask Expense Sheets AI.\", e);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenId}}"
+              },
+              {
+                "key": "X-IND-Company",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "X-IND-AxUserId",
+                "value": "{{axUserId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Resume las hojas de gasto capturadas y destaca importes, usuarios y observaciones relevantes.\",\n  \"answerInstructions\": \"Responde en espanol claro y breve.\",\n  \"listRequest\": {{expenseSheetsListRequestJson}},\n  \"sourceJson\": {{expenseSheetsListResponseJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ia/service/expensesheets/ask",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "service",
+                "expensesheets",
+                "ask"
+              ]
+            },
+            "description": "Analiza las hojas de gasto usando el JSON capturado desde List Expense Sheets o, en su defecto, los filtros enviados en listRequest."
+          },
+          "response": []
         }
       ]
     },
@@ -799,7 +1131,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountNum\": \"CPOT007449\",\n  \"page\": \"1\",\n  \"pageSize\": \"30\"\n}"
+              "raw": "{\n  \"accountNum\": \"CPOT007449\",\n  \"page\": 1,\n  \"pageSize\": 50\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/accounts/listContacts",
@@ -836,7 +1168,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountNum\":\"CPOT007449\",\n  \"page\":1,\n  \"pageSize\":10\n}"
+              "raw": "{\n  \"accountNum\": \"CPOT007449\",\n  \"page\": 1,\n  \"pageSize\": 50\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/accounts/listAccounts",
@@ -882,7 +1214,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"description\": \"Visita de prueba desde Postman V2 - TAZ\",\n  \"transDate\": \"2025-12-05\",\n  \"comentarios\": \"Comentarios de prueba\",\n  \"antecedentes\": \"Antecedentes de prueba\",\n  \"conclusiones\": \"Conclusiones de prueba\"\n}\n/*{\n  \"accountNum\": \"1019\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"description\": \"Visita de prueba desde Postman V2 - RSI\",\n  \"transDate\": \"2025-12-05\",\n  \"comentarios\": \"Comentarios de prueba\",\n  \"antecedentes\": \"Antecedentes de prueba\",\n  \"conclusiones\": \"Conclusiones de prueba\"\n}*/\n "
+              "raw": "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"userId\": \"{{axUserId}}\",\n  \"createdByUserId\": \"{{axUserId}}\",\n  \"description\": \"Visita comercial desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentarios de prueba\",\n  \"antecedentes\": \"Antecedentes de prueba\",\n  \"conclusiones\": \"Conclusiones de prueba\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/activities/create",
@@ -923,7 +1255,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fromDate\": \"2020-01-01\",\n  \"toDate\": \"2026-01-31\",\n  \"accountNum\": \"AZ15-0002\"\n}"
+              "raw": "{\n  \"fromDate\": \"2026-02-01\",\n  \"toDate\": \"2026-03-02\",\n  //\"accountNum\": \"AZ15-0002\",\n  \"page\": 1,\n  \"pageSize\": 50\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/activities/list",
@@ -964,7 +1296,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountNum\": \"1019\",\n  \"visitType\": \"VISIT\",\n  \"description\": \"Actualizacion desde POSTMAN\",\n  \"transDate\": \"2026-01-14\",\n  \"comentarios\": \"\",\n  \"antecedentes\": \"\",\n  \"conclusiones\": \"\"\n}"
+              "raw": "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"userId\": \"{{axUserId}}\",\n  \"description\": \"Actividad actualizada desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentario actualizado\",\n  \"antecedentes\": \"Antecedente actualizado\",\n  \"conclusiones\": \"Conclusion actualizada\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/activities/288079372",
@@ -1110,7 +1442,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refRecIdActividad\": \"288079847\",\n  \"asistenteTipo\": \"0\",\n  \"asistenteId\": \"CRISTINA PARADA\",\n  \"contactoRecId\": \"-163462852\"\n}\n\n/*\n    {\n        \"refRecIdActividad\": \"288077297\",\n        \"asistenteTipo\": \"CONTACTO\",\n        \"asistenteId\": \"Imanol\",\n        \"contactoRecId\": \"-197970324\"}\n*/"
+              "raw": "{\n  \"refRecIdActividad\": \"288079847\",\n  \"asistenteTipo\": \"0\",\n  \"asistenteId\": \"CRISTINA PARADA\",\n  \"contactoRecId\": \"-163462852\",\n  \"createdByUserId\": \"{{axUserId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/visits/createVisitaAsistente",
@@ -1147,7 +1479,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refRecIdActividad\": \"288077297\",\n  \"asistenteId\": \"Miguel Angel Mateos\"\n}"
+              "raw": "{\n  \"refRecIdActividad\": \"288079847\",\n  \"asistenteId\": \"CRISTINA PARADA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/visits/deleteVisitaAsistente",
@@ -1173,6 +1505,137 @@
           "name": "Expense Sheet Tickets",
           "item": [
             {
+              "name": "Quick Create Ticket From Image",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status created or partial failure', function () {",
+                      "  pm.expect(pm.response.code).to.be.oneOf([201, 422, 429, 500]);",
+                      "});",
+                      "",
+                      "var j = {};",
+                      "try { j = pm.response.json(); } catch (e) { j = {}; }",
+                      "var d = j.data || j.Data || {};",
+                      "var fileId = d.FileId || d.fileId || '';",
+                      "var urlFile = d.UrlFile || d.urlFile || '';",
+                      "var fileName = d.FileName || d.fileName || '';",
+                      "var processedByAI = d.ProcessedByAI;",
+                      "if (processedByAI === undefined) processedByAI = d.processedByAI;",
+                      "var linkedToSheet = d.LinkedToSheet;",
+                      "if (linkedToSheet === undefined) linkedToSheet = d.linkedToSheet;",
+                      "var hojaGastosId = d.HojaGastosId || d.hojaGastosId || '';",
+                      "var completedStage = d.CompletedStage || d.completedStage || '';",
+                      "var stepTraceIds = d.StepTraceIds || d.stepTraceIds || {};",
+                      "",
+                      "if (fileId) {",
+                      "  pm.collectionVariables.set('fileId', String(fileId));",
+                      "  pm.collectionVariables.set('persistedTicketFileId', String(fileId));",
+                      "}",
+                      "if (urlFile) pm.collectionVariables.set('ticketUrlFile', String(urlFile));",
+                      "if (fileName) pm.collectionVariables.set('ticketFileName', String(fileName));",
+                      "if (completedStage) pm.collectionVariables.set('quickCreateCompletedStage', String(completedStage));",
+                      "if (hojaGastosId) pm.collectionVariables.set('quickCreateHojaGastosId', String(hojaGastosId));",
+                      "if (linkedToSheet !== undefined) pm.collectionVariables.set('quickCreateLinkedToSheet', String(!!linkedToSheet));",
+                      "if (processedByAI !== undefined) pm.collectionVariables.set('quickCreateProcessedByAI', String(!!processedByAI));",
+                      "if (stepTraceIds.TicketCreate) pm.collectionVariables.set('quickCreateTraceTicketCreate', String(stepTraceIds.TicketCreate));",
+                      "if (stepTraceIds.FileUpload) pm.collectionVariables.set('quickCreateTraceFileUpload', String(stepTraceIds.FileUpload));",
+                      "if (stepTraceIds.DraftExtract) pm.collectionVariables.set('quickCreateTraceDraftExtract', String(stepTraceIds.DraftExtract));",
+                      "if (stepTraceIds.TicketFinalize) pm.collectionVariables.set('quickCreateTraceTicketFinalize', String(stepTraceIds.TicketFinalize));",
+                      "if (stepTraceIds.SheetLink) pm.collectionVariables.set('quickCreateTraceSheetLink', String(stepTraceIds.SheetLink));",
+                      "",
+                      "var traceId = j.traceId || j.TraceId;",
+                      "if (traceId) pm.collectionVariables.set('lastTraceId', String(traceId));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  },
+                  {
+                    "key": "X-IND-EntraOid",
+                    "value": "{{entraOid}}"
+                  },
+                  {
+                    "key": "X-IND-Context-Version",
+                    "value": "{{contextVersion}}"
+                  },
+                  {
+                    "key": "X-IND-Permissions-Revision",
+                    "value": "{{permissionsRevision}}"
+                  },
+                  {
+                    "key": "X-IND-Context-Token",
+                    "value": "{{contextToken}}"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "ticketImage",
+                      "type": "file",
+                      "value": null
+                    },
+                    {
+                      "key": "currencyCode",
+                      "value": "EUR",
+                      "type": "text"
+                    },
+                    {
+                      "key": "description",
+                      "value": "Quick create ticket",
+                      "type": "text"
+                    },
+                    {
+                      "key": "comentario",
+                      "value": "Quick create from Postman V28",
+                      "type": "text"
+                    },
+                    {
+                      "key": "existingHojaGastosId",
+                      "value": "",
+                      "type": "text"
+                    },
+                    {
+                      "key": "projectId",
+                      "value": "",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/quick-create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "crm",
+                    "expensesheets",
+                    "tickets",
+                    "quick-create"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "Create Ticket - Header + Lines (mode 0)",
               "request": {
                 "method": "POST",
@@ -1196,7 +1659,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"mode\":  0,\r\n    \"description\":  \"Ticket restaurante\",\r\n    \"totalAmount\":  32.5,\r\n    \"fileExtension\":  \"jpg\",\r\n    \"transDate\":  \"20260225\",\r\n    \"comentario\":  \"Consumo cliente\",\r\n    \"lines\":  [\r\n                  {\r\n                      \"price\":  20,\r\n                      \"description\":  \"Menu ejecutivo\",\r\n                      \"totalAmount\":  20,\r\n                      \"qty\":  1\r\n                  },\r\n                  {\r\n                      \"price\":  12.5,\r\n                      \"description\":  \"Bebida\",\r\n                      \"totalAmount\":  12.5,\r\n                      \"qty\":  1\r\n                  }\r\n              ],\r\n    \"urlFile\":  \"https://\\u003cblob-url\\u003e/tickets/sample.jpg\",\r\n    \"currencyCode\":  \"EUR\"\r\n}"
+                  "raw": "{\n  \"mode\": 0,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket restaurante\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 32.5,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Consumo cliente\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Menu ejecutivo\",\n      \"qty\": 1,\n      \"price\": 20,\n      \"totalAmount\": 20\n    },\n    {\n      \"description\": \"Bebida\",\n      \"qty\": 1,\n      \"price\": 12.5,\n      \"totalAmount\": 12.5\n    }\n  ]\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1267,7 +1730,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"transDate\":  \"20260225\",\r\n    \"comentario\":  \"Solo cabecera\",\r\n    \"fileExtension\":  \"jpg\",\r\n    \"urlFile\":  \"https://\\u003cblob-url\\u003e/tickets/header-only.jpg\",\r\n    \"description\":  \"Ticket sin detalle\",\r\n    \"mode\":  1,\r\n    \"totalAmount\":  15,\r\n    \"currencyCode\":  \"EUR\"\r\n}"
+                  "raw": "{\n  \"mode\": 1,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket sin detalle\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 8,\n  \"totalAmount\": 15,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Solo cabecera\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": []\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1308,7 +1771,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"lines\":  [\r\n                  {\r\n                      \"price\":  5,\r\n                      \"description\":  \"Postre\",\r\n                      \"totalAmount\":  5,\r\n                      \"qty\":  1\r\n                  }\r\n              ],\r\n    \"existingFileId\":  \"{{fileId}}\",\r\n    \"mode\":  2\r\n}"
+                  "raw": "{\n  \"mode\": 2,\n  \"existingFileId\": \"{{fileId}}\",\n  \"description\": \"\",\n  \"currencyCode\": \"\",\n  \"gastoType\": null,\n  \"totalAmount\": null,\n  \"transDate\": \"\",\n  \"comentario\": \"\",\n  \"urlFile\": \"\",\n  \"fileExtension\": \"\",\n  \"lines\": [\n    {\n      \"description\": \"Postre\",\n      \"qty\": 1,\n      \"price\": 5,\n      \"totalAmount\": 5\n    }\n  ]\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1331,7 +1794,6 @@
                 {
                   "listen": "test",
                   "script": {
-                    "type": "text/javascript",
                     "exec": [
                       "pm.test('Status success', function () {",
                       "  pm.expect(pm.response.code).to.eql(200);",
@@ -1356,6 +1818,11 @@
                       "  pm.expect(typeof processed).to.eql('boolean');",
                       "});",
                       "",
+                      "var gastoType = (d.GastoType !== undefined) ? d.GastoType : d.gastoType;",
+                      "pm.test('GastoType is integer or null', function () {",
+                      "  pm.expect(gastoType === undefined || gastoType === null || Number.isInteger(gastoType)).to.eql(true);",
+                      "});",
+                      "",
                       "var persistedTicketFileId = pm.collectionVariables.get('persistedTicketFileId') || '';",
                       "if (persistedTicketFileId && fileId && persistedTicketFileId === fileId) {",
                       "  pm.test('ProcessedByAI true for persisted IA ticket', function () {",
@@ -1371,7 +1838,10 @@
                       "",
                       "var traceId = j.traceId || j.TraceId;",
                       "if (traceId) pm.collectionVariables.set('lastTraceId', String(traceId));"
-                    ]
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -1427,11 +1897,27 @@
                   {
                     "key": "X-IND-AxUserId",
                     "value": "{{axUserId}}"
+                  },
+                  {
+                    "key": "X-IND-EntraOid",
+                    "value": "{{entraOid}}"
+                  },
+                  {
+                    "key": "X-IND-Context-Version",
+                    "value": "{{contextVersion}}"
+                  },
+                  {
+                    "key": "X-IND-Permissions-Revision",
+                    "value": "{{permissionsRevision}}"
+                  },
+                  {
+                    "key": "X-IND-Context-Token",
+                    "value": "{{contextToken}}"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"filter\":  \"\",\r\n    \"status\":  0,\r\n    \"pageSize\":  50,\r\n    \"page\":  1\r\n}"
+                  "raw": "{\n    \"page\": 1,\n    \"pageSize\": 10,\n    \"createdDateFrom\": \"05.02.2026\",\n    \"createdDateTo\": \"05.05.2026\",\n    \"gastoType\": null,\n    \"processedByAI\": null,\n    \"status\": null\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/list",
@@ -1445,7 +1931,140 @@
                     "tickets",
                     "list"
                   ]
-                }
+                },
+                "description": "Lista generica de tickets. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, Status, ProcessedByAI, CurrencyCode, TotalAmount, TransDate, FileName y GastoType."
+              },
+              "response": []
+            },
+            {
+              "name": "List Tickets for Linking",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"page\": 1,\n  \"pageSize\": 20,\n  \"searchKey\": \"\",\n  \"filter\": \"\",\n  \"createdDateFrom\": \"\",\n  \"createdDateTo\": \"\",\n  \"currencyCode\": \"\",\n  \"gastoType\": null,\n  \"processedByAI\": null\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/link/list",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "crm",
+                    "expensesheets",
+                    "tickets",
+                    "link",
+                    "list"
+                  ]
+                },
+                "description": "Lista especifica para vinculacion. Sale prefiltrada por status Pending y totalAmount distinto de cero. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, CurrencyCode, TotalAmount, TransDate, FileName, ProcessedByAI y GastoType."
+              },
+              "response": []
+            },
+            {
+              "name": "Bulk Link Tickets to Expense Sheet (selected)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"expenseSheetId\": \"{{expenseSheetId}}\",\n  \"selectionMode\": \"selected\",\n  \"ticketIds\": [\n    \"{{fileId}}\"\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/link/bulk",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "crm",
+                    "expensesheets",
+                    "tickets",
+                    "link",
+                    "bulk"
+                  ]
+                },
+                "description": "Vincula tickets seleccionados manualmente a una hoja existente. Compatibilidad backward: si se omite selectionMode, el backend asume selected. La vinculacion reutiliza createExpenseSheet en modo 2 y soporta resultados parciales."
+              },
+              "response": []
+            },
+            {
+              "name": "Bulk Link Tickets to Expense Sheet (filtered)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{tokenId}}"
+                  },
+                  {
+                    "key": "X-IND-Company",
+                    "value": "{{companyId}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-IND-AxUserId",
+                    "value": "{{axUserId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"expenseSheetId\": \"{{expenseSheetId}}\",\n  \"selectionMode\": \"filtered\",\n  \"filters\": {\n    \"searchKey\": \"\",\n    \"filter\": \"\",\n    \"createdDateFrom\": \"\",\n    \"createdDateTo\": \"\",\n    \"currencyCode\": \"\",\n    \"gastoType\": null,\n    \"processedByAI\": null\n  },\n  \"excludedIds\": []\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/link/bulk",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "crm",
+                    "expensesheets",
+                    "tickets",
+                    "link",
+                    "bulk"
+                  ]
+                },
+                "description": "Resuelve tickets candidatos desde backend usando la misma logica base de tickets/link/list. Aplica status Pending, totalAmount distinto de cero, filtros por createdDate basados en ticketHeader.createdDate y permite excludedIds para desmarcar tickets tras seleccionar todo."
               },
               "response": []
             },
@@ -1473,7 +2092,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"transDate\":  \"20260225\",\r\n    \"comentario\":  \"Comentario update\",\r\n    \"urlFile\":  \"https://\\u003cblob-url\\u003e/tickets/updated.jpg\",\r\n    \"description\":  \"Ticket actualizado\",\r\n    \"status\":  0,\r\n    \"fileExtension\":  \"jpg\",\r\n    \"totalAmount\":  37.5,\r\n    \"currencyCode\":  \"EUR\"\r\n}"
+                  "raw": "{\n  \"description\": \"Ticket actualizado\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 37.5,\n  \"status\": 0,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Comentario update\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"processedByAI\": false,\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}",
@@ -1557,7 +2176,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"Success\": true,\n    \"Message\": \"OK\",\n    \"Data\": {\n        \"Confidence\": 0.9,\n        \"Warnings\": [\n            \"transDate inferred from receipt text, may be uncertain\"\n        ],\n        \"RawCurrency\": \"Euro\",\n        \"Merchant\": \"Cafe Teatre\",\n        \"userId\": \"\",\n        \"mode\": 0,\n        \"description\": \"Café Teatre expense\",\n        \"currencyCode\": \"EUR\",\n        \"lines\": [\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 5,\n                \"description\": \"Pinchos Patatas\",\n                \"internacional\": false,\n                \"qty\": 1.0,\n                \"price\": 7.2\n            },\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 5,\n                \"description\": \"Bacon Huevos Patatas\",\n                \"internacional\": false,\n                \"qty\": 2.0,\n                \"price\": 6.8\n            },\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 5,\n                \"description\": \"Pollo Huevos Patatas\",\n                \"internacional\": false,\n                \"qty\": 1.0,\n                \"price\": 7.0\n            },\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 8,\n                \"description\": \"Refresco lata\",\n                \"internacional\": false,\n                \"qty\": 1.0,\n                \"price\": 1.5\n            },\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 8,\n                \"description\": \"Varios\",\n                \"internacional\": false,\n                \"qty\": 3.0,\n                \"price\": 1.5\n            },\n            {\n                \"transDate\": \"20120907\",\n                \"typeValue\": 5,\n                \"description\": \"Cortado\",\n                \"internacional\": false,\n                \"qty\": 2.0,\n                \"price\": 1.1\n            }\n        ]\n    },\n    \"TraceId\": \"d6749d8ab00842e8956abeb040fef572\"\n}"
+                  "raw": "{\n  \"description\": \"Cafe Teatre expense\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 11.7,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Procesado por IA\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Pinchos Patatas\",\n      \"qty\": 1.0,\n      \"price\": 7.2,\n      \"totalAmount\": 7.2\n    },\n    {\n      \"description\": \"Varios\",\n      \"qty\": 3.0,\n      \"price\": 1.5,\n      \"totalAmount\": 4.5\n    }\n  ]\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}/ia",
@@ -1600,7 +2219,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"price\":  9.99,\r\n    \"description\":  \"Linea nueva\",\r\n    \"totalAmount\":  9.99,\r\n    \"qty\":  1\r\n}"
+                  "raw": "{\n  \"description\": \"Linea nueva\",\n  \"qty\": 1,\n  \"price\": 9.99,\n  \"totalAmount\": 9.99\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}/lines",
@@ -1643,7 +2262,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n    \"price\":  8.5,\r\n    \"description\":  \"Linea editada\",\r\n    \"totalAmount\":  17,\r\n    \"qty\":  2\r\n}"
+                  "raw": "{\n  \"description\": \"Linea editada\",\n  \"qty\": 2,\n  \"price\": 8.5,\n  \"totalAmount\": 17\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}/lines/{{lineRecId}}",
@@ -1779,7 +2398,6 @@
                 {
                   "listen": "test",
                   "script": {
-                    "type": "text/javascript",
                     "exec": [
                       "pm.test('Status success', function () {",
                       "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
@@ -1806,7 +2424,10 @@
                       "",
                       "var traceId = j.traceId || j.TraceId;",
                       "if (traceId) pm.collectionVariables.set('lastTraceId', String(traceId));"
-                    ]
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -1830,9 +2451,9 @@
                   "mode": "formdata",
                   "formdata": [
                     {
-                      "key": "file",
+                      "key": "ticketFile",
                       "type": "file",
-                      "value": null
+                      "src": "postman-cloud:///1f108d70-4268-4460-9df1-b1e5c57a1c66"
                     }
                   ]
                 },
@@ -1996,6 +2617,39 @@
         },
         {
           "name": "List Expense Sheets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let requestBody = {};",
+                  "try {",
+                  "  requestBody = JSON.parse(pm.variables.replaceIn(pm.request.body && pm.request.body.raw ? pm.request.body.raw : \"{}\"));",
+                  "} catch (e) {",
+                  "  console.warn(\"No fue posible capturar el body del listado.\", e);",
+                  "}",
+                  "pm.collectionVariables.set(\"expenseSheetsListRequestJson\", JSON.stringify(requestBody, null, 2));",
+                  "",
+                  "try {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set(\"expenseSheetsListResponseJson\", JSON.stringify(json, null, 2));",
+                  "  const data = json && json.Data ? json.Data : (json && json.data ? json.data : null);",
+                  "  const items = data && Array.isArray(data.Items) ? data.Items : (Array.isArray(json.Items) ? json.Items : []);",
+                  "  pm.collectionVariables.set(\"expenseSheetsListItemsJson\", JSON.stringify(items, null, 2));",
+                  "  const traceId = json && (json.TraceId || json.traceId);",
+                  "  if (traceId) {",
+                  "    pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+                  "  }",
+                  "} catch (e) {",
+                  "  console.warn(\"No fue posible capturar el JSON de respuesta.\", e);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -2018,7 +2672,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"filter\": \"GASTO\",\n  \"page\": 1,\n  \"pageSize\": 50,\n  \"billedMode\": 0,\n  \"createdDateFrom\": \"20260101\",\n  \"createdDateTo\": \"20260228\",\n  \"projId\": \"\",\n  \"currencyCode\": \"\"\n}",
+              "raw": "{\n    \"filter\": \"\",\n    \"billedMode\": 2,\n    \"createdDateFrom\": \"01.01.2025\",\n    \"createdDateTo\": \"31.12.2026\",\n    \"expenseSheetStatus\": null,\n    \"page\": 1,\n    \"pageSize\": 6,\n    \"includeSubordinates\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2064,7 +2718,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"mode\":  0,\r\n    \"description\":  \"Gastos visita\",\r\n    \"currencyCode\":  \"EUR\",\r\n    \"exchRate\":  1,\r\n    \"projId\":  \"\",\r\n    \"expenseSheetStatus\":  0,\r\n    \"exchangeRateMode\":  0,\r\n    \"lines\":  [\r\n                  {\r\n                      \"transDate\":  \"20260115\",\r\n                      \"typeValue\":  5,\r\n                      \"description\":  \"Comida\",\r\n                      \"internacional\":  false,\r\n                      \"qty\":  1,\r\n                      \"price\":  25.5,\r\n                      \"projId\":  \"\",\r\n                                            \"fileId\":  \"\"\r\n                  },\r\n                  {\r\n                      \"transDate\":  \"20260115\",\r\n                      \"typeValue\":  2,\r\n                      \"description\":  \"Parking dia\",\r\n                      \"internacional\":  false,\r\n                      \"qty\":  1,\r\n                      \"price\":  45,\r\n                      \"projId\":  \"\",\r\n                                            \"fileId\":  \"\"\r\n                  },\r\n                  {\r\n                      \"transDate\":  \"20260115\",\r\n                      \"typeValue\":  7,\r\n                      \"description\":  \"Hotel\",\r\n                      \"internacional\":  false,\r\n                      \"qty\":  1,\r\n                      \"price\":  53,\r\n                      \"projId\":  \"\",\r\n                                            \"fileId\":  \"\"\r\n                  },\r\n                  {\r\n                      \"transDate\":  \"20260115\",\r\n                      \"typeValue\":  8,\r\n                      \"description\":  \"Materiales de presentacion\",\r\n                      \"internacional\":  false,\r\n                      \"qty\":  1,\r\n                      \"price\":  14.3,\r\n                      \"projId\":  \"\",\r\n                                            \"fileId\":  \"\"\r\n                  }\r\n              ]\r\n}"
+              "raw": "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"20260302\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/expensesheets",
@@ -2104,7 +2758,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"description\":  \"Gastos visita (actualizado)\",\r\n    \"currencyCode\":  \"EUR\",\r\n    \"exchRate\":  1,\r\n    \"projId\":  \"\",\r\n    \"expenseSheetStatus\":  0,\r\n    \"exchangeRateMode\":  0,\r\n    \"estadoComentarios\":  \"Pendiente de revision\"\r\n}"
+              "raw": "{\n    \"description\": \"PARADA VERANO-25 TEKNIA AMPUERO\",\n    \"currencyCode\": \"EUR\",\n    \"exchRate\": 1,\n    \"expenseSheetStatus\": 2,\n    \"exchangeRateMode\": 0,\n    \"estadoComentarios\": \"ok\"\n}\n/*{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"Pendiente de revision\"\n}*/"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/expensesheets/009998",
@@ -2145,7 +2799,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"transDate\":  \"20260115\",\r\n    \"typeValue\":  5,\r\n    \"description\":  \"Comida (actualizado)\",\r\n    \"internacional\":  false,\r\n    \"qty\":  1,\r\n    \"price\":  30.0,\r\n    \"projId\":  \"PRJ-001\",\r\n        \"fileId\":  \"\"\r\n}"
+              "raw": "{\n  \"transDate\": \"20260302\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",
@@ -2328,6 +2982,31 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Get MCP Tools",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/tools",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "tools"
+              ]
+            },
+            "description": "Catalogo MCP expuesto por la API para clientes integradores."
+          },
+          "response": []
         }
       ]
     }
@@ -2337,10 +3016,77 @@
       "listen": "prerequest",
       "script": {
         "type": "text/javascript",
-        "packages": {},
         "requests": {},
         "exec": [
-          ""
+          "// Inyecta los headers necesarios para la autenticacion actual sin duplicar configuracion por request.",
+          "(function () {",
+          "  function getVar(name) {",
+          "    var value = pm.collectionVariables.get(name);",
+          "    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();",
+          "    value = pm.environment.get(name);",
+          "    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();",
+          "    value = pm.globals.get(name);",
+          "    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();",
+          "    value = pm.variables.get(name);",
+          "    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();",
+          "    return \"\";",
+          "  }",
+          "",
+          "  function upsertHeader(key, value) {",
+          "    if (value === undefined || value === null || String(value).trim() === \"\") return;",
+          "    pm.request.headers.upsert({ key: key, value: String(value) });",
+          "  }",
+          "",
+          "  function clearContextVariables() {",
+          "    ['axUserId', 'axUserName', 'defaultCompanyId', 'defaultCurrencyCode', 'defaultLanguageId', 'defaultCompanyName', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc', 'availableCompaniesJson'].forEach(function (key) { pm.collectionVariables.set(key, key === 'availableCompaniesJson' ? '[]' : ''); });",
+          "  }",
+          "",
+          "  function isContextExpired(expiresUtc) {",
+          "    if (!expiresUtc) return false;",
+          "    var expiresMs = Date.parse(expiresUtc);",
+          "    return !isNaN(expiresMs) && expiresMs <= Date.now() + 60000;",
+          "  }",
+          "",
+          "  function getRawUrl() {",
+          "    if (!pm.request || !pm.request.url) return \"\";",
+          "    if (typeof pm.request.url.toString === \"function\") return pm.request.url.toString();",
+          "    return pm.request.url.raw || \"\";",
+          "  }",
+          "",
+          "  var rawUrl = getRawUrl();",
+          "  var resolvedUrl = pm.variables.replaceIn(rawUrl || \"\");",
+          "  var baseUrl = getVar(\"baseUrl\");",
+          "  var resolvedBaseUrl = baseUrl ? pm.variables.replaceIn(baseUrl) : \"\";",
+          "  var requestPath = resolvedUrl;",
+          "  if (resolvedBaseUrl && requestPath.indexOf(resolvedBaseUrl) === 0) requestPath = requestPath.substring(resolvedBaseUrl.length);",
+          "  else requestPath = requestPath.replace(/^https?:\\/\\/[^/]+/i, \"\");",
+          "  requestPath = requestPath || \"/\";",
+          "  var pathOnly = requestPath.split(\"?\")[0];",
+          "  var isApiRequest = pathOnly.indexOf(\"/api/\") === 0 || resolvedUrl.indexOf(\"/api/\") >= 0;",
+          "  var requiresCompanyContext = pathOnly.indexOf(\"/api/crm/\") === 0 || resolvedUrl.indexOf(\"/api/crm/\") >= 0 || pathOnly === \"/api/ia/service/expensesheets/ask\" || pathOnly === \"/api/ia/service/expensefromticket\" || resolvedUrl.indexOf(\"/api/ia/service/expensesheets/ask\") >= 0 || resolvedUrl.indexOf(\"/api/ia/service/expensefromticket\") >= 0;",
+          "  var isLogin = pathOnly === \"/api/auth/login\";",
+          "",
+          "  if (isApiRequest && !isLogin) {",
+          "    var token = getVar(\"tokenId\");",
+          "    if (token) upsertHeader(\"Authorization\", \"Bearer \" + token);",
+          "  }",
+          "",
+          "  var contextExpired = requiresCompanyContext && isContextExpired(getVar(\"contextExpiresUtc\"));",
+          "  if (contextExpired) {",
+          "    clearContextVariables();",
+          "    console.warn(\"Contexto Entra local expirado. Ejecuta Auth / Entra Context antes de reintentar.\");",
+          "  }",
+          "",
+          "  if (requiresCompanyContext && !contextExpired) {",
+          "    console.log(\"IND request context\", { path: pathOnly, companyId: getVar(\"companyId\"), axUserId: getVar(\"axUserId\"), entraOid: getVar(\"entraOid\"), contextVersion: getVar(\"contextVersion\"), permissionsRevisionSet: !!getVar(\"permissionsRevision\"), contextTokenSet: !!getVar(\"contextToken\") });",
+          "    upsertHeader(\"X-IND-Company\", getVar(\"companyId\"));",
+          "    upsertHeader(\"X-IND-AxUserId\", getVar(\"axUserId\"));",
+          "    upsertHeader(\"X-IND-EntraOid\", getVar(\"entraOid\"));",
+          "    upsertHeader(\"X-IND-Context-Version\", getVar(\"contextVersion\"));",
+          "    upsertHeader(\"X-IND-Permissions-Revision\", getVar(\"permissionsRevision\"));",
+          "    upsertHeader(\"X-IND-Context-Token\", getVar(\"contextToken\"));",
+          "  }",
+          "})();"
         ]
       }
     },
@@ -2351,7 +3097,20 @@
         "packages": {},
         "requests": {},
         "exec": [
-          ""
+          "// Captura el ultimo traceId disponible para facilitar diagnostico manual en Postman.",
+          "try {",
+          "  var payload = pm.response.json();",
+          "  var traceId = payload && (payload.traceId || payload.TraceId);",
+          "  if (traceId) pm.collectionVariables.set(\"lastTraceId\", String(traceId));",
+          "  var errorCode = payload && String(payload.errorCode || payload.ErrorCode || \"\");",
+          "  if (pm.response && pm.response.code >= 400) console.warn(\"IND API error\", { status: pm.response.code, errorCode: errorCode, message: payload && (payload.message || payload.Message), traceId: traceId });",
+          "  if (errorCode === \"AUTH_CONTEXT_REQUIRED\" || errorCode === \"AUTH_CONTEXT_STALE\") {",
+          "    ['axUserId', 'axUserName', 'defaultCompanyId', 'defaultCurrencyCode', 'defaultLanguageId', 'defaultCompanyName', 'contextToken', 'contextVersion', 'permissionsRevision', 'contextIssuedUtc', 'contextExpiresUtc', 'availableCompaniesJson'].forEach(function (key) { pm.collectionVariables.set(key, key === 'availableCompaniesJson' ? '[]' : ''); });",
+          "    console.warn(\"La API rechazo el contexto Entra. Ejecuta Auth / Entra Context y reintenta la llamada.\");",
+          "  }",
+          "} catch (e) {",
+          "  // Algunas respuestas no son JSON. No interrumpir la ejecucion.",
+          "}"
         ]
       }
     }
@@ -2359,7 +3118,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://crm.insertec.biz:7776"
+      "value": "https://dev.insertec.biz:2083"
     },
     {
       "key": "tokenId",
@@ -2368,6 +3127,10 @@
     {
       "key": "companyId",
       "value": "TAZ"
+    },
+    {
+      "key": "defaultCompanyId",
+      "value": ""
     },
     {
       "key": "axUserId",
@@ -2380,6 +3143,30 @@
     {
       "key": "entraOid",
       "value": ""
+    },
+    {
+      "key": "contextToken",
+      "value": ""
+    },
+    {
+      "key": "contextVersion",
+      "value": ""
+    },
+    {
+      "key": "permissionsRevision",
+      "value": ""
+    },
+    {
+      "key": "contextIssuedUtc",
+      "value": ""
+    },
+    {
+      "key": "contextExpiresUtc",
+      "value": ""
+    },
+    {
+      "key": "availableCompaniesJson",
+      "value": "[]"
     },
     {
       "key": "appCode",
@@ -2395,6 +3182,10 @@
     },
     {
       "key": "fileId",
+      "value": ""
+    },
+    {
+      "key": "expenseSheetId",
       "value": ""
     },
     {
@@ -2419,6 +3210,34 @@
     },
     {
       "key": "lastTraceId",
+      "value": ""
+    },
+    {
+      "key": "expenseSheetsListRequestJson",
+      "value": "{\n  \"filter\": \"\",\n  \"billedMode\": 2,\n  \"createdDateFrom\": \"01.01.2025\",\n  \"createdDateTo\": \"31.12.2026\",\n  \"expenseSheetStatus\": null,\n  \"page\": 1,\n  \"pageSize\": 6,\n  \"includeSubordinates\": true\n}"
+    },
+    {
+      "key": "expenseSheetsListResponseJson",
+      "value": "{\n  \"Success\": true,\n  \"Message\": \"OK\",\n  \"Data\": {\n    \"Items\": [],\n    \"Total\": 0\n  },\n  \"TraceId\": \"\"\n}"
+    },
+    {
+      "key": "expenseSheetsListItemsJson",
+      "value": "[]"
+    },
+    {
+      "key": "expenseSheetsAiLastResponseJson",
+      "value": "{}"
+    },
+    {
+      "key": "axUserName",
+      "value": ""
+    },
+    {
+      "key": "defaultLanguageId",
+      "value": ""
+    },
+    {
+      "key": "defaultCompanyName",
       "value": ""
     }
   ]
