@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Miércoles 22/04/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 07/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -1968,6 +1968,7 @@ Formatversion: 1
         #                                                     ]);
         #
         #        while select line
+        #        order by createdDate DESC
         #            where line.UserId       == crmUserId
         #               && line.HojaGastosId == hojaId
         #        {
@@ -2266,6 +2267,7 @@ Formatversion: 1
         #                                                     ]);
         #
         #        while select ticketLine
+        #          order by createdDate DESC
         #            where ticketLine.FileId        == ticketHeader.FileId
         #               && ticketLine.RefRecIdTable == ticketHeader.RecId
         #        {
@@ -2393,7 +2395,7 @@ Formatversion: 1
         #            return conResult;
         #
         #        while select ticketHeader
-        #            order by RecId desc
+        #            order by createdDate DESC
         #            where ticketHeader.CreatedByUserId == axUserId
         #               && ticketHeader.Status          == pendingStatus
         #               && ticketHeader.TotalAmount     != 0
@@ -2544,7 +2546,7 @@ Formatversion: 1
         #            return conResult;
         #
         #        while select ticketHeader
-        #            order by RecId desc
+        #            order by createdDate DESC
         #            where ticketHeader.CreatedByUserId == axUserId
         #               && (!hasStatusFilter       || ticketHeader.Status == statusFilter)
         #               && (!filterTxt             || ticketHeader.SearchKey like likePattern )

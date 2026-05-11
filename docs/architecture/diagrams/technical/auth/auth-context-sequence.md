@@ -1,0 +1,63 @@
+# Auth and context sequence
+
+The login/context flow combines Entra sign-in for the web app, an API JWT for
+`IND_CRM_API`, and a CRM context token that carries company and module access.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Browser as Browser
+  participant WebApp as IND_CRM_APP
+  participant Entra as Entra ID
+  participant Session as Web session
+  participant Client as ApiClientService
+  participant ApiAuth as IND_CRM_API AuthController
+  participant Guard as API auth/context services
+  participant Bc as Business Connector COM
+  participant Ax as Axapta 3.0
+
+  Browser->>WebApp: Start login or open CRM page
+  WebApp->>Entra: OIDC challenge
+  Entra-->>WebApp: ID token and claims
+  WebApp->>Session: Store cookie session and Entra OID
+
+  alt API token missing or expired
+    WebApp->>Client: Request API token
+    Client->>ApiAuth: POST /api/auth/login or /api/auth/refresh
+    ApiAuth->>Bc: Validate Axapta session
+    Bc->>Ax: Authenticate AX user
+    Ax-->>Bc: Auth result
+    Bc-->>ApiAuth: Session valid
+    ApiAuth-->>Client: IndApiResponse(token)
+    Client-->>Session: Store API token metadata
+  end
+
+  WebApp->>Client: Ensure CRM context
+  Client->>ApiAuth: POST /api/auth/entra/context<br/>Authorization + Entra OID + app code
+  ApiAuth->>Guard: Validate JWT, Entra OID, app code
+  Guard->>Bc: Execute loginEntraContext
+  Bc->>Ax: INDCRMUtilityService.loginEntraContext
+  Ax-->>Bc: Companies, modules, AX user, defaults
+  Bc-->>Guard: Context data
+  Guard-->>ApiAuth: Signed context token and revisions
+  ApiAuth-->>Client: IndPagedResponse(EntraContextDto)
+  Client-->>Session: Store company, AX user, context token, revisions
+  WebApp-->>Browser: Render CRM page or return context JSON
+
+  Note over Client,ApiAuth: Later CRM requests include:<br/>Authorization: Bearer token<br/>X-IND-Company<br/>X-IND-AxUserId<br/>X-IND-EntraOid<br/>X-IND-Context-Version<br/>X-IND-Permissions-Revision<br/>X-IND-Context-Token
+```
+
+## Contracts observed
+
+- `POST /api/auth/login` returns a token envelope after Axapta credential
+  validation.
+- `POST /api/auth/refresh` refreshes the API JWT.
+- `POST /api/auth/entra/context` returns `IndPagedResponse<EntraContextDto>`
+  with context metadata, companies, modules, default company, default
+  currency, and AX user.
+
+## Pending validation
+
+The exact path used to rehydrate an API JWT after an Entra-only browser login
+depends on runtime session state and configuration. It is pendiente de
+validar for every deployment profile.

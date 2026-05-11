@@ -1,0 +1,56 @@
+# User flow: audio transcription
+
+Technical source:
+[ai-audio-transcription-sequence.md](../../technical/ai/ai-audio-transcription-sequence.md)
+
+This is the user-level version of the technical audio transcription diagram.
+It keeps the same decisions and outcomes, but uses simpler labels.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User as Usuario
+  participant Screen as Pantalla de audio
+  participant System as Sistema CRM<br/>(aplicacion que coordina)
+  participant Limit as Control de uso<br/>(evita exceso de IA)
+  participant Voice as IA de voz<br/>(convierte audio en texto)
+  participant Review as Revision de contenido<br/>(comprueba si el texto es aceptable)
+  participant OpenAI as OpenAI<br/>(servicio externo de IA)
+
+  User->>Screen: Selecciona audio e idioma
+  Screen->>System: Envia el audio para transcribir
+  System->>Limit: Comprueba limite de uso<br/>y si ya hay otra IA en curso
+
+  alt Se supera el limite de uso
+    Limit-->>System: Bloquea temporalmente la solicitud
+    System-->>Screen: Mensaje para intentar mas tarde
+    Screen-->>User: Muestra aviso de limite
+  else Solicitud permitida
+    Limit->>System: Permite continuar
+    System->>System: Comprueba formato, tamano<br/>e idioma del audio
+    System->>System: Prepara instrucciones opcionales<br/>(contexto para mejorar el texto)
+    System->>Voice: Pide convertir audio a texto
+    Voice->>OpenAI: Envia audio al servicio de IA
+    OpenAI-->>Voice: Devuelve texto transcrito
+    Voice-->>System: Entrega solo el texto
+    System->>Review: Revisa el texto generado
+    Review->>OpenAI: Pide moderacion<br/>(revision automatica de contenido)
+    OpenAI-->>Review: Resultado de la revision
+
+    alt Texto rechazado
+      Review-->>System: Contenido no aceptado
+      System-->>Screen: Mensaje de rechazo
+      Screen-->>User: Informa que no se puede usar el texto
+    else Texto aceptado
+      Review-->>System: Contenido aceptado
+      System-->>Screen: Texto transcrito<br/>y referencia de seguimiento
+      Screen-->>User: Muestra la transcripcion
+    end
+  end
+```
+
+## User-level explanation
+
+The user sends an audio file and receives text back. The system first checks
+usage limits and file rules. Then AI converts the audio into text, and a second
+AI review checks whether the generated text can be returned to the user.
