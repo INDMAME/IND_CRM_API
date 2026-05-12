@@ -106,6 +106,10 @@ namespace IND_CRM_API.Contracts.Responses
         public bool LinkedToSheet { get; set; }
         public string HojaGastosId { get; set; }
         public string CompletedStage { get; set; }
+        public string FailedStage { get; set; }
+        public bool? RollbackAttempted { get; set; }
+        public bool? RollbackSucceeded { get; set; }
+        public string RollbackMessage { get; set; }
         public ExpenseSheetTicketQuickCreateStepTraceIdsDto StepTraceIds { get; set; }
     }
 

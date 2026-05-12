@@ -351,6 +351,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Servicio IA no disponible", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
         {
@@ -369,6 +370,8 @@ namespace IND_CRM_API.Controllers.CRM
             long? draftMs = null;
             long? finalizeMs = null;
             long? linkMs = null;
+            AxaptaComSession ax = null;
+            string username = null;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -410,6 +413,36 @@ namespace IND_CRM_API.Controllers.CRM
                     $"hojaGastosId={ToLogValue(resultData.HojaGastosId)} message={ToLogValue(message)}");
             }
 
+            void RollbackQuickCreateIfNeeded(string failedStage, string reason)
+            {
+                resultData.FailedStage = failedStage;
+                if (string.IsNullOrWhiteSpace(resultData.FileId))
+                    return;
+
+                if (resultData.RollbackAttempted == true)
+                    return;
+
+                if (ax == null)
+                {
+                    resultData.RollbackAttempted = false;
+                    resultData.RollbackSucceeded = false;
+                    resultData.RollbackMessage = "Rollback no ejecutado: no hay sesion AX disponible.";
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=skipped failedStage={ToLogValue(failedStage)} reason=no-ax-session fileId={ToLogValue(resultData.FileId)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                    return;
+                }
+
+                TryRollbackQuickCreatePartialTicket(
+                    ax,
+                    company,
+                    axUserId,
+                    resultData,
+                    failedStage,
+                    reason,
+                    traceId);
+            }
+
             try
             {
                 var readFormStageTraceId = Guid.NewGuid().ToString("N");
@@ -435,7 +468,7 @@ namespace IND_CRM_API.Controllers.CRM
                     readFormMs,
                     $"multipart-ok fileName={quickCreateForm.OriginalFileName} imageBytes={quickCreateForm.ImageBytes?.Length ?? 0}");
 
-                var username = GetAuthenticatedUsername();
+                username = GetAuthenticatedUsername();
                 var createStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.TicketCreate = createStepTraceId;
                 resultData.HojaGastosId = string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId)
@@ -465,7 +498,7 @@ namespace IND_CRM_API.Controllers.CRM
                     lines = null
                 };
 
-                var ax = _sessionManager.GetAxInstanceForUser(username);
+                ax = _sessionManager.GetAxInstanceForUser(username);
                 var createSw = DiagnosticsStopwatch.StartNew();
                 if (!TryCreateQuickCreateProvisionalTicket(
                         ax,
@@ -521,6 +554,7 @@ namespace IND_CRM_API.Controllers.CRM
                         "deny",
                         uploadMs,
                         uploadMessage);
+                    RollbackQuickCreateIfNeeded("file-upload", uploadMessage);
                     LogOut(uploadStatus);
                     return Content(uploadStatus, BuildQuickCreateErrorResponse(
                         traceId,
@@ -570,6 +604,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.Message);
                     LogOut((HttpStatusCode)429);
                     return BuildQuickCreateTooManyRequests(
                         traceId,
@@ -583,6 +618,7 @@ namespace IND_CRM_API.Controllers.CRM
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.UserMessage);
                     Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft external service={ex.ServiceName} summary={ex.ProviderSummary} traceId={traceId}");
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.UserMessage);
                     LogOut(ex.StatusCode);
                     return Content(ex.StatusCode, BuildQuickCreateErrorResponse(
                         traceId,
@@ -595,6 +631,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, "Timeout o cancelacion.");
+                    RollbackQuickCreateIfNeeded("draft-extract", "Timeout o cancelacion.");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -608,6 +645,7 @@ namespace IND_CRM_API.Controllers.CRM
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
                     Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft: {ex}");
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.Message);
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -621,6 +659,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (draft == null)
                 {
+                    RollbackQuickCreateIfNeeded("draft-extract", "No se pudo generar el borrador desde el ticket.");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -666,6 +705,9 @@ namespace IND_CRM_API.Controllers.CRM
                                 "deny",
                                 finalizeMs,
                                 headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.");
+                            RollbackQuickCreateIfNeeded(
+                                "ticket-finalize-header-only",
+                                headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.");
                             LogOut(headerApplyStatus);
                             return Content(headerApplyStatus, BuildQuickCreateErrorResponse(
                                 traceId,
@@ -696,6 +738,7 @@ namespace IND_CRM_API.Controllers.CRM
                         });
                     }
 
+                    RollbackQuickCreateIfNeeded("draft-validation", "Error de validacion.");
                     LogOut((HttpStatusCode)422);
                     return Content((HttpStatusCode)422, BuildQuickCreateErrorResponse(
                         traceId,
@@ -726,6 +769,9 @@ namespace IND_CRM_API.Controllers.CRM
                         finalizeStepTraceId,
                         "deny",
                         finalizeMs,
+                        applyError?.Message ?? "No se pudo finalizar el ticket.");
+                    RollbackQuickCreateIfNeeded(
+                        "ticket-finalize",
                         applyError?.Message ?? "No se pudo finalizar el ticket.");
                     LogOut(applyStatus);
                     return Content(applyStatus, BuildQuickCreateErrorResponse(
@@ -760,6 +806,7 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         linkMs = linkSw.ElapsedMilliseconds;
                         LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkedTicketMessage);
+                        RollbackQuickCreateIfNeeded("sheet-link", linkedTicketMessage);
                         LogOut(linkedTicketStatus);
                         return Content(linkedTicketStatus, BuildQuickCreateErrorResponse(
                             traceId,
@@ -783,6 +830,7 @@ namespace IND_CRM_API.Controllers.CRM
                         linkMs = linkSw.ElapsedMilliseconds;
                         LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkMessage);
                         var linkError = BuildExpenseSheetActionError(linkMessage, traceId, out _);
+                        RollbackQuickCreateIfNeeded("sheet-link", linkMessage);
                         LogOut(linkStatus);
                         return Content(linkStatus, BuildQuickCreateErrorResponse(
                             traceId,
@@ -813,6 +861,7 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket: {ex}");
+                RollbackQuickCreateIfNeeded("quick-create-unhandled", ex.Message);
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                     traceId,
@@ -3204,6 +3253,121 @@ namespace IND_CRM_API.Controllers.CRM
                 return "multipart-buffering";
 
             return "multipart-read-failed";
+        }
+
+        // Compensates a failed quick-create by deleting the uploaded blob and the provisional AX ticket.
+        private bool TryRollbackQuickCreatePartialTicket(
+            AxaptaComSession ax,
+            string company,
+            string axUserId,
+            ExpenseSheetTicketQuickCreateResultDto data,
+            string failedStage,
+            string reason,
+            string traceId)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.FileId))
+                return true;
+
+            data.RollbackAttempted = true;
+            data.RollbackSucceeded = false;
+
+            var fileId = data.FileId.Trim();
+            var rollbackMessages = new List<string>();
+            var blobDeleteFailed = false;
+            var blobDeleteAttempted = false;
+            var blobDeleted = false;
+            var ticketDeleted = false;
+
+            Logger.Log(
+                $"[QUICKCREATE-ROLLBACK] stage=begin failedStage={ToLogValue(failedStage)} completedStage={ToLogValue(data.CompletedStage)} fileId={ToLogValue(fileId)} reason={ToLogValue(reason)} traceId={traceId}");
+
+            var rollbackUrl = (data.UrlFile ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(rollbackUrl) &&
+                !rollbackUrl.StartsWith("pending://", StringComparison.OrdinalIgnoreCase))
+            {
+                blobDeleteAttempted = true;
+                try
+                {
+                    blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(rollbackUrl);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=allow deleted={blobDeleted} fileId={ToLogValue(fileId)} traceId={traceId}");
+                }
+                catch (Exception ex)
+                {
+                    blobDeleteFailed = true;
+                    rollbackMessages.Add("blob-delete failed");
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+            }
+            else
+            {
+                Logger.Log(
+                    $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=skipped fileId={ToLogValue(fileId)} traceId={traceId}");
+            }
+
+            try
+            {
+                var deleteCon = ax.CreateContainer();
+                deleteCon.Append(company);
+                deleteCon.Append(axUserId);
+                deleteCon.Append(fileId);
+
+                var deleteResultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "deleteExpenseSheetTicket",
+                    deleteCon);
+
+                if (!TryReadHeader(deleteResultObj as IAxaptaContainer, out var deleteSuccess, out var deleteMessage, out _, out _))
+                {
+                    rollbackMessages.Add("ticket-delete response parse failed");
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny reason=parse-response fileId={ToLogValue(fileId)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+                else if (deleteSuccess)
+                {
+                    ticketDeleted = true;
+                    if (!string.IsNullOrWhiteSpace(deleteMessage))
+                        rollbackMessages.Add(deleteMessage);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=allow fileId={ToLogValue(fileId)} message={ToLogValue(deleteMessage)} traceId={traceId}");
+                }
+                else
+                {
+                    rollbackMessages.Add(string.IsNullOrWhiteSpace(deleteMessage)
+                        ? "ticket-delete failed"
+                        : deleteMessage);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny fileId={ToLogValue(fileId)} message={ToLogValue(deleteMessage)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                rollbackMessages.Add("ticket-delete exception");
+                Logger.Log(
+                    $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+            }
+
+            var rollbackSucceeded = !blobDeleteFailed && ticketDeleted;
+            var blobSummary = blobDeleteAttempted
+                ? "blobDeleted=" + blobDeleted.ToString()
+                : "blobDeleted=skipped";
+            var ticketSummary = "ticketDeleted=" + ticketDeleted.ToString();
+            var detailMessage = string.Join("; ", rollbackMessages.Where(x => !string.IsNullOrWhiteSpace(x)));
+            data.RollbackSucceeded = rollbackSucceeded;
+            data.RollbackMessage = string.IsNullOrWhiteSpace(detailMessage)
+                ? blobSummary + "; " + ticketSummary
+                : blobSummary + "; " + ticketSummary + "; " + detailMessage;
+
+            Logger.Log(
+                $"[QUICKCREATE-ROLLBACK] stage=complete result={(rollbackSucceeded ? "allow" : "deny")} fileId={ToLogValue(fileId)} {blobSummary} {ticketSummary} failedStage={ToLogValue(failedStage)} traceId={traceId}",
+                rollbackSucceeded ? AxaptaSessionManager.LogLevel.Info : AxaptaSessionManager.LogLevel.Warning);
+
+            return rollbackSucceeded;
         }
 
         // Builds the standard quick-create error envelope, preserving partial data when available.

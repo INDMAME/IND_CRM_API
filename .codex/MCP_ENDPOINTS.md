@@ -195,8 +195,9 @@ Endpoints
   - Requerido: `ticketImage` (jpg/jpeg/png/webp, max 50 MB)
   - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projectId`
 - Flujo: crea ticket provisional, sube archivo, ejecuta OCR + normalizacion IA, finaliza ticket y opcionalmente lo vincula a una hoja existente.
-- Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `StepTraceIds`
-- Errores relevantes: 422 validacion, 429 limite IA, 500 error interno
+- En errores tras crear `FileId`, intenta rollback interno del blob y del ticket AX.
+- Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds`
+- Errores relevantes: 422 validacion, 429 limite IA, 503 servicio IA no disponible, 500 error interno
 
 ### Tool: crm_expensesheets_tickets_get
 - HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
