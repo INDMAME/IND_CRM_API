@@ -3296,7 +3296,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Creates the provisional ticket using the existing createExpenseSheetTicket AX contract.
         private bool TryCreateQuickCreateProvisionalTicket(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             CreateExpenseSheetTicketRequest body,
@@ -3444,7 +3444,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Uploads the ticket image and syncs the final blob URL into AX.
         private bool TryUploadQuickCreateTicketFile(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             byte[] imageBytes,
@@ -4067,7 +4067,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Updates ticket header and DocuRef data without replacing lines when quick-create cannot build valid detail rows.
         private bool TryApplyQuickCreateDraftHeaderCore(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -4206,7 +4206,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Executes the existing AX atomic replace flow used by UpdateExpenseSheetTicketFromIA.
         private bool TryApplyTicketFromIACore(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -4921,7 +4921,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Finalizes filename by calling AX updateExpenseSheetTicket with full stable values.
         private bool TryFinalizeTicketFileName(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5019,7 +5019,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Obtiene detalle de ticket desde AX validando ownership por company y axUserId.
         private bool TryGetTicketDetailFromAx(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5083,7 +5083,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Actualiza cabecera ticket en AX reutilizando valores existentes y sobreescribiendo URL/nombre de archivo.
         private bool TryUpdateTicketFromExisting(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5448,7 +5448,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Resolves the final candidate ids for bulk-link, either from explicit selection or from server-side filters.
         private static bool TryResolveBulkLinkTicketIds(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             BulkLinkExpenseSheetTicketsRequest body,
@@ -5515,7 +5515,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Builds the AX container used by the ticket-link list query.
         private static IAxaptaContainer BuildExpenseSheetTicketLinkListRequestContainer(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string searchKeyValue,
@@ -5598,7 +5598,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Loads target expense sheet data needed by the bulk-link flow.
         private static bool TryGetExpenseSheetTargetInfo(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string expenseSheetId,
@@ -5650,7 +5650,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Loads a ticket detail from AX for bulk-link validation.
         private static bool TryGetExpenseSheetTicketDetail(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5702,7 +5702,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Links one ticket into an existing expense sheet by reusing AX createExpenseSheet mode 2.
         private static bool TryLinkTicketToExpenseSheet(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string expenseSheetId,

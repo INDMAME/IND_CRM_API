@@ -235,11 +235,14 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
+    <Compile Include="Services\AxaptaComOptions.cs" />
+    <Compile Include="Services\AxaptaComSession.cs" />
     <Compile Include="Services\AxSession.cs" />
     <Compile Include="Services\AzureReceiptAnalyzerService.cs" />
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
     <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
+    <Compile Include="Services\ComPlusApplicationController.cs" />
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />

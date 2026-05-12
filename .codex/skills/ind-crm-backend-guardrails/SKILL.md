@@ -153,3 +153,37 @@ Recommended order when the task needs them:
 3. Current code and actual project structure
 4. Supporting skills
 5. General best practices
+
+## Política permanente: Axapta 3.0 Business Connector COM
+
+Toda llamada a Axapta 3.0 mediante Business Connector COM debe pasar por un wrapper central del proyecto.
+
+Reglas obligatorias:
+- El proyecto debe seguir en .NET Framework 4.8, Web API 2 / OWIN self-host y x86.
+- No usar DLL COM de versiones modernas de AX contra AOS Axapta 3.0.
+- No introducir multihilo, Task.Run, Parallel.ForEach ni ejecución concurrente contra COM/BC.
+- No crear clases nuevas con prefijo “IND”; preservar nombres existentes.
+- No mantener objetos Axapta, AxaptaRecord, AxaptaObject ni AxaptaContainer vivos fuera del scope de la operación.
+- Cada operación COM debe usar try/catch/finally.
+- Si se hizo Logon/Logon2/LogonAs, ejecutar Logoff() en finally.
+- Liberar objetos AX/COM creados en la operación en orden inverso.
+- Ejecutar Dispose() si aplica.
+- Usar Marshal.ReleaseComObject o Marshal.FinalReleaseComObject solo sobre objetos COM creados y poseídos por ese scope.
+- No llamar GC.Collect() como patrón normal por request.
+- No compartir una misma instancia COM entre AOS, AXC, empresa o configuración distinta.
+- Manejar COMException 0x80041004 como posible contaminación de proceso.
+- Reiniciar COM+ con COMAdmin solo como recuperación controlada o mantenimiento, nunca por defecto en cada request concurrente.
+- Cualquier reinicio COM+ debe estar protegido por configuración, lock global y logging sin datos sensibles.
+- No modificar envelopes REST existentes ni contratos públicos salvo aprobación explícita.
+- En endpoints nuevos o modificados que cambien contrato, actualizar Swagger/OpenAPI y documentación MCP.
+
+Checklist antes de cerrar una tarea que toque Axapta COM:
+1. Todas las rutas COM pasan por wrapper central.
+2. Hay finally con Logoff.
+3. Hay liberación de objetos AX/COM intermedios.
+4. No quedan objetos COM en campos static mutables.
+5. No hay llamadas COM paralelas nuevas.
+6. Se mantiene x86.
+7. Se registran errores con traceId.
+8. No se loguean credenciales ni bodies sensibles.
+9. Pruebas de Health/System/operación CRM crítica ejecutadas o documentadas.
