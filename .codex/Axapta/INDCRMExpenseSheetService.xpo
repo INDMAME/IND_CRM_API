@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 07/05/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 12/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -285,7 +285,7 @@ Formatversion: 1
         #        if (!currencyCode)
         #            return [INDCRMUtilityService::buildHeader(false, 'CurrencyCode es obligatorio.', conNull()), conNull()];
         #
-        #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
+        #        currencyCode = strUpr(strLRTrim(currencyCode));
         #
         #        if (currencyCode == 'EUR')
         #            exchRate = 100.0;
@@ -1104,7 +1104,7 @@ Formatversion: 1
         #        if (!transDate)
         #            return [INDCRMUtilityService::buildHeader(false, strFmt('TransDate invalida (yyyymmdd): %1', transDateStr), conNull()), conNull()];
         #
-        #        currencyCode = strUpr(strLTrim(strRTrim(currencyCode)));
+        #        currencyCode = strUpr(strLRTrim(currencyCode));
         #
         #        if (hasGastoType && !INDCRMExpenseSheetService::isValidGastoType(gastoType))
         #            return [INDCRMUtilityService::buildHeader(false, strFmt('GastoType invalido: %1.', gastoType), conNull()), conNull()];
@@ -2054,7 +2054,7 @@ Formatversion: 1
         #
         #    if (conLen(_data) >= 9)
         #    {
-        #        expenseSheetStatusFilterRaw = strLwr(strLTrim(strRTrim(strFmt("%1", conPeek(_data, 9)))));
+        #        expenseSheetStatusFilterRaw = strLwr(strLRTrim(strFmt("%1", conPeek(_data, 9))));
         #
         #        if (expenseSheetStatusFilterRaw == '0'
         #         || expenseSheetStatusFilterRaw == '1'
@@ -2069,7 +2069,7 @@ Formatversion: 1
         #
         #    if (conLen(_data) >= 10)
         #    {
-        #        includeSubordinatesRaw = strLwr(strLTrim(strRTrim(strFmt("%1", conPeek(_data, 10)))));
+        #        includeSubordinatesRaw = strLwr(strLRTrim(strFmt("%1", conPeek(_data, 10))));
         #        includeSubordinates = includeSubordinatesRaw == '1'
         #                           || includeSubordinatesRaw == 'true'
         #                           || includeSubordinatesRaw == 'yes';
@@ -2366,7 +2366,7 @@ Formatversion: 1
         #    if (conLen(_data) >= 8)
         #    {
         #        processedByAIRaw = strFmt('%1', conPeek(_data, 8));
-        #        processedByAIRaw = strLwr(strLTrim(strRTrim(processedByAIRaw)));
+        #        processedByAIRaw = strLwr(strLRTrim(processedByAIRaw));
         #        if (processedByAIRaw == '0' || processedByAIRaw == '1')
         #        {
         #            processedByAIFilter = str2Int(processedByAIRaw);
@@ -2481,7 +2481,7 @@ Formatversion: 1
         #    if (conLen(_data) >= 4)
         #    {
         #        statusFilterRaw = strFmt('%1', conPeek(_data, 4));
-        #        statusFilterRaw = strLwr(strLTrim(strRTrim(statusFilterRaw)));
+        #        statusFilterRaw = strLwr(strLRTrim(statusFilterRaw));
         #        if (statusFilterRaw == '0' || statusFilterRaw == '1')
         #        {
         #            statusFilter = str2Int(statusFilterRaw);
@@ -2510,7 +2510,7 @@ Formatversion: 1
         #    if (conLen(_data) >= 9)
         #    {
         #        processedByAIRaw = strFmt('%1', conPeek(_data, 9));
-        #        processedByAIRaw = strLwr(strLTrim(strRTrim(processedByAIRaw)));
+        #        processedByAIRaw = strLwr(strLRTrim(processedByAIRaw));
         #        if (processedByAIRaw == '0' || processedByAIRaw == '1')
         #        {
         #            processedByAIFilter = str2Int(processedByAIRaw);
@@ -2770,12 +2770,11 @@ Formatversion: 1
         #        if (!subordinateList)
         #            return resultCon;
         #
-        #        subordinateUsersCon = str2con(subordinateList, ',');
+        #        subordinateUsersCon = Global::str2ConKeepStrings(subordinateList, ',');
         #
         #        for (i = 1; i <= conLen(subordinateUsersCon); i++)
         #        {
-        #            //subordinateUserId = strLTrim(strRTrim(conPeek(subordinateUsersCon, i)));
-        #            subordinateUserId   = strLTrim(strRTrim(strFmt("%1",conPeek(subordinateUsersCon, i))));
+        #            subordinateUserId   = strLRTrim(strFmt("%1",conPeek(subordinateUsersCon, i)));
         #            crmUsuarioTableSub  = CRMUsuarioTable::Find(subordinateUserId);
         #            if(!crmUsuarioTableSub)
         #            {
@@ -2851,7 +2850,7 @@ Formatversion: 1
         #
         #        for (i = 1; i <= conLen(subordinateUsersCon); i++)
         #        {
-        #            subordinateUserId = strLTrim(strRTrim(conPeek(subordinateUsersCon, i)));
+        #            subordinateUserId = strLRTrim(conPeek(subordinateUsersCon, i));
         #            if (!subordinateUserId)
         #                continue;
         #
@@ -2985,7 +2984,7 @@ Formatversion: 1
         #    if (conLen(_data) >= 8)
         #    {
         #        expenseSheetStatusRaw = strFmt('%1', conPeek(_data, 8));
-        #        expenseSheetStatusRaw = strLwr(strLTrim(strRTrim(expenseSheetStatusRaw)));
+        #        expenseSheetStatusRaw = strLwr(strLRTrim(expenseSheetStatusRaw));
         #        if (expenseSheetStatusRaw == '0' || str2Int(expenseSheetStatusRaw) != 0)
         #        {
         #            expenseSheetStatus = str2Int(expenseSheetStatusRaw);
@@ -2997,7 +2996,7 @@ Formatversion: 1
         #    if (conLen(_data) >= 9)
         #    {
         #        exchangeRateModeRaw = strFmt('%1', conPeek(_data, 9));
-        #        exchangeRateModeRaw = strLwr(strLTrim(strRTrim(exchangeRateModeRaw)));
+        #        exchangeRateModeRaw = strLwr(strLRTrim(exchangeRateModeRaw));
         #        if (exchangeRateModeRaw == '0' || str2Int(exchangeRateModeRaw) != 0)
         #        {
         #            exchangeRateMode = str2Int(exchangeRateModeRaw);
