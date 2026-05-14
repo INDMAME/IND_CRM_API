@@ -184,8 +184,8 @@ Endpoints
   - `mode` (0|1|2)
   - `existingFileId` (requerido cuando `mode=2`)
   - `description`, `currencyCode`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (requeridos cuando `mode=0|1`)
-  - `totalAmount`, `comentario`, `fileExtension`, `gastoType`, `ocrJson`, `normalizedJson` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
-  - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
+  - `totalAmount`, `comentario`, `fileExtension`, `gastoType`, `ocrJson`, `normalizedJson`, `ticketDate`, `ticketTime` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14; `ticketTime` acepta HH:mm, HH:mm:ss o segundos 0..86399)
+  - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`; `price`/`totalAmount` pueden ser negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total negativo)
 
 ### Tool: crm_expensesheets_tickets_quick_create
 - HTTP: POST `/api/crm/expensesheets/tickets/quick-create`
@@ -195,14 +195,15 @@ Endpoints
   - Requerido: `ticketImage` (jpg/jpeg/png/webp, max 50 MB)
   - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projectId`
 - Flujo: crea ticket provisional, sube archivo, ejecuta OCR + normalizacion IA, finaliza ticket y opcionalmente lo vincula a una hoja existente.
-- Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `StepTraceIds`
-- Errores relevantes: 422 validacion, 429 limite IA, 500 error interno
+- En errores tras crear `FileId`, intenta rollback interno del blob y del ticket AX.
+- Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds`
+- Errores relevantes: 422 validacion, 429 limite IA, 503 servicio IA no disponible, 500 error interno
 
 ### Tool: crm_expensesheets_tickets_get
 - HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson` y `normalizedJson`.
+- Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson`, `normalizedJson`, `ticketDate` y `ticketTime`.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`
@@ -212,7 +213,7 @@ Endpoints
   - Requerido: `page`, `pageSize`
   - Opcional: `searchKey` (compatibilidad: `filter`), `status` (0|1), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
   - Regla: para ejecutar consulta siempre deben viajar `X-IND-Company` y `X-IND-AxUserId`; el rango de fechas es opcional y usa `ticketHeader.createdDate`.
-- Respuesta: cada item incluye `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `GastoType`.
+- Respuesta: cada item incluye `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `GastoType`.
 
 ### Tool: crm_expensesheets_tickets_link_list
 - HTTP: POST `/api/crm/expensesheets/tickets/link/list`
@@ -222,7 +223,7 @@ Endpoints
   - Requerido: `page`, `pageSize`
   - Opcional: `searchKey` (compatibilidad: `filter`), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`), `currencyCode`, `gastoType` (0,1,2,3,4,5,6,7,8,14), `processedByAI` (bool)
   - Regla: el origen sale prefiltrado con `status = Pending` y `totalAmount != 0`; la fecha de referencia es `ticketHeader.createdDate`.
-- Respuesta: cada item incluye `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI`, `GastoType`.
+- Respuesta: cada item incluye `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI`, `GastoType`.
 
 ### Tool: crm_expensesheets_tickets_link_bulk
 - HTTP: POST `/api/crm/expensesheets/tickets/link/bulk`
@@ -241,18 +242,18 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body:
-  - `description`, `currencyCode`, `gastoType`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (se completan desde ticket actual si no se envian)
+  - `description`, `currencyCode`, `gastoType`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399, opcional), `urlFile` (se completan desde ticket actual si no se envian)
   - `totalAmount` (opcional)
   - `comentario` (opcional)
   - `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional si no hay `fileName`)
-  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional)
+  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional). Las lineas pueden llevar importes negativos como descuento; si `qty = 0`, el total de linea debe ser negativo.
 - Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
 - Compatibilidad: acepta body directo del contrato IA o envelope de `expensefromticket` (`Success/Message/Data/TraceId`) y mapea `Data` de forma interna.
 

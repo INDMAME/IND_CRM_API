@@ -77,7 +77,7 @@ Endpoints
   Content-Type: multipart/form-data
   Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
   Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId, X-IND-EntraOid, X-IND-Context-Version, X-IND-Permissions-Revision, X-IND-Context-Token.
-  Draft IA incluye `gastoType` (tipo de gasto de cabecera), mantiene `lines[].typeValue` y puede incluir `lines[].taxPercent` si el IVA por linea se detecta con confianza.
+  Draft IA incluye `gastoType` (tipo de gasto de cabecera) y mantiene `lines[].typeValue`.
   Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
 - POST /api/ia/service/expensesheets/ask (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `question`.
@@ -133,8 +133,8 @@ Endpoints
   mode 1: crea solo cabecera + DocuRef.
   mode 2: agrega lineas a `existingFileId`.
   Body mode 0|1: description, currencyCode, transDate (DDMMYYYY o DD.MM.YYYY), urlFile.
-  Body mode 0|2: lines[] con description, qty, price (totalAmount y taxPercent opcionales). `taxPercent` es informativo y no altera calculos. Las lineas de ticket pueden informar `price`/`totalAmount` negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total de linea negativo.
-  Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14), ocrJson, normalizedJson.
+  Body mode 0|2: lines[] con description, qty, price (totalAmount opcional). Las lineas de ticket pueden informar `price`/`totalAmount` negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total de linea negativo.
+  Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14), ocrJson, normalizedJson, ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399).
 - POST /api/crm/expensesheets/tickets/quick-create (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type required: multipart/form-data.
   Body required: ticketImage (jpg/jpeg/png/webp, max 50 MB).
@@ -145,19 +145,18 @@ Endpoints
   Errores relevantes: 422 validacion, 429 rate limit IA, 503 servicio IA no disponible, 500 error interno.
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
-  Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string) y `normalizedJson` (string).
-  Lineas incluyen `TaxPercent` cuando AX devuelve el IVA informativo de la linea.
+  Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate` y `ticketTime`.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
   Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`. La fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
-  Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `GastoType`.
+  Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `GastoType`.
 - POST /api/crm/expensesheets/tickets/link/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
   Prefiltros fijos en origen: `status = Pending` y `totalAmount != 0`.
   Nota: la fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
-  Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI`, `GastoType`.
+  Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI`, `GastoType`.
 - POST /api/crm/expensesheets/tickets/link/bulk (Authorize + X-IND-Company + X-IND-AxUserId)
   Body legacy soportado: `expenseSheetId`, `ticketIds[]` (equivale a `selectionMode = selected`).
   Body ampliado:
@@ -171,7 +170,7 @@ Endpoints
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
+  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.
   Reglas:
@@ -179,7 +178,7 @@ Endpoints
   - Marca `processedByAI=true`.
   - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
   - Compatibilidad de entrada: si llega envelope tipo `expensefromticket` (`{ Success, Message, Data, TraceId }`), el backend adapta automaticamente `Data` al contrato esperado.
-  Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate` (DDMMYYYY o DD.MM.YYYY), `comentario` (opcional), `urlFile`, `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional), `lines[]` con `taxPercent` opcional e informativo. Las lineas pueden llevar importes negativos como descuento; si `qty = 0`, el total de linea debe ser negativo.
+  Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate` (DDMMYYYY o DD.MM.YYYY), `ticketDate` (DDMMYYYY o DD.MM.YYYY, opcional), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399, opcional), `comentario` (opcional), `urlFile`, `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional), `lines[]`. Las lineas pueden llevar importes negativos como descuento; si `qty = 0`, el total de linea debe ser negativo.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.
@@ -192,10 +191,10 @@ Endpoints
   Nota: si se envia `lineRecId`, debe ser distinto de 0 y puede ser negativo para lineas temporales.
 - POST /api/crm/expensesheets/tickets/{fileId}/lines (Authorize + X-IND-Company + X-IND-AxUserId)
   Crea una linea granular en `INDTicketInfoLine`.
-  Body: `description`, `qty`, `price`, `totalAmount` opcional, `taxPercent` opcional informativo.
+  Body: `description`, `qty`, `price`, `totalAmount` opcional.
 - PUT /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza una linea granular de `INDTicketInfoLine`.
-  Body: `description`, `qty`, `price`, `totalAmount` opcional, `taxPercent` opcional informativo.
+  Body: `description`, `qty`, `price`, `totalAmount` opcional.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
 - DELETE /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina una linea granular de `INDTicketInfoLine`.

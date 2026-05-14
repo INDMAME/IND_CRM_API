@@ -15,6 +15,14 @@ namespace IND_CRM_API.Contracts.Requests
         /// Ticket date in mandatory DDMMYYYY format.
         /// </summary>
         public string transDate { get; set; }
+        /// <summary>
+        /// Receipt date stored in INDTicketInfoTable. Accepts DDMMYYYY or DD.MM.YYYY.
+        /// </summary>
+        public string ticketDate { get; set; }
+        /// <summary>
+        /// Receipt time stored in INDTicketInfoTable. Accepts HH:mm or HH:mm:ss.
+        /// </summary>
+        public string ticketTime { get; set; }
         public string comentario { get; set; }
         public string urlFile { get; set; }
         public string fileName { get; set; }

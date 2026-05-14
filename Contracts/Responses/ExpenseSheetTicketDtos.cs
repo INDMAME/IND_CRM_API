@@ -16,6 +16,8 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? TotalAmount { get; set; }
         public string CreatedByUserId { get; set; }
         public string TransDate { get; set; }
+        public string TicketDate { get; set; }
+        public string TicketTime { get; set; }
         public string Comentario { get; set; }
         public string UrlFile { get; set; }
         public string FileName { get; set; }
@@ -35,7 +37,6 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Price { get; set; }
         public decimal? TotalAmount { get; set; }
-        public decimal? TaxPercent { get; set; }
         public string RefRecIdTable { get; set; }
         public string CreatedByUserId { get; set; }
     }
@@ -53,6 +54,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string CurrencyCode { get; set; }
         public decimal? TotalAmount { get; set; }
         public string TransDate { get; set; }
+        public string TicketDate { get; set; }
+        public string TicketTime { get; set; }
         public string FileName { get; set; }
     }
 
@@ -66,6 +69,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string CurrencyCode { get; set; }
         public decimal? TotalAmount { get; set; }
         public string TransDate { get; set; }
+        public string TicketDate { get; set; }
+        public string TicketTime { get; set; }
         public string FileName { get; set; }
         public bool? ProcessedByAI { get; set; }
         public int? GastoType { get; set; }

@@ -193,6 +193,10 @@ namespace IND_CRM_API.Controllers.CRM
                 var normalizedTransDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
                     : NormalizeApiDateToAxYmd(body.transDate);
+                var normalizedTicketDate = modeValue == ModeAddLinesToExisting
+                    ? string.Empty
+                    : NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, normalizedTransDate);
+                var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
 
                 Logger.Log(
                     $"[API-IN] CreateExpenseSheetTicket mode={modeValue} existingFileId={body.existingFileId} lines={body.lines?.Count ?? 0} " +
@@ -217,16 +221,23 @@ namespace IND_CRM_API.Controllers.CRM
                     headerCon.Append(body.comentario?.Trim() ?? string.Empty);
                     headerCon.Append(body.urlFile?.Trim() ?? string.Empty);
                     headerCon.Append(provisionalFileName);
-                    var hasExtendedDocuRefJson = body.ocrJson != null || body.normalizedJson != null;
-                    if (body.gastoType.HasValue || hasExtendedDocuRefJson)
+                    var hasExtendedHeaderFields =
+                        body.gastoType.HasValue ||
+                        body.ocrJson != null ||
+                        body.normalizedJson != null ||
+                        !string.IsNullOrWhiteSpace(normalizedTicketDate) ||
+                        normalizedTicketTime.HasValue;
+                    if (hasExtendedHeaderFields)
                     {
                         headerCon.Append(body.gastoType ?? 0);
+                        headerCon.Append(body.ocrJson ?? string.Empty);
+                        headerCon.Append(body.normalizedJson ?? string.Empty);
 
-                        if (hasExtendedDocuRefJson)
-                        {
-                            headerCon.Append(body.ocrJson ?? string.Empty);
-                            headerCon.Append(body.normalizedJson ?? string.Empty);
-                        }
+                        if (!string.IsNullOrWhiteSpace(normalizedTicketDate) || normalizedTicketTime.HasValue)
+                            headerCon.Append(normalizedTicketDate ?? string.Empty);
+
+                        if (normalizedTicketTime.HasValue)
+                            headerCon.Append(normalizedTicketTime.Value);
                     }
                 }
                 rootCon.Append(headerCon);
@@ -241,8 +252,6 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(CalculateTicketLineTotal(line));
-                        if (line.taxPercent.HasValue)
-                            lineCon.Append(line.taxPercent.Value);
                         linesCon.Append(lineCon);
                     }
                 }
@@ -1531,6 +1540,12 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
+                if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+                if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
                 if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
@@ -1541,6 +1556,8 @@ namespace IND_CRM_API.Controllers.CRM
                     !body.status.HasValue &&
                     !body.processedByAI.HasValue &&
                     string.IsNullOrWhiteSpace(body.transDate) &&
+                    string.IsNullOrWhiteSpace(body.ticketDate) &&
+                    string.IsNullOrWhiteSpace(body.ticketTime) &&
                     body.comentario == null &&
                     body.urlFile == null &&
                     body.ocrJson == null &&
@@ -1640,6 +1657,11 @@ namespace IND_CRM_API.Controllers.CRM
                     Logger.Log(
                         $"[WARN] UpdateExpenseSheetTicket transDate fallback-to-today raw={ToLogValue(mergedTransDateRaw)} fileId={ToLogValue(fileId)} traceId={traceId}");
                 }
+                var mergedTicketDateRaw = body.ticketDate ?? existing.TicketDate ?? existing.TransDate;
+                var mergedTicketDate = NormalizeTicketDateToAxYmdOrFallback(mergedTicketDateRaw, mergedTransDate);
+                var mergedTicketTime = !string.IsNullOrWhiteSpace(body.ticketTime)
+                    ? NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime)
+                    : NormalizeOptionalTicketTimeToAxSeconds(existing.TicketTime);
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
                 var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
                 var mergedFileName = (body.fileName ?? string.Empty).Trim();
@@ -1671,16 +1693,23 @@ namespace IND_CRM_API.Controllers.CRM
                 updateCon.Append(mergedFileName);
                 updateCon.Append(mergedProcessedByAI ? 1 : 0);
 
-                var shouldAppendExtendedDocuRefJson = body.gastoType.HasValue || body.ocrJson != null || body.normalizedJson != null;
-                if (shouldAppendExtendedDocuRefJson)
+                var shouldAppendExtendedHeaderFields =
+                    body.gastoType.HasValue ||
+                    body.ocrJson != null ||
+                    body.normalizedJson != null ||
+                    !string.IsNullOrWhiteSpace(mergedTicketDate) ||
+                    mergedTicketTime.HasValue;
+                if (shouldAppendExtendedHeaderFields)
                 {
                     updateCon.Append(mergedGastoType);
+                    updateCon.Append(mergedOcrJson ?? string.Empty);
+                    updateCon.Append(mergedNormalizedJson ?? string.Empty);
 
-                    if (body.ocrJson != null || body.normalizedJson != null)
-                    {
-                        updateCon.Append(mergedOcrJson ?? string.Empty);
-                        updateCon.Append(mergedNormalizedJson ?? string.Empty);
-                    }
+                    if (!string.IsNullOrWhiteSpace(mergedTicketDate) || mergedTicketTime.HasValue)
+                        updateCon.Append(mergedTicketDate ?? string.Empty);
+
+                    if (mergedTicketTime.HasValue)
+                        updateCon.Append(mergedTicketTime.Value);
                 }
 
                 var updateResultObj = ax.CallStaticClassMethod(
@@ -1803,6 +1832,12 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+                if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+                if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
 
                 if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
@@ -1942,6 +1977,10 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(mergedGastoType);
                 headerCon.Append(mergedOcrJson ?? string.Empty);
                 headerCon.Append(mergedNormalizedJson ?? string.Empty);
+                headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
+                var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
+                if (mergedTicketTime.HasValue)
+                    headerCon.Append(mergedTicketTime.Value);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -1956,8 +1995,6 @@ namespace IND_CRM_API.Controllers.CRM
                     lineCon.Append(qty);
                     lineCon.Append(price);
                     lineCon.Append(lineTotal);
-                    if (line.taxPercent.HasValue)
-                        lineCon.Append(line.taxPercent.Value);
                     linesCon.Append(lineCon);
                 }
                 rootCon.Append(linesCon);
@@ -2564,10 +2601,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                if (body.totalAmount.HasValue || body.taxPercent.HasValue)
+                if (body.totalAmount.HasValue)
                     con.Append(CalculateTicketLineTotal(body));
-                if (body.taxPercent.HasValue)
-                    con.Append(body.taxPercent.Value);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2599,8 +2634,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : string.Empty,
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null,
-                    TaxPercent = extras.Count > 3 ? ToDecimal(extras[3]) : body.taxPercent
+                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
                 };
 
                 LogOut(HttpStatusCode.Created);
@@ -2691,10 +2725,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                if (body.totalAmount.HasValue || body.taxPercent.HasValue)
+                if (body.totalAmount.HasValue)
                     con.Append(CalculateTicketLineTotal(body));
-                if (body.taxPercent.HasValue)
-                    con.Append(body.taxPercent.Value);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2726,8 +2758,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : lineRecId.ToString(CultureInfo.InvariantCulture),
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null,
-                    TaxPercent = extras.Count > 3 ? ToDecimal(extras[3]) : body.taxPercent
+                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
                 };
 
                 LogOut(HttpStatusCode.OK);
@@ -3493,6 +3524,10 @@ namespace IND_CRM_API.Controllers.CRM
                 var normalizedTransDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
                     : NormalizeApiDateToAxYmd(body?.transDate);
+                var normalizedTicketDate = modeValue == ModeAddLinesToExisting
+                    ? string.Empty
+                    : NormalizeTicketDateToAxYmdOrFallback(body?.ticketDate, normalizedTransDate);
+                var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body?.ticketTime);
 
                 var rootCon = ax.CreateContainer();
                 rootCon.Append(company);
@@ -3506,16 +3541,24 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body?.comentario?.Trim() ?? string.Empty);
                 headerCon.Append(body?.urlFile?.Trim() ?? string.Empty);
                 headerCon.Append(provisionalFileName);
-                var hasExtendedDocuRefJson = body?.ocrJson != null || body?.normalizedJson != null;
-                if (body?.gastoType.HasValue == true || hasExtendedDocuRefJson)
+                var hasExtendedHeaderFields =
+                    body?.gastoType.HasValue == true ||
+                    body?.ocrJson != null ||
+                    body?.normalizedJson != null ||
+                    !string.IsNullOrWhiteSpace(normalizedTicketDate) ||
+                    normalizedTicketTime.HasValue;
+                if (hasExtendedHeaderFields)
                 {
                     headerCon.Append(body?.gastoType ?? 0);
 
-                    if (hasExtendedDocuRefJson)
-                    {
-                        headerCon.Append(body?.ocrJson ?? string.Empty);
-                        headerCon.Append(body?.normalizedJson ?? string.Empty);
-                    }
+                    headerCon.Append(body?.ocrJson ?? string.Empty);
+                    headerCon.Append(body?.normalizedJson ?? string.Empty);
+
+                    if (!string.IsNullOrWhiteSpace(normalizedTicketDate) || normalizedTicketTime.HasValue)
+                        headerCon.Append(normalizedTicketDate ?? string.Empty);
+
+                    if (normalizedTicketTime.HasValue)
+                        headerCon.Append(normalizedTicketTime.Value);
                 }
                 rootCon.Append(headerCon);
 
@@ -3529,8 +3572,6 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(CalculateTicketLineTotal(line));
-                        if (line.taxPercent.HasValue)
-                            lineCon.Append(line.taxPercent.Value);
                         linesCon.Append(lineCon);
                     }
                 }
@@ -3871,6 +3912,7 @@ namespace IND_CRM_API.Controllers.CRM
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
                 totalAmount = validLines.Count > 0 ? (decimal?)linesTotal : null,
                 transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
+                ticketDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
                 fileName = (fileName ?? string.Empty).Trim(),
@@ -3898,8 +3940,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     description = description,
                     qty = qty,
-                    price = price,
-                    taxPercent = line.taxPercent
+                    price = price
                 };
                 var lineTotal = CalculateTicketLineTotal(lineRequest);
                 if (string.IsNullOrWhiteSpace(description) || !IsValidTicketLineAmount(lineRequest))
@@ -3910,8 +3951,7 @@ namespace IND_CRM_API.Controllers.CRM
                     description = description,
                     qty = qty,
                     price = price,
-                    totalAmount = lineTotal,
-                    taxPercent = line.taxPercent
+                    totalAmount = lineTotal
                 });
             }
 
@@ -4219,6 +4259,12 @@ namespace IND_CRM_API.Controllers.CRM
             if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                 validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
+            if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+            if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
             if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                 validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
@@ -4489,6 +4535,10 @@ namespace IND_CRM_API.Controllers.CRM
             headerCon.Append(mergedGastoType);
             headerCon.Append(mergedOcrJson ?? string.Empty);
             headerCon.Append(mergedNormalizedJson ?? string.Empty);
+            headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
+            var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
+            if (mergedTicketTime.HasValue)
+                headerCon.Append(mergedTicketTime.Value);
             rootCon.Append(headerCon);
 
             var linesCon = ax.CreateContainer();
@@ -4503,8 +4553,6 @@ namespace IND_CRM_API.Controllers.CRM
                 lineCon.Append(qty);
                 lineCon.Append(price);
                 lineCon.Append(lineTotal);
-                if (line.taxPercent.HasValue)
-                    lineCon.Append(line.taxPercent.Value);
                 linesCon.Append(lineCon);
             }
             rootCon.Append(linesCon);
@@ -4583,6 +4631,12 @@ namespace IND_CRM_API.Controllers.CRM
             if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                 errors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
+            if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                errors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+            if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                errors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
                 if (string.IsNullOrWhiteSpace(body.description))
@@ -4660,9 +4714,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (!body.price.HasValue || body.price.Value == 0)
                 errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price no puede ser cero." });
-
-            if (body.taxPercent.HasValue && body.taxPercent.Value < 0m)
-                errors.Add(new IndValidationError { Field = prefix + ".taxPercent", Message = "taxPercent no puede ser negativo." });
         }
 
         // Builds the IA update request and applies compatibility mapping when body comes wrapped in { Success, Message, Data }.
@@ -4724,6 +4775,8 @@ namespace IND_CRM_API.Controllers.CRM
                 request.gastoType.HasValue ||
                 request.totalAmount.HasValue ||
                 !string.IsNullOrWhiteSpace(request.transDate) ||
+                !string.IsNullOrWhiteSpace(request.ticketDate) ||
+                !string.IsNullOrWhiteSpace(request.ticketTime) ||
                 !string.IsNullOrWhiteSpace(request.comentario) ||
                 !string.IsNullOrWhiteSpace(request.urlFile) ||
                 !string.IsNullOrWhiteSpace(request.fileName) ||
@@ -4749,6 +4802,8 @@ namespace IND_CRM_API.Controllers.CRM
                 gastoType = GetJsonIntIgnoreCase(dataObject, "gastoType"),
                 totalAmount = GetJsonDecimalIgnoreCase(dataObject, "totalAmount"),
                 transDate = GetJsonStringIgnoreCase(dataObject, "transDate"),
+                ticketDate = GetJsonStringIgnoreCase(dataObject, "ticketDate"),
+                ticketTime = GetJsonStringIgnoreCase(dataObject, "ticketTime"),
                 comentario = GetJsonStringIgnoreCase(dataObject, "comentario"),
                 urlFile = GetJsonStringIgnoreCase(dataObject, "urlFile"),
                 fileName = GetJsonStringIgnoreCase(dataObject, "fileName"),
@@ -4761,6 +4816,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(mapped.comentario))
                 mapped.comentario = GetJsonStringIgnoreCase(dataObject, "merchant");
 
+            if (string.IsNullOrWhiteSpace(mapped.ticketDate))
+                mapped.ticketDate = mapped.transDate;
+
             var linesArray = GetJsonArrayIgnoreCase(dataObject, "lines");
             if (linesArray != null)
             {
@@ -4771,7 +4829,6 @@ namespace IND_CRM_API.Controllers.CRM
                     var linePrice = GetJsonDecimalIgnoreCase(lineToken, "price");
                     var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount")
                                     ?? GetJsonDecimalIgnoreCase(lineToken, "lineTotal");
-                    var lineTaxPercent = GetJsonDecimalIgnoreCase(lineToken, "taxPercent");
                     if (!lineTotal.HasValue && lineQty.HasValue && linePrice.HasValue)
                         lineTotal = lineQty.Value * linePrice.Value;
 
@@ -4787,8 +4844,7 @@ namespace IND_CRM_API.Controllers.CRM
                         description = lineDescription,
                         qty = lineQty,
                         price = linePrice,
-                        totalAmount = lineTotal,
-                        taxPercent = lineTaxPercent
+                        totalAmount = lineTotal
                     });
                 }
             }
@@ -4952,6 +5008,21 @@ namespace IND_CRM_API.Controllers.CRM
             return TryNormalizeApiDateToAxYmd(input, out var normalized) ? normalized : string.Empty;
         }
 
+        // Normalizes optional ticketDate, falling back to an already normalized AX date.
+        private static string NormalizeTicketDateToAxYmdOrFallback(string input, string fallbackYmd)
+        {
+            if (TryNormalizeApiDateToAxYmd(input, out var normalized))
+                return normalized;
+
+            return fallbackYmd ?? string.Empty;
+        }
+
+        // Converts optional ticketTime to AX time seconds.
+        private static int? NormalizeOptionalTicketTimeToAxSeconds(string input)
+        {
+            return TryNormalizeTicketTimeToAxSeconds(input, out var seconds) ? (int?)seconds : null;
+        }
+
         // Validates accepted API date formats (DDMMYYYY / DD.MM.YYYY) and converts to AX format.
         private static bool TryNormalizeApiDateToAxYmd(string input, out string normalized)
         {
@@ -5005,6 +5076,36 @@ namespace IND_CRM_API.Controllers.CRM
                 out normalized);
         }
 
+        // Validates accepted ticket time formats and converts to AX seconds since midnight.
+        private static bool TryNormalizeTicketTimeToAxSeconds(string input, out int seconds)
+        {
+            seconds = 0;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawSeconds) &&
+                rawSeconds >= 0 &&
+                rawSeconds <= 86399)
+            {
+                seconds = rawSeconds;
+                return true;
+            }
+
+            if (!DateTime.TryParseExact(
+                    trimmed,
+                    new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var parsed))
+            {
+                return false;
+            }
+
+            seconds = (int)parsed.TimeOfDay.TotalSeconds;
+            return seconds >= 0 && seconds <= 86399;
+        }
+
         // Uses today when an internal compatibility date cannot be normalized safely for AX.
         private static string NormalizeAnyDateToAxYmdOrToday(string input, out bool usedFallback)
         {
@@ -5049,6 +5150,31 @@ namespace IND_CRM_API.Controllers.CRM
                 return DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+        }
+
+        // Formats optional ticketDate values without inventing a date when AX returns blank/default.
+        private static string FormatOptionalApiDate(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            var trimmed = input.Trim();
+            if (trimmed == "0")
+                return string.Empty;
+
+            return TryNormalizeAnyDateToAxYmd(trimmed, out var normalizedYmd) &&
+                   DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                ? date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture)
+                : string.Empty;
+        }
+
+        // Formats AX time seconds or API time strings as HH:mm:ss.
+        private static string FormatApiTime(string input)
+        {
+            if (!TryNormalizeTicketTimeToAxSeconds(input, out var seconds))
+                return string.Empty;
+
+            return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
         }
 
         // Validates allowed values for AX INDTicketStatus.
@@ -6160,6 +6286,8 @@ namespace IND_CRM_API.Controllers.CRM
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 OcrJson = headerExtras.Count > 13 ? headerExtras[13] : null,
                 NormalizedJson = headerExtras.Count > 14 ? headerExtras[14] : null,
+                TicketDate = headerExtras.Count > 15 ? FormatOptionalApiDate(headerExtras[15]) : string.Empty,
+                TicketTime = headerExtras.Count > 16 ? FormatApiTime(headerExtras[16]) : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -6177,7 +6305,6 @@ namespace IND_CRM_API.Controllers.CRM
                     Qty = SafeDecimal(row, 3),
                     Price = SafeDecimal(row, 4),
                     TotalAmount = SafeDecimal(row, 5),
-                    TaxPercent = AxContainerReadHelper.SafeLength(row) >= 8 ? SafeDecimal(row, 8) : null,
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 7)
                 });
@@ -6228,7 +6355,13 @@ namespace IND_CRM_API.Controllers.CRM
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7)),
                     FileName = AxContainerReadHelper.SafeString(row, 8),
-                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9)))
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9))),
+                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 10
+                        ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 10))
+                        : string.Empty,
+                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 11
+                        ? FormatApiTime(AxContainerReadHelper.SafeString(row, 11))
+                        : string.Empty
                 });
             }
 
@@ -6300,7 +6433,13 @@ namespace IND_CRM_API.Controllers.CRM
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 5)),
                     FileName = AxContainerReadHelper.SafeString(row, 6),
                     ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 7)),
-                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8)))
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8))),
+                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 9
+                        ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 9))
+                        : string.Empty,
+                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 10
+                        ? FormatApiTime(AxContainerReadHelper.SafeString(row, 10))
+                        : string.Empty
                 });
             }
 

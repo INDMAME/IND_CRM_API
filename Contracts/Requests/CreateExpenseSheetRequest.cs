@@ -71,10 +71,6 @@ namespace IND_CRM_API.Contracts.Requests
         /// Unit price. Amount is calculated internally in AX as qty * price.
         /// </summary>
         [Required] public decimal? price { get; set; }
-        /// <summary>
-        /// Porcentaje de IVA detectado para la linea de ticket. Es informativo.
-        /// </summary>
-        public decimal? taxPercent { get; set; }
         public string projId { get; set; }
     }
 }
