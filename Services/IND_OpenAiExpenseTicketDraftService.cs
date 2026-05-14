@@ -960,16 +960,17 @@ namespace IND_CRM_API.Services
 - gastoType representa el tipo de gasto dominante del ticket.
 - Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
-- qty debe ser la cantidad real de la linea (admite decimales) y nunca 0.
+- qty debe ser la cantidad real de la linea (admite decimales). Solo puede ser 0 cuando la linea sea un descuento con lineTotal negativo visible.
 - price debe representar el precio unitario de la linea.
 - lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
-- Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty.
+- Si la linea es un descuento, devuelve price y lineTotal en negativo.
+- Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty, incluso cuando lineTotal sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
 - No uses separadores de miles en los numeros del JSON.
 - Si solo detectas un importe unico para la linea y qty=1, usa ese valor como price y lineTotal.
 - transDate en formato DD.MM.YYYY o null si no se puede inferir.
 - fileId debe ser null en todas las lineas (se asigna despues en backend).
-- qty por defecto 1 salvo evidencia fuerte.
+- qty por defecto 1 salvo evidencia fuerte; no uses 0 salvo descuentos visibles con total negativo.
 - internacional true solo si hay evidencia de gasto internacional.
 - description corto y util para una linea de gasto.
 - currencyCode en cabecera debe ir siempre en ISO-4217 uppercase si existe evidencia suficiente.
@@ -1005,8 +1006,9 @@ namespace IND_CRM_API.Services
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Si qty no es visible, usa 1.
-- price debe ser el precio unitario.
-- Si hay total visible de linea y qty > 0, asegura coherencia: price = total / qty.
+- Solo usa qty 0 cuando la linea sea un descuento con lineTotal negativo visible.
+- price debe ser el precio unitario, negativo cuando la linea sea un descuento.
+- Si hay total visible de linea y qty > 0, asegura coherencia: price = total / qty, incluso cuando total sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON.
 - No uses separadores de miles en los numeros del JSON.
 - description debe ser corta y util para la linea.
@@ -1399,17 +1401,24 @@ namespace IND_CRM_API.Services
                 warnings = EnsureWarnings(warnings, "No se pudo inferir fecha de gasto. Se deja transDate null.");
 
             var qtyParsed = TryParseDecimal(lineToken["qty"]);
-            var qty = qtyParsed.HasValue && qtyParsed.Value > 0m ? qtyParsed.Value : 1m;
-            if (!qtyParsed.HasValue || qtyParsed.Value <= 0m)
-                warnings = EnsureWarnings(warnings, "No se detecto qty valida. Se uso qty=1 por defecto.");
-
             var price = TryParseDecimal(lineToken["price"]);
             var lineTotal = TryParseDecimal(lineToken["lineTotal"]);
+            var isZeroQtyDiscount = qtyParsed.HasValue &&
+                                    qtyParsed.Value == 0m &&
+                                    ((lineTotal.HasValue && lineTotal.Value < 0m) || (price.HasValue && price.Value < 0m));
+            var qty = qtyParsed.HasValue && (qtyParsed.Value > 0m || isZeroQtyDiscount) ? qtyParsed.Value : 1m;
+            if (!qtyParsed.HasValue || qtyParsed.Value < 0m || (qtyParsed.Value == 0m && !isZeroQtyDiscount))
+                warnings = EnsureWarnings(warnings, "No se detecto qty valida. Se uso qty=1 por defecto.");
 
             if (!price.HasValue && lineTotal.HasValue && qty > 0m)
             {
                 price = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
                 warnings = EnsureWarnings(warnings, "price se calculo desde lineTotal/qty por falta de precio unitario explicito.");
+            }
+            else if (!price.HasValue && lineTotal.HasValue && qty == 0m && lineTotal.Value < 0m)
+            {
+                price = lineTotal.Value;
+                warnings = EnsureWarnings(warnings, "price se calculo desde lineTotal para descuento con qty=0.");
             }
 
             if (price.HasValue && lineTotal.HasValue && qty > 0m)
@@ -1418,12 +1427,17 @@ namespace IND_CRM_API.Services
                 if (Math.Abs(expectedTotal - lineTotal.Value) > 0.02m)
                 {
                     var normalizedPrice = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
-                    if (normalizedPrice > 0m)
+                    if (normalizedPrice != 0m)
                     {
                         price = normalizedPrice;
                         warnings = EnsureWarnings(warnings, "Se ajusto price para mantener coherencia con qty y lineTotal detectado.");
                     }
                 }
+            }
+            else if (price.HasValue && lineTotal.HasValue && qty == 0m && lineTotal.Value < 0m && price.Value != lineTotal.Value)
+            {
+                price = lineTotal.Value;
+                warnings = EnsureWarnings(warnings, "Se ajusto price para mantener descuento con qty=0 y lineTotal negativo.");
             }
 
             if (!price.HasValue)
@@ -1817,9 +1831,14 @@ namespace IND_CRM_API.Services
 
         private static JObject BuildFullNormalizedLineToken(CreateExpenseSheetLineRequest line)
         {
-            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
             var price = line?.price;
-            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+            var qty = line?.qty.HasValue == true &&
+                      (line.qty.Value > 0m || (line.qty.Value == 0m && price.HasValue && price.Value < 0m))
+                ? line.qty.Value
+                : 1m;
+            var lineTotal = price.HasValue
+                ? (qty == 0m && price.Value < 0m ? price.Value : qty * price.Value)
+                : (decimal?)null;
 
             return new JObject
             {
@@ -1837,9 +1856,14 @@ namespace IND_CRM_API.Services
 
         private static JObject BuildQuickCreateNormalizedLineToken(CreateExpenseSheetLineRequest line)
         {
-            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
             var price = line?.price;
-            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+            var qty = line?.qty.HasValue == true &&
+                      (line.qty.Value > 0m || (line.qty.Value == 0m && price.HasValue && price.Value < 0m))
+                ? line.qty.Value
+                : 1m;
+            var lineTotal = price.HasValue
+                ? (qty == 0m && price.Value < 0m ? price.Value : qty * price.Value)
+                : (decimal?)null;
 
             return new JObject
             {

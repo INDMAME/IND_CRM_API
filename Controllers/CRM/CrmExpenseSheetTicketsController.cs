@@ -45,6 +45,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const string QuickCreateStageDraftExtracted = "draft-extracted";
         private const string QuickCreateStageTicketFinalized = "ticket-finalized";
         private const string QuickCreateStageSheetLinked = "sheet-linked";
+        private const string TicketNegativeTotalValidationMessage = "El total del ticket no puede ser negativo.";
         private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
 
         private readonly IAxaptaSessionManager _sessionManager;
@@ -239,8 +240,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.description?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        if (line.totalAmount.HasValue)
-                            lineCon.Append(line.totalAmount.Value);
+                        lineCon.Append(CalculateTicketLineTotal(line));
                         linesCon.Append(lineCon);
                     }
                 }
@@ -1529,6 +1529,9 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
+                if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
                     !body.gastoType.HasValue &&
@@ -1799,8 +1802,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
-                if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
-                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+                if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
                 if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
                 {
@@ -1818,6 +1821,7 @@ namespace IND_CRM_API.Controllers.CRM
                 else
                 {
                     ValidateTicketLines(body.lines, validationErrors);
+                    ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", validationErrors);
                 }
             }
 
@@ -1857,9 +1861,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
-                var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
-                    ? body.totalAmount.Value
-                    : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+                var mergedTotalAmount = body.lines != null && body.lines.Count > 0
+                    ? linesTotalAmount
+                    : (body.totalAmount ?? existing.TotalAmount ?? 0m);
                 var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
                 var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
                 if (usedTransDateFallback)
@@ -1943,9 +1947,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     var qty = line.qty ?? 0m;
                     var price = line.price ?? 0m;
-                    var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                        ? line.totalAmount.Value
-                        : qty * price;
+                    var lineTotal = CalculateTicketLineTotal(line);
 
                     var lineCon = ax.CreateContainer();
                     lineCon.Append(line.description?.Trim() ?? string.Empty);
@@ -3516,8 +3518,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.description?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        if (line.totalAmount.HasValue)
-                            lineCon.Append(line.totalAmount.Value);
+                        lineCon.Append(CalculateTicketLineTotal(line));
                         linesCon.Append(lineCon);
                     }
                 }
@@ -3856,7 +3857,7 @@ namespace IND_CRM_API.Controllers.CRM
                 description = string.IsNullOrWhiteSpace(draft?.description) ? fallbackDescription : draft.description.Trim(),
                 currencyCode = currencyCode,
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
-                totalAmount = linesTotal > 0m ? (decimal?)linesTotal : null,
+                totalAmount = validLines.Count > 0 ? (decimal?)linesTotal : null,
                 transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
@@ -3866,7 +3867,7 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
-        // Normalizes IA draft lines into ticket line payloads with positive qty/price only.
+        // Normalizes IA draft lines into ticket line payloads allowing signed discount prices.
         private static List<ExpenseSheetTicketLineRequest> MapQuickCreateDraftLines(IEnumerable<CreateExpenseSheetLineRequest> lines)
         {
             var mapped = new List<ExpenseSheetTicketLineRequest>();
@@ -3881,7 +3882,14 @@ namespace IND_CRM_API.Controllers.CRM
                 var description = (line.description ?? string.Empty).Trim();
                 var qty = line.qty ?? 0m;
                 var price = line.price ?? 0m;
-                if (string.IsNullOrWhiteSpace(description) || qty <= 0m || price <= 0m)
+                var lineRequest = new ExpenseSheetTicketLineRequest
+                {
+                    description = description,
+                    qty = qty,
+                    price = price
+                };
+                var lineTotal = CalculateTicketLineTotal(lineRequest);
+                if (string.IsNullOrWhiteSpace(description) || !IsValidTicketLineAmount(lineRequest))
                     continue;
 
                 mapped.Add(new ExpenseSheetTicketLineRequest
@@ -3889,7 +3897,7 @@ namespace IND_CRM_API.Controllers.CRM
                     description = description,
                     qty = qty,
                     price = price,
-                    totalAmount = qty * price
+                    totalAmount = lineTotal
                 });
             }
 
@@ -4197,8 +4205,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                 validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
-            if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
-                validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+            if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
             if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
             {
@@ -4216,6 +4224,7 @@ namespace IND_CRM_API.Controllers.CRM
             else
             {
                 ValidateTicketLines(body.lines, validationErrors);
+                ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", validationErrors);
             }
         }
 
@@ -4251,7 +4260,7 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedDescription = (body?.description ?? existing.Description ?? string.Empty).Trim();
             var mergedCurrencyCode = (body?.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
             var mergedGastoType = body?.gastoType ?? existing.GastoType ?? 0;
-            var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value > 0m
+            var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value >= 0m
                 ? body.totalAmount.Value
                 : (existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body?.transDate) ? existing.TransDate : body.transDate;
@@ -4391,9 +4400,9 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
             var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
             var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
-            var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
-                ? body.totalAmount.Value
-                : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+            var mergedTotalAmount = body.lines != null && body.lines.Count > 0
+                ? linesTotalAmount
+                : (body.totalAmount ?? existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
             var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
                 ? normalizedTransDate
@@ -4473,9 +4482,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var qty = line.qty ?? 0m;
                 var price = line.price ?? 0m;
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
+                var lineTotal = CalculateTicketLineTotal(line);
 
                 var lineCon = ax.CreateContainer();
                 lineCon.Append(line.description?.Trim() ?? string.Empty);
@@ -4557,6 +4564,9 @@ namespace IND_CRM_API.Controllers.CRM
                 });
             }
 
+            if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                errors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
                 if (string.IsNullOrWhiteSpace(body.description))
@@ -4581,6 +4591,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 ValidateTicketLines(body.lines, errors);
+                ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", errors);
                 return;
             }
 
@@ -4624,11 +4635,15 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(body.description))
                 errors.Add(new IndValidationError { Field = prefix + ".description", Message = "description es obligatorio." });
 
-            if (!body.qty.HasValue || body.qty.Value <= 0)
-                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty debe ser mayor que cero." });
+            if (!body.qty.HasValue)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty es obligatorio." });
+            else if (body.qty.Value < 0m)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty no puede ser negativo." });
+            else if (body.qty.Value == 0m && CalculateTicketLineTotal(body) >= 0m)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty cero solo se permite en descuentos con total negativo." });
 
-            if (!body.price.HasValue || body.price.Value <= 0)
-                errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
+            if (!body.price.HasValue || body.price.Value == 0)
+                errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price no puede ser cero." });
         }
 
         // Builds the IA update request and applies compatibility mapping when body comes wrapped in { Success, Message, Data }.
@@ -4762,7 +4777,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (!mapped.gastoType.HasValue)
                 mapped.gastoType = ResolveGastoTypeFromDraftLines(linesArray);
 
-            if (!mapped.totalAmount.HasValue || mapped.totalAmount.Value <= 0m)
+            if (!mapped.totalAmount.HasValue)
                 mapped.totalAmount = CalculateTicketLinesTotal(mapped.lines);
 
             var ticketCreation = GetJsonObjectIgnoreCase(dataObject, "ticketCreation");
@@ -5154,7 +5169,49 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Calculates total amount from ticket lines using qty*price or provided totalAmount.
+        // Validates that signed ticket line totals do not produce a negative ticket total.
+        private static void ValidateTicketTotalIsNotNegative(List<ExpenseSheetTicketLineRequest> lines, string field, List<IndValidationError> errors)
+        {
+            if (CalculateTicketLinesTotal(lines) < 0m)
+                errors.Add(new IndValidationError { Field = field, Message = TicketNegativeTotalValidationMessage });
+        }
+
+        // Calculates one ticket line amount using a signed totalAmount when provided.
+        private static decimal CalculateTicketLineTotal(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null)
+                return 0m;
+
+            if (line.totalAmount.HasValue)
+                return line.totalAmount.Value;
+
+            var qty = line.qty ?? 0m;
+            var price = line.price ?? 0m;
+            if (!line.price.HasValue)
+                return 0m;
+
+            if (qty == 0m && price < 0m)
+                return price;
+
+            return qty * price;
+        }
+
+        // Allows qty=0 only when the signed ticket line total represents a discount.
+        private static bool IsValidTicketLineAmount(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null || !line.qty.HasValue || !line.price.HasValue)
+                return false;
+
+            if (line.qty.Value < 0m || line.price.Value == 0m)
+                return false;
+
+            if (line.qty.Value > 0m)
+                return true;
+
+            return CalculateTicketLineTotal(line) < 0m;
+        }
+
+        // Calculates total amount from ticket lines using signed qty*price or provided totalAmount.
         private static decimal CalculateTicketLinesTotal(List<ExpenseSheetTicketLineRequest> lines)
         {
             if (lines == null || lines.Count == 0)
@@ -5163,19 +5220,7 @@ namespace IND_CRM_API.Controllers.CRM
             decimal total = 0m;
             foreach (var line in lines)
             {
-                if (line == null)
-                    continue;
-
-                var qty = line.qty ?? 0m;
-                var price = line.price ?? 0m;
-                if (qty <= 0m || price <= 0m)
-                    continue;
-
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
-
-                total += lineTotal;
+                total += CalculateTicketLineTotal(line);
             }
 
             return total;
@@ -5883,6 +5928,15 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 status = (HttpStatusCode)422;
                 message = "Ticket data is empty.";
+                return false;
+            }
+
+            if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
+            {
+                status = (HttpStatusCode)422;
+                message = ticketDetail.TotalAmount.HasValue && ticketDetail.TotalAmount.Value < 0m
+                    ? TicketNegativeTotalValidationMessage
+                    : "Ticket total amount must be greater than zero.";
                 return false;
             }
 

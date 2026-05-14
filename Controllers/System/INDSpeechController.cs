@@ -584,7 +584,14 @@ namespace IND_CRM_API.Controllers.System
                         var qty = line.qty ?? 0m;
                         var price = line.price ?? 0m;
                         var description = (line.description ?? string.Empty).Trim();
-                        if (qty <= 0m || price <= 0m || string.IsNullOrWhiteSpace(description))
+                        var lineRequest = new ExpenseSheetTicketLineRequest
+                        {
+                            description = description,
+                            qty = qty,
+                            price = price
+                        };
+                        var lineTotal = CalculateTicketLineTotal(lineRequest);
+                        if (!IsValidTicketLineAmount(lineRequest) || string.IsNullOrWhiteSpace(description))
                             continue;
 
                         validLines.Add(new ExpenseSheetTicketLineRequest
@@ -592,7 +599,7 @@ namespace IND_CRM_API.Controllers.System
                             description = description,
                             qty = qty,
                             price = price,
-                            totalAmount = qty * price
+                            totalAmount = lineTotal
                         });
                     }
                 }
@@ -612,6 +619,14 @@ namespace IND_CRM_API.Controllers.System
                 var comentarioValue = string.IsNullOrWhiteSpace(draft.Merchant) ? "Ticket IA" : draft.Merchant.Trim();
                 var transDateValue = ResolveDraftTransDate(draft);
                 var totalAmountValue = CalculateTicketLinesTotal(validLines);
+                if (totalAmountValue < 0m)
+                {
+                    errorMessage = "El total del ticket no puede ser negativo.";
+                    errorCode = IndErrorCodes.ValidationError;
+                    errorStatus = (HttpStatusCode)422;
+                    return false;
+                }
+
                 var gastoTypeValue = ResolveDraftGastoType(draft);
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
                 _logger.Log(
@@ -839,6 +854,41 @@ namespace IND_CRM_API.Controllers.System
             return 8;
         }
 
+        // Calculates the signed line amount while preserving zero-quantity discounts.
+        private static decimal CalculateTicketLineTotal(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null)
+                return 0m;
+
+            if (line.totalAmount.HasValue)
+                return line.totalAmount.Value;
+
+            var qty = line.qty ?? 0m;
+            var price = line.price ?? 0m;
+            if (!line.price.HasValue)
+                return 0m;
+
+            if (qty == 0m && price < 0m)
+                return price;
+
+            return qty * price;
+        }
+
+        // Allows qty 0 only when the signed line total represents a discount.
+        private static bool IsValidTicketLineAmount(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null || !line.qty.HasValue || !line.price.HasValue)
+                return false;
+
+            if (line.qty.Value < 0m || line.price.Value == 0m)
+                return false;
+
+            if (line.qty.Value > 0m)
+                return true;
+
+            return CalculateTicketLineTotal(line) < 0m;
+        }
+
         // Total de lineas de ticket.
         private static decimal CalculateTicketLinesTotal(List<ExpenseSheetTicketLineRequest> lines)
         {
@@ -851,16 +901,10 @@ namespace IND_CRM_API.Controllers.System
                 if (line == null)
                     continue;
 
-                var qty = line.qty ?? 0m;
-                var price = line.price ?? 0m;
-                if (qty <= 0m || price <= 0m)
+                if (!IsValidTicketLineAmount(line))
                     continue;
 
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
-
-                total += lineTotal;
+                total += CalculateTicketLineTotal(line);
             }
 
             return total;
