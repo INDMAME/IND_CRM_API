@@ -222,7 +222,7 @@ namespace IND_CRM_API.Services
             var receiptContent = analyzeResult["content"]?.ToString();
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
-            var lineTaxPercentHints = BuildLineTaxPercentHints(receiptContent);
+            var lineTaxPercentHints = BuildLineTaxPercentHints(analyzeResult["pages"], receiptContent);
             var taxPercentHints = BuildTaxPercentHints(receiptContent, lineTaxPercentHints);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
@@ -392,7 +392,62 @@ namespace IND_CRM_API.Services
         }
 
         // Extracts row-level VAT percentages from receipts where the tax column uses numeric values without a percent sign.
-        private static JArray BuildLineTaxPercentHints(string receiptContent)
+        private static JArray BuildLineTaxPercentHints(JToken pagesToken, string receiptContent)
+        {
+            var geometryHints = BuildLineTaxPercentHintsFromGeometry(pagesToken);
+            var textHints = BuildLineTaxPercentHintsFromText(receiptContent);
+            return geometryHints.Count >= textHints.Count ? geometryHints : textHints;
+        }
+
+        private static JArray BuildLineTaxPercentHintsFromGeometry(JToken pagesToken)
+        {
+            var hints = new JArray();
+            if (!(pagesToken is JArray pages))
+                return hints;
+
+            foreach (var page in pages.OfType<JObject>())
+            {
+                if (hints.Count >= MaxPromptTaxPercentHints)
+                    break;
+
+                var words = ReadOcrWords(page);
+                var lines = ReadOcrLines(page);
+                if (words.Count == 0 || lines.Count == 0)
+                    continue;
+
+                var medianWordHeight = MedianPositive(words.Select(word => word.Height).ToList(), 0.05m);
+                var medianWordWidth = MedianPositive(words.Select(word => word.Width).ToList(), 0.05m);
+                var rowTolerance = Math.Max(medianWordHeight * 0.85m, 0.03m);
+                var layout = TryFindTaxColumnLayout(lines, words, rowTolerance);
+                if (layout == null)
+                    continue;
+
+                var rowWords = words
+                    .Where(word => word.CenterY > layout.HeaderY + rowTolerance)
+                    .Where(word => !layout.TerminatorY.HasValue || word.CenterY < layout.TerminatorY.Value - rowTolerance)
+                    .OrderBy(word => word.CenterY)
+                    .ThenBy(word => word.CenterX)
+                    .ToList();
+                var rows = GroupOcrWordsByRow(rowWords, rowTolerance);
+                var rowIndex = 0;
+
+                foreach (var row in rows)
+                {
+                    if (hints.Count >= MaxPromptTaxPercentHints)
+                        break;
+
+                    if (TryBuildLineTaxPercentHintFromOcrRow(row, layout, medianWordWidth, rowIndex, out var hint))
+                    {
+                        hints.Add(hint);
+                        rowIndex++;
+                    }
+                }
+            }
+
+            return hints;
+        }
+
+        private static JArray BuildLineTaxPercentHintsFromText(string receiptContent)
         {
             var hints = new JArray();
             if (string.IsNullOrWhiteSpace(receiptContent))
@@ -431,6 +486,292 @@ namespace IND_CRM_API.Services
             }
 
             return hints;
+        }
+
+        private static TaxColumnLayout TryFindTaxColumnLayout(
+            List<OcrLineInfo> lines,
+            List<OcrWordInfo> words,
+            decimal rowTolerance)
+        {
+            foreach (var line in lines.OrderBy(value => value.CenterY))
+            {
+                var upper = line.Text?.ToUpperInvariant();
+                if (!IsTaxColumnHeaderLine(upper))
+                    continue;
+
+                var headerWords = words
+                    .Where(word => Math.Abs(word.CenterY - line.CenterY) <= rowTolerance * 2m)
+                    .OrderBy(word => word.CenterX)
+                    .ToList();
+                var taxWord = headerWords.FirstOrDefault(word => ContainsTaxLabel(word.Text?.ToUpperInvariant()));
+                if (taxWord == null)
+                    continue;
+
+                var priceWord = headerWords.FirstOrDefault(word => IsPriceHeaderWord(word.Text));
+                var terminator = lines
+                    .Where(candidate => candidate.CenterY > line.CenterY)
+                    .OrderBy(candidate => candidate.CenterY)
+                    .FirstOrDefault(candidate => IsTaxColumnSectionTerminator(candidate.Text?.ToUpperInvariant()));
+
+                return new TaxColumnLayout
+                {
+                    HeaderY = line.CenterY,
+                    TaxX = taxWord.CenterX,
+                    PriceX = priceWord?.CenterX,
+                    TerminatorY = terminator?.CenterY
+                };
+            }
+
+            return null;
+        }
+
+        private static bool TryBuildLineTaxPercentHintFromOcrRow(
+            List<OcrWordInfo> row,
+            TaxColumnLayout layout,
+            decimal medianWordWidth,
+            int rowIndex,
+            out JObject hint)
+        {
+            hint = null;
+            if (row == null || row.Count == 0)
+                return false;
+
+            var ordered = row.OrderBy(word => word.CenterX).ToList();
+            var sourceText = NormalizePromptLine(string.Join(" ", ordered.Select(word => word.Text)));
+            if (string.IsNullOrWhiteSpace(sourceText) || !ContainsLetter(sourceText))
+                return false;
+
+            var upper = sourceText.ToUpperInvariant();
+            if (IsNonItemTaxColumnLine(upper) || IsTaxColumnSectionTerminator(upper))
+                return false;
+
+            var gapToPrice = layout.PriceX.HasValue ? Math.Abs(layout.PriceX.Value - layout.TaxX) : 0m;
+            var taxTolerance = Math.Max(gapToPrice > 0m ? gapToPrice * 0.45m : 0m, medianWordWidth * 3m);
+            var taxWord = ordered
+                .Where(word => Math.Abs(word.CenterX - layout.TaxX) <= taxTolerance)
+                .Select(word => new
+                {
+                    Word = word,
+                    TaxPercent = TryParsePercentText(TrimPercentSuffix(word.Text))
+                })
+                .Where(candidate => IsLikelyTaxColumnPercent(candidate.TaxPercent))
+                .OrderBy(candidate => Math.Abs(candidate.Word.CenterX - layout.TaxX))
+                .FirstOrDefault();
+
+            if (taxWord == null)
+                return false;
+
+            var description = NormalizePromptLine(string.Join(
+                " ",
+                ordered
+                    .Where(word => word.CenterX < taxWord.Word.LeftX - (medianWordWidth * 0.25m))
+                    .Select(word => word.Text)));
+            if (string.IsNullOrWhiteSpace(description) || description.Length < 2 || !ContainsLetter(description))
+                return false;
+
+            hint = new JObject
+            {
+                ["rowIndex"] = rowIndex,
+                ["description"] = description,
+                ["taxPercent"] = taxWord.TaxPercent.Value,
+                ["sourceText"] = sourceText
+            };
+
+            var amountWord = ordered
+                .Where(word => word.CenterX > taxWord.Word.RightX + (medianWordWidth * 0.25m))
+                .Where(word => LooksLikeMoneyAmount(word.Text))
+                .OrderBy(word => word.CenterX)
+                .LastOrDefault();
+            var amount = TryParseDecimalText(amountWord?.Text);
+            if (amount.HasValue)
+                hint["amount"] = amount.Value;
+
+            return true;
+        }
+
+        private static List<OcrWordInfo> ReadOcrWords(JObject page)
+        {
+            var words = new List<OcrWordInfo>();
+            if (!(page?["words"] is JArray wordTokens))
+                return words;
+
+            foreach (var token in wordTokens.OfType<JObject>())
+            {
+                var text = NormalizePromptLine(token["content"]?.ToString());
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                if (TryReadOcrBox(token, out var left, out var right, out var top, out var bottom))
+                {
+                    words.Add(new OcrWordInfo
+                    {
+                        Text = text,
+                        CenterX = (left + right) / 2m,
+                        CenterY = (top + bottom) / 2m,
+                        LeftX = left,
+                        RightX = right,
+                        Width = Math.Abs(right - left),
+                        Height = Math.Abs(bottom - top)
+                    });
+                }
+            }
+
+            return words;
+        }
+
+        private static List<OcrLineInfo> ReadOcrLines(JObject page)
+        {
+            var lines = new List<OcrLineInfo>();
+            if (!(page?["lines"] is JArray lineTokens))
+                return lines;
+
+            foreach (var token in lineTokens.OfType<JObject>())
+            {
+                var text = NormalizePromptLine(token["content"]?.ToString());
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                if (TryReadOcrBox(token, out var left, out var right, out var top, out var bottom))
+                {
+                    lines.Add(new OcrLineInfo
+                    {
+                        Text = text,
+                        CenterY = (top + bottom) / 2m,
+                        LeftX = left,
+                        RightX = right
+                    });
+                }
+            }
+
+            return lines;
+        }
+
+        private static bool TryReadOcrBox(JObject token, out decimal left, out decimal right, out decimal top, out decimal bottom)
+        {
+            left = right = top = bottom = 0m;
+            var polygon = token?["polygon"] ?? token?["boundingPolygon"];
+            var coordinates = ReadPolygonCoordinates(polygon);
+            if (coordinates.Count < 4)
+                return false;
+
+            var xs = new List<decimal>();
+            var ys = new List<decimal>();
+            for (var i = 0; i + 1 < coordinates.Count; i += 2)
+            {
+                xs.Add(coordinates[i]);
+                ys.Add(coordinates[i + 1]);
+            }
+
+            if (xs.Count == 0 || ys.Count == 0)
+                return false;
+
+            left = xs.Min();
+            right = xs.Max();
+            top = ys.Min();
+            bottom = ys.Max();
+            return true;
+        }
+
+        private static List<decimal> ReadPolygonCoordinates(JToken polygon)
+        {
+            var values = new List<decimal>();
+            if (!(polygon is JArray array))
+                return values;
+
+            foreach (var item in array)
+            {
+                if (item is JObject point)
+                {
+                    AddDecimalCoordinate(values, point["x"]);
+                    AddDecimalCoordinate(values, point["y"]);
+                    continue;
+                }
+
+                AddDecimalCoordinate(values, item);
+            }
+
+            return values;
+        }
+
+        private static void AddDecimalCoordinate(List<decimal> values, JToken token)
+        {
+            if (values == null || token == null)
+                return;
+
+            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+            {
+                values.Add(token.Value<decimal>());
+                return;
+            }
+
+            if (decimal.TryParse(token.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+                values.Add(parsed);
+        }
+
+        private static List<List<OcrWordInfo>> GroupOcrWordsByRow(List<OcrWordInfo> words, decimal rowTolerance)
+        {
+            var rows = new List<List<OcrWordInfo>>();
+            foreach (var word in words.OrderBy(value => value.CenterY).ThenBy(value => value.CenterX))
+            {
+                var current = rows.LastOrDefault();
+                if (current == null)
+                {
+                    rows.Add(new List<OcrWordInfo> { word });
+                    continue;
+                }
+
+                var currentY = current.Average(value => value.CenterY);
+                if (Math.Abs(word.CenterY - currentY) <= rowTolerance)
+                {
+                    current.Add(word);
+                    continue;
+                }
+
+                rows.Add(new List<OcrWordInfo> { word });
+            }
+
+            return rows;
+        }
+
+        private static decimal MedianPositive(List<decimal> values, decimal fallback)
+        {
+            var positives = (values ?? new List<decimal>())
+                .Where(value => value > 0m)
+                .OrderBy(value => value)
+                .ToList();
+            if (positives.Count == 0)
+                return fallback;
+
+            var mid = positives.Count / 2;
+            return positives.Count % 2 == 1
+                ? positives[mid]
+                : (positives[mid - 1] + positives[mid]) / 2m;
+        }
+
+        private static string TrimPercentSuffix(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? value : value.Trim().TrimEnd('%');
+        }
+
+        private static decimal? TryParseDecimalText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var normalized = raw.Trim().TrimEnd('%').Replace(',', '.');
+            return decimal.TryParse(
+                normalized,
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+                ? parsed
+                : (decimal?)null;
+        }
+
+        private static bool LooksLikeMoneyAmount(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   Regex.IsMatch(value.Trim(), @"^-?\d{1,6}[,.]\d{2}$");
         }
 
         private static bool TryBuildLineTaxPercentHint(string line, int rowIndex, out JObject hint)
@@ -543,6 +884,18 @@ namespace IND_CRM_API.Services
                    upperLine.Contains("TVA");
         }
 
+        private static bool IsPriceHeaderWord(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var upper = value.Trim().ToUpperInvariant();
+            return upper.Contains("PREZZO") ||
+                   upper.Contains("PRICE") ||
+                   upper.Contains("IMPORTO") ||
+                   upper.Contains("AMOUNT");
+        }
+
         private static bool ContainsLetter(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -557,6 +910,33 @@ namespace IND_CRM_API.Services
                 return false;
 
             return value.Value >= 0m && value.Value <= 30m;
+        }
+
+        private sealed class OcrWordInfo
+        {
+            public string Text { get; set; }
+            public decimal CenterX { get; set; }
+            public decimal CenterY { get; set; }
+            public decimal LeftX { get; set; }
+            public decimal RightX { get; set; }
+            public decimal Width { get; set; }
+            public decimal Height { get; set; }
+        }
+
+        private sealed class OcrLineInfo
+        {
+            public string Text { get; set; }
+            public decimal CenterY { get; set; }
+            public decimal LeftX { get; set; }
+            public decimal RightX { get; set; }
+        }
+
+        private sealed class TaxColumnLayout
+        {
+            public decimal HeaderY { get; set; }
+            public decimal TaxX { get; set; }
+            public decimal? PriceX { get; set; }
+            public decimal? TerminatorY { get; set; }
         }
 
         private static void AddPromptLine(List<string> lines, string value)
