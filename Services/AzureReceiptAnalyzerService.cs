@@ -34,6 +34,10 @@ namespace IND_CRM_API.Services
         private const string DefaultApiVersion = "2023-07-31";
         private const int DefaultPollIntervalMs = 1000;
         private const int DefaultTimeoutSeconds = 120;
+        private const int MaxPromptOcrTextChars = 6000;
+        private const int MaxPromptOcrLines = 160;
+        private const int MaxPromptOcrLineChars = 180;
+        private const int MaxPromptTaxPercentHints = 80;
 
         private static readonly HttpClient HttpClient = CreateHttpClient();
 
@@ -216,6 +220,9 @@ namespace IND_CRM_API.Services
             var merchantAddress = ReadFieldScalar(fields?["MerchantAddress"] as JObject);
             var merchantPhone = ReadFieldScalar(fields?["MerchantPhoneNumber"] as JObject);
             var receiptContent = analyzeResult["content"]?.ToString();
+            var ocrText = NormalizeOcrTextForPrompt(receiptContent);
+            var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
+            var taxPercentHints = BuildTaxPercentHints(receiptContent);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
@@ -246,7 +253,10 @@ namespace IND_CRM_API.Services
                     ["total"] = effectiveTotalToken ?? JValue.CreateNull()
                 },
                 ["items"] = items,
-                ["itemCount"] = items.Count
+                ["itemCount"] = items.Count,
+                ["ocrText"] = ToNullableValue(ocrText),
+                ["ocrLines"] = ocrLines,
+                ["taxPercentHints"] = taxPercentHints
             };
 
             return new AzureReceiptAnalysisResult
@@ -286,6 +296,116 @@ namespace IND_CRM_API.Services
             }
 
             return items;
+        }
+
+        private static string NormalizeOcrTextForPrompt(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent))
+                return null;
+
+            var lines = receiptContent
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(NormalizePromptLine)
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToList();
+
+            if (lines.Count == 0)
+                return null;
+
+            var normalized = string.Join("\n", lines);
+            return normalized.Length > MaxPromptOcrTextChars
+                ? normalized.Substring(0, MaxPromptOcrTextChars)
+                : normalized;
+        }
+
+        private static JArray BuildCompactOcrLines(JToken pagesToken, string receiptContent)
+        {
+            var lines = new List<string>();
+
+            if (pagesToken is JArray pages)
+            {
+                foreach (var lineToken in pages
+                    .OfType<JObject>()
+                    .SelectMany(page => (page["lines"] as JArray)?.OfType<JObject>() ?? Enumerable.Empty<JObject>()))
+                {
+                    AddPromptLine(lines, lineToken["content"]?.ToString());
+                    if (lines.Count >= MaxPromptOcrLines)
+                        break;
+                }
+            }
+
+            if (lines.Count == 0 && !string.IsNullOrWhiteSpace(receiptContent))
+            {
+                foreach (var rawLine in receiptContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    AddPromptLine(lines, rawLine);
+                    if (lines.Count >= MaxPromptOcrLines)
+                        break;
+                }
+            }
+
+            return new JArray(lines.Select(line => new JValue(line)));
+        }
+
+        private static JArray BuildTaxPercentHints(string receiptContent)
+        {
+            var hints = new JArray();
+            if (string.IsNullOrWhiteSpace(receiptContent))
+                return hints;
+
+            var matches = Regex.Matches(
+                receiptContent,
+                @"(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*%");
+
+            foreach (Match match in matches)
+            {
+                if (hints.Count >= MaxPromptTaxPercentHints)
+                    break;
+
+                var parsed = TryParsePercentText(match.Groups[1].Value);
+                if (parsed.HasValue && parsed.Value >= 0m && parsed.Value <= 100m)
+                    hints.Add(parsed.Value);
+            }
+
+            return hints;
+        }
+
+        private static void AddPromptLine(List<string> lines, string value)
+        {
+            if (lines == null)
+                return;
+
+            var normalized = NormalizePromptLine(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return;
+
+            if (normalized.Length > MaxPromptOcrLineChars)
+                normalized = normalized.Substring(0, MaxPromptOcrLineChars);
+
+            lines.Add(normalized);
+        }
+
+        private static string NormalizePromptLine(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return Regex.Replace(value.Trim(), @"\s+", " ");
+        }
+
+        private static decimal? TryParsePercentText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var normalized = raw.Trim().Replace(',', '.');
+            return decimal.TryParse(
+                normalized,
+                NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+                ? parsed
+                : (decimal?)null;
         }
 
         private static JToken ProjectMoneyField(JObject field)

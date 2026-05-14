@@ -932,6 +932,8 @@ namespace IND_CRM_API.Services
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
+- El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines para recuperar columnas que Azure no haya modelado como campos, especialmente IVA/VAT/TAX/% por linea.
+- Si hay una columna IVA/VAT/TAX/% paralela a las lineas de productos, asigna taxPercent por orden de fila y devuelve solo el numero sin simbolo %.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
@@ -964,6 +966,8 @@ namespace IND_CRM_API.Services
 - price debe representar el precio unitario de la linea.
 - lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
 - taxPercent debe representar el porcentaje de IVA/VAT/tax de la linea (ej: 21, 10, 4). Si no aparece ni se puede deducir con confianza para esa linea, usa null.
+- Para taxPercent, revisa tambien ocrText, ocrLines y taxPercentHints: cuando una columna IVA/VAT/TAX/% tenga tantos valores como lineas de producto, asigna cada porcentaje a la linea por orden visual.
+- No uses un impuesto total de cabecera (por ejemplo DI CUI IVA, Total tax, VAT total) como taxPercent de todas las lineas si no hay evidencia por linea.
 - Si la linea es un descuento, devuelve price y lineTotal en negativo.
 - Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty, incluso cuando lineTotal sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
@@ -1007,6 +1011,8 @@ namespace IND_CRM_API.Services
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Incluye taxPercent solo cuando el porcentaje de IVA/VAT/tax de esa linea aparezca o se pueda deducir con confianza; si no, usa null.
+- Para taxPercent, usa tambien ocrText, ocrLines y taxPercentHints: cuando una columna IVA/VAT/TAX/% este alineada con las lineas del ticket, asigna cada porcentaje por orden de fila y devuelve solo el numero sin %.
+- No uses un impuesto total de cabecera (por ejemplo DI CUI IVA, Total tax, VAT total) como taxPercent de todas las lineas si no hay evidencia por linea.
 - Si qty no es visible, usa 1.
 - Solo usa qty 0 cuando la linea sea un descuento con lineTotal negativo visible.
 - price debe ser el precio unitario, negativo cuando la linea sea un descuento.
