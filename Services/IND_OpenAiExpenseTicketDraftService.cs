@@ -963,6 +963,7 @@ namespace IND_CRM_API.Services
 - qty debe ser la cantidad real de la linea (admite decimales). Solo puede ser 0 cuando la linea sea un descuento con lineTotal negativo visible.
 - price debe representar el precio unitario de la linea.
 - lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
+- taxPercent debe representar el porcentaje de IVA/VAT/tax de la linea (ej: 21, 10, 4). Si no aparece ni se puede deducir con confianza para esa linea, usa null.
 - Si la linea es un descuento, devuelve price y lineTotal en negativo.
 - Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty, incluso cuando lineTotal sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
@@ -1005,6 +1006,7 @@ namespace IND_CRM_API.Services
 - transDate debe ir solo en cabecera, en formato DD.MM.YYYY o null.
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
+- Incluye taxPercent solo cuando el porcentaje de IVA/VAT/tax de esa linea aparezca o se pueda deducir con confianza; si no, usa null.
 - Si qty no es visible, usa 1.
 - Solo usa qty 0 cuando la linea sea un descuento con lineTotal negativo visible.
 - price debe ser el precio unitario, negativo cuando la linea sea un descuento.
@@ -1403,6 +1405,12 @@ namespace IND_CRM_API.Services
             var qtyParsed = TryParseDecimal(lineToken["qty"]);
             var price = TryParseDecimal(lineToken["price"]);
             var lineTotal = TryParseDecimal(lineToken["lineTotal"]);
+            var taxPercent = TryParseDecimal(lineToken["taxPercent"]);
+            if (taxPercent.HasValue && taxPercent.Value < 0m)
+            {
+                taxPercent = null;
+                warnings = EnsureWarnings(warnings, "taxPercent negativo descartado en una linea.");
+            }
             var isZeroQtyDiscount = qtyParsed.HasValue &&
                                     qtyParsed.Value == 0m &&
                                     ((lineTotal.HasValue && lineTotal.Value < 0m) || (price.HasValue && price.Value < 0m));
@@ -1452,6 +1460,7 @@ namespace IND_CRM_API.Services
                 fileId = NormalizeText(lineToken["fileId"]?.ToString(), null),
                 qty = qty,
                 price = price,
+                taxPercent = taxPercent,
                 projId = NormalizeText(lineToken["projId"]?.ToString(), request?.projId)
             };
 
@@ -1850,6 +1859,7 @@ namespace IND_CRM_API.Services
                 ["qty"] = new JValue(qty),
                 ["price"] = ToNullableDecimalToken(price),
                 ["lineTotal"] = ToNullableDecimalToken(lineTotal),
+                ["taxPercent"] = ToNullableDecimalToken(line?.taxPercent),
                 ["projId"] = ToNullableStringToken(line?.projId)
             };
         }
@@ -1870,7 +1880,8 @@ namespace IND_CRM_API.Services
                 ["description"] = ToNullableStringToken(line?.description),
                 ["qty"] = new JValue(qty),
                 ["price"] = ToNullableDecimalToken(price),
-                ["lineTotal"] = ToNullableDecimalToken(lineTotal)
+                ["lineTotal"] = ToNullableDecimalToken(lineTotal),
+                ["taxPercent"] = ToNullableDecimalToken(line?.taxPercent)
             };
         }
 
@@ -2032,6 +2043,10 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = new JArray("number", "null")
                     },
+                    ["taxPercent"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null")
+                    },
                     ["projId"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
@@ -2046,6 +2061,7 @@ namespace IND_CRM_API.Services
                     "qty",
                     "price",
                     "lineTotal",
+                    "taxPercent",
                     "projId")
             };
         }
@@ -2124,13 +2140,18 @@ namespace IND_CRM_API.Services
                     ["lineTotal"] = new JObject
                     {
                         ["type"] = new JArray("number", "null")
+                    },
+                    ["taxPercent"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null")
                     }
                 },
                 ["required"] = new JArray(
                     "description",
                     "qty",
                     "price",
-                    "lineTotal")
+                    "lineTotal",
+                    "taxPercent")
             };
         }
 

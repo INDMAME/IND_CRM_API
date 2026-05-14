@@ -241,6 +241,8 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(CalculateTicketLineTotal(line));
+                        if (line.taxPercent.HasValue)
+                            lineCon.Append(line.taxPercent.Value);
                         linesCon.Append(lineCon);
                     }
                 }
@@ -1954,6 +1956,8 @@ namespace IND_CRM_API.Controllers.CRM
                     lineCon.Append(qty);
                     lineCon.Append(price);
                     lineCon.Append(lineTotal);
+                    if (line.taxPercent.HasValue)
+                        lineCon.Append(line.taxPercent.Value);
                     linesCon.Append(lineCon);
                 }
                 rootCon.Append(linesCon);
@@ -2560,8 +2564,10 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                if (body.totalAmount.HasValue)
-                    con.Append(body.totalAmount.Value);
+                if (body.totalAmount.HasValue || body.taxPercent.HasValue)
+                    con.Append(CalculateTicketLineTotal(body));
+                if (body.taxPercent.HasValue)
+                    con.Append(body.taxPercent.Value);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2593,7 +2599,8 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : string.Empty,
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
+                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null,
+                    TaxPercent = extras.Count > 3 ? ToDecimal(extras[3]) : body.taxPercent
                 };
 
                 LogOut(HttpStatusCode.Created);
@@ -2684,8 +2691,10 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                if (body.totalAmount.HasValue)
-                    con.Append(body.totalAmount.Value);
+                if (body.totalAmount.HasValue || body.taxPercent.HasValue)
+                    con.Append(CalculateTicketLineTotal(body));
+                if (body.taxPercent.HasValue)
+                    con.Append(body.taxPercent.Value);
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2717,7 +2726,8 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : lineRecId.ToString(CultureInfo.InvariantCulture),
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
+                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null,
+                    TaxPercent = extras.Count > 3 ? ToDecimal(extras[3]) : body.taxPercent
                 };
 
                 LogOut(HttpStatusCode.OK);
@@ -3519,6 +3529,8 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(CalculateTicketLineTotal(line));
+                        if (line.taxPercent.HasValue)
+                            lineCon.Append(line.taxPercent.Value);
                         linesCon.Append(lineCon);
                     }
                 }
@@ -3886,7 +3898,8 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     description = description,
                     qty = qty,
-                    price = price
+                    price = price,
+                    taxPercent = line.taxPercent
                 };
                 var lineTotal = CalculateTicketLineTotal(lineRequest);
                 if (string.IsNullOrWhiteSpace(description) || !IsValidTicketLineAmount(lineRequest))
@@ -3897,7 +3910,8 @@ namespace IND_CRM_API.Controllers.CRM
                     description = description,
                     qty = qty,
                     price = price,
-                    totalAmount = lineTotal
+                    totalAmount = lineTotal,
+                    taxPercent = line.taxPercent
                 });
             }
 
@@ -4489,6 +4503,8 @@ namespace IND_CRM_API.Controllers.CRM
                 lineCon.Append(qty);
                 lineCon.Append(price);
                 lineCon.Append(lineTotal);
+                if (line.taxPercent.HasValue)
+                    lineCon.Append(line.taxPercent.Value);
                 linesCon.Append(lineCon);
             }
             rootCon.Append(linesCon);
@@ -4644,6 +4660,9 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (!body.price.HasValue || body.price.Value == 0)
                 errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price no puede ser cero." });
+
+            if (body.taxPercent.HasValue && body.taxPercent.Value < 0m)
+                errors.Add(new IndValidationError { Field = prefix + ".taxPercent", Message = "taxPercent no puede ser negativo." });
         }
 
         // Builds the IA update request and applies compatibility mapping when body comes wrapped in { Success, Message, Data }.
@@ -4750,7 +4769,9 @@ namespace IND_CRM_API.Controllers.CRM
                     var lineDescription = GetJsonStringIgnoreCase(lineToken, "description");
                     var lineQty = GetJsonDecimalIgnoreCase(lineToken, "qty");
                     var linePrice = GetJsonDecimalIgnoreCase(lineToken, "price");
-                    var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount");
+                    var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount")
+                                    ?? GetJsonDecimalIgnoreCase(lineToken, "lineTotal");
+                    var lineTaxPercent = GetJsonDecimalIgnoreCase(lineToken, "taxPercent");
                     if (!lineTotal.HasValue && lineQty.HasValue && linePrice.HasValue)
                         lineTotal = lineQty.Value * linePrice.Value;
 
@@ -4766,7 +4787,8 @@ namespace IND_CRM_API.Controllers.CRM
                         description = lineDescription,
                         qty = lineQty,
                         price = linePrice,
-                        totalAmount = lineTotal
+                        totalAmount = lineTotal,
+                        taxPercent = lineTaxPercent
                     });
                 }
             }
@@ -6155,6 +6177,7 @@ namespace IND_CRM_API.Controllers.CRM
                     Qty = SafeDecimal(row, 3),
                     Price = SafeDecimal(row, 4),
                     TotalAmount = SafeDecimal(row, 5),
+                    TaxPercent = AxContainerReadHelper.SafeLength(row) >= 8 ? SafeDecimal(row, 8) : null,
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 7)
                 });

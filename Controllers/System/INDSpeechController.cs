@@ -588,7 +588,8 @@ namespace IND_CRM_API.Controllers.System
                         {
                             description = description,
                             qty = qty,
-                            price = price
+                            price = price,
+                            taxPercent = line.taxPercent
                         };
                         var lineTotal = CalculateTicketLineTotal(lineRequest);
                         if (!IsValidTicketLineAmount(lineRequest) || string.IsNullOrWhiteSpace(description))
@@ -599,7 +600,8 @@ namespace IND_CRM_API.Controllers.System
                             description = description,
                             qty = qty,
                             price = price,
-                            totalAmount = lineTotal
+                            totalAmount = lineTotal,
+                            taxPercent = line.taxPercent
                         });
                     }
                 }
@@ -660,6 +662,8 @@ namespace IND_CRM_API.Controllers.System
                         lineCon.Append(ticketLine.qty ?? 0m);
                         lineCon.Append(ticketLine.price ?? 0m);
                         lineCon.Append(ticketLine.totalAmount ?? 0m);
+                        if (ticketLine.taxPercent.HasValue)
+                            lineCon.Append(ticketLine.taxPercent.Value);
                         linesCon.Append(lineCon);
                     }
                 }

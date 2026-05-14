@@ -1655,6 +1655,10 @@
                                                                                                                                                       },
                                                                                                                                             "totalAmount":  {
                                                                                                                                                                 "type":  "number"
+                                                                                                                                                            },
+                                                                                                                                            "taxPercent":  {
+                                                                                                                                                               "type":  "number",
+                                                                                                                                                               "description":  "IVA/VAT/tax percentage for the ticket line. Informational only."
                                                                                                                                                             }
                                                                                                                                         },
                                                                                                                          "required":  [
@@ -1711,7 +1715,8 @@
                                                                           "description":  "Comida",
                                                                           "qty":  1,
                                                                           "price":  25.5,
-                                                                          "totalAmount":  25.5
+                                                                          "totalAmount":  25.5,
+                                                                          "taxPercent":  10
                                                                       }
                                                                   ]
                                                     }
@@ -2339,6 +2344,10 @@
                                                                                                        },
                                                                                              "totalAmount":  {
                                                                                                                  "type":  "number"
+                                                                                                             },
+                                                                                             "taxPercent":  {
+                                                                                                               "type":  "number",
+                                                                                                               "description":  "IVA/VAT/tax percentage for the ticket line. Informational only."
                                                                                                              }
                                                                                          },
                                                                           "required":  [
@@ -2383,7 +2392,8 @@
                                                         "description":  "Comida",
                                                         "qty":  1,
                                                         "price":  20.5,
-                                                        "totalAmount":  20.5
+                                                        "totalAmount":  20.5,
+                                                        "taxPercent":  10
                                                     }
                                        }
                                    ]
@@ -2455,6 +2465,10 @@
                                                                                                        },
                                                                                              "totalAmount":  {
                                                                                                                  "type":  "number"
+                                                                                                             },
+                                                                                             "taxPercent":  {
+                                                                                                               "type":  "number",
+                                                                                                               "description":  "IVA/VAT/tax percentage for the ticket line. Informational only."
                                                                                                              }
                                                                                          },
                                                                           "required":  [
@@ -2500,7 +2514,8 @@
                                                         "description":  "Comida",
                                                         "qty":  1,
                                                         "price":  21,
-                                                        "totalAmount":  21
+                                                        "totalAmount":  21,
+                                                        "taxPercent":  10
                                                     }
                                        }
                                    ]

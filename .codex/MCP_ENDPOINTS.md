@@ -110,7 +110,7 @@ Endpoints
 - Headers: `Authorization`
 - Headers opcionales cuando `persistTicket=true`: `X-IND-Company`, `X-IND-AxUserId`
 - Body (multipart): `ticketImage`, `persistTicket` (opcional), `ticketUrlFile` (opcional; si no viene se usa URL temporal)
-- Respuesta: `Data` incluye `gastoType` (cabecera) y `lines[].typeValue` por linea.
+- Respuesta: `Data` incluye `gastoType` (cabecera), `lines[].typeValue` por linea y puede incluir `lines[].taxPercent` cuando el IVA por linea se detecta con confianza.
 - Respuesta: con `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` debe ser `true`.
 
 ## Expense Sheets
@@ -185,7 +185,7 @@ Endpoints
   - `existingFileId` (requerido cuando `mode=2`)
   - `description`, `currencyCode`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (requeridos cuando `mode=0|1`)
   - `totalAmount`, `comentario`, `fileExtension`, `gastoType`, `ocrJson`, `normalizedJson` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
-  - `lines[]` con `description`, `qty`, `price`, `totalAmount` (lineas requeridas cuando `mode=0|2`)
+  - `lines[]` con `description`, `qty`, `price`, `totalAmount`, `taxPercent` (lineas requeridas cuando `mode=0|2`; `taxPercent` es opcional e informativo)
 
 ### Tool: crm_expensesheets_tickets_quick_create
 - HTTP: POST `/api/crm/expensesheets/tickets/quick-create`
@@ -203,7 +203,7 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson` y `normalizedJson`.
+- Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson` y `normalizedJson`; lineas incluyen `TaxPercent`.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`
@@ -253,7 +253,7 @@ Endpoints
   - `totalAmount` (opcional)
   - `comentario` (opcional)
   - `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional si no hay `fileName`)
-  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional)
+  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional), `taxPercent` (opcional e informativo)
 - Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
 - Compatibilidad: acepta body directo del contrato IA o envelope de `expensefromticket` (`Success/Message/Data/TraceId`) y mapea `Data` de forma interna.
 
@@ -280,13 +280,13 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/lines`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`, `qty`, `price`, `totalAmount` (opcional)
+- Body: `description`, `qty`, `price`, `totalAmount` (opcional), `taxPercent` (opcional e informativo)
 
 ### Tool: crm_expensesheets_tickets_update_line
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`, `qty`, `price`, `totalAmount` (opcional)
+- Body: `description`, `qty`, `price`, `totalAmount` (opcional), `taxPercent` (opcional e informativo)
 
 ### Tool: crm_expensesheets_tickets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}`

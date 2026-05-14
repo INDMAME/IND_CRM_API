@@ -50,5 +50,9 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? qty { get; set; }
         [Required] public decimal? price { get; set; }
         public decimal? totalAmount { get; set; }
+        /// <summary>
+        /// Porcentaje de IVA de la linea del ticket. Es informativo y no altera calculos.
+        /// </summary>
+        public decimal? taxPercent { get; set; }
     }
 }

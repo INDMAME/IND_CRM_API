@@ -35,6 +35,7 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Price { get; set; }
         public decimal? TotalAmount { get; set; }
+        public decimal? TaxPercent { get; set; }
         public string RefRecIdTable { get; set; }
         public string CreatedByUserId { get; set; }
     }

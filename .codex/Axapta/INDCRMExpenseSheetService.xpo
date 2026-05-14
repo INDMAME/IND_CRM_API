@@ -587,7 +587,7 @@ Formatversion: 1
         #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional)]
         #         - Mode 2  : at least [axUserId]
         #      3) linesIn (container of line containers)
-        #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
+        #         - Each line: [lineDescr, qty, price, lineTotal(optional), taxPercent(optional)]
         #      4) optionsIn (optional): [mode, existingFileId, processedByAI]
         #*/
         #static server container createExpenseSheetTicket(container _data)
@@ -627,6 +627,7 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    Percent            lineTaxPercent;
         #    int                processedByAI;
         #    int                gastoType;
         #    boolean            hasHeaderTotalAmount;
@@ -863,6 +864,10 @@ Formatversion: 1
         #                    if (conLen(lineIn) >= 4)
         #                        lineTotal = conPeek(lineIn, 4);
         #
+        #                    lineTaxPercent = 0;
+        #                    if (conLen(lineIn) >= 5)
+        #                        lineTaxPercent = conPeek(lineIn, 5);
+        #
         #                    if (!lineDescr)
         #                    {
         #                        ttsabort;
@@ -884,6 +889,12 @@ Formatversion: 1
         #                    if(lineTotal <= 0)
         #                        lineTotal = qty * price;
         #
+        #                    if (lineTaxPercent < 0)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('TaxPercent no puede ser negativo en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
         #                    ticketLine.clear();
         #                    ticketLine.initValue();
         #
@@ -893,6 +904,7 @@ Formatversion: 1
         #                    ticketLine.Qty             = qty;
         #                    ticketLine.Price           = price;
         #                    ticketLine.TotalAmount     = lineTotal;
+        #                    ticketLine.TaxPercent      = lineTaxPercent;
         #                    ticketLine.CreatedByUserId = axUserId;
         #
         #                    ticketLine.insert();
@@ -969,7 +981,7 @@ Formatversion: 1
         #         - Mode 0/1: [axUserId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional)]
         #         - Mode 2  : at least [axUserId]
         #      3) linesIn (container of line containers)
-        #         - Each line: [lineDescr, qty, price, lineTotal(optional)]
+        #         - Each line: [lineDescr, qty, price, lineTotal(optional), taxPercent(optional)]
         #      4) optionsIn (optional): [mode, existingFileId]
         #*/
         #static server container createExpenseSheetTicket_backup(container _data)
@@ -1006,6 +1018,7 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    Percent            lineTaxPercent;
         #    int                gastoType;
         #    boolean            hasHeaderTotalAmount;
         #    boolean            hasGastoType;
@@ -1209,6 +1222,10 @@ Formatversion: 1
         #                    if (conLen(lineIn) >= 4)
         #                        lineTotal = conPeek(lineIn, 4);
         #
+        #                    lineTaxPercent = 0;
+        #                    if (conLen(lineIn) >= 5)
+        #                        lineTaxPercent = conPeek(lineIn, 5);
+        #
         #                    if (!lineDescr)
         #                    {
         #
@@ -1230,6 +1247,12 @@ Formatversion: 1
         #                    if(lineTotal <= 0)
         #                        lineTotal = qty * price;
         #
+        #                    if (lineTaxPercent < 0)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('TaxPercent no puede ser negativo en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
         #                    ticketLine.clear();
         #                    ticketLine.initValue();
         #
@@ -1239,6 +1262,7 @@ Formatversion: 1
         #                    ticketLine.Qty             = qty;
         #                    ticketLine.Price           = price;
         #                    ticketLine.TotalAmount     = lineTotal;
+        #                    ticketLine.TaxPercent      = lineTaxPercent;
         #                    ticketLine.CreatedByUserId = axUserId;
         #
         #                    ticketLine.insert();
@@ -1316,6 +1340,7 @@ Formatversion: 1
         #//  - _data[5] = qty
         #//  - _data[6] = price
         #//  - _data[7] = lineTotal (optional)
+        #//  - _data[8] = taxPercent (optional)
         #static server container createExpenseSheetTicketLine(container _data)
         #{
         #    DataAreaId         companyId;
@@ -1326,6 +1351,7 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    Percent            lineTaxPercent;
         #    int                startLine;
         #    str                msg;
         #
@@ -1351,6 +1377,10 @@ Formatversion: 1
         #    if (conLen(_data) >= 7)
         #        lineTotal = conPeek(_data, 7);
         #
+        #    lineTaxPercent = 0;
+        #    if (conLen(_data) >= 8)
+        #        lineTaxPercent = conPeek(_data, 8);
+        #
         #    if (!axUserId)
         #        return INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull());
         #
@@ -1368,6 +1398,9 @@ Formatversion: 1
         #
         #    if (lineTotal <= 0)
         #        lineTotal = qty * price;
+        #
+        #    if (lineTaxPercent < 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'TaxPercent no puede ser negativo.', conNull());
         #
         #    startLine = infolog.line();
         #
@@ -1399,6 +1432,7 @@ Formatversion: 1
         #            ticketLine.Qty             = qty;
         #            ticketLine.Price           = price;
         #            ticketLine.TotalAmount     = lineTotal;
+        #            ticketLine.TaxPercent      = lineTaxPercent;
         #            ticketLine.CreatedByUserId = axUserId;
         #            ticketLine.insert();
         #
@@ -1410,7 +1444,7 @@ Formatversion: 1
         #            ttscommit;
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket creada correctamente.',
-        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketLine.TaxPercent)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -2278,7 +2312,8 @@ Formatversion: 1
         #                        strFmt('%1', ticketLine.Price),
         #                        strFmt('%1', ticketLine.TotalAmount),
         #                        strFmt('%1', ticketLine.RefRecIdTable),
-        #                        strFmt('%1', ticketLine.CreatedByUserId)
+        #                        strFmt('%1', ticketLine.CreatedByUserId),
+        #                        strFmt('%1', ticketLine.TaxPercent)
         #                      ];
         #
         #            linesOut = conIns(linesOut, conLen(linesOut) + 1, lineRow);
@@ -3598,7 +3633,7 @@ Formatversion: 1
         #// Input:
         #//  - _data[1] = CompanyId
         #//  - _data[2] = headerIn = [axUserId, fileId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional)]
-        #//  - _data[3] = linesIn  = container of lines [lineDescr, qty, price, lineTotal(optional)]
+        #//  - _data[3] = linesIn  = container of lines [lineDescr, qty, price, lineTotal(optional), taxPercent(optional)]
         #// Output:
         #//  - [header, linesOutRecIds]
         #static server container updateExpenseSheetTicketFromIA(container _data)
@@ -3628,6 +3663,7 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    Percent            lineTaxPercent;
         #    real               linesTotalAmount;
         #    boolean            hasTotalAmount;
         #    boolean            hasGastoType;
@@ -3822,6 +3858,10 @@ Formatversion: 1
         #                else
         #                    lineTotal = 0;
         #
+        #                lineTaxPercent = 0;
+        #                if (conLen(lineIn) >= 5)
+        #                    lineTaxPercent = conPeek(lineIn, 5);
+        #
         #                if (!lineDescr)
         #                {
         #                    ttsabort;
@@ -3843,6 +3883,12 @@ Formatversion: 1
         #                if (lineTotal <= 0)
         #                    lineTotal = qty * price;
         #
+        #                if (lineTaxPercent < 0)
+        #                {
+        #                    ttsabort;
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: TaxPercent no puede ser negativo.', i), conNull()), conNull()];
+        #                }
+        #
         #                ticketLine.clear();
         #                ticketLine.initValue();
         #                ticketLine.FileId          = ticketHeader.FileId;
@@ -3850,6 +3896,7 @@ Formatversion: 1
         #                ticketLine.Qty             = qty;
         #                ticketLine.Price           = price;
         #                ticketLine.TotalAmount     = lineTotal;
+        #                ticketLine.TaxPercent      = lineTaxPercent;
         #                ticketLine.RefRecIdTable   = ticketHeader.RecId;
         #                ticketLine.CreatedByUserId = axUserId;
         #                ticketLine.insert();
@@ -3921,6 +3968,7 @@ Formatversion: 1
         #//  - _data[6] = qty
         #//  - _data[7] = price
         #//  - _data[8] = lineTotal (optional)
+        #//  - _data[9] = taxPercent (optional)
         #static server container updateExpenseSheetTicketLine(container _data)
         #{
         #    DataAreaId         companyId;
@@ -3932,6 +3980,8 @@ Formatversion: 1
         #    real               qty;
         #    real               price;
         #    real               lineTotal;
+        #    Percent            lineTaxPercent;
+        #    boolean            hasLineTaxPercent;
         #    int                startLine;
         #    str                msg;
         #
@@ -3958,6 +4008,13 @@ Formatversion: 1
         #    if (conLen(_data) >= 8)
         #        lineTotal = conPeek(_data, 8);
         #
+        #    hasLineTaxPercent = false;
+        #    if (conLen(_data) >= 9)
+        #    {
+        #        lineTaxPercent = conPeek(_data, 9);
+        #        hasLineTaxPercent = true;
+        #    }
+        #
         #    if (!axUserId)
         #        return INDCRMUtilityService::buildHeader(false, 'AxUserId es obligatorio.', conNull());
         #
@@ -3978,6 +4035,9 @@ Formatversion: 1
         #
         #    if (lineTotal <= 0)
         #        lineTotal = qty * price;
+        #
+        #    if (hasLineTaxPercent && lineTaxPercent < 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'TaxPercent no puede ser negativo.', conNull());
         #
         #    startLine = infolog.line();
         #
@@ -4017,6 +4077,10 @@ Formatversion: 1
         #            ticketLine.Qty         = qty;
         #            ticketLine.Price       = price;
         #            ticketLine.TotalAmount = lineTotal;
+        #
+        #            if (hasLineTaxPercent)
+        #                ticketLine.TaxPercent = lineTaxPercent;
+        #
         #            ticketLine.update();
         #
         #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
@@ -4027,7 +4091,7 @@ Formatversion: 1
         #            ttscommit;
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket actualizada correctamente.',
-        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketLine.TaxPercent)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
