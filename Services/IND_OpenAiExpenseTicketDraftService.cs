@@ -396,12 +396,13 @@ namespace IND_CRM_API.Services
 
                     ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
                     ApplySingleLineTotalFallbackFromOcr(extracted, receiptAnalysis);
+                    var taxFallbackLines = ApplyTaxPercentFallbackFromOcr(extracted, receiptAnalysis);
                     extracted.gastoType = ResolveDraftGastoType(extracted.gastoType, extracted.lines);
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
                     _logger.Log(
-                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} inputCurrency={ToMetricText(receiptAnalysis.CurrencyCode)} outputCurrency={ToMetricText(extracted.currencyCode)} rawCurrency={ToMetricText(extracted.RawCurrency)} normalizedJsonChars={normalizedJson.Length}",
+                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} inputCurrency={ToMetricText(receiptAnalysis.CurrencyCode)} outputCurrency={ToMetricText(extracted.currencyCode)} rawCurrency={ToMetricText(extracted.RawCurrency)} taxFallbackLines={taxFallbackLines} normalizedJsonChars={normalizedJson.Length}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     return new OpenAITicketNormalizationResult
@@ -926,7 +927,8 @@ namespace IND_CRM_API.Services
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
-- El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines para recuperar columnas que Azure no haya modelado como campos, especialmente IVA/VAT/TAX/% por linea.
+- El JSON puede incluir items estructurados, lineTaxPercentHints y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines para recuperar columnas que Azure no haya modelado como campos, especialmente IVA/VAT/TAX/% por linea.
+- Si lineTaxPercentHints incluye una fila que coincide por orden, descripcion o importe con una linea del ticket, usa su taxPercent.
 - Si hay una columna IVA/VAT/TAX/% paralela a las lineas de productos, asigna taxPercent por orden de fila y devuelve solo el numero sin simbolo %.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
@@ -960,7 +962,8 @@ namespace IND_CRM_API.Services
 - price debe representar el precio unitario de la linea.
 - lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
 - taxPercent debe representar el porcentaje de IVA/VAT/tax de la linea (ej: 21, 10, 4). Si no aparece ni se puede deducir con confianza para esa linea, usa null.
-- Para taxPercent, revisa tambien ocrText, ocrLines y taxPercentHints: cuando una columna IVA/VAT/TAX/% tenga tantos valores como lineas de producto, asigna cada porcentaje a la linea por orden visual.
+- Para taxPercent, revisa tambien ocrText, ocrLines, taxPercentHints y lineTaxPercentHints: cuando una columna IVA/VAT/TAX/% tenga tantos valores como lineas de producto, asigna cada porcentaje a la linea por orden visual.
+- Si lineTaxPercentHints trae description/taxPercent/amount, usalo como pista prioritaria para la linea coincidente.
 - No uses un impuesto total de cabecera (por ejemplo DI CUI IVA, Total tax, VAT total) como taxPercent de todas las lineas si no hay evidencia por linea.
 - Si la linea es un descuento, devuelve price y lineTotal en negativo.
 - Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty, incluso cuando lineTotal sea negativo.
@@ -1005,7 +1008,8 @@ namespace IND_CRM_API.Services
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Incluye taxPercent solo cuando el porcentaje de IVA/VAT/tax de esa linea aparezca o se pueda deducir con confianza; si no, usa null.
-- Para taxPercent, usa tambien ocrText, ocrLines y taxPercentHints: cuando una columna IVA/VAT/TAX/% este alineada con las lineas del ticket, asigna cada porcentaje por orden de fila y devuelve solo el numero sin %.
+- Para taxPercent, usa tambien ocrText, ocrLines, taxPercentHints y lineTaxPercentHints: cuando una columna IVA/VAT/TAX/% este alineada con las lineas del ticket, asigna cada porcentaje por orden de fila y devuelve solo el numero sin %.
+- Si lineTaxPercentHints trae description/taxPercent/amount, usalo como pista prioritaria para la linea coincidente.
 - No uses un impuesto total de cabecera (por ejemplo DI CUI IVA, Total tax, VAT total) como taxPercent de todas las lineas si no hay evidencia por linea.
 - Si qty no es visible, usa 1.
 - Solo usa qty 0 cuando la linea sea un descuento con lineTotal negativo visible.
@@ -1327,6 +1331,197 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(
                 draft.Warnings,
                 "No se detectaron lineas de detalle; se genero una linea unica con el total del ticket.");
+        }
+
+        // Fills missing line VAT percentages from deterministic OCR tax-column hints when the mapping is safe.
+        private static int ApplyTaxPercentFallbackFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
+        {
+            if (draft?.lines == null || draft.lines.Count == 0)
+                return 0;
+
+            var hints = ReadLineTaxPercentHints(receiptAnalysis?.PromptJson);
+            if (hints.Count == 0)
+                return 0;
+
+            var used = new bool[hints.Count];
+            var applied = 0;
+
+            for (var lineIndex = 0; lineIndex < draft.lines.Count; lineIndex++)
+            {
+                var line = draft.lines[lineIndex];
+                if (line == null || line.taxPercent.HasValue)
+                    continue;
+
+                var hintIndex = FindTaxPercentHintIndex(line, hints, used, lineIndex, draft.lines.Count);
+                if (hintIndex < 0)
+                    continue;
+
+                line.taxPercent = hints[hintIndex].TaxPercent;
+                used[hintIndex] = true;
+                applied++;
+            }
+
+            return applied;
+        }
+
+        private static List<LineTaxPercentHint> ReadLineTaxPercentHints(string promptJson)
+        {
+            var hints = new List<LineTaxPercentHint>();
+            if (string.IsNullOrWhiteSpace(promptJson))
+                return hints;
+
+            try
+            {
+                var root = JObject.Parse(promptJson);
+                var hintArray = root["lineTaxPercentHints"] as JArray;
+                if (hintArray == null)
+                    return hints;
+
+                foreach (var item in hintArray.OfType<JObject>())
+                {
+                    var taxPercent = TryParseDecimal(item["taxPercent"]);
+                    if (!IsLikelyLineTaxPercent(taxPercent))
+                        continue;
+
+                    hints.Add(new LineTaxPercentHint
+                    {
+                        RowIndex = TryParseInt(item["rowIndex"]),
+                        Description = NormalizeText(item["description"]?.ToString(), null),
+                        Amount = TryParseDecimal(item["amount"]),
+                        TaxPercent = taxPercent.Value
+                    });
+                }
+            }
+            catch
+            {
+                return new List<LineTaxPercentHint>();
+            }
+
+            return hints;
+        }
+
+        private static int FindTaxPercentHintIndex(
+            CreateExpenseSheetLineRequest line,
+            List<LineTaxPercentHint> hints,
+            bool[] used,
+            int lineIndex,
+            int lineCount)
+        {
+            if (hints.Count == lineCount && lineIndex < hints.Count && !used[lineIndex])
+                return lineIndex;
+
+            var bestIndex = -1;
+            var bestScore = 0;
+            for (var hintIndex = 0; hintIndex < hints.Count; hintIndex++)
+            {
+                if (used[hintIndex])
+                    continue;
+
+                var score = ScoreTaxPercentHintMatch(line, hints[hintIndex], lineIndex);
+                if (score <= bestScore)
+                    continue;
+
+                bestScore = score;
+                bestIndex = hintIndex;
+            }
+
+            return bestScore >= 5 ? bestIndex : -1;
+        }
+
+        private static int ScoreTaxPercentHintMatch(CreateExpenseSheetLineRequest line, LineTaxPercentHint hint, int lineIndex)
+        {
+            if (line == null || hint == null)
+                return 0;
+
+            var score = 0;
+            var commonTokens = CountCommonTaxMatchTokens(line.description, hint.Description);
+            if (commonTokens >= 2)
+                score += 5;
+            else if (commonTokens == 1)
+                score += 3;
+
+            if (AmountsMatch(hint.Amount, line.price))
+                score += 3;
+
+            if (line.qty.HasValue && line.price.HasValue)
+            {
+                var lineTotal = line.qty.Value == 0m && line.price.Value < 0m
+                    ? line.price.Value
+                    : line.qty.Value * line.price.Value;
+                if (AmountsMatch(hint.Amount, lineTotal))
+                    score += 3;
+            }
+
+            if (hint.RowIndex.HasValue && Math.Abs(hint.RowIndex.Value - lineIndex) <= 1)
+                score += 1;
+
+            return score;
+        }
+
+        private static int CountCommonTaxMatchTokens(string left, string right)
+        {
+            var leftTokens = BuildTaxMatchTokens(left);
+            var rightTokens = BuildTaxMatchTokens(right);
+            if (leftTokens.Count == 0 || rightTokens.Count == 0)
+                return 0;
+
+            return leftTokens.Intersect(rightTokens, StringComparer.Ordinal).Count();
+        }
+
+        private static List<string> BuildTaxMatchTokens(string value)
+        {
+            var tokens = new List<string>();
+            if (string.IsNullOrWhiteSpace(value))
+                return tokens;
+
+            var current = new StringBuilder();
+            foreach (var ch in value.ToUpperInvariant())
+            {
+                if (char.IsLetterOrDigit(ch))
+                {
+                    current.Append(ch);
+                    continue;
+                }
+
+                AddTaxMatchToken(tokens, current);
+            }
+
+            AddTaxMatchToken(tokens, current);
+            return tokens;
+        }
+
+        private static void AddTaxMatchToken(List<string> tokens, StringBuilder current)
+        {
+            if (current.Length >= 3)
+                tokens.Add(current.ToString());
+
+            current.Clear();
+        }
+
+        private static bool AmountsMatch(decimal? left, decimal? right)
+        {
+            if (!left.HasValue || !right.HasValue)
+                return false;
+
+            return Math.Abs(Math.Round(left.Value, 2, MidpointRounding.AwayFromZero) -
+                            Math.Round(right.Value, 2, MidpointRounding.AwayFromZero)) <= 0.02m;
+        }
+
+        private static bool IsLikelyLineTaxPercent(decimal? value)
+        {
+            if (!value.HasValue)
+                return false;
+
+            return value.Value >= 0m && value.Value <= 30m;
+        }
+
+        private static int? TryParseInt(JToken token)
+        {
+            var parsed = TryParseDecimal(token);
+            if (!parsed.HasValue)
+                return null;
+
+            return (int)Math.Round(parsed.Value, 0, MidpointRounding.AwayFromZero);
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)
@@ -2153,6 +2348,15 @@ namespace IND_CRM_API.Services
                     "lineTotal",
                     "taxPercent")
             };
+        }
+
+        // Normalized OCR hint used to fill informational VAT percentages after model extraction.
+        private sealed class LineTaxPercentHint
+        {
+            public int? RowIndex { get; set; }
+            public string Description { get; set; }
+            public decimal? Amount { get; set; }
+            public decimal TaxPercent { get; set; }
         }
 
         // Holds the effective request knobs that define a latency profile.

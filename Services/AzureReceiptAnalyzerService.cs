@@ -222,7 +222,8 @@ namespace IND_CRM_API.Services
             var receiptContent = analyzeResult["content"]?.ToString();
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
-            var taxPercentHints = BuildTaxPercentHints(receiptContent);
+            var lineTaxPercentHints = BuildLineTaxPercentHints(receiptContent);
+            var taxPercentHints = BuildTaxPercentHints(receiptContent, lineTaxPercentHints);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
@@ -256,7 +257,8 @@ namespace IND_CRM_API.Services
                 ["itemCount"] = items.Count,
                 ["ocrText"] = ToNullableValue(ocrText),
                 ["ocrLines"] = ocrLines,
-                ["taxPercentHints"] = taxPercentHints
+                ["taxPercentHints"] = taxPercentHints,
+                ["lineTaxPercentHints"] = lineTaxPercentHints
             };
 
             return new AzureReceiptAnalysisResult
@@ -347,27 +349,214 @@ namespace IND_CRM_API.Services
             return new JArray(lines.Select(line => new JValue(line)));
         }
 
-        private static JArray BuildTaxPercentHints(string receiptContent)
+        private static JArray BuildTaxPercentHints(string receiptContent, JArray lineTaxPercentHints)
+        {
+            var hints = new JArray();
+            if (lineTaxPercentHints != null)
+            {
+                foreach (var hint in lineTaxPercentHints.OfType<JObject>())
+                {
+                    if (hints.Count >= MaxPromptTaxPercentHints)
+                        return hints;
+
+                    var parsed = TryParsePercentText(hint["taxPercent"]?.ToString());
+                    if (IsLikelyTaxColumnPercent(parsed))
+                        hints.Add(parsed.Value);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(receiptContent))
+                return hints;
+
+            foreach (var rawLine in receiptContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (hints.Count >= MaxPromptTaxPercentHints)
+                    break;
+
+                var line = NormalizePromptLine(rawLine);
+                if (string.IsNullOrWhiteSpace(line) || !ContainsTaxLabel(line.ToUpperInvariant()))
+                    continue;
+
+                foreach (Match match in Regex.Matches(line, @"(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*%"))
+                {
+                    if (hints.Count >= MaxPromptTaxPercentHints)
+                        break;
+
+                    var parsed = TryParsePercentText(match.Groups[1].Value);
+                    if (IsLikelyTaxColumnPercent(parsed))
+                        hints.Add(parsed.Value);
+                }
+            }
+
+            return hints;
+        }
+
+        // Extracts row-level VAT percentages from receipts where the tax column uses numeric values without a percent sign.
+        private static JArray BuildLineTaxPercentHints(string receiptContent)
         {
             var hints = new JArray();
             if (string.IsNullOrWhiteSpace(receiptContent))
                 return hints;
 
-            var matches = Regex.Matches(
-                receiptContent,
-                @"(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*%");
+            var inTaxColumnSection = false;
+            var rowIndex = 0;
 
-            foreach (Match match in matches)
+            foreach (var rawLine in receiptContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (hints.Count >= MaxPromptTaxPercentHints)
                     break;
 
-                var parsed = TryParsePercentText(match.Groups[1].Value);
-                if (parsed.HasValue && parsed.Value >= 0m && parsed.Value <= 100m)
-                    hints.Add(parsed.Value);
+                var line = NormalizePromptLine(rawLine);
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var upper = line.ToUpperInvariant();
+                if (IsTaxColumnHeaderLine(upper))
+                {
+                    inTaxColumnSection = true;
+                    continue;
+                }
+
+                if (!inTaxColumnSection)
+                    continue;
+
+                if (IsTaxColumnSectionTerminator(upper))
+                    break;
+
+                if (TryBuildLineTaxPercentHint(line, rowIndex, out var hint))
+                {
+                    hints.Add(hint);
+                    rowIndex++;
+                }
             }
 
             return hints;
+        }
+
+        private static bool TryBuildLineTaxPercentHint(string line, int rowIndex, out JObject hint)
+        {
+            hint = null;
+            if (string.IsNullOrWhiteSpace(line) || !ContainsLetter(line))
+                return false;
+
+            var upper = line.ToUpperInvariant();
+            if (IsNonItemTaxColumnLine(upper))
+                return false;
+
+            var match = Regex.Match(
+                line,
+                @"^(?<description>.+?[A-Za-z].*?)\s+(?<tax>\d{1,2}(?:[.,]\d{1,2})?)\s+(?<amount>-?\d{1,6}(?:[.,]\d{2}))$");
+            if (!match.Success)
+            {
+                match = Regex.Match(
+                    line,
+                    @"^(?<description>.+?[A-Za-z].*?)\s+(?<tax>\d{1,2}(?:[.,]\d{1,2})?)$");
+            }
+
+            if (!match.Success)
+                return false;
+
+            var taxPercent = TryParsePercentText(match.Groups["tax"].Value);
+            if (!IsLikelyTaxColumnPercent(taxPercent))
+                return false;
+
+            var description = NormalizePromptLine(match.Groups["description"].Value);
+            if (string.IsNullOrWhiteSpace(description) || description.Length < 2)
+                return false;
+
+            hint = new JObject
+            {
+                ["rowIndex"] = rowIndex,
+                ["description"] = description,
+                ["taxPercent"] = taxPercent.Value,
+                ["sourceText"] = line
+            };
+
+            var amountRaw = match.Groups["amount"]?.Value;
+            var amount = TryParsePercentText(amountRaw);
+            if (amount.HasValue)
+                hint["amount"] = amount.Value;
+
+            return true;
+        }
+
+        private static bool IsTaxColumnHeaderLine(string upperLine)
+        {
+            if (string.IsNullOrWhiteSpace(upperLine))
+                return false;
+
+            return upperLine.Contains("IVA%") ||
+                   upperLine.Contains("IVA %") ||
+                   upperLine.Contains("IVAX") ||
+                   upperLine.Contains("VAT%") ||
+                   upperLine.Contains("VAT %") ||
+                   upperLine.Contains("TAX%") ||
+                   upperLine.Contains("TAX %") ||
+                   upperLine.Contains("TVA%") ||
+                   upperLine.Contains("TVA %") ||
+                   (ContainsTaxLabel(upperLine) &&
+                    (upperLine.Contains("DESCRIZIONE") ||
+                     upperLine.Contains("DESCRIPTION") ||
+                     upperLine.Contains("PREZZO") ||
+                     upperLine.Contains("PRICE") ||
+                     upperLine.Contains("IMPORTO") ||
+                     upperLine.Contains("AMOUNT")));
+        }
+
+        private static bool IsTaxColumnSectionTerminator(string upperLine)
+        {
+            if (string.IsNullOrWhiteSpace(upperLine))
+                return false;
+
+            return upperLine.Contains("SUBTOT") ||
+                   upperLine.Contains("SUBTOTAL") ||
+                   upperLine.StartsWith("TOTALE", StringComparison.Ordinal) ||
+                   upperLine.StartsWith("TOTAL", StringComparison.Ordinal) ||
+                   upperLine.Contains("DI CUI IVA") ||
+                   upperLine.Contains("PAGAMENTO") ||
+                   upperLine.Contains("PAYMENT") ||
+                   upperLine.Contains("DETTAGLIO");
+        }
+
+        private static bool IsNonItemTaxColumnLine(string upperLine)
+        {
+            if (string.IsNullOrWhiteSpace(upperLine))
+                return true;
+
+            return upperLine.Contains(" PZ X ") ||
+                   upperLine.Contains(" KG X ") ||
+                   upperLine.Contains("/PZ") ||
+                   upperLine.Contains("/KG") ||
+                   upperLine.Contains(" EURO ") ||
+                   upperLine.StartsWith("EURO", StringComparison.Ordinal) ||
+                   upperLine.StartsWith("SCONTRINO", StringComparison.Ordinal);
+        }
+
+        private static bool ContainsTaxLabel(string upperLine)
+        {
+            if (string.IsNullOrWhiteSpace(upperLine))
+                return false;
+
+            return upperLine.Contains("IVA") ||
+                   upperLine.Contains("VAT") ||
+                   upperLine.Contains("TAX") ||
+                   upperLine.Contains("TVA");
+        }
+
+        private static bool ContainsLetter(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            return value.Any(char.IsLetter);
+        }
+
+        private static bool IsLikelyTaxColumnPercent(decimal? value)
+        {
+            if (!value.HasValue)
+                return false;
+
+            return value.Value >= 0m && value.Value <= 30m;
         }
 
         private static void AddPromptLine(List<string> lines, string value)

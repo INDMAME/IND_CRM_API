@@ -1,6 +1,7 @@
 using IND_CRM_API.Helpers;
 using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Services.Interfaces;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Globalization;
 using System.IO;
@@ -82,7 +83,7 @@ namespace IND_CRM_API.Services
 
             totalSw.Stop();
             _logger.Log(
-                $"[TICKET-AI] Pipeline completed source=stored-blob profile={profile} totalMs={totalSw.ElapsedMilliseconds} ocrMs={analysisSw.ElapsedMilliseconds} normalizeMs={normalizationSw.ElapsedMilliseconds} itemCount={analysis?.ItemCount ?? 0} taxLineCount={CountTaxPercentLines(normalization?.Draft)} ocrCurrency={ToLogValue(analysis?.CurrencyCode)} normalizedCurrency={ToLogValue(normalization?.Draft?.currencyCode)} ocrJsonChars={ToLogLength(analysis?.RawJson)} normalizedJsonChars={ToLogLength(normalization?.NormalizedJson)} attempts={(normalization?.Attempts ?? 0)}",
+                $"[TICKET-AI] Pipeline completed source=stored-blob profile={profile} totalMs={totalSw.ElapsedMilliseconds} ocrMs={analysisSw.ElapsedMilliseconds} normalizeMs={normalizationSw.ElapsedMilliseconds} itemCount={analysis?.ItemCount ?? 0} taxHintLineCount={CountLineTaxPercentHints(analysis?.PromptJson)} taxLineCount={CountTaxPercentLines(normalization?.Draft)} ocrCurrency={ToLogValue(analysis?.CurrencyCode)} normalizedCurrency={ToLogValue(normalization?.Draft?.currencyCode)} ocrJsonChars={ToLogLength(analysis?.RawJson)} normalizedJsonChars={ToLogLength(normalization?.NormalizedJson)} attempts={(normalization?.Attempts ?? 0)}",
                 AxaptaSessionManager.LogLevel.Info);
 
             return new TicketAIProcessingResult
@@ -156,6 +157,22 @@ namespace IND_CRM_API.Services
         private static int CountTaxPercentLines(ExpenseSheetDraftResponse draft)
         {
             return draft?.lines?.Count(line => line?.taxPercent.HasValue == true) ?? 0;
+        }
+
+        private static int CountLineTaxPercentHints(string promptJson)
+        {
+            if (string.IsNullOrWhiteSpace(promptJson))
+                return 0;
+
+            try
+            {
+                var root = JObject.Parse(promptJson);
+                return (root["lineTaxPercentHints"] as JArray)?.Count ?? 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
     }
 }
