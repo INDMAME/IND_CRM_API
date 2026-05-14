@@ -628,6 +628,7 @@ Formatversion: 1
         #    real               price;
         #    real               lineTotal;
         #    Percent            lineTaxPercent;
+        #    boolean            hasLineTotal;
         #    int                processedByAI;
         #    int                gastoType;
         #    boolean            hasHeaderTotalAmount;
@@ -861,8 +862,12 @@ Formatversion: 1
         #                    price     = conPeek(lineIn, 3);
         #
         #                    lineTotal = qty * price;
+        #                    hasLineTotal = false;
         #                    if (conLen(lineIn) >= 4)
+        #                    {
         #                        lineTotal = conPeek(lineIn, 4);
+        #                        hasLineTotal = true;
+        #                    }
         #
         #                    lineTaxPercent = 0;
         #                    if (conLen(lineIn) >= 5)
@@ -874,19 +879,33 @@ Formatversion: 1
         #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Description es obligatorio en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if (qty <= 0)
+        #                    if (qty < 0)
         #                    {
         #                        ttsabort;
-        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty no puede ser negativo en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if (price <= 0)
+        #                    if (price == 0)
         #                    {
         #                        ttsabort;
-        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price no puede ser 0 en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if(lineTotal <= 0)
+        #                    if (!hasLineTotal)
+        #                    {
+        #                        if (qty == 0 && price < 0)
+        #                            lineTotal = price;
+        #                        else
+        #                            lineTotal = qty * price;
+        #                    }
+        #
+        #                    if (qty == 0 && lineTotal >= 0)
+        #                    {
+        #                        ttsabort;
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty cero solo se permite en descuentos con total negativo en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if(lineTotal == 0 && qty > 0)
         #                        lineTotal = qty * price;
         #
         #                    if (lineTaxPercent < 0)
@@ -1019,6 +1038,7 @@ Formatversion: 1
         #    real               price;
         #    real               lineTotal;
         #    Percent            lineTaxPercent;
+        #    boolean            hasLineTotal;
         #    int                gastoType;
         #    boolean            hasHeaderTotalAmount;
         #    boolean            hasGastoType;
@@ -1219,8 +1239,12 @@ Formatversion: 1
         #                    price     = conPeek(lineIn, 3);
         #
         #                    lineTotal = qty * price;
+        #                    hasLineTotal = false;
         #                    if (conLen(lineIn) >= 4)
+        #                    {
         #                        lineTotal = conPeek(lineIn, 4);
+        #                        hasLineTotal = true;
+        #                    }
         #
         #                    lineTaxPercent = 0;
         #                    if (conLen(lineIn) >= 5)
@@ -1232,19 +1256,33 @@ Formatversion: 1
         #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Description es obligatorio en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if (qty <= 0)
+        #                    if (qty < 0)
         #                    {
         #
-        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty no puede ser negativo en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if (price <= 0)
+        #                    if (price == 0)
         #                    {
         #
-        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price debe ser mayor que 0 en linea %1.', i), conNull()), conNull()];
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Price no puede ser 0 en linea %1.', i), conNull()), conNull()];
         #                    }
         #
-        #                    if(lineTotal <= 0)
+        #                    if (!hasLineTotal)
+        #                    {
+        #                        if (qty == 0 && price < 0)
+        #                            lineTotal = price;
+        #                        else
+        #                            lineTotal = qty * price;
+        #                    }
+        #
+        #                    if (qty == 0 && lineTotal >= 0)
+        #                    {
+        #
+        #                        return [INDCRMUtilityService::buildHeader(false, strFmt('Qty cero solo se permite en descuentos con total negativo en linea %1.', i), conNull()), conNull()];
+        #                    }
+        #
+        #                    if(lineTotal == 0 && qty > 0)
         #                        lineTotal = qty * price;
         #
         #                    if (lineTaxPercent < 0)
@@ -1352,6 +1390,7 @@ Formatversion: 1
         #    real               price;
         #    real               lineTotal;
         #    Percent            lineTaxPercent;
+        #    boolean            hasLineTotal;
         #    int                startLine;
         #    str                msg;
         #
@@ -1373,9 +1412,13 @@ Formatversion: 1
         #    qty       = conPeek(_data, 5);
         #    price     = conPeek(_data, 6);
         #    lineTotal = qty * price;
+        #    hasLineTotal = false;
         #
         #    if (conLen(_data) >= 7)
+        #    {
         #        lineTotal = conPeek(_data, 7);
+        #        hasLineTotal = true;
+        #    }
         #
         #    lineTaxPercent = 0;
         #    if (conLen(_data) >= 8)
@@ -1390,13 +1433,24 @@ Formatversion: 1
         #    if (!lineDescr)
         #        return INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull());
         #
-        #    if (qty <= 0)
-        #        return INDCRMUtilityService::buildHeader(false, 'Qty debe ser mayor que 0.', conNull());
+        #    if (qty < 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty no puede ser negativo.', conNull());
         #
-        #    if (price <= 0)
-        #        return INDCRMUtilityService::buildHeader(false, 'Price debe ser mayor que 0.', conNull());
+        #    if (price == 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Price no puede ser 0.', conNull());
         #
-        #    if (lineTotal <= 0)
+        #    if (!hasLineTotal)
+        #    {
+        #        if (qty == 0 && price < 0)
+        #            lineTotal = price;
+        #        else
+        #            lineTotal = qty * price;
+        #    }
+        #
+        #    if (qty == 0 && lineTotal >= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty cero solo se permite en descuentos con total negativo.', conNull());
+        #
+        #    if (lineTotal == 0 && qty > 0)
         #        lineTotal = qty * price;
         #
         #    if (lineTaxPercent < 0)
@@ -3665,6 +3719,7 @@ Formatversion: 1
         #    real               lineTotal;
         #    Percent            lineTaxPercent;
         #    real               linesTotalAmount;
+        #    boolean            hasLineTotal;
         #    boolean            hasTotalAmount;
         #    boolean            hasGastoType;
         #    boolean            hasOcrJson;
@@ -3853,8 +3908,12 @@ Formatversion: 1
         #                qty       = conPeek(lineIn, 2);
         #                price     = conPeek(lineIn, 3);
         #
+        #                hasLineTotal = false;
         #                if (conLen(lineIn) >= 4)
+        #                {
         #                    lineTotal = conPeek(lineIn, 4);
+        #                    hasLineTotal = true;
+        #                }
         #                else
         #                    lineTotal = 0;
         #
@@ -3868,19 +3927,33 @@ Formatversion: 1
         #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Description es obligatorio.', i), conNull()), conNull()];
         #                }
         #
-        #                if (qty <= 0)
+        #                if (qty < 0)
         #                {
         #                    ttsabort;
-        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Qty debe ser mayor que 0.', i), conNull()), conNull()];
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Qty no puede ser negativo.', i), conNull()), conNull()];
         #                }
         #
-        #                if (price <= 0)
+        #                if (price == 0)
         #                {
         #                    ttsabort;
-        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Price debe ser mayor que 0.', i), conNull()), conNull()];
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Price no puede ser 0.', i), conNull()), conNull()];
         #                }
         #
-        #                if (lineTotal <= 0)
+        #                if (!hasLineTotal)
+        #                {
+        #                    if (qty == 0 && price < 0)
+        #                        lineTotal = price;
+        #                    else
+        #                        lineTotal = qty * price;
+        #                }
+        #
+        #                if (qty == 0 && lineTotal >= 0)
+        #                {
+        #                    ttsabort;
+        #                    return [INDCRMUtilityService::buildHeader(false, strFmt('Linea %1: Qty cero solo se permite en descuentos con total negativo.', i), conNull()), conNull()];
+        #                }
+        #
+        #                if (lineTotal == 0 && qty > 0)
         #                    lineTotal = qty * price;
         #
         #                if (lineTaxPercent < 0)
@@ -3981,6 +4054,7 @@ Formatversion: 1
         #    real               price;
         #    real               lineTotal;
         #    Percent            lineTaxPercent;
+        #    boolean            hasLineTotal;
         #    boolean            hasLineTaxPercent;
         #    int                startLine;
         #    str                msg;
@@ -4004,9 +4078,13 @@ Formatversion: 1
         #    qty        = conPeek(_data, 6);
         #    price      = conPeek(_data, 7);
         #    lineTotal  = qty * price;
+        #    hasLineTotal = false;
         #
         #    if (conLen(_data) >= 8)
+        #    {
         #        lineTotal = conPeek(_data, 8);
+        #        hasLineTotal = true;
+        #    }
         #
         #    hasLineTaxPercent = false;
         #    if (conLen(_data) >= 9)
@@ -4027,13 +4105,24 @@ Formatversion: 1
         #    if (!lineDescr)
         #        return INDCRMUtilityService::buildHeader(false, 'Description es obligatorio.', conNull());
         #
-        #    if (qty <= 0)
-        #        return INDCRMUtilityService::buildHeader(false, 'Qty debe ser mayor que 0.', conNull());
+        #    if (qty < 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty no puede ser negativo.', conNull());
         #
-        #    if (price <= 0)
-        #        return INDCRMUtilityService::buildHeader(false, 'Price debe ser mayor que 0.', conNull());
+        #    if (price == 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Price no puede ser 0.', conNull());
         #
-        #    if (lineTotal <= 0)
+        #    if (!hasLineTotal)
+        #    {
+        #        if (qty == 0 && price < 0)
+        #            lineTotal = price;
+        #        else
+        #            lineTotal = qty * price;
+        #    }
+        #
+        #    if (qty == 0 && lineTotal >= 0)
+        #        return INDCRMUtilityService::buildHeader(false, 'Qty cero solo se permite en descuentos con total negativo.', conNull());
+        #
+        #    if (lineTotal == 0 && qty > 0)
         #        lineTotal = qty * price;
         #
         #    if (hasLineTaxPercent && lineTaxPercent < 0)

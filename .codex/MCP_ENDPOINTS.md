@@ -185,7 +185,7 @@ Endpoints
   - `existingFileId` (requerido cuando `mode=2`)
   - `description`, `currencyCode`, `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `urlFile` (requeridos cuando `mode=0|1`)
   - `totalAmount`, `comentario`, `fileExtension`, `gastoType`, `ocrJson`, `normalizedJson` (opcionales; `gastoType` permitido: 0,1,2,3,4,5,6,7,8,14)
-  - `lines[]` con `description`, `qty`, `price`, `totalAmount`, `taxPercent` (lineas requeridas cuando `mode=0|2`; `taxPercent` es opcional e informativo)
+  - `lines[]` con `description`, `qty`, `price`, `totalAmount`, `taxPercent` (lineas requeridas cuando `mode=0|2`; `taxPercent` es opcional e informativo; `price`/`totalAmount` pueden ser negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total negativo)
 
 ### Tool: crm_expensesheets_tickets_quick_create
 - HTTP: POST `/api/crm/expensesheets/tickets/quick-create`
@@ -253,7 +253,7 @@ Endpoints
   - `totalAmount` (opcional)
   - `comentario` (opcional)
   - `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional si no hay `fileName`)
-  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional), `taxPercent` (opcional e informativo)
+  - `lines[]` obligatorio con `description`, `qty`, `price`, `totalAmount` (opcional), `taxPercent` (opcional e informativo). Las lineas pueden llevar importes negativos como descuento; si `qty = 0`, el total de linea debe ser negativo.
 - Regla: reemplazo total del detalle de lineas (delete + insert) y `processedByAI=true`.
 - Compatibilidad: acepta body directo del contrato IA o envelope de `expensefromticket` (`Success/Message/Data/TraceId`) y mapea `Data` de forma interna.
 
