@@ -128,7 +128,6 @@ namespace IND_CRM_API.Services
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var attempt = 0;
             var retriedWithoutServiceTier = false;
-            var retriedWithExpandedOutput = false;
 
             try
             {
@@ -196,10 +195,8 @@ namespace IND_CRM_API.Services
                     if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
                     {
                         var metrics = TryReadResponseMetrics(responseBody);
-                        if (!retriedWithExpandedOutput &&
-                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        if (TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
                         {
-                            retriedWithExpandedOutput = true;
                             _logger.Log(
                                 $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
                                 AxaptaSessionManager.LogLevel.Warning);
@@ -297,7 +294,6 @@ namespace IND_CRM_API.Services
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var attempt = 0;
             var retriedWithoutServiceTier = false;
-            var retriedWithExpandedOutput = false;
 
             try
             {
@@ -365,10 +361,8 @@ namespace IND_CRM_API.Services
                     if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
                     {
                         var metrics = TryReadResponseMetrics(responseBody);
-                        if (!retriedWithExpandedOutput &&
-                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        if (TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
                         {
-                            retriedWithExpandedOutput = true;
                             _logger.Log(
                                 $"[OPENAI-NORMALIZE] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
                                 AxaptaSessionManager.LogLevel.Warning);
