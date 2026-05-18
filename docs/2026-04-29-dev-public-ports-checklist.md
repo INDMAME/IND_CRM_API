@@ -14,7 +14,8 @@ Publicar `DEV` en Internet con host propio y puertos nuevos, manteniendo el mism
 ## Variables esperadas en la maquina DEV
 
 - `IND_ENV=DEV`
-- `ASPNETCORE_ENVIRONMENT=Production`
+- `ASPNETCORE_ENVIRONMENT=Development`
+- `INDCRM_AX_CONFIG_FILE=C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc`
 - `INDCRM_BASE_URL=https://dev.insertec.biz:2083/`
 - `INDCRM_PUBLIC_HOST=dev.insertec.biz`
 - `INDCRM_PUBLIC_PORT=2083`

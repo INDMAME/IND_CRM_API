@@ -3913,6 +3913,7 @@ namespace IND_CRM_API.Controllers.CRM
                 totalAmount = validLines.Count > 0 ? (decimal?)linesTotal : null,
                 transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 ticketDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
+                ticketTime = NormalizeQuickCreateDraftTicketTime(draft?.ticketTime),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
                 fileName = (fileName ?? string.Empty).Trim(),
@@ -3962,8 +3963,24 @@ namespace IND_CRM_API.Controllers.CRM
         private static QuickCreateTransDateResolution ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
         {
             var rawCandidates = new List<string>();
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.ticketDate))
+                rawCandidates.Add(draft.ticketDate.Trim());
             if (draft != null && !string.IsNullOrWhiteSpace(draft.transDate))
                 rawCandidates.Add(draft.transDate.Trim());
+
+            foreach (var rawHeaderDate in rawCandidates)
+            {
+                if (TryNormalizeQuickCreateDraftDateToAxYmd(rawHeaderDate, out var normalized, out var reason))
+                {
+                    return new QuickCreateTransDateResolution
+                    {
+                        RawTransDate = rawHeaderDate,
+                        NormalizedTransDateYmd = normalized,
+                        UsedFallback = false,
+                        Reason = reason
+                    };
+                }
+            }
 
             if (draft?.lines != null)
             {
@@ -3997,6 +4014,15 @@ namespace IND_CRM_API.Controllers.CRM
                     ? "fallback-today-no-date-detected"
                     : "fallback-today-invalid-or-unreasonable-date"
             };
+        }
+
+        // Keeps quick-create ticketTime in the public CRUD format when the AI extracted it.
+        private static string NormalizeQuickCreateDraftTicketTime(string input)
+        {
+            if (!TryNormalizeTicketTimeToAxSeconds(input, out var seconds))
+                return null;
+
+            return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
         }
 
         // Tries exact formats first and then OCR-safe compact heuristics for quick-create dates.

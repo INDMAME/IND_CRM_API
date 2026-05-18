@@ -19,6 +19,9 @@ set "HOST=dev.insertec.biz"
 set "PORT=2083"
 set "LEGACY_PORT=17776"
 set "SERVICE_USER=%INDCRM_HTTP_SERVICE_USER%"
+set "ASPNETCORE_ENV=%ASPNETCORE_ENVIRONMENT%"
+set "AX_CONFIG=%INDCRM_AX_CONFIG_FILE%"
+set "BLOB_ENV=%AZURE_BLOB_ENVIRONMENT_SEGMENT%"
 set "APP_ID={ABCBA743-3E22-4006-B8D1-4D7EA6B4F4ED}"
 set "PFX_PATH_ENV_VAR=INDCRM_DEV_PFX_PATH"
 set "PFX_PATH_SOURCE=default path"
@@ -40,6 +43,7 @@ if not "%~2"=="" set "PFX_PASSWORD=%~2"
 
 call :RequireAdmin || goto :fail
 call :RequireExpectedEnvironment || goto :fail
+call :RequireEnvironmentAlignment || goto :fail
 call :RequireExpectedHostConfiguration || goto :fail
 call :RequireServiceUser || goto :fail
 call :RequirePfxPath || goto :fail
@@ -110,6 +114,25 @@ if "%IND_ENV%"=="" (
 
 if /I not "%IND_ENV%"=="%TARGET_ENV%" (
     echo ERROR: IND_ENV is "%IND_ENV%". This script only supports %TARGET_ENV%.
+    exit /b 1
+)
+exit /b 0
+
+:RequireEnvironmentAlignment
+for %%I in ("%AX_CONFIG%") do set "AX_CONFIG_FILE=%%~nxI"
+
+if /I not "%ASPNETCORE_ENV%"=="Development" (
+    echo ERROR: ASPNETCORE_ENVIRONMENT must be Development for DEV. Current value: %ASPNETCORE_ENV%
+    exit /b 1
+)
+
+if /I not "%BLOB_ENV%"=="DEV" (
+    echo ERROR: AZURE_BLOB_ENVIRONMENT_SEGMENT must be DEV. Current value: %BLOB_ENV%
+    exit /b 1
+)
+
+if /I not "%AX_CONFIG_FILE%"=="CRM_API_AxConfig_DEV.axc" (
+    echo ERROR: INDCRM_AX_CONFIG_FILE must point to CRM_API_AxConfig_DEV.axc for DEV. Current value: %AX_CONFIG%
     exit /b 1
 )
 exit /b 0

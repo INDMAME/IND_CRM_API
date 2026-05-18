@@ -77,7 +77,7 @@ Endpoints
   Content-Type: multipart/form-data
   Fields: ticketImage (required), persistTicket (optional true|false), ticketUrlFile (optional; si persistTicket=true y no se envia, se usa URL temporal)
   Headers adicionales cuando persistTicket=true: X-IND-Company, X-IND-AxUserId, X-IND-EntraOid, X-IND-Context-Version, X-IND-Permissions-Revision, X-IND-Context-Token.
-  Draft IA incluye `gastoType` (tipo de gasto de cabecera) y mantiene `lines[].typeValue`.
+  Draft IA incluye `gastoType` (tipo de gasto de cabecera), `ticketDate`, `ticketTime` y mantiene `lines[].typeValue`. `transDate` se conserva por compatibilidad y debe coincidir con `ticketDate` cuando la IA detecta fecha del ticket.
   Si `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` retorna `true` y el ticket queda marcado en AX como procesado por IA.
 - POST /api/ia/service/expensesheets/ask (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `question`.
@@ -199,6 +199,24 @@ Endpoints
 - DELETE /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina una linea granular de `INDTicketInfoLine`.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
+
+## Activities / Visits
+- POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
+  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`.
+  Si `contactMethod` no se envia, AX recibe `0` (InPerson).
+- POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
+  Body optional: `accountNum`.
+  Response rows incluyen `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod` y `Description`.
+- GET /api/crm/activities/{recId} (Authorize + X-IND-Company)
+  Response rows incluyen el detalle de visita con `ContactMethod`.
+- GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company)
+  Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
+- PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
+  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`.
+- DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company)
 
 ## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

@@ -110,7 +110,7 @@ Endpoints
 - Headers: `Authorization`
 - Headers opcionales cuando `persistTicket=true`: `X-IND-Company`, `X-IND-AxUserId`
 - Body (multipart): `ticketImage`, `persistTicket` (opcional), `ticketUrlFile` (opcional; si no viene se usa URL temporal)
-- Respuesta: `Data` incluye `gastoType` (cabecera) y `lines[].typeValue` por linea.
+- Respuesta: `Data` incluye `gastoType`, `ticketDate`, `ticketTime` y `lines[].typeValue` por linea. `transDate` se mantiene por compatibilidad y coincide con `ticketDate` cuando se detecta fecha del ticket.
 - Respuesta: con `persistTicket=true`, `Data.TicketCreation.ProcessedByAI` debe ser `true`.
 
 ## Expense Sheets
@@ -292,6 +292,33 @@ Endpoints
 - HTTP: DELETE `/api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+
+## Activities / Visits
+
+### Endpoint: crm_activities_create
+- HTTP: POST `/api/crm/activities/create`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd), `contactMethod` opcional (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`
+
+### Endpoint: crm_activities_list
+- HTTP: POST `/api/crm/activities/list`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `fromDate`, `toDate`, `accountNum` opcional, `page`, `pageSize`
+- Respuesta: rows con `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod`, `Description`
+
+### Endpoint: crm_activities_get_by_code
+- HTTP: GET `/api/crm/activities/by-code/{code}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`
+- Respuesta: `ActivityDetailDto` dentro de `Items[0]`, incluyendo `ContactMethod`
+
+### Endpoint: crm_activities_update
+- HTTP: PUT `/api/crm/activities/{recId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `accountNum`, `visitType`, `description`, `transDate`, `contactMethod` opcional (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`
 
 ## Projects
 

@@ -25,6 +25,9 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmActivitiesController : BaseCrmController
     {
         private const int MaxPageSize = 50;
+        private const int ContactMethodInPerson = 0;
+        private const int ContactMethodPhoneCall = 1;
+        private const int ContactMethodOnlineMeeting = 2;
         private readonly IAxaptaSessionManager _sessionManager;
  
         public CrmActivitiesController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
@@ -86,6 +89,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = "contactMethod debe ser 0 (InPerson), 1 (PhoneCall) o 2 (OnlineMeeting)." });
             }
 
             if (validationErrors.Any())
@@ -124,6 +129,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($" -> userId(header): {axUserId}");
                 Logger.Log($" -> createdByUserId(header): {axUserId}");
                 Logger.Log($" -> transDate: {body.transDate}");
+                Logger.Log($" -> contactMethod: {body.contactMethod ?? ContactMethodInPerson}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -141,6 +147,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
+                con.Append(body.contactMethod ?? ContactMethodInPerson);
 
                 Logger.Log("Container enviado a AX (CreateActivity):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -288,6 +295,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = "contactMethod debe ser 0 (InPerson), 1 (PhoneCall) o 2 (OnlineMeeting)." });
             }
 
             if (validationErrors.Any())
@@ -323,6 +332,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
+                con.Append(body.contactMethod ?? ContactMethodInPerson);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -924,6 +934,18 @@ namespace IND_CRM_API.Controllers.CRM
                 }
             }
 
+            int? SafeNullableInt(AxaptaCOMConnector.IAxaptaContainer c, int index)
+            {
+                var value = SafeString(c, index);
+                return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                    ? parsed
+                    : (int?)null;
+            }
+
+            var hasContactMethod = row.Length() >= 14;
+            var descriptionIndex = hasContactMethod ? 10 : 9;
+            var asistentesIndex = hasContactMethod ? 14 : 13;
+
             var dto = new ActivityDetailDto
             {
                 ActividadId = SafeString(row, 1),
@@ -934,14 +956,15 @@ namespace IND_CRM_API.Controllers.CRM
                 Country = SafeString(row, 6),
                 ActividadType = SafeString(row, 7),
                 TipoVisita = SafeString(row, 8),
-                Description = SafeString(row, 9),
-                Comentarios = SafeString(row, 10),
-                Antecedentes = SafeString(row, 11),
-                Conclusiones = SafeString(row, 12),
+                ContactMethod = hasContactMethod ? SafeNullableInt(row, 9) : null,
+                Description = SafeString(row, descriptionIndex),
+                Comentarios = SafeString(row, descriptionIndex + 1),
+                Antecedentes = SafeString(row, descriptionIndex + 2),
+                Conclusiones = SafeString(row, descriptionIndex + 3),
                 Asistentes = new List<ActivityAssistantDto>()
             };
 
-            var asistentesCon = row.Length() >= 13 ? row.Peek(13) as AxaptaCOMConnector.IAxaptaContainer : null;
+            var asistentesCon = row.Length() >= asistentesIndex ? row.Peek(asistentesIndex) as AxaptaCOMConnector.IAxaptaContainer : null;
             if (asistentesCon != null)
             {
                 try
@@ -982,6 +1005,14 @@ namespace IND_CRM_API.Controllers.CRM
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out date);
+        }
+
+        // Keeps INDContactMethod request values aligned with the AX enum contract.
+        private static bool IsValidContactMethod(int value)
+        {
+            return value == ContactMethodInPerson ||
+                   value == ContactMethodPhoneCall ||
+                   value == ContactMethodOnlineMeeting;
         }
 
         private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)

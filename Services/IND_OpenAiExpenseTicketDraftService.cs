@@ -33,9 +33,9 @@ namespace IND_CRM_API.Services
         private const string DefaultQuickCreateImageDetail = "auto";
         private const string DefaultServiceTier = "priority";
         private const string DefaultProfileTag = "ticket-fast-v1";
-        private const string DefaultPromptCacheKey = "expense-ticket-draft-v3";
+        private const string DefaultPromptCacheKey = "expense-ticket-draft-v4";
         private const string DefaultQuickCreateProfileTag = "ticket-quick-create-v1";
-        private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v2";
+        private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v3";
         private const string DefaultReasoningEffort = "low";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
@@ -926,7 +926,7 @@ namespace IND_CRM_API.Services
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
-- El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fechas y moneda.
+- El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fecha, hora y moneda.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
@@ -963,7 +963,10 @@ namespace IND_CRM_API.Services
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
 - No uses separadores de miles en los numeros del JSON.
 - Si solo detectas un importe unico para la linea y qty=1, usa ese valor como price y lineTotal.
-- transDate en formato DD.MM.YYYY o null si no se puede inferir.
+- ticketDate debe ser la fecha impresa del ticket, en formato DD.MM.YYYY o null si no se puede inferir.
+- ticketTime debe ser la hora impresa del ticket, en formato HH:mm:ss de 24 horas o null si no se puede inferir.
+- transDate de cabecera debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
+- transDate de cada linea debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
 - fileId debe ser null en todas las lineas (se asigna despues en backend).
 - qty por defecto 1 salvo evidencia fuerte; no uses 0 salvo descuentos visibles con total negativo.
 - internacional true solo si hay evidencia de gasto internacional.
@@ -997,7 +1000,9 @@ namespace IND_CRM_API.Services
   - 14: Taxi
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
-- transDate debe ir solo en cabecera, en formato DD.MM.YYYY o null.
+- ticketDate debe ser la fecha impresa del ticket y debe ir solo en cabecera, en formato DD.MM.YYYY o null.
+- ticketTime debe ser la hora impresa del ticket y debe ir solo en cabecera, en formato HH:mm:ss de 24 horas o null.
+- transDate debe ir solo en cabecera y debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Si qty no es visible, usa 1.
@@ -1203,6 +1208,8 @@ namespace IND_CRM_API.Services
             var currencyCode = CurrencyCodeHelper.ResolveToIso4217(
                 root["currencyCode"]?.ToString(),
                 rawCurrency);
+            var normalizedTicketDate = NormalizeDate(root["ticketDate"]?.ToString());
+            var normalizedTransDate = NormalizeDate(root["transDate"]?.ToString()) ?? normalizedTicketDate;
 
             var request = new ExpenseSheetDraftResponse
             {
@@ -1211,7 +1218,9 @@ namespace IND_CRM_API.Services
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
                 currencyCode = string.IsNullOrWhiteSpace(currencyCode) ? null : currencyCode,
                 gastoType = NormalizeTypeValue(root["gastoType"]),
-                transDate = NormalizeDate(root["transDate"]?.ToString()),
+                transDate = normalizedTransDate,
+                ticketDate = normalizedTicketDate ?? normalizedTransDate,
+                ticketTime = NormalizeTime(root["ticketTime"]?.ToString()),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -1775,6 +1784,22 @@ namespace IND_CRM_API.Services
             return null;
         }
 
+        private static string NormalizeTime(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var trimmed = value.Trim();
+            var acceptedFormats = new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" };
+            if (DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                return parsed.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+            if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var any))
+                return any.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+            return null;
+        }
+
         private static string BuildNormalizedDraftJson(ExpenseSheetDraftResponse draft, ExpenseTicketDraftProfile profile)
         {
             var root = profile == ExpenseTicketDraftProfile.QuickCreate
@@ -1796,6 +1821,9 @@ namespace IND_CRM_API.Services
                 ["description"] = ToNullableStringToken(draft?.description),
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
                 ["gastoType"] = ToNullableIntToken(draft?.gastoType),
+                ["transDate"] = ToNullableStringToken(draft?.transDate),
+                ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
+                ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
                 ["exchRate"] = ToNullableDecimalToken(draft?.exchRate),
                 ["projId"] = ToNullableStringToken(draft?.projId),
                 ["confidence"] = ToNullableDecimalToken(draft?.Confidence),
@@ -1818,6 +1846,8 @@ namespace IND_CRM_API.Services
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
                 ["gastoType"] = new JValue(draft?.gastoType ?? 8),
                 ["transDate"] = ToNullableStringToken(draft?.transDate),
+                ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
+                ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
                 ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
                 ["merchant"] = ToNullableStringToken(draft?.Merchant),
                 ["lines"] = lines
@@ -1934,6 +1964,18 @@ namespace IND_CRM_API.Services
                         ["type"] = new JArray("integer", "null"),
                         ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14, null)
                     },
+                    ["transDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketTime"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
                     ["exchRate"] = new JObject
                     {
                         ["type"] = new JArray("number", "null")
@@ -1976,6 +2018,9 @@ namespace IND_CRM_API.Services
                     "description",
                     "currencyCode",
                     "gastoType",
+                    "transDate",
+                    "ticketDate",
+                    "ticketTime",
                     "exchRate",
                     "projId",
                     "confidence",
@@ -2070,6 +2115,14 @@ namespace IND_CRM_API.Services
                     {
                         ["type"] = new JArray("string", "null")
                     },
+                    ["ticketDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketTime"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
                     ["rawCurrency"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
@@ -2090,6 +2143,8 @@ namespace IND_CRM_API.Services
                     "currencyCode",
                     "gastoType",
                     "transDate",
+                    "ticketDate",
+                    "ticketTime",
                     "rawCurrency",
                     "merchant",
                     "lines")

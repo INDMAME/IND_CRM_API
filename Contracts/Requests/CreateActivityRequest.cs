@@ -13,6 +13,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string createdByUserId { get; set; }
         [Required] public string description { get; set; } 
         [Required] public string transDate { get; set; }
+        public int? contactMethod { get; set; }
         public string comentarios { get; set; }
         public string antecedentes { get; set; }
         public string conclusiones { get; set; }

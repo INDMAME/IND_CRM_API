@@ -20,7 +20,7 @@ Fecha: 2026-04-07
 
 | Entorno | URL | Host | IP | AX config | Blob |
 | --- | --- | --- | --- | --- | --- |
-| `DEV` | `https://dev.insertec.biz:2083/` | `dev.insertec.biz` | `192.168.0.146` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
+| `DEV` | `https://dev.insertec.biz:2083/` | `dev.insertec.biz` | `192.168.0.148` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc` | `DEV` |
 | `PROD` | `https://crm.insertec.biz:7776/` | `crm.insertec.biz` | `212.142.143.182` | `C:\INDAxaptaConfigAPI\CRM_API_AxConfig_PROD.axc` | `PROD` |
 
 ## Endpoints web
@@ -39,7 +39,7 @@ Que hace:
 - Crea o actualiza la configuracion base del entorno.
 - No pide valores por consola.
 - Salta placeholders sensibles.
-- Escribe tambien `ASPNETCORE_ENVIRONMENT` con `Production` para `DEV` y `PROD`, porque ambos son despliegues publicos.
+- Escribe tambien `ASPNETCORE_ENVIRONMENT` por entorno: `Development` para `DEV` y `Production` para `PROD`.
 - Escribe las claves web no sensibles: `INDCRM_WEB_BASE_URL`, `INDCRM_WEB_PUBLIC_HOST`, `INDCRM_WEB_PUBLIC_PORT`, `IND_E2E_BASE_URL` y `ApiSettings__BaseUrl`.
 - Muestra placeholders para las claves Entra/OIDC de la web y las salta hasta que se carguen con el script interactivo.
 - Configura tambien `INDCRM_SERVICE_USER` e `INDCRM_HTTP_SERVICE_USER`.
@@ -293,6 +293,7 @@ Restart-Service IND_CRM_API
 - `INDCRM_CONTEXT_TOKEN_AUDIENCE`: `IND_CRM_WEB_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_ISSUER`: `IND_CRM_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_SECRET_KEY`: generado por el script al aplicar si la maquina no tiene valor previo; debe quedar distinto entre DEV y PROD.
+- `ASPNETCORE_ENVIRONMENT`: `DEV` -> `Development`, `PROD` -> `Production`.
 - `INDCRM_WEB_BASE_URL`: `DEV` -> `https://dev.insertec.biz:2053/`, `PROD` -> `https://crm.insertec.biz:7702/`
 - `INDCRM_WEB_PUBLIC_HOST`: `DEV` -> `dev.insertec.biz`, `PROD` -> `crm.insertec.biz`
 - `INDCRM_WEB_PUBLIC_PORT`: `DEV` -> `2053`, `PROD` -> `7702`
@@ -323,11 +324,12 @@ Esas rutas quedan ignoradas por Git.
 ## Notas
 
 - `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_IP` y `INDCRM_PUBLIC_PORT` son datos operativos para DNS, firewall y despliegue.
-- La IP de `DEV` queda confirmada en `192.168.0.146`.
+- La IP de `DEV` queda confirmada en `192.168.0.148`.
 - La web `DEV` se sirve en `https://dev.insertec.biz:2053/`; la API `DEV` se sirve en `https://dev.insertec.biz:2083/`.
 - La web `PROD` se sirve en `https://crm.insertec.biz:7702/`; la API `PROD` se sirve en `https://crm.insertec.biz:7776/`.
 - El puerto web se aplica realmente en IIS, pero `INDCRM_WEB_BASE_URL`, `INDCRM_WEB_PUBLIC_HOST` e `INDCRM_WEB_PUBLIC_PORT` quedan como contrato de maquina y son validados por `IND_CRM_APP\publish.ps1`.
 - El cambio de `DEV` a `PROD` debe resolverse en despliegue, no en recompilacion.
+- `DEV` debe mantener `ASPNETCORE_ENVIRONMENT=Development`, `INDCRM_AX_CONFIG_FILE=...\CRM_API_AxConfig_DEV.axc` y `AZURE_BLOB_ENVIRONMENT_SEGMENT=DEV`; los scripts de instalacion bloquean combinaciones cruzadas con `PROD`.
 - Cuando se cambie una variable de maquina usada por la API, reiniciar `IND_CRM_API` para recargar la configuracion del proceso.
 - Blob usa `AZURE_BLOB_ENVIRONMENT_SEGMENT` y, si falta, hereda `IND_ENV` antes de usar un fallback neutro.
 - Un `git push` entre ramas no cambia el ambiente por si solo; el riesgo real es ejecutar scripts locales con variables equivocadas.

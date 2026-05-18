@@ -618,6 +618,8 @@ namespace IND_CRM_API.Controllers.System
 
                 var comentarioValue = string.IsNullOrWhiteSpace(draft.Merchant) ? "Ticket IA" : draft.Merchant.Trim();
                 var transDateValue = ResolveDraftTransDate(draft);
+                var ticketDateValue = ResolveDraftTicketDate(draft, transDateValue);
+                var ticketTimeValue = ResolveDraftTicketTime(draft);
                 var totalAmountValue = CalculateTicketLinesTotal(validLines);
                 if (totalAmountValue < 0m)
                 {
@@ -648,7 +650,9 @@ namespace IND_CRM_API.Controllers.System
                 headerCon.Append(gastoTypeValue);
                 headerCon.Append(ocrJson ?? string.Empty);
                 headerCon.Append(normalizedJson ?? string.Empty);
-                headerCon.Append(transDateValue);
+                headerCon.Append(ticketDateValue);
+                if (ticketTimeValue.HasValue)
+                    headerCon.Append(ticketTimeValue.Value);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -721,6 +725,9 @@ namespace IND_CRM_API.Controllers.System
                     updateCon.Append(gastoTypeValue);
                     updateCon.Append(ocrJson ?? string.Empty);
                     updateCon.Append(normalizedJson ?? string.Empty);
+                    updateCon.Append(ticketDateValue);
+                    if (ticketTimeValue.HasValue)
+                        updateCon.Append(ticketTimeValue.Value);
 
                     var updateObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",
@@ -814,6 +821,31 @@ namespace IND_CRM_API.Controllers.System
             }
 
             return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        // Resolves the ticket document date, using transDate only as compatibility fallback.
+        private static string ResolveDraftTicketDate(ExpenseSheetDraftResponse draft, string fallbackTransDateYmd)
+        {
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.ticketDate))
+            {
+                if (TryNormalizeYmdDate(draft.ticketDate, out var normalizedTicketDate))
+                    return normalizedTicketDate;
+            }
+
+            return string.IsNullOrWhiteSpace(fallbackTransDateYmd)
+                ? DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture)
+                : fallbackTransDateYmd;
+        }
+
+        // Converts the AI ticket time to AX seconds since midnight when present.
+        private static int? ResolveDraftTicketTime(ExpenseSheetDraftResponse draft)
+        {
+            if (draft == null || string.IsNullOrWhiteSpace(draft.ticketTime))
+                return null;
+
+            return TryNormalizeTicketTimeToAxSeconds(draft.ticketTime, out var seconds)
+                ? (int?)seconds
+                : null;
         }
 
         // Resolves ticket header gastoType from draft value or dominant line type.
@@ -964,6 +996,36 @@ namespace IND_CRM_API.Controllers.System
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             return true;
+        }
+
+        // Validates accepted ticket time formats and converts to AX seconds since midnight.
+        private static bool TryNormalizeTicketTimeToAxSeconds(string input, out int seconds)
+        {
+            seconds = 0;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawSeconds) &&
+                rawSeconds >= 0 &&
+                rawSeconds <= 86399)
+            {
+                seconds = rawSeconds;
+                return true;
+            }
+
+            if (!DateTime.TryParseExact(
+                    trimmed,
+                    new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var parsed))
+            {
+                return false;
+            }
+
+            seconds = (int)parsed.TimeOfDay.TotalSeconds;
+            return seconds >= 0 && seconds <= 86399;
         }
 
         // Lee header AX [success, message, extras...] y container de lineas opcional.

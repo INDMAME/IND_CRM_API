@@ -264,9 +264,12 @@ function New-ServiceDisplayName {
 function Assert-RequiredEnvironment {
     $requiredNames = @(
         "IND_ENV",
+        "ASPNETCORE_ENVIRONMENT",
+        "INDCRM_AX_CONFIG_FILE",
         "INDCRM_PUBLIC_HOST",
         "INDCRM_PUBLIC_PORT",
-        "INDCRM_BASE_URL"
+        "INDCRM_BASE_URL",
+        "AZURE_BLOB_ENVIRONMENT_SEGMENT"
     )
 
     foreach ($name in $requiredNames) {
@@ -275,6 +278,71 @@ function Assert-RequiredEnvironment {
             throw "$name is not defined. Run scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment DEV/PROD -Apply first."
         }
     }
+}
+
+function Get-ExpectedAspNetCoreEnvironment {
+    param([Parameter(Mandatory = $true)][string]$EnvironmentName)
+
+    if ([string]::Equals($EnvironmentName, "DEV", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "Development"
+    }
+
+    if ([string]::Equals($EnvironmentName, "PROD", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "Production"
+    }
+
+    throw "IND_ENV must be DEV or PROD. Current value: $EnvironmentName"
+}
+
+function Get-ExpectedAxConfigFileName {
+    param([Parameter(Mandatory = $true)][string]$EnvironmentName)
+
+    if ([string]::Equals($EnvironmentName, "DEV", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "CRM_API_AxConfig_DEV.axc"
+    }
+
+    if ([string]::Equals($EnvironmentName, "PROD", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "CRM_API_AxConfig_PROD.axc"
+    }
+
+    throw "IND_ENV must be DEV or PROD. Current value: $EnvironmentName"
+}
+
+function Assert-ExpectedEnvironmentValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][string]$Actual,
+        [Parameter(Mandatory = $true)][string]$Expected
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Actual) -or
+        -not [string]::Equals($Actual.Trim(), $Expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $actualText = if ([string]::IsNullOrWhiteSpace($Actual)) { "<empty>" } else { $Actual }
+        throw "$Name must be $Expected. Current value: $actualText"
+    }
+}
+
+function Assert-EnvironmentAlignment {
+    $environmentName = Get-EnvironmentValue -Name "IND_ENV"
+    $expectedAspNetCoreEnvironment = Get-ExpectedAspNetCoreEnvironment -EnvironmentName $environmentName
+    $expectedAxConfigFileName = Get-ExpectedAxConfigFileName -EnvironmentName $environmentName
+
+    Assert-ExpectedEnvironmentValue `
+        -Name "ASPNETCORE_ENVIRONMENT" `
+        -Actual (Get-EnvironmentValue -Name "ASPNETCORE_ENVIRONMENT") `
+        -Expected $expectedAspNetCoreEnvironment
+
+    Assert-ExpectedEnvironmentValue `
+        -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT" `
+        -Actual (Get-EnvironmentValue -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT") `
+        -Expected $environmentName.Trim()
+
+    $axConfigFile = Get-EnvironmentValue -Name "INDCRM_AX_CONFIG_FILE"
+    $actualAxConfigFileName = if ([string]::IsNullOrWhiteSpace($axConfigFile)) { $null } else { [System.IO.Path]::GetFileName($axConfigFile.Trim()) }
+    Assert-ExpectedEnvironmentValue `
+        -Name "INDCRM_AX_CONFIG_FILE" `
+        -Actual $actualAxConfigFileName `
+        -Expected $expectedAxConfigFileName
 }
 
 function New-ServiceCredentialFromEnvironment {
@@ -399,6 +467,7 @@ if (-not $Apply) {
 
 Assert-Administrator
 Assert-RequiredEnvironment
+Assert-EnvironmentAlignment
 
 if (-not $SkipBuild) {
     Write-Step "Building Release|x86"

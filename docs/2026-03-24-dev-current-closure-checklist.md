@@ -15,10 +15,11 @@ Cerrar el `DEV` actual en esta maquina con:
 ## Estado verificado antes de ejecutar
 
 - `IND_ENV=DEV`
+- `ASPNETCORE_ENVIRONMENT=Development`
 - `INDCRM_AX_CONFIG_FILE=C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc`
 - `INDCRM_BASE_URL=https://dev.insertec.biz:2083/`
 - `INDCRM_PUBLIC_HOST=dev.insertec.biz`
-- `INDCRM_PUBLIC_IP=192.168.0.146`
+- `INDCRM_PUBLIC_IP=192.168.0.148`
 - `INDCRM_PUBLIC_PORT=2083`
 - `AZURE_BLOB_ENVIRONMENT_SEGMENT=DEV`
 - El servicio `IND_CRM_API` no esta instalado actualmente (`sc query` devuelve 1060).
@@ -36,6 +37,7 @@ Comando:
 ```powershell
 $names = @(
   'IND_ENV',
+  'ASPNETCORE_ENVIRONMENT',
   'INDCRM_AX_CONFIG_FILE',
   'INDCRM_BASE_URL',
   'INDCRM_PUBLIC_HOST',
@@ -189,7 +191,7 @@ Evidencia esperada:
 Checklist:
 
 - [ ] Tener un PFX real de `dev.insertec.biz` en `C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx` o usar un override de ruta controlado.
-- [ ] Corregir la discrepancia `CRM_API_AxConfig.axc` vs `CRM_API_AxConfig_PROD.axc` en scripts y documentacion.
+- [x] Corregida la discrepancia de AXC: DEV exige `CRM_API_AxConfig_DEV.axc` en scripts y documentacion.
 - [ ] Completar la maquina de build con SDK/Build Tools para que `Release/x86` compile sin depender de `Debug`.
 - [ ] Mantener Postman separado por entorno y usar la coleccion `DEV V01` por defecto para pruebas.
 

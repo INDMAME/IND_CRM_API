@@ -10,6 +10,8 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public int? gastoType { get; set; }
         public string transDate { get; set; }
+        public string ticketDate { get; set; }
+        public string ticketTime { get; set; }
         public decimal? Confidence { get; set; }
         public List<string> Warnings { get; set; }
         public string RawCurrency { get; set; }

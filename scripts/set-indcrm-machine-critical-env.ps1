@@ -66,7 +66,7 @@ function Get-CriticalSettings {
         [string]$EnvironmentName
     )
 
-    $publicIpDefault = if ($EnvironmentName -eq "PROD") { "212.142.143.182" } else { $null }
+    $publicIpDefault = if ($EnvironmentName -eq "DEV") { "192.168.0.148" } else { "212.142.143.182" }
     $pfxPathDefault = if ($EnvironmentName -eq "DEV") { "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx" } else { "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx" }
 
     return @(
@@ -232,6 +232,50 @@ function Set-MachineEnvSetting {
     Write-Host ("Set machine variable {0}" -f $Name)
 }
 
+function Get-ResolvedSettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$ResolvedSettings,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $setting = $ResolvedSettings | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if ($null -eq $setting) {
+        return $null
+    }
+
+    return $setting.Value
+}
+
+function Assert-ResolvedSettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [AllowNull()]
+        [string]$Actual,
+        [Parameter(Mandatory = $true)]
+        [string]$Expected
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Actual) -or
+        -not [string]::Equals($Actual.Trim(), $Expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ("{0} must be {1}. Current value: {2}" -f $Name, $Expected, $(if ([string]::IsNullOrWhiteSpace($Actual)) { "<empty>" } else { $Actual }))
+    }
+}
+
+function Assert-ResolvedCriticalSettings {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$ResolvedSettings,
+        [Parameter(Mandatory = $true)]
+        [string]$EnvironmentName
+    )
+
+    $expectedPublicIp = if ($EnvironmentName -eq "DEV") { "192.168.0.148" } else { "212.142.143.182" }
+    Assert-ResolvedSettingValue -Name "INDCRM_PUBLIC_IP" -Actual (Get-ResolvedSettingValue -ResolvedSettings $ResolvedSettings -Name "INDCRM_PUBLIC_IP") -Expected $expectedPublicIp
+}
+
 $settings = Get-CriticalSettings -EnvironmentName $TargetEnvironment
 
 if (-not $Apply) {
@@ -258,6 +302,7 @@ Write-Host ""
 Write-Host ("Applying critical machine environment values for {0}" -f $TargetEnvironment)
 Write-Host ""
 
+$resolvedSettings = @()
 foreach ($setting in $settings) {
     $value = if ($setting.Secret) {
         Read-SecretValue -Setting $setting
@@ -266,7 +311,16 @@ foreach ($setting in $settings) {
         Read-PlainValue -Setting $setting
     }
 
-    Set-MachineEnvSetting -Name $setting.Name -Value $value
+    $resolvedSettings += [pscustomobject]@{
+        Name = $setting.Name
+        Value = $value
+    }
+}
+
+Assert-ResolvedCriticalSettings -ResolvedSettings $resolvedSettings -EnvironmentName $TargetEnvironment
+
+foreach ($resolvedSetting in $resolvedSettings) {
+    Set-MachineEnvSetting -Name $resolvedSetting.Name -Value $resolvedSetting.Value
 }
 
 Write-Host ""
