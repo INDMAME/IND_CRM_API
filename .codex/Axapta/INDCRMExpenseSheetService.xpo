@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 12/05/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 19/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -131,6 +131,25 @@ Formatversion: 1
         #    }
         #
         #    return totalAmount;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #validateTicketDateTimeForApi
+        #// Method: validateTicketDateTimeForApi
+        #// Purpose: Runs INDTicketInfoTable date/time uniqueness validation before API writes.
+        #static server str validateTicketDateTimeForApi(INDTicketInfoTable _ticketHeader, int _startLine)
+        #{
+        #    str msg;
+        #    ;
+        #
+        #    if (_ticketHeader.validateUniqueTicketDateTime())
+        #        return '';
+        #
+        #    msg = INDCRMUtilityService::getInfologMessagesSince(_startLine);
+        #    if (!msg)
+        #        msg = 'Ya existe otro ticket con la misma fecha y hora.';
+        #
+        #    return msg;
         #}
         #
       ENDSOURCE
@@ -872,6 +891,14 @@ Formatversion: 1
         #                    ticketHeader.TicketTime = ticketTime;
         #
         #                ticketHeader.CreatedByUserId = axUserId;
+        #
+        #                msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #                if (msg)
+        #                {
+        #                    ttsabort;
+        #                    return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #                }
+        #
         #                ticketHeader.insert();
         #
         #                //Actualizo referencia en DocuRef
@@ -971,6 +998,13 @@ Formatversion: 1
         #
         #            if (mode == #ModeCreateHeaderOnly && hasHeaderTotalAmount)
         #                ticketHeader.TotalAmount = totalAmount;
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #            }
         #
         #            ticketHeader.update();
         #
@@ -1232,6 +1266,14 @@ Formatversion: 1
         #                ticketHeader.TotalAmount     = totalAmount;
         #                ticketHeader.GastoType       = hasGastoType ? gastoType : 0;
         #                ticketHeader.CreatedByUserId = axUserId;
+        #
+        #                msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #                if (msg)
+        #                {
+        #                    ttsabort;
+        #                    return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #                }
+        #
         #                ticketHeader.insert();
         #                ttscommit;
         #
@@ -1335,6 +1377,13 @@ Formatversion: 1
         #
         #            if (mode == #ModeCreateHeaderOnly && hasHeaderTotalAmount)
         #                ticketHeader.TotalAmount = totalAmount;
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #            }
         #
         #            ticketHeader.update();
         #
@@ -1501,6 +1550,14 @@ Formatversion: 1
         #            ticketLine.insert();
         #
         #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #            }
+        #
         #            ticketHeader.update();
         #
         #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
@@ -1773,6 +1830,14 @@ Formatversion: 1
         #                ticketLine.delete();
         #
         #                ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #                msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #                if (msg)
+        #                {
+        #                    ttsabort;
+        #                    return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #                }
+        #
         #                ticketHeader.update();
         #
         #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
@@ -1920,6 +1985,14 @@ Formatversion: 1
         #            ticketLine.delete();
         #
         #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #            }
+        #
         #            ticketHeader.update();
         #
         #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
@@ -2699,7 +2772,8 @@ Formatversion: 1
         #    str        source;
         #
         #    CRMHojaGastosUserPriceKmFechaTable userPriceKmFechaTable;
-        #    CRMParameters                      crmParameters;
+        #    CRMParameters               crmParameters;
+        #    CRMUsuarioTable             usuarioTable;
         #    int        startLine;
         #    str        msg;
         #    ;
@@ -2730,6 +2804,7 @@ Formatversion: 1
         #                return INDCRMUtilityService::buildHeader(false, 'crmUserId es obligatorio.', conNull());
         #
         #            userPriceKmFechaTable = CRMHojaGastosUserPriceKmFechaTable::FindActive(crmUserId, transDate);
+        #
         #            if (userPriceKmFechaTable.RecId)
         #            {
         #                priceKm = userPriceKmFechaTable.PriceKm;
@@ -2737,9 +2812,21 @@ Formatversion: 1
         #            }
         #            else
         #            {
+        #                usuarioTable  = CRMUsuarioTable::Find(crmUserId);
         #                crmParameters = CRMParameters::find();
-        #                priceKm = crmParameters.PriceKm;
+        #
         #                source  = 'CRMParameters';
+        #                priceKm = usuarioTable.priceKmAFecha(transDate);
+        #
+        #                if (priceKm)
+        #                    priceKm = priceKm;
+        #                else
+        #                {
+        #                    if (usuarioTable.CocheEmpresa)
+        #                        priceKm  = crmParameters.PriceKmEmpresa;
+        #                    else
+        #                        priceKm  = crmParameters.PriceKm;
+        #                }
         #            }
         #
         #            return INDCRMUtilityService::buildHeader(true, 'OK', [strFmt("%1", priceKm), source]);
@@ -2996,6 +3083,8 @@ Formatversion: 1
         #    CRMHojaGastosLine  assignedLine;
         #    INDTicketInfoTable ticketHeader;
         #    boolean            hasAssignedLine;
+        #    int                startLine;
+        #    str                msg;
         #    ;
         #
         #    if (!_fileId)
@@ -3017,12 +3106,22 @@ Formatversion: 1
         #
         #    if (hasAssignedLine && ticketHeader.Status != INDTicketStatus::Assigned)
         #    {
+        #        startLine = infolog.line();
         #        ticketHeader.Status = INDTicketStatus::Assigned;
+        #        msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #        if (msg)
+        #            throw error(msg);
+        #
         #        ticketHeader.update();
         #    }
         #    else if (!hasAssignedLine && ticketHeader.Status != INDTicketStatus::Pending)
         #    {
+        #        startLine = infolog.line();
         #        ticketHeader.Status = INDTicketStatus::Pending;
+        #        msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #        if (msg)
+        #            throw error(msg);
+        #
         #        ticketHeader.update();
         #    }
         #}
@@ -3339,8 +3438,11 @@ Formatversion: 1
         #            line.Price         = price;
         #            line.Amount        = line.CalcAmount();
         #
+        #            // Keep line project explicit and fall back to the header project when omitted.
         #            if (projId)
         #                line.ProjId = projId;
+        #            else
+        #                line.ProjId = header.ProjId;
         #
         #            line.update();
         #
@@ -3632,6 +3734,13 @@ Formatversion: 1
         #
         #            if (hasTicketTime)
         #                ticketHeader.TicketTime = ticketTime;
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #            }
         #
         #            ticketHeader.update();
         #
@@ -4058,6 +4167,13 @@ Formatversion: 1
         #            else
         #                ticketHeader.TotalAmount = linesTotalAmount;
         #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return [INDCRMUtilityService::buildHeader(false, msg, conNull()), conNull()];
+        #            }
+        #
         #            ticketHeader.update();
         #
         #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);
@@ -4232,6 +4348,14 @@ Formatversion: 1
         #            ticketLine.update();
         #
         #            ticketHeader.TotalAmount = INDCRMExpenseSheetService::calculateTicketTotalAmount(ticketHeader.FileId, ticketHeader.RecId);
+        #
+        #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
+        #            if (msg)
+        #            {
+        #                ttsabort;
+        #                return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #            }
+        #
         #            ticketHeader.update();
         #
         #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(axUserId, ticketHeader.FileId);

@@ -107,7 +107,7 @@ Endpoints
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate
-  Response line fields include: price, qty, amount
+  Response line fields include: price, qty, amount, projId
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional)
@@ -138,7 +138,7 @@ Endpoints
 - POST /api/crm/expensesheets/tickets/quick-create (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type required: multipart/form-data.
   Body required: ticketImage (jpg/jpeg/png/webp, max 50 MB).
-  Body optional: currencyCode, description, comentario, existingHojaGastosId, projectId.
+  Body optional: currencyCode, description, comentario, existingHojaGastosId, projId (legacy alias: projectId).
   Flujo: crea ticket provisional, sube archivo, extrae draft IA, finaliza ticket y opcionalmente lo vincula a una hoja de gastos existente.
   Response data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds.{TicketCreate,FileUpload,DraftExtract,TicketFinalize,SheetLink}`.
   En errores tras crear `FileId`, el endpoint intenta rollback interno del blob y del ticket AX; el error original se conserva y el resultado del rollback viaja en los campos `Rollback*`.
@@ -166,7 +166,7 @@ Endpoints
   - `filters` obligatorio en `filtered`: `searchKey` (compat: `filter`), `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`
   - `excludedIds[]` opcional en `filtered`
   En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base `status = Pending` y `totalAmount != 0`.
-  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente.
+  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente, usando el `projId` de la hoja destino para la linea generada.
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)

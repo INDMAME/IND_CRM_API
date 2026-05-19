@@ -1,8 +1,8 @@
 # IND_CRM_API Postman
 
 Colecciones
-- DEV activa: `.codex/Postman/DEV/IND_CRM_API V03.postman_collection.json`
-- DEV soporte: `Notes/DEV/IND_CRM_API V03.postman_collection.json`
+- DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
+- DEV soporte: `Notes/DEV/IND_CRM_API V04.postman_collection.json`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -36,7 +36,7 @@ Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
-- La coleccion `DEV V03` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
+- La coleccion `DEV V04` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
 - `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
@@ -51,15 +51,15 @@ Notas
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
   - `GET /api/crm/expensesheets/tickets/{fileId}` retorna tambien `ocrJson` y `normalizedJson`.
-  - `POST /api/crm/expensesheets/tickets/list` devuelve solo `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName` y `GastoType`.
+  - `POST /api/crm/expensesheets/tickets/list` devuelve solo `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName` y `GastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `ocrJson` y `normalizedJson` como payload opcional de OCR/normalizacion.
   - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`) y la fecha de referencia es `ticketHeader.createdDate`.
   - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
-  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`.
+  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`.
   - `POST /api/crm/expensesheets/tickets/link/bulk` mantiene compatibilidad con `expenseSheetId` + `ticketIds[]` y ahora soporta `selectionMode=selected|filtered`, `filters` y `excludedIds`, reutilizando `createExpenseSheet` en modo `2` y devolviendo resultado parcial con `linked`, `skipped` y `failed`.
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
-  - `POST /api/crm/expensesheets/tickets/quick-create` acepta `multipart/form-data` con `ticketImage` y campos opcionales `currencyCode`, `description`, `comentario`, `existingHojaGastosId` y `projectId`; devuelve `completedStage` y `stepTraceIds` para trazar cada etapa.
+  - `POST /api/crm/expensesheets/tickets/quick-create` acepta `multipart/form-data` con `ticketImage` y campos opcionales `currencyCode`, `description`, `comentario`, `existingHojaGastosId` y `projId` (`projectId` sigue como alias legacy); devuelve `completedStage` y `stepTraceIds` para trazar cada etapa.
 - `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
 - V23 agrega tests automatizados para:
 - V24 agrega tests automatizados para:
@@ -74,3 +74,4 @@ Notas
 - V28 se basa en la V27 mas reciente, incorpora `tickets/quick-create` y documenta `ocrJson`/`normalizedJson` en contratos de tickets sin romper compatibilidad.
 - V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
 - V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:2083` para el nuevo despliegue publico separado por host y puerto.
+- V04 de DEV actualiza la coleccion activa con `projId` en contratos de lineas de hoja de gastos, alias `projId` para quick-create y ejemplos de tickets con `ticketDate`, `ticketTime`, `ocrJson`, `normalizedJson` y `fileExtension`.

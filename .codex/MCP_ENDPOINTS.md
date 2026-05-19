@@ -130,7 +130,7 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -143,6 +143,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 - Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`
+- Respuesta (lineas) incluye: `price`, `qty`, `amount`, `projId`
 - Nota de routing: `hojaGastosId` excluye el literal `tickets` para evitar colision con `/api/crm/expensesheets/tickets`.
 
 ### Tool: crm_expensesheets_update_header
@@ -193,7 +194,7 @@ Endpoints
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: multipart/form-data`
 - Body multipart:
   - Requerido: `ticketImage` (jpg/jpeg/png/webp, max 50 MB)
-  - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projectId`
+  - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projId` (alias legacy: `projectId`)
 - Flujo: crea ticket provisional, sube archivo, ejecuta OCR + normalizacion IA, finaliza ticket y opcionalmente lo vincula a una hoja existente.
 - En errores tras crear `FileId`, intenta rollback interno del blob y del ticket AX.
 - Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds`
@@ -235,7 +236,7 @@ Endpoints
     - Opcional: `selectionMode` (`selected` por defecto, `filtered`)
     - En `selected`: `ticketIds[]` obligatorio
     - En `filtered`: `filters` obligatorio (`searchKey`, `filter`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`) y `excludedIds[]` opcional
-    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2` y soporta resultado parcial.
+    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2`, usa el `projId` de la hoja destino para la linea generada y soporta resultado parcial.
   - Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 
 ### Tool: crm_expensesheets_tickets_update

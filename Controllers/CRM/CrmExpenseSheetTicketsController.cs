@@ -1425,7 +1425,7 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, null, out var linkMessage, out var linkStatus))
+                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, out var linkMessage, out var linkStatus))
                     {
                         if (IsTicketAlreadyLinkedMessage(linkMessage))
                         {
@@ -3237,6 +3237,11 @@ namespace IND_CRM_API.Controllers.CRM
                 imageBytes.Length,
                 "Multipart leido correctamente.");
 
+            // Prefer the standard CRM ProjId field while keeping the previous projectId alias.
+            var projectId = (await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false) ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(projectId))
+                projectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim();
+
             return new QuickCreateFormReadResult
             {
                 Success = true,
@@ -3249,7 +3254,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Description = await ReadFormFieldAsync(provider, "description").ConfigureAwait(false),
                 Comentario = await ReadFormFieldAsync(provider, "comentario").ConfigureAwait(false),
                 ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
-                ProjectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim()
+                ProjectId = projectId
             };
         }
 
@@ -5633,6 +5638,7 @@ namespace IND_CRM_API.Controllers.CRM
         private sealed class ExpenseSheetTargetInfo
         {
             public string Voucher { get; set; }
+            public string ProjId { get; set; }
         }
 
         // Validates shared paging and date filters for ticket list endpoints.
@@ -6483,6 +6489,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras.Count >= 12)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                targetInfo.ProjId = headerExtras[9];
                 return targetInfo;
             }
 
@@ -6491,10 +6498,12 @@ namespace IND_CRM_API.Controllers.CRM
                 if (IsLikelyDateValue(headerExtras[10]))
                 {
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                    targetInfo.ProjId = headerExtras[8];
                 }
                 else
                 {
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                    targetInfo.ProjId = headerExtras[9];
                 }
 
                 return targetInfo;
@@ -6503,18 +6512,21 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras.Count == 10)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                targetInfo.ProjId = headerExtras[8];
                 return targetInfo;
             }
 
             if (headerExtras.Count == 8)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[7]);
+                targetInfo.ProjId = headerExtras[6];
                 return targetInfo;
             }
 
             if (headerExtras.Count == 7)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[6]);
+                targetInfo.ProjId = headerExtras[5];
                 return targetInfo;
             }
 

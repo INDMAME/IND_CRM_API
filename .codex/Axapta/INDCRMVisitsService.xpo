@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMVisitsService descargados en Martes 12/05/2026
+; Navision Axapta Class: INDCRMVisitsService descargados en Martes 19/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -428,7 +428,7 @@ Formatversion: 1
         #             strFmt("%1", actividadTable.Country),
         #             strFmt("%1", actividadTable.ActividadType),
         #             strFmt("%1", actividadTable.TipoVisita),
-        #             strFmt("%1", enum2int(actividadTable.ContactMethod)),
+        #             strFmt("%1", actividadTable.ContactMethod),
         #             strFmt("%1", actividadTable.Description),
         #             strFmt("%1", actividadTable.Comentarios),
         #             strFmt("%1", actividadTable.VisitaAntecedentes),
@@ -492,7 +492,7 @@ Formatversion: 1
         #             strFmt("%1", actividadTable.Country),
         #             strFmt("%1", actividadTable.ActividadType),
         #             strFmt("%1", actividadTable.TipoVisita),
-        #             strFmt("%1", enum2int(actividadTable.ContactMethod)),
+        #             strFmt("%1", actividadTable.ContactMethod),
         #             strFmt("%1", actividadTable.Description),
         #             strFmt("%1", actividadTable.Comentarios),
         #             strFmt("%1", actividadTable.VisitaAntecedentes),
@@ -577,7 +577,7 @@ Formatversion: 1
         #                 strFmt("%1", actividadTable.Country),
         #                 strFmt("%1", actividadTable.ActividadType),
         #                 strFmt("%1", actividadTable.TipoVisita),
-        #                 strFmt("%1", enum2int(actividadTable.ContactMethod)),
+        #                 strFmt("%1", actividadTable.ContactMethod),
         #                 strFmt("%1", actividadTable.Description),
         #                 conAsistentes
         #            ]];
