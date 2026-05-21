@@ -154,15 +154,23 @@ Endpoints
 - Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional), `reimbursableExpense` (opcional)
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 - Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
-- Nota: si una linea guardada difiere en divisa, proyecto o gasto reembolsable, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`, `INDDefaultParameters.CRMProjIdVarios` o `INDReimbursableExpense::Both`.
+- Nota: si una linea guardada difiere en divisa, proyecto o gasto reembolsable, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`, `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`.
 
 ### Tool: crm_expensesheets_propagate_currency_defaults
 - HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Query: `recalculateAmountMST` opcional, default `true`
+- Query: `recalculateAmountMST` opcional, default `true`; `force` opcional, default `false`
 - Propaga `currencyCode` y `exchRate` de cabecera a lineas existentes y recalcula `amountMST` si corresponde.
-- AX bloquea si la hoja ya tiene lineas multimoneda, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si tiene Voucher.
+- AX bloquea si la hoja ya tiene lineas multimoneda y `force=false`, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
+
+### Tool: crm_expensesheets_propagate_project_default
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Propaga `projId` de cabecera a `projId` y `projIdHornos` de lineas existentes y rehace la asignacion de proyecto.
+- AX bloquea si `projId` de cabecera es `PurchParameters.INDProjIdVarious`, si falta `projId` o si la hoja tiene Voucher.
 - Routing: `hojaGastosId` excluye el literal `tickets`.
 
 ### Tool: crm_expensesheets_propagate_reimbursable_expense

@@ -823,7 +823,7 @@ FORM #CRMHojaGastosTable
           #        {
           #            updated = CRMHojaGastosTable.updateCurrencyDefaultsInLines(true);
           #            info(strFmt("%1 lineas actualizadas.", updated));
-          #        }
+          #}
           #    }
           #
           #    if (hasLines && reimbursableExpenseChanged && !CRMHojaGastosTable.isVariousReimbursableExpenseDefault())
@@ -838,6 +838,7 @@ FORM #CRMHojaGastosTable
           #    CRMHojaGastosTable_ds.reread();
           #    CRMHojaGastosTable_ds.refresh();
           #}
+          #
         ENDSOURCE
         SOURCE #delete
           #public void delete()

@@ -113,11 +113,16 @@ Endpoints
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
   Nota: actualizar cabecera no propaga cambios a lineas existentes. La propagacion se ejecuta con endpoints explicitos.
-  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `INDDefaultParameters.CRMProjIdVarios`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con `INDReimbursableExpense::Both`.
-- POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true (Authorize + X-IND-Company + X-IND-AxUserId)
+  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con `INDReimbursableExpense::Both`.
+- POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false (Authorize + X-IND-Company + X-IND-AxUserId)
   Propaga la `currencyCode` y `exchRate` actuales de cabecera a todas las lineas existentes.
-  Query optional: `recalculateAmountMST` (default true).
-  AX bloquea la operacion si la hoja tiene lineas multimoneda, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si esta bloqueada por Voucher.
+  Query optional: `recalculateAmountMST` (default true), `force` (default false).
+  AX bloquea la operacion si la hoja tiene lineas multimoneda y `force=false`, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si esta bloqueada por Voucher.
+  Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
+  Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
+- POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
+  Propaga el `projId` actual de cabecera a `projId` y `projIdHornos` de todas las lineas existentes y rehace la asignacion de proyecto de cada linea.
+  AX bloquea la operacion si `projId` de cabecera es `PurchParameters.INDProjIdVarious`, si no hay `projId` de cabecera o si la hoja esta bloqueada por Voucher.
   Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate (Authorize + X-IND-Company + X-IND-AxUserId)

@@ -43,7 +43,8 @@ Notas
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
 - `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`) y `reimbursableExpense` (0 No, 1 Yes, 2 Both), y cuando se envia `estadoComentarios` requiere `expenseSheetStatus` + `exchangeRateMode`.
 - `PUT /api/crm/expensesheets/{hojaGastosId}` no propaga cambios a lineas. Para confirmar desde web, usar:
-  - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true`
+  - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false`
+  - `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
   - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
 - Expense Sheets admite `reimbursableExpense` en cabecera y lineas. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`.
 - Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.

@@ -18,6 +18,7 @@ This updates the header fields, including:
 
 - `currencyCode`
 - `exchRate`
+- `projId`
 - `reimbursableExpense`
 
 It does not propagate those values to existing lines.
@@ -25,7 +26,7 @@ It does not propagate those values to existing lines.
 AX no longer blocks line-level currency changes just because the header has a currency default.
 When a saved line uses a currency different from the header, AX sets `CRMHojaGastosTable.CurrencyCode` to `INDDefaultParameters.CRMCurrencyVarios`.
 
-The same rule applies to projects. When a saved line `ProjId` or `ProjIdHornos` differs from the header `ProjId`, AX sets the header `ProjId` to `INDDefaultParameters.CRMProjIdVarios`.
+The same rule applies to projects. When a saved line `ProjId` or `ProjIdHornos` differs from the header `ProjId`, AX sets the header `ProjId` to `PurchParameters.INDProjIdVarious`.
 
 The same rule applies to reimbursable expense. When a saved line `reimbursableExpense` differs from the header, AX sets the header `reimbursableExpense` to `INDReimbursableExpense::Both`.
 
@@ -38,6 +39,7 @@ When the frontend changes a line `currencyCode` to a currency different from the
 Endpoint:
 
 - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true`
+- `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=true`
 
 Headers:
 
@@ -50,7 +52,7 @@ Behavior:
 
 - Applies the current header `currencyCode` and `exchRate` to all existing lines.
 - Recalculates line `amountMST` by default.
-- Blocks when the sheet has multi-currency lines.
+- Blocks when the sheet has multi-currency lines unless `force=true`.
 - Blocks when the header `currencyCode` is the `CRMCurrencyVarios` marker.
 - Blocks when the sheet is locked by `Voucher`.
 
@@ -69,6 +71,41 @@ Frontend flow:
 
 1. User changes header `currencyCode` or `exchRate`.
 2. Frontend saves the header with `PUT /api/crm/expensesheets/{hojaGastosId}`.
+3. If the sheet has existing lines, show a confirmation dialog.
+4. If the user confirms, call the propagation endpoint.
+5. Refresh the expense sheet detail.
+
+When the current lines are already multi-currency, use the same confirmation as Axapta but call the endpoint with `force=true` only after the user accepts that existing line currencies and exchange rates will be overwritten.
+
+## Project Propagation API
+
+Endpoint:
+
+- `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
+
+Behavior:
+
+- Applies the current header `projId` to all existing line `projId` and `projIdHornos` values.
+- Rebuilds the line project assignment using the header project.
+- Blocks when the header `projId` is the `PurchParameters.INDProjIdVarious` marker.
+- Blocks when the header `projId` is empty.
+- Blocks when the sheet is locked by `Voucher`.
+
+Response data:
+
+```json
+{
+  "hojaGastosId": "009998",
+  "propagationType": "projectDefault",
+  "updatedLines": 3,
+  "recalculateAmountMST": false
+}
+```
+
+Frontend flow:
+
+1. User changes header `projId`.
+2. Frontend saves the header.
 3. If the sheet has existing lines, show a confirmation dialog.
 4. If the user confirms, call the propagation endpoint.
 5. Refresh the expense sheet detail.
@@ -109,9 +146,10 @@ Frontend flow:
 In the Axapta form, propagation is interactive:
 
 - Header `currencyCode` or `exchRate` changes ask whether to update line currency/exchange-rate and recalculate `amountMST`.
+- Header `projId` changes ask whether to update line projects.
 - Header `reimbursableExpense` changes ask whether to update line reimbursable value.
 - Line currency changes can mark the header currency as `CRMCurrencyVarios` instead of blocking the line save.
-- Line project changes can mark the header project as `CRMProjIdVarios` instead of blocking the line save.
+- Line project changes can mark the header project as `PurchParameters.INDProjIdVarious` instead of blocking the line save.
 - Line reimbursable changes can mark the header reimbursable value as `Both` instead of blocking the line save.
 
 ## Important Non-Scope

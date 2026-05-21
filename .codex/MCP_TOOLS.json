@@ -1165,7 +1165,11 @@
                                                                                               "recalculateAmountMST":  {
                                                                                                                            "type":  "boolean",
                                                                                                                            "description":  "Default true. Recalcula AmountMST por linea al propagar."
-                                                                                                                       }
+                                                                                                                       },
+                                                                                              "force":  {
+                                                                                                            "type":  "boolean",
+                                                                                                            "description":  "Default false. Permite sobrescribir lineas multimoneda tras confirmacion explicita."
+                                                                                                        }
                                                                                           },
                                                                            "required":  [
 
@@ -1200,8 +1204,80 @@
                                                         "hojaGastosId":  "009998"
                                                     },
                                            "query":  {
-                                                         "recalculateAmountMST":  true
+                                                         "recalculateAmountMST":  true,
+                                                         "force":  false
                                                      }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_propagate_project_default",
+                      "description":  "Propaga el proyecto de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada con PurchParameters.INDProjIdVarious.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "hojaGastosId":  {
+                                                                                                                  "type":  "string"
+                                                                                                              }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "hojaGastosId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/{hojaGastosId}/project-default/propagate",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "hojaGastosId":  "009998"
+                                                    }
                                        }
                                    ]
                   },

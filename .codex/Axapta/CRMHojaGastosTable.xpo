@@ -2253,84 +2253,6 @@ Formatversion: 1
         #    ttscommit;
         #}
       ENDSOURCE
-      SOURCE #isVariousCurrencyDefault
-        #//INDMMS_ExternalCRM - 2026.05.21
-        #boolean isVariousCurrencyDefault()
-        #{
-        #    INDDefaultParameters defaultParameters = INDDefaultParameters::find();
-        #    ;
-        #
-        #    // Identifies the header marker used when line currencies are mixed.
-        #    return defaultParameters.CRMCurrencyVarios && this.CurrencyCode == defaultParameters.CRMCurrencyVarios;
-        #}
-      ENDSOURCE
-      SOURCE #isVariousProjectDefault
-        #//INDMMS_ExternalCRM - 2026.05.21
-        #boolean isVariousProjectDefault()
-        #{
-        #    INDDefaultParameters defaultParameters = INDDefaultParameters::find();
-        #    ;
-        #
-        #    // Identifies the header marker used when line projects are mixed.
-        #    return defaultParameters.CRMProjIdVarios && this.ProjId == defaultParameters.CRMProjIdVarios;
-        #}
-      ENDSOURCE
-      SOURCE #isVariousReimbursableExpenseDefault
-        #//INDMMS_ExternalCRM - 2026.05.21
-        #boolean isVariousReimbursableExpenseDefault()
-        #{
-        #    // Identifies the header marker used when line reimbursable values are mixed.
-        #    return this.ReimbursableExpense == INDReimbursableExpense::Both;
-        #}
-      ENDSOURCE
-      SOURCE #markHeaderVariousFromLine
-        #//INDMMS_ExternalCRM - 2026.05.21
-        #void markHeaderVariousFromLine(CRMHojaGastosLine _hojaGastosLine)
-        #{
-        #    INDDefaultParameters defaultParameters = INDDefaultParameters::find();
-        #    CurrencyCode         currencyVarios;
-        #    ProjId               projIdVarios;
-        #    boolean              mustUpdate;
-        #    ;
-        #
-        #    // Marks header defaults as various when one saved line no longer matches them.
-        #    if (!this.RecId || !_hojaGastosLine)
-        #        return;
-        #
-        #    currencyVarios = defaultParameters.CRMCurrencyVarios;
-        #    projIdVarios   = defaultParameters.CRMProjIdVarios;
-        #
-        #    if (currencyVarios &&
-        #        this.CurrencyCode &&
-        #        _hojaGastosLine.Currency &&
-        #        this.CurrencyCode != currencyVarios &&
-        #        _hojaGastosLine.Currency != this.CurrencyCode)
-        #    {
-        #        this.CurrencyCode = currencyVarios;
-        #        mustUpdate = true;
-        #    }
-        #
-        #    if (projIdVarios &&
-        #        this.ProjId &&
-        #        this.ProjId != projIdVarios &&
-        #        ((_hojaGastosLine.ProjId && _hojaGastosLine.ProjId != this.ProjId) ||
-        #         (_hojaGastosLine.ProjIdHornos && _hojaGastosLine.ProjIdHornos != this.ProjId)))
-        #    {
-        #        this.ProjId = projIdVarios;
-        #        mustUpdate = true;
-        #    }
-        #
-        #    if (!this.isVariousReimbursableExpenseDefault() &&
-        #        _hojaGastosLine.ReimbursableExpense != this.ReimbursableExpense)
-        #    {
-        #        this.ReimbursableExpense = INDReimbursableExpense::Both;
-        #        mustUpdate = true;
-        #    }
-        #
-        #    if (mustUpdate)
-        #        this.doUpdate();
-        #}
-      ENDSOURCE
       SOURCE #canChangeCurrencyDefaults
         #//INDMMS_ExternalCRM - 2026.05.21
         #boolean canChangeCurrencyDefaults()
@@ -2338,6 +2260,7 @@ Formatversion: 1
         #    // Kept for explicit propagation safeguards; direct header edits are allowed.
         #    return !this.hasMultiCurrencyLines();
         #}
+        #
       ENDSOURCE
       SOURCE #CrearDetalleAsignacionEnLineas
         #void CrearDetalleAsignacionEnLineas(CRMConsultaOrigen _origen)
@@ -2564,6 +2487,36 @@ Formatversion: 1
         #    return CRMHojaGastosLine ? NoYes::Yes : NoYes::No;
         #}
       ENDSOURCE
+      SOURCE #isVariousCurrencyDefault
+        #//INDMMS_ExternalCRM - 2026.05.21
+        #boolean isVariousCurrencyDefault()
+        #{
+        #    INDDefaultParameters defaultParameters = INDDefaultParameters::find();
+        #    ;
+        #
+        #    // Identifies the header marker used when line currencies are mixed.
+        #    return defaultParameters.CRMCurrencyVarios && this.CurrencyCode == defaultParameters.CRMCurrencyVarios;
+        #}
+      ENDSOURCE
+      SOURCE #isVariousProjectDefault
+        #//INDMMS_ExternalCRM - 2026.05.21
+        #boolean isVariousProjectDefault()
+        #{
+        #    PurchParameters purchParameters = PurchParameters::find();
+        #    ;
+        #
+        #    // Identifies the header marker used when line projects are mixed.
+        #    return purchParameters.INDProjIdVarious && this.ProjId == purchParameters.INDProjIdVarious;
+        #}
+      ENDSOURCE
+      SOURCE #isVariousReimbursableExpenseDefault
+        #//INDMMS_ExternalCRM - 2026.05.21
+        #boolean isVariousReimbursableExpenseDefault()
+        #{
+        #    // Identifies the header marker used when line reimbursable values are mixed.
+        #    return this.ReimbursableExpense == INDReimbursableExpense::Both;
+        #}
+      ENDSOURCE
       SOURCE #mapDescripcionDiaHojaGastos
         #Map mapDescripcionDiaHojaGastos()
         #{
@@ -2784,6 +2737,55 @@ Formatversion: 1
         #    }
         #
         #    return map;
+        #}
+      ENDSOURCE
+      SOURCE #markHeaderVariousFromLine
+        #//INDMMS_ExternalCRM - 2026.05.21
+        #void markHeaderVariousFromLine(CRMHojaGastosLine _hojaGastosLine)
+        #{
+        #    INDDefaultParameters defaultParameters = INDDefaultParameters::find();
+        #    PurchParameters      purchParameters   = PurchParameters::find();
+        #    CurrencyCode         currencyVarios;
+        #    ProjId               projIdVarios;
+        #    boolean              mustUpdate;
+        #    ;
+        #
+        #    // Marks header defaults as various when one saved line no longer matches them.
+        #    if (!this.RecId || !_hojaGastosLine)
+        #        return;
+        #
+        #    currencyVarios = defaultParameters.CRMCurrencyVarios;
+        #    projIdVarios   = purchParameters.INDProjIdVarious;
+        #
+        #    if (currencyVarios &&
+        #        this.CurrencyCode &&
+        #        _hojaGastosLine.Currency &&
+        #        this.CurrencyCode != currencyVarios &&
+        #        _hojaGastosLine.Currency != this.CurrencyCode)
+        #    {
+        #        this.CurrencyCode = currencyVarios;
+        #        mustUpdate = true;
+        #    }
+        #
+        #    if (projIdVarios &&
+        #        this.ProjId &&
+        #        this.ProjId != projIdVarios &&
+        #        ((_hojaGastosLine.ProjId && _hojaGastosLine.ProjId != this.ProjId) ||
+        #         (_hojaGastosLine.ProjIdHornos && _hojaGastosLine.ProjIdHornos != this.ProjId)))
+        #    {
+        #        this.ProjId = projIdVarios;
+        #        mustUpdate = true;
+        #    }
+        #
+        #    if (!this.isVariousReimbursableExpenseDefault() &&
+        #        _hojaGastosLine.ReimbursableExpense != this.ReimbursableExpense)
+        #    {
+        #        this.ReimbursableExpense = INDReimbursableExpense::Both;
+        #        mustUpdate = true;
+        #    }
+        #
+        #    if (mustUpdate)
+        #        this.doUpdate();
         #}
       ENDSOURCE
       SOURCE #modifiedField
@@ -3418,6 +3420,7 @@ Formatversion: 1
         #        this.UpdateViajeEnLineas();
         #
         #}
+        #
       ENDSOURCE
       SOURCE #updateCurrencyDefaultsInLines
         #//INDMMS_ExternalCRM - 2026.05.21
@@ -3452,6 +3455,7 @@ Formatversion: 1
         #
         #    return updated;
         #}
+        #
       ENDSOURCE
       SOURCE #UpdateDivisaEnLineas
         #//IJL.14/07/23
@@ -3462,28 +3466,46 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #updateProjectDefaultInLines
+        #//INDMMS_ExternalCRM - 2026.05.21
+        #int updateProjectDefaultInLines()
+        #{
+        #    CRMHojaGastosLine hojaGastosLine;
+        #    int               updated;
+        #    ;
+        #
+        #    // Applies header project to all current lines. Call only after the user confirms propagation.
+        #    if (!this.HojaGastosId)
+        #        return 0;
+        #
+        #    if (!this.ProjId || this.isVariousProjectDefault())
+        #        return 0;
+        #
+        #    ttsbegin;
+        #    while select forupdate hojaGastosLine
+        #    index hint index1
+        #    where hojaGastosLine.HojaGastosId == this.HojaGastosId
+        #    {
+        #        hojaGastosLine.ProjId       = this.ProjId;
+        #        hojaGastosLine.ProjIdHornos = this.ProjId;
+        #        hojaGastosLine.doUpdate();
+        #
+        #        hojaGastosLine.BorrarTodosProyecto();
+        #        hojaGastosLine.CreaLineaProyecto(this.ProjId);
+        #        updated++;
+        #    }
+        #    ttscommit;
+        #
+        #    return updated;
+        #}
+        #
+      ENDSOURCE
       SOURCE #UpdateProjIdEnLineas
         #//IJL.20/01/26
         #void UpdateProjIdEnLineas()
         #{
-        #    CRMHojaGastosLine       hojsGastosLine;
-        #    ;
-        #
-        #    if (! this.HojaGastosId)
-        #        return;
-        #
-        #    ttsbegin;
-        #    while select forupdate hojsGastosLine
-        #    index hint index1
-        #    where hojsGastosLine.HojaGastosId == this.HojaGastosId {
-        #
-        #        hojsGastosLine.ProjIdHornos = this.ProjId;
-        #        hojsGastosLine.doUpdate();
-        #
-        #        hojsGastosLine.BorrarTodosProyecto();
-        #        hojsGastosLine.CreaLineaProyecto(this.ProjId);
-        #    }
-        #    ttscommit;
+        #    // Keeps the legacy method name, but delegates to the project propagation helper.
+        #    this.updateProjectDefaultInLines(); //INDMMS_ExternalCRM - 2026.05.21
         #}
       ENDSOURCE
       SOURCE #updateReimbursableExpenseInLines
@@ -3514,6 +3536,7 @@ Formatversion: 1
         #
         #    return updated;
         #}
+        #
       ENDSOURCE
       SOURCE #updateSearchKey
         #//IND_MMS - API PROJECT - 2025.11.10
@@ -3576,6 +3599,7 @@ Formatversion: 1
         #
         #    return true;
         #}
+        #
       ENDSOURCE
       SOURCE #validateDelete
         #public boolean validateDelete()
@@ -3620,6 +3644,7 @@ Formatversion: 1
         #    }
         #    return ret;
         #}
+        #
       ENDSOURCE
       SOURCE #validateWrite
         #public boolean validateWrite()
@@ -3652,6 +3677,7 @@ Formatversion: 1
         #
         #    return ret;
         #}
+        #
       ENDSOURCE
       SOURCE #AprobarHojaDeGastosFromForm
         #static void AprobarHojaDeGastosFromForm(CRMHojaGastosTable  _hojaGastosTable,

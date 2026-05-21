@@ -820,7 +820,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         /// <remarks>
         /// The web client must ask for user confirmation before calling this endpoint.
-        /// AX blocks the operation when the sheet already has multi-currency lines.
+        /// AX blocks the operation when the sheet already has multi-currency lines unless force=true.
         /// </remarks>
         [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/currency-defaults/propagate")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
@@ -829,7 +829,10 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult PropagateExpenseSheetCurrencyDefaults(string hojaGastosId, [FromUri] bool recalculateAmountMST = true)
+        public IHttpActionResult PropagateExpenseSheetCurrencyDefaults(
+            string hojaGastosId,
+            [FromUri] bool recalculateAmountMST = true,
+            [FromUri] bool force = false)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
@@ -869,7 +872,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] PropagateExpenseSheetCurrencyDefaults hojaGastosId={hojaGastosId} " +
-                    $"recalculateAmountMST={recalculateAmountMST} user={username} axUserId={axUserId} company={company} traceId={traceId}");
+                    $"recalculateAmountMST={recalculateAmountMST} force={force} user={username} axUserId={axUserId} company={company} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -877,6 +880,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 con.Append(recalculateAmountMST ? 1 : 0);
+                con.Append(force ? 1 : 0);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -921,6 +925,124 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] PropagateExpenseSheetCurrencyDefaults: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
+        /// Propagates current header project to all existing lines.
+        /// </summary>
+        /// <remarks>
+        /// The web client must ask for user confirmation before calling this endpoint.
+        /// AX blocks the operation when the header project is the configured "various" marker.
+        /// </remarks>
+        [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/project-default/propagate")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de proyecto aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult PropagateExpenseSheetProjectDefault(string hojaGastosId)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(hojaGastosId))
+                validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] PropagateExpenseSheetProjectDefault {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log(
+                    $"[API-IN] PropagateExpenseSheetProjectDefault hojaGastosId={hojaGastosId} " +
+                    $"user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(hojaGastosId.Trim());
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "propagateExpenseSheetProjectDefault",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                if (!success)
+                {
+                    var errorResponse = BuildActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = MapExpenseSheetPropagationResult(hojaGastosId, "projectDefault", extras, false);
+                var okResponse = new IndApiResponse<ExpenseSheetPropagationResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] PropagateExpenseSheetProjectDefault: {ex}");
                 var response = new IndApiResponse<object>
                 {
                     Success = false,

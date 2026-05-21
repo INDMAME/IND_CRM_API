@@ -2954,7 +2954,7 @@
                                                                      }
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/009998/currency-defaults/propagate?recalculateAmountMST=true",
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/009998/currency-defaults/propagate?recalculateAmountMST=true\u0026force=false",
                                                                   "host":  [
                                                                                "{{baseUrl}}"
                                                                            ],
@@ -2970,10 +2970,52 @@
                                                                                 {
                                                                                     "key":  "recalculateAmountMST",
                                                                                     "value":  "true"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "force",
+                                                                                    "value":  "false"
                                                                                 }
                                                                             ]
                                                               },
-                                                      "description":  "Propaga divisa y tipo de cambio de cabecera a lineas existentes. La web debe pedir confirmacion antes de llamarlo."
+                                                      "description":  "Propaga divisa y tipo de cambio de cabecera a lineas existentes. La web debe pedir confirmacion antes de llamarlo. Use force=true solo si el usuario acepta sobrescribir lineas multimoneda."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Propagate Expense Sheet Project Default",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-AxUserId",
+                                                                         "value":  "{{axUserId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/009998/project-default/propagate",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "crm",
+                                                                               "expensesheets",
+                                                                               "009998",
+                                                                               "project-default",
+                                                                               "propagate"
+                                                                           ]
+                                                              },
+                                                      "description":  "Propaga el proyecto de cabecera a projId y projIdHornos de las lineas existentes. La web debe pedir confirmacion antes de llamarlo."
                                                   },
                                       "response":  [
 

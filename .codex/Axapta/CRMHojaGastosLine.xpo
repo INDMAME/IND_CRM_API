@@ -1309,16 +1309,17 @@ Formatversion: 1
         #
         #    if (!hojaGastosTable.isVariousCurrencyDefault())
         #    {
-        #        this.Currency = hojaGastosTable.CurrencyCode;
-        #        this.ExchRate = hojaGastosTable.ExchRate ? hojaGastosTable.ExchRate : (hojaGastosTable.CurrencyCode == CompanyInfo::standardCurrency() ? 100 : 0);
+        #    this.Currency            = hojaGastosTable.CurrencyCode;
+        #    this.ExchRate            = hojaGastosTable.ExchRate ? hojaGastosTable.ExchRate : (hojaGastosTable.CurrencyCode == CompanyInfo::standardCurrency() ? 100 : 0);
         #
-        #        if (_recalculateAmountMST)
-        #            this.AmountMST = this.LineAmountMST();
-        #    }
+        #    if (_recalculateAmountMST)
+        #        this.AmountMST = this.LineAmountMST();
+        #}
         #
         #    if (!hojaGastosTable.isVariousReimbursableExpenseDefault())
         #        this.ReimbursableExpense = hojaGastosTable.ReimbursableExpense;
         #}
+        #
       ENDSOURCE
       SOURCE #BorrarLineaProyecto
         #void BorrarLineaProyecto(ProjId _projId)
@@ -1379,7 +1380,7 @@ Formatversion: 1
         #ExchRate calcExchRateFromAmountMST()
         #{
         #    CRMHojaGastosTable hojaGastosTable = this.HojaGastosTable();
-        #    CurrencyCode       currencyCode;
+        #    CurrencyCode currencyCode;
         #    ;
         #
         #    // AX exchange rates are stored in base 100. This derives the rate from Amount and AmountMST.
@@ -1399,6 +1400,7 @@ Formatversion: 1
         #
         #    return (this.Amount * 100) / this.AmountMST;
         #}
+        #
       ENDSOURCE
       SOURCE #CategoriaId
         #display CRMUserCategoriaId CategoriaId()
@@ -1754,15 +1756,15 @@ Formatversion: 1
         #    this.Division           = hojaGastosTable.Division;
         #
         #    if (!hojaGastosTable.isVariousProjectDefault())
-        #        this.ProjIdHornos   = hojaGastosTable.ProjId;
+        #    this.ProjIdHornos       = hojaGastosTable.ProjId;
         #
         #    if (!hojaGastosTable.isVariousCurrencyDefault())
         #    {
-        #        this.Currency       = hojaGastosTable.CurrencyCode;
+        #    this.Currency           = hojaGastosTable.CurrencyCode;
         #
-        #        //MMS - Divisa desde línea - 2026.05.22
-        #        if(hojaGastosTable.ExchRate)
-        #            this.ExchRate = hojaGastosTable.ExchRate;
+        #    //MMS - Divisa desde línea - 2026.05.22
+        #    if(hojaGastosTable.ExchRate)
+        #        this.ExchRate = hojaGastosTable.ExchRate;
         #    }
         #
         #    this.ViajeId            = hojaGastosTable.ViajeId;
@@ -1772,8 +1774,9 @@ Formatversion: 1
         #        this.AmountMST = this.LineAmountMST();
         #
         #    if (!hojaGastosTable.isVariousReimbursableExpenseDefault())
-        #        this.ReimbursableExpense = hojaGastosTable.ReimbursableExpense;
+        #    this.ReimbursableExpense = hojaGastosTable.ReimbursableExpense;
         #}
+        #
       ENDSOURCE
       SOURCE #InitFromPreviousLine
         #void InitFromPreviousLine(CRMHojaGastosLine _hojaGastosLine)
@@ -1875,8 +1878,8 @@ Formatversion: 1
         #display Amount LineAmountMST()
         #{
         #    CRMHojaGastosTable hojaGastosTable = this.HojaGastosTable();
-        #    CurrencyCode       currencyCode;
-        #    ExchRate           exchRate;
+        #    CurrencyCode currencyCode;
+        #    ExchRate     exchRate;
         #    ;
         #
         #    currencyCode = this.Currency;
@@ -1901,6 +1904,7 @@ Formatversion: 1
         #    return Currency::amountCur2MST(this.Amount, this.Currency, this.ExchRate ? this.ExchRate : this.HojaGastosTable().ExchRate); // this.HojaGastosTable().ExchRate);   //MMS - Divisa desde línea - 2026.05.22
         #
         #} */
+        #
       ENDSOURCE
       SOURCE #MapLedgerDimension_Amount_Line
         #Map MapLedgerDimension_Amount_Line(boolean _ignorarErrores = false)
@@ -2151,6 +2155,7 @@ Formatversion: 1
         #
         #    this.AmountMST = this.LineAmountMST();
         #}
+        #
       ENDSOURCE
       SOURCE #NumeroProyectosAsignado
         #int NumeroProyectosAsignado()
@@ -2230,7 +2235,8 @@ Formatversion: 1
         #    if(hojaGastosTable)
         #        hojaGastosTable.markHeaderVariousFromLine(this);
         #    ttscommit;
-        #}
+        #    }
+        #
       ENDSOURCE
       SOURCE #TieneProyectoAsignado
         #boolean TieneProyectoAsignado()
@@ -2281,9 +2287,9 @@ Formatversion: 1
         #//MMS - Divisa desde linea - 2026.05.21
         #boolean validateCurrencyAmounts()
         #{
-        #    boolean             ret = true;
-        #    CurrencyCode        currencyCode;
-        #    ExchRate            exchRate;
+        #    boolean      ret = true;
+        #    CurrencyCode currencyCode;
+        #    ExchRate     exchRate;
         #    CRMHojaGastosTable  hojaGastosTable;
         #    ;
         #
@@ -2309,6 +2315,7 @@ Formatversion: 1
         #
         #    return ret;
         #}
+        #
       ENDSOURCE
       SOURCE #validateDelete
         #public boolean validateDelete()
