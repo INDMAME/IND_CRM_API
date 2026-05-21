@@ -41,6 +41,8 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeAddLinesToExisting = 2;
         private const int ExpenseSheetStatusDraft = 0;
         private const int ExpenseSheetStatusPaid = 4;
+        private const int ReimbursableExpenseNo = 0;
+        private const int ReimbursableExpenseBoth = 2;
         private const int MaxPageSize = 50;
 
         private readonly IAxaptaSessionManager _sessionManager;
@@ -61,7 +63,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// - mode 0 (default): description, currencyCode and lines are required.
         /// - mode 1: description and currencyCode are required, lines must be null or empty.
         /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
-        /// Optional header enums: expenseSheetStatus and exchangeRateMode.
+        /// Optional header enums: expenseSheetStatus, exchangeRateMode and reimbursableExpense.
         /// </remarks>
         [HttpPost, Route("")]
         [ResponseType(typeof(IndApiResponse<object>))]
@@ -129,7 +131,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log(
                     $"[API-IN] CreateExpenseSheet user={username} axUserId={axUserId} company={company} mode={modeValue} " +
                     $"existingHojaGastosId={existingHojaGastosId} expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} " +
-                    $"exchangeRateMode={ToLogValue(body.exchangeRateMode)} traceId={traceId}");
+                    $"exchangeRateMode={ToLogValue(body.exchangeRateMode)} reimbursableExpense={ToLogValue(body.reimbursableExpense)} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var rootCon = ax.CreateContainer();
@@ -142,7 +144,7 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body.currencyCode?.Trim() ?? string.Empty);
                 headerCon.Append(body.exchRate ?? 0m);
                 headerCon.Append(body.projId?.Trim() ?? string.Empty);
-                AppendHeaderEnumFields(headerCon, body.expenseSheetStatus, body.exchangeRateMode, null);
+                AppendCreateHeaderOptionalFields(headerCon, body.expenseSheetStatus, body.exchangeRateMode, body.reimbursableExpense);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -161,6 +163,12 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
                         lineCon.Append(line.projId?.Trim() ?? string.Empty);
+                        AppendLineOptionalFields(
+                            lineCon,
+                            line.reimbursableExpense,
+                            line.currencyCode,
+                            line.amountMST,
+                            line.exchRate);
 
                         linesCon.Append(lineCon);
                     }
@@ -531,7 +539,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// Gets an expense sheet by id with its lines.
         /// </summary>
         /// <remarks>
-        /// Header fields include expenseSheetStatus, estadoComentarios, exchangeRateMode, and createdDate.
+        /// Header fields include expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate and reimbursableExpense.
+        /// Line fields include reimbursableExpense, currencyCode, amountMST and exchRate.
         /// </remarks>
         // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
         [HttpGet, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}")]
@@ -657,7 +666,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// Updates the header data of an expense sheet.
         /// </summary>
         /// <remarks>
-        /// Optional header fields: expenseSheetStatus, exchangeRateMode, and estadoComentarios.
+        /// Optional header fields: expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
         /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
         // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
@@ -702,6 +711,14 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus debe ser mayor o igual que 0." });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
+                if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "reimbursableExpense",
+                        Message = "reimbursableExpense invalido. Valores permitidos: 0 No, 1 Yes, 2 Both."
+                    });
+                }
             }
 
             if (validationErrors.Any())
@@ -730,7 +747,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
-                    $"estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
+                    $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -741,7 +758,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
-                AppendHeaderEnumFields(con, body.expenseSheetStatus, body.exchangeRateMode, body.estadoComentarios);
+                AppendUpdateHeaderOptionalFields(con, body.expenseSheetStatus, body.exchangeRateMode, body.estadoComentarios, body.reimbursableExpense);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -799,6 +816,242 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
+        /// Propagates current header currency and exchange rate to all existing lines.
+        /// </summary>
+        /// <remarks>
+        /// The web client must ask for user confirmation before calling this endpoint.
+        /// AX blocks the operation when the sheet already has multi-currency lines.
+        /// </remarks>
+        [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/currency-defaults/propagate")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de divisa aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult PropagateExpenseSheetCurrencyDefaults(string hojaGastosId, [FromUri] bool recalculateAmountMST = true)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(hojaGastosId))
+                validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] PropagateExpenseSheetCurrencyDefaults {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log(
+                    $"[API-IN] PropagateExpenseSheetCurrencyDefaults hojaGastosId={hojaGastosId} " +
+                    $"recalculateAmountMST={recalculateAmountMST} user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(hojaGastosId.Trim());
+                con.Append(recalculateAmountMST ? 1 : 0);
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "propagateExpenseSheetCurrencyDefaults",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                if (!success)
+                {
+                    var errorResponse = BuildActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = MapExpenseSheetPropagationResult(hojaGastosId, "currencyDefaults", extras, recalculateAmountMST);
+                var okResponse = new IndApiResponse<ExpenseSheetPropagationResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] PropagateExpenseSheetCurrencyDefaults: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
+        /// Propagates current header reimbursable expense value to all existing lines.
+        /// </summary>
+        /// <remarks>
+        /// The web client must ask for user confirmation before calling this endpoint.
+        /// </remarks>
+        [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/reimbursable-expense/propagate")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de gasto reembolsable aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult PropagateExpenseSheetReimbursableExpense(string hojaGastosId)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(hojaGastosId))
+                validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
+
+            if (validationErrors.Any())
+            {
+                var validationResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                };
+                return Content((HttpStatusCode)422, validationResponse);
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] PropagateExpenseSheetReimbursableExpense {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log(
+                    $"[API-IN] PropagateExpenseSheetReimbursableExpense hojaGastosId={hojaGastosId} " +
+                    $"user={username} axUserId={axUserId} company={company} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(hojaGastosId.Trim());
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "propagateExpenseSheetReimbursableExpense",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    var errorResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, errorResponse);
+                }
+
+                if (!success)
+                {
+                    var errorResponse = BuildActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = MapExpenseSheetPropagationResult(hojaGastosId, "reimbursableExpense", extras, false);
+                var okResponse = new IndApiResponse<ExpenseSheetPropagationResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] PropagateExpenseSheetReimbursableExpense: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        /// <summary>
         /// Updates one expense sheet line.
         /// </summary>
         [HttpPut, Route("{hojaGastosId}/lines/{lineRecId}")]
@@ -842,6 +1095,16 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "qty", Message = "qty debe ser mayor que cero." });
                 if (!body.price.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "price", Message = "price es obligatorio." });
+                if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+                {
+                    validationErrors.Add(new IndValidationError
+                    {
+                        Field = "reimbursableExpense",
+                        Message = "reimbursableExpense invalido. Valores permitidos: 0 No, 1 Yes, 2 Both."
+                    });
+                }
+                if (body.exchRate.HasValue && body.exchRate.Value <= 0m)
+                    validationErrors.Add(new IndValidationError { Field = "exchRate", Message = "exchRate debe ser mayor que cero cuando se informa." });
             }
 
             if (validationErrors.Any())
@@ -886,6 +1149,12 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
+                AppendLineOptionalFields(
+                    con,
+                    body.reimbursableExpense,
+                    body.currencyCode,
+                    body.amountMST,
+                    body.exchRate);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1106,8 +1375,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// Filtro opcional por estado: expenseSheetStatus.
         /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// Filtro opcional por reembolso: reimbursableExpense (0 No, 1 Yes, 2 Both).
         /// Filtro opcional includeSubordinates: cuando es true lista hojas de subordinados directos del usuario del header.
-        /// Response items include estadoComentarios and userName.
+        /// Response items include estadoComentarios, userName and reimbursableExpense.
         /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
@@ -1198,12 +1468,13 @@ namespace IND_CRM_API.Controllers.CRM
                 var projIdValue = body.projId?.Trim() ?? string.Empty;
                 var currencyCodeValue = body.currencyCode?.Trim() ?? string.Empty;
                 var expenseSheetStatusValue = NormalizeExpenseSheetStatusOrNull(body.expenseSheetStatus);
+                var reimbursableExpenseValue = NormalizeReimbursableExpenseOrNull(body.reimbursableExpense);
                 var includeSubordinatesValue = body.includeSubordinates ?? false;
 
                 Logger.Log(
                     $"[API-IN] GetExpenseSheetsList filter={filterValue} billedMode={billedModeValue} page={pageValue} pageSize={pageSizeValue} " +
                     $"createdDateFrom={createdDateFromYmd} createdDateTo={createdDateToYmd} projId={projIdValue} currencyCode={currencyCodeValue} " +
-                    $"expenseSheetStatus={ToLogValue(expenseSheetStatusValue)} includeSubordinates={includeSubordinatesValue} " +
+                    $"expenseSheetStatus={ToLogValue(expenseSheetStatusValue)} reimbursableExpense={ToLogValue(reimbursableExpenseValue)} includeSubordinates={includeSubordinatesValue} " +
                     $"user={username} axUserId={axUserId} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
@@ -1219,6 +1490,7 @@ namespace IND_CRM_API.Controllers.CRM
                     projIdValue,
                     currencyCodeValue,
                     expenseSheetStatusValue,
+                    reimbursableExpenseValue,
                     includeSubordinatesValue);
 
                 object resultObj = ax.CallStaticClassMethod(
@@ -1287,6 +1559,14 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError { Field = "exchangeRateMode", Message = "exchangeRateMode debe ser mayor o igual que 0." });
             if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
                 errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
+            if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+            {
+                errors.Add(new IndValidationError
+                {
+                    Field = "reimbursableExpense",
+                    Message = "reimbursableExpense invalido. Valores permitidos: 0 No, 1 Yes, 2 Both."
+                });
+            }
 
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
@@ -1354,6 +1634,16 @@ namespace IND_CRM_API.Controllers.CRM
                     errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty debe ser mayor que cero." });
                 if (!line.price.HasValue || line.price.Value <= 0)
                     errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
+                if (line.reimbursableExpense.HasValue && !IsValidReimbursableExpense(line.reimbursableExpense.Value))
+                {
+                    errors.Add(new IndValidationError
+                    {
+                        Field = prefix + ".reimbursableExpense",
+                        Message = "reimbursableExpense invalido. Valores permitidos: 0 No, 1 Yes, 2 Both."
+                    });
+                }
+                if (line.exchRate.HasValue && line.exchRate.Value <= 0m)
+                    errors.Add(new IndValidationError { Field = prefix + ".exchRate", Message = "exchRate debe ser mayor que cero cuando se informa." });
             }
         }
 
@@ -1457,6 +1747,13 @@ namespace IND_CRM_API.Controllers.CRM
                    expenseSheetStatus <= ExpenseSheetStatusPaid;
         }
 
+        // Validates allowed values for AX INDReimbursableExpense.
+        private static bool IsValidReimbursableExpense(int reimbursableExpense)
+        {
+            return reimbursableExpense >= ReimbursableExpenseNo &&
+                   reimbursableExpense <= ReimbursableExpenseBoth;
+        }
+
         // Standard enum normalization: invalid values are treated as null.
         private static int? NormalizeExpenseSheetStatusOrNull(int? expenseSheetStatus)
         {
@@ -1464,6 +1761,15 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             return expenseSheetStatus.Value;
+        }
+
+        // Standard enum normalization: invalid values are treated as null.
+        private static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
+        {
+            if (!reimbursableExpense.HasValue || !IsValidReimbursableExpense(reimbursableExpense.Value))
+                return null;
+
+            return reimbursableExpense.Value;
         }
 
         // Appends expense sheet list filters to AX container using stable positions.
@@ -1474,6 +1780,7 @@ namespace IND_CRM_API.Controllers.CRM
             string projId,
             string currencyCode,
             int? expenseSheetStatus,
+            int? reimbursableExpense,
             bool includeSubordinates)
         {
             if (container == null)
@@ -1491,6 +1798,11 @@ namespace IND_CRM_API.Controllers.CRM
             else
                 container.Append(noOptionalValueToken);
 
+            if (reimbursableExpense.HasValue)
+                container.Append(reimbursableExpense.Value);
+            else
+                container.Append(noOptionalValueToken);
+
             container.Append(includeSubordinates ? 1 : 0);
         }
 
@@ -1502,14 +1814,17 @@ namespace IND_CRM_API.Controllers.CRM
                    mode == ExpenseSheetDeleteMode.WholeSheet;
         }
 
-        // Appends optional header fields to AX container using stable positions.
-        private static void AppendHeaderEnumFields(IAxaptaContainer container, int? expenseSheetStatus, int? exchangeRateMode, string estadoComentarios)
+        // Appends optional create-header fields to AX container using stable positions.
+        private static void AppendCreateHeaderOptionalFields(
+            IAxaptaContainer container,
+            int? expenseSheetStatus,
+            int? exchangeRateMode,
+            int? reimbursableExpense)
         {
             if (container == null)
                 return;
 
-            var hasEstadoComentarios = estadoComentarios != null;
-            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios)
+            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !reimbursableExpense.HasValue)
                 return;
 
             const string noOptionalValueToken = "null";
@@ -1519,17 +1834,90 @@ namespace IND_CRM_API.Controllers.CRM
             else
                 container.Append(noOptionalValueToken);
 
-            if (exchangeRateMode.HasValue || hasEstadoComentarios)
+            if (exchangeRateMode.HasValue || reimbursableExpense.HasValue)
             {
                 if (exchangeRateMode.HasValue)
                     container.Append(exchangeRateMode.Value);
                 else
                     container.Append(noOptionalValueToken);
 
-                // _data[10] in AX updateExpenseSheetHeader: EstadoComentarios (optional).
+                if (reimbursableExpense.HasValue)
+                    container.Append(reimbursableExpense.Value);
+            }
+        }
+
+        // Appends optional update-header fields without shifting the legacy estadoComentarios slot.
+        private static void AppendUpdateHeaderOptionalFields(
+            IAxaptaContainer container,
+            int? expenseSheetStatus,
+            int? exchangeRateMode,
+            string estadoComentarios,
+            int? reimbursableExpense)
+        {
+            if (container == null)
+                return;
+
+            var hasEstadoComentarios = estadoComentarios != null;
+            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios && !reimbursableExpense.HasValue)
+                return;
+
+            const string noOptionalValueToken = "null";
+
+            if (expenseSheetStatus.HasValue)
+                container.Append(expenseSheetStatus.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            if (exchangeRateMode.HasValue || hasEstadoComentarios || reimbursableExpense.HasValue)
+            {
+                if (exchangeRateMode.HasValue)
+                    container.Append(exchangeRateMode.Value);
+                else
+                    container.Append(noOptionalValueToken);
+
                 if (hasEstadoComentarios)
                     container.Append(estadoComentarios.Trim());
+                else if (reimbursableExpense.HasValue)
+                    container.Append(noOptionalValueToken);
+
+                if (reimbursableExpense.HasValue)
+                    container.Append(reimbursableExpense.Value);
             }
+        }
+
+        // Appends optional line fields to AX container using stable positions after legacy columns.
+        private static void AppendLineOptionalFields(
+            IAxaptaContainer container,
+            int? reimbursableExpense,
+            string currencyCode,
+            decimal? amountMST,
+            decimal? exchRate)
+        {
+            if (container == null)
+                return;
+
+            var hasCurrencyCode = !string.IsNullOrWhiteSpace(currencyCode);
+            if (!reimbursableExpense.HasValue && !hasCurrencyCode && !amountMST.HasValue && !exchRate.HasValue)
+                return;
+
+            const string noOptionalValueToken = "null";
+
+            if (reimbursableExpense.HasValue)
+                container.Append(reimbursableExpense.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            container.Append(hasCurrencyCode ? currencyCode.Trim() : string.Empty);
+
+            if (amountMST.HasValue)
+                container.Append(amountMST.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            if (exchRate.HasValue)
+                container.Append(exchRate.Value);
+            else
+                container.Append(noOptionalValueToken);
         }
 
         // Adds model binding/deserialization errors to standard validation list.
@@ -1646,6 +2034,37 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
+        // Maps AX propagation extras to the API response contract.
+        private static ExpenseSheetPropagationResultDto MapExpenseSheetPropagationResult(
+            string requestedHojaGastosId,
+            string propagationType,
+            List<string> extras,
+            bool recalculateAmountMST)
+        {
+            var hojaGastosId = requestedHojaGastosId?.Trim() ?? string.Empty;
+            var updatedLines = 0;
+
+            if (extras != null)
+            {
+                if (extras.Count >= 1 && !string.IsNullOrWhiteSpace(extras[0]))
+                    hojaGastosId = extras[0];
+
+                if (extras.Count >= 2)
+                    updatedLines = ToInt(extras[1]) ?? 0;
+
+                if (extras.Count >= 3)
+                    recalculateAmountMST = ToBool(extras[2]);
+            }
+
+            return new ExpenseSheetPropagationResultDto
+            {
+                HojaGastosId = hojaGastosId,
+                PropagationType = propagationType,
+                UpdatedLines = updatedLines,
+                RecalculateAmountMST = recalculateAmountMST
+            };
+        }
+
         // Maps AX currency rows to typed currency DTOs.
         private static List<ExpenseSheetCurrencyDto> MapCurrencyList(IAxaptaContainer root, out string message)
         {
@@ -1731,6 +2150,7 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
+            // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense
             // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
             // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
             // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
@@ -1756,6 +2176,7 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.ProjId = headerExtras[9];
                 detail.Voucher = NormalizeVoucher(headerExtras[10]);
                 detail.CreatedDate = FormatApiDate(headerExtras[11]);
+                detail.ReimbursableExpense = headerExtras.Count >= 13 ? ToInt(headerExtras[12]) : null;
             }
             else if (headerExtras.Count == 11)
             {
@@ -1839,9 +2260,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 9)
                     continue;
 
+                // Current shape (14): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate
                 // Current shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId
                 // Previous shape (9): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId
                 var hasPriceColumn = rowLen >= 10;
+                var hasReimbursableColumns = rowLen >= 14;
                 var line = new ExpenseSheetLineDto
                 {
                     RecId = AxContainerReadHelper.SafeString(row, 1),
@@ -1853,7 +2276,11 @@ namespace IND_CRM_API.Controllers.CRM
                     Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
                     Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
                     Amount = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8),
-                    ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9)
+                    ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9),
+                    ReimbursableExpense = hasReimbursableColumns ? SafeInt(row, 11) : null,
+                    CurrencyCode = hasReimbursableColumns ? AxContainerReadHelper.SafeString(row, 12) : null,
+                    AmountMST = hasReimbursableColumns ? SafeDecimal(row, 13) : null,
+                    ExchRate = hasReimbursableColumns ? SafeDecimal(row, 14) : null
                 };
 
                 detail.Lines.Add(line);
@@ -1896,6 +2323,7 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
+                // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountMST [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense
                 // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountMST [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate
                 // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
                 // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
@@ -1904,6 +2332,28 @@ namespace IND_CRM_API.Controllers.CRM
                 // Current (9): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ExchangeRateMode [8]ProjId [9]Voucher
                 // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
+                if (rowLen >= 14)
+                {
+                    items.Add(new ExpenseSheetListItemDto
+                    {
+                        HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                        Description = AxContainerReadHelper.SafeString(row, 2),
+                        ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                        EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
+                        UserId = AxContainerReadHelper.SafeString(row, 5),
+                        UserName = AxContainerReadHelper.SafeString(row, 6),
+                        Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 12)),
+                        ProjId = AxContainerReadHelper.SafeString(row, 11),
+                        CurrencyCode = AxContainerReadHelper.SafeString(row, 7),
+                        TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                        ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
+                        ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
+                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
+                        ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14))
+                    });
+                    continue;
+                }
+
                 if (rowLen >= 13)
                 {
                     items.Add(new ExpenseSheetListItemDto

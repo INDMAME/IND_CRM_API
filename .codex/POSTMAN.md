@@ -41,7 +41,12 @@ Notas
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
-- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`), y cuando se envia requiere `expenseSheetStatus` + `exchangeRateMode`.
+- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`) y `reimbursableExpense` (0 No, 1 Yes, 2 Both), y cuando se envia `estadoComentarios` requiere `expenseSheetStatus` + `exchangeRateMode`.
+- `PUT /api/crm/expensesheets/{hojaGastosId}` no propaga cambios a lineas. Para confirmar desde web, usar:
+  - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true`
+  - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
+- Expense Sheets admite `reimbursableExpense` en cabecera y lineas. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`.
+- Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.
 - Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.
 - La coleccion V21 incluye CRUD completo de tickets + endpoints de archivo:
   - `POST /api/crm/expensesheets/tickets/{fileId}/file`
@@ -75,3 +80,4 @@ Notas
 - V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
 - V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:2083` para el nuevo despliegue publico separado por host y puerto.
 - V04 de DEV actualiza la coleccion activa con `projId` en contratos de lineas de hoja de gastos, alias `projId` para quick-create y ejemplos de tickets con `ticketDate`, `ticketTime`, `ocrJson`, `normalizedJson` y `fileExtension`.
+- DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.

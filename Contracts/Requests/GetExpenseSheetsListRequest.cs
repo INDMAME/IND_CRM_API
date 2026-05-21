@@ -29,6 +29,11 @@ namespace IND_CRM_API.Contracts.Requests
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
+        /// Reimbursable expense filter. Valores permitidos: 0 No, 1 Yes, 2 Both.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
+
+        /// <summary>
         /// Cuando es true, lista las hojas de los subordinados directos del usuario del header.
         /// Cuando no se informa o es false, mantiene el listado del propio usuario.
         /// </summary>

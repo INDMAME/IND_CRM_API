@@ -130,7 +130,8 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
+  - `reimbursableExpense`: enum AX `INDReimbursableExpense` (`0 No`, `1 Yes`, `2 Both`).
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -142,22 +143,43 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`
-- Respuesta (lineas) incluye: `price`, `qty`, `amount`, `projId`
+- Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `reimbursableExpense`
+- Respuesta (lineas) incluye: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `exchRate`
 - Nota de routing: `hojaGastosId` excluye el literal `tickets` para evitar colision con `/api/crm/expensesheets/tickets`.
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional)
+- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional), `reimbursableExpense` (opcional)
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
+- Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
+- Nota: si una linea guardada difiere en divisa, proyecto o gasto reembolsable, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`, `INDDefaultParameters.CRMProjIdVarios` o `INDReimbursableExpense::Both`.
+
+### Tool: crm_expensesheets_propagate_currency_defaults
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Query: `recalculateAmountMST` opcional, default `true`
+- Propaga `currencyCode` y `exchRate` de cabecera a lineas existentes y recalcula `amountMST` si corresponde.
+- AX bloquea si la hoja ya tiene lineas multimoneda, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
+
+### Tool: crm_expensesheets_propagate_reimbursable_expense
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Propaga `reimbursableExpense` de cabecera a lineas existentes.
+- AX bloquea si `reimbursableExpense` de cabecera es `Both` o si la hoja tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
 
 ### Tool: crm_expensesheets_update_line
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional)
+- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
+- Nota: si `currencyCode` de linea difiere de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa.
+- Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera como `Both`.
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -172,8 +194,8 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `includeSubordinates` (bool opcional; `true` = subordinados directos del usuario de header)
-- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`.
+- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `reimbursableExpense` (opcional), `includeSubordinates` (bool opcional; `true` = subordinados directos del usuario de header)
+- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`, `reimbursableExpense`.
 
 ## Expense Sheet Tickets
 

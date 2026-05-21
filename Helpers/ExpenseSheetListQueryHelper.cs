@@ -61,6 +61,17 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
+        /// Returns only supported AX reimbursable expense values.
+        /// </summary>
+        public static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
+        {
+            if (!reimbursableExpense.HasValue || reimbursableExpense.Value < 0 || reimbursableExpense.Value > 2)
+                return null;
+
+            return reimbursableExpense.Value;
+        }
+
+        /// <summary>
         /// Appends expense sheet list filters in the AX order expected by the service.
         /// </summary>
         public static void AppendExpenseSheetListFilters(
@@ -70,6 +81,7 @@ namespace IND_CRM_API.Helpers
             string projId,
             string currencyCode,
             int? expenseSheetStatus,
+            int? reimbursableExpense,
             bool includeSubordinates)
         {
             if (container == null)
@@ -84,6 +96,11 @@ namespace IND_CRM_API.Helpers
 
             if (expenseSheetStatus.HasValue)
                 container.Append(expenseSheetStatus.Value);
+            else
+                container.Append(noOptionalValueToken);
+
+            if (reimbursableExpense.HasValue)
+                container.Append(reimbursableExpense.Value);
             else
                 container.Append(noOptionalValueToken);
 
@@ -124,6 +141,27 @@ namespace IND_CRM_API.Helpers
 
         private static ExpenseSheetListItemDto MapExpenseSheetListItem(IAxaptaContainer row, int rowLen)
         {
+            if (rowLen >= 14)
+            {
+                return new ExpenseSheetListItemDto
+                {
+                    HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
+                    Description = AxContainerReadHelper.SafeString(row, 2),
+                    ExpenseSheetStatus = ToInt(AxContainerReadHelper.SafeString(row, 3)),
+                    EstadoComentarios = AxContainerReadHelper.SafeString(row, 4),
+                    UserId = AxContainerReadHelper.SafeString(row, 5),
+                    UserName = AxContainerReadHelper.SafeString(row, 6),
+                    Voucher = NormalizeVoucher(AxContainerReadHelper.SafeString(row, 12)),
+                    ProjId = AxContainerReadHelper.SafeString(row, 11),
+                    CurrencyCode = AxContainerReadHelper.SafeString(row, 7),
+                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                    ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
+                    ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
+                    CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
+                    ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14))
+                };
+            }
+
             if (rowLen >= 13)
             {
                 return new ExpenseSheetListItemDto

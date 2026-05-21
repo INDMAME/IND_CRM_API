@@ -22,5 +22,7 @@ namespace IND_CRM_API.Contracts.Responses
         public int? ExchangeRateMode { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
+        // Reimbursable expense enum value returned by AX.
+        public int? ReimbursableExpense { get; set; }
     }
 }

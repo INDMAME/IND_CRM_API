@@ -710,6 +710,15 @@
                                                                                                                       "description":  "Requiere expenseSheetStatus cuando se envia.",
                                                                                                                       "minimum":  0
                                                                                                                   },
+                                                                                             "reimbursableExpense":  {
+                                                                                                                         "type":  "integer",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                         "enum":  [
+                                                                                                                                      0,
+                                                                                                                                      1,
+                                                                                                                                      2
+                                                                                                                                  ]
+                                                                                                                     },
                                                                                              "lines":  {
                                                                                                            "type":  "array",
                                                                                                            "items":  {
@@ -740,7 +749,25 @@
                                                                                                                                                        },
                                                                                                                                             "fileId":  {
                                                                                                                                                            "type":  "string"
-                                                                                                                                                       }
+                                                                                                                                                       },
+                                                                                                                                            "reimbursableExpense":  {
+                                                                                                                                                                        "type":  "integer",
+                                                                                                                                                                        "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                                                                        "enum":  [
+                                                                                                                                                                                     0,
+                                                                                                                                                                                     1,
+                                                                                                                                                                                     2
+                                                                                                                                                                                 ]
+                                                                                                                                                                    },
+                                                                                                                                            "currencyCode":  {
+                                                                                                                                                                 "type":  "string"
+                                                                                                                                                             },
+                                                                                                                                            "amountMST":  {
+                                                                                                                                                              "type":  "number"
+                                                                                                                                                          },
+                                                                                                                                            "exchRate":  {
+                                                                                                                                                             "type":  "number"
+                                                                                                                                                         }
                                                                                                                                         },
                                                                                                                          "required":  [
                                                                                                                                           "transDate",
@@ -792,6 +819,7 @@
                                                         "projId":  "",
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
+                                                        "reimbursableExpense":  2,
                                                         "lines":  [
                                                                       {
                                                                           "transDate":  "20260115",
@@ -801,7 +829,11 @@
                                                                           "price":  25.5,
                                                                           "internacional":  false,
                                                                           "projId":  "",
-                                                                          "fileId":  ""
+                                                                          "fileId":  "",
+                                                                          "reimbursableExpense":  1,
+                                                                          "currencyCode":  "EUR",
+                                                                          "amountMST":  25.5,
+                                                                          "exchRate":  100
                                                                       }
                                                                   ]
                                                     }
@@ -954,7 +986,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_header",
-                      "description":  "Actualiza cabecera de hoja de gastos. Soporta estadoComentarios en _data[10] de AX.",
+                      "description":  "Actualiza cabecera de hoja de gastos. Soporta estadoComentarios y reimbursableExpense.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1025,7 +1057,16 @@
                                                                                              "estadoComentarios":  {
                                                                                                                        "type":  "string",
                                                                                                                        "description":  "Comentario de estado. Requiere expenseSheetStatus y exchangeRateMode cuando se envia."
-                                                                                                                   }
+                                                                                                                   },
+                                                                                             "reimbursableExpense":  {
+                                                                                                                         "type":  "integer",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                         "enum":  [
+                                                                                                                                      0,
+                                                                                                                                      1,
+                                                                                                                                      2
+                                                                                                                                  ]
+                                                                                                                     }
                                                                                          },
                                                                           "required":  [
                                                                                            "description",
@@ -1071,14 +1112,173 @@
                                                         "exchRate":  1,
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
-                                                        "estadoComentarios":  "Pendiente de revision"
+                                                        "estadoComentarios":  "Pendiente de revision",
+                                                        "reimbursableExpense":  2
+                                                    }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_propagate_currency_defaults",
+                      "description":  "Propaga divisa y tipo de cambio de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada con CRMCurrencyVarios.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "hojaGastosId":  {
+                                                                                                                  "type":  "string"
+                                                                                                              }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "hojaGastosId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      },
+                                                             "query":  {
+                                                                           "type":  "object",
+                                                                           "properties":  {
+                                                                                              "recalculateAmountMST":  {
+                                                                                                                           "type":  "boolean",
+                                                                                                                           "description":  "Default true. Recalcula AmountMST por linea al propagar."
+                                                                                                                       }
+                                                                                          },
+                                                                           "required":  [
+
+                                                                                        ],
+                                                                           "additionalProperties":  false
+                                                                       }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "hojaGastosId":  "009998"
+                                                    },
+                                           "query":  {
+                                                         "recalculateAmountMST":  true
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "name":  "crm_expensesheets_propagate_reimbursable_expense",
+                      "description":  "Propaga el valor reembolsable de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada como Both.",
+                      "inputSchema":  {
+                                          "type":  "object",
+                                          "properties":  {
+                                                             "headers":  {
+                                                                             "type":  "object",
+                                                                             "properties":  {
+                                                                                                "Authorization":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
+                                                                                                                  },
+                                                                                                "X-IND-Company":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "CompanyId header for CRM endpoints."
+                                                                                                                  },
+                                                                                                "X-IND-AxUserId":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                   }
+                                                                                            },
+                                                                             "required":  [
+                                                                                              "Authorization",
+                                                                                              "X-IND-Company",
+                                                                                              "X-IND-AxUserId"
+                                                                                          ],
+                                                                             "additionalProperties":  false
+                                                                         },
+                                                             "path":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "hojaGastosId":  {
+                                                                                                                  "type":  "string"
+                                                                                                              }
+                                                                                         },
+                                                                          "required":  [
+                                                                                           "hojaGastosId"
+                                                                                       ],
+                                                                          "additionalProperties":  false
+                                                                      }
+                                                         },
+                                          "required":  [
+                                                           "headers",
+                                                           "path"
+                                                       ],
+                                          "additionalProperties":  false
+                                      },
+                      "x-http":  {
+                                     "method":  "POST",
+                                     "path":  "/api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate",
+                                     "auth":  "bearer",
+                                     "requiredHeaders":  [
+                                                             "Authorization",
+                                                             "X-IND-Company",
+                                                             "X-IND-AxUserId"
+                                                         ]
+                                 },
+                      "examples":  [
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                       },
+                                           "path":  {
+                                                        "hojaGastosId":  "009998"
                                                     }
                                        }
                                    ]
                   },
                   {
                       "name":  "crm_expensesheets_update_line",
-                      "description":  "Actualiza linea de hoja de gastos.",
+                      "description":  "Actualiza linea de hoja de gastos. Si currencyCode difiere de cabecera, enviar exchRate o amountMST. Si reimbursableExpense difiere de cabecera, AX marca cabecera como Both.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1157,7 +1357,25 @@
                                                                                                         },
                                                                                              "fileId":  {
                                                                                                             "type":  "string"
-                                                                                                        }
+                                                                                                        },
+                                                                                             "reimbursableExpense":  {
+                                                                                                                         "type":  "integer",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                         "enum":  [
+                                                                                                                                      0,
+                                                                                                                                      1,
+                                                                                                                                      2
+                                                                                                                                  ]
+                                                                                                                     },
+                                                                                             "currencyCode":  {
+                                                                                                                  "type":  "string"
+                                                                                                              },
+                                                                                             "amountMST":  {
+                                                                                                               "type":  "number"
+                                                                                                           },
+                                                                                             "exchRate":  {
+                                                                                                              "type":  "number"
+                                                                                                          }
                                                                                          },
                                                                           "required":  [
                                                                                            "transDate",
@@ -1208,7 +1426,11 @@
                                                         "price":  30.0,
                                                         "internacional":  false,
                                                         "projId":  "",
-                                                        "fileId":  ""
+                                                        "fileId":  "",
+                                                        "reimbursableExpense":  1,
+                                                        "currencyCode":  "EUR",
+                                                        "amountMST":  30.0,
+                                                        "exchRate":  100
                                                     }
                                        }
                                    ]
@@ -1397,7 +1619,16 @@
                                                                                                                                      3,
                                                                                                                                      4
                                                                                                                                  ]
-                                                                                                                    }
+                                                                                                                    },
+                                                                                             "reimbursableExpense":  {
+                                                                                                                         "type":  "integer",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                         "enum":  [
+                                                                                                                                      0,
+                                                                                                                                      1,
+                                                                                                                                      2
+                                                                                                                                  ]
+                                                                                                                     }
                                                                                          },
                                                                           "required":  [
                                                                                            "page",
@@ -1441,7 +1672,8 @@
                                                         "createdDateTo":  "20260131",
                                                         "projId":  "PROJ-001",
                                                         "currencyCode":  "USD",
-                                                        "expenseSheetStatus":  1
+                                                        "expenseSheetStatus":  1,
+                                                        "reimbursableExpense":  2
                                                     }
                                        }
                                    ]
@@ -1958,21 +2190,21 @@
                                                                                                             "minimum":  0,
                                                                                                             "maximum":  1
                                                                                                         },
-                                                                                          "transDate":  {
-                                                                                                             "type":  "string",
-                                                                                                             "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
-                                                                                                         },
-                                                                                          "ticketDate":  {
-                                                                                                             "type":  "string",
-                                                                                                             "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
-                                                                                                         },
-                                                                                          "ticketTime":  {
-                                                                                                             "type":  "string",
-                                                                                                             "description":  "HH:mm, HH:mm:ss or AX seconds 0..86399."
-                                                                                                         },
-                                                                                          "comentario":  {
-                                                                                                             "type":  "string"
-                                                                                                         },
+                                                                                             "transDate":  {
+                                                                                                               "type":  "string",
+                                                                                                               "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                           },
+                                                                                             "ticketDate":  {
+                                                                                                                "type":  "string",
+                                                                                                                "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                            },
+                                                                                             "ticketTime":  {
+                                                                                                                "type":  "string",
+                                                                                                                "description":  "HH:mm, HH:mm:ss or AX seconds 0..86399."
+                                                                                                            },
+                                                                                             "comentario":  {
+                                                                                                                "type":  "string"
+                                                                                                            },
                                                                                              "urlFile":  {
                                                                                                              "type":  "string"
                                                                                                          },

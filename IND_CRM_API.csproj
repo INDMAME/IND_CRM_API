@@ -194,6 +194,7 @@
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetFuelPriceKmDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetPropagationResultDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetTicketDtos.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetSubordinateDto.cs" />
     <Compile Include="Contracts\Responses\EntraContextDto.cs" />

@@ -45,6 +45,11 @@ namespace IND_CRM_API.Contracts.Requests
         public int? exchangeRateMode { get; set; }
 
         /// <summary>
+        /// Reimbursable expense enum value from AX. 0 = No, 1 = Yes, 2 = Both.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
+
+        /// <summary>
         /// Lines payload. Required with at least one line in mode = 0 and mode = 2. Must be null or empty in mode = 1.
         /// </summary>
         public List<CreateExpenseSheetLineRequest> lines { get; set; }
@@ -72,5 +77,21 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
+        /// <summary>
+        /// Reimbursable expense enum value from AX. 0 = No, 1 = Yes, 2 = Both.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
+        /// <summary>
+        /// Optional line currency code. When omitted, AX keeps the header currency behavior.
+        /// </summary>
+        public string currencyCode { get; set; }
+        /// <summary>
+        /// Optional line amount in company currency.
+        /// </summary>
+        public decimal? amountMST { get; set; }
+        /// <summary>
+        /// Optional line exchange rate.
+        /// </summary>
+        public decimal? exchRate { get; set; }
     }
 }

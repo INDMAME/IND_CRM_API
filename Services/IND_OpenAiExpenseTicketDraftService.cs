@@ -1875,7 +1875,11 @@ namespace IND_CRM_API.Services
                 ["qty"] = new JValue(qty),
                 ["price"] = ToNullableDecimalToken(price),
                 ["lineTotal"] = ToNullableDecimalToken(lineTotal),
-                ["projId"] = ToNullableStringToken(line?.projId)
+                ["projId"] = ToNullableStringToken(line?.projId),
+                ["reimbursableExpense"] = ToNullableIntToken(line?.reimbursableExpense),
+                ["currencyCode"] = ToNullableStringToken(line?.currencyCode),
+                ["amountMST"] = ToNullableDecimalToken(line?.amountMST),
+                ["exchRate"] = ToNullableDecimalToken(line?.exchRate)
             };
         }
 

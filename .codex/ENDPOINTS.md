@@ -82,7 +82,7 @@ Endpoints
 - POST /api/ia/service/expensesheets/ask (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `question`.
   Body optional: `answerInstructions`, `listRequest`, `sourceJson`.
-  `listRequest` reutiliza los filtros de `POST /api/crm/expensesheets/list`: `filter`, `billedMode`, `createdDateFrom`, `createdDateTo`, `projId`, `currencyCode`, `expenseSheetStatus`, `includeSubordinates`.
+  `listRequest` reutiliza los filtros de `POST /api/crm/expensesheets/list`: `filter`, `billedMode`, `createdDateFrom`, `createdDateTo`, `projId`, `currencyCode`, `expenseSheetStatus`, `reimbursableExpense`, `includeSubordinates`.
   Compatibilidad: `page` y `pageSize` pueden enviarse dentro de `listRequest`, pero este endpoint los ignora.
   `sourceJson` acepta el JSON completo devuelto por `POST /api/crm/expensesheets/list` o un array directo de registros (`Items`).
   Limites defensivos para `sourceJson`: maximo 4 MB por request y maximo 6000 registros inline.
@@ -101,20 +101,35 @@ Endpoints
   mode 0 (default): description, currencyCode, lines[] (con lines[].price)
   mode 1: description, currencyCode (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, lines[].projId, lines[].internacional, lines[].fileId
+  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, reimbursableExpense (0 No, 1 Yes, 2 Both), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate
-  Response line fields include: price, qty, amount, projId
+  Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense
+  Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional)
+  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
+  Nota: actualizar cabecera no propaga cambios a lineas existentes. La propagacion se ejecuta con endpoints explicitos.
+  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `INDDefaultParameters.CRMProjIdVarios`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con `INDReimbursableExpense::Both`.
+- POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true (Authorize + X-IND-Company + X-IND-AxUserId)
+  Propaga la `currencyCode` y `exchRate` actuales de cabecera a todas las lineas existentes.
+  Query optional: `recalculateAmountMST` (default true).
+  AX bloquea la operacion si la hoja tiene lineas multimoneda, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si esta bloqueada por Voucher.
+  Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
+  Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
+- POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
+  Propaga el `reimbursableExpense` actual de cabecera a todas las lineas existentes.
+  AX bloquea la operacion si `reimbursableExpense` de cabecera es `Both` o si la hoja esta bloqueada por Voucher.
+  Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
+  Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
-  Optional: fileId (INDFileId), internacional, projId
+  Optional: fileId (INDFileId), internacional, projId, reimbursableExpense (0 No, 1 Yes, 2 Both), currencyCode, amountMST, exchRate
+  Nota: si `currencyCode` de linea difiere de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa.
+  Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera como `Both`.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
@@ -123,8 +138,8 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid), includeSubordinates (bool; true = subordinados directos del usuario de header)
-  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate y createdDate
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid), reimbursableExpense (0 No, 1 Yes, 2 Both), includeSubordinates (bool; true = subordinados directos del usuario de header)
+  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate y reimbursableExpense
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
 ## Expense Sheet Tickets

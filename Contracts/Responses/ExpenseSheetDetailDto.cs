@@ -22,6 +22,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string Voucher { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
+        // Reimbursable expense enum value returned by AX.
+        public int? ReimbursableExpense { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
     }
 
@@ -41,5 +43,9 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
+        public int? ReimbursableExpense { get; set; }
+        public string CurrencyCode { get; set; }
+        public decimal? AmountMST { get; set; }
+        public decimal? ExchRate { get; set; }
     }
 }
