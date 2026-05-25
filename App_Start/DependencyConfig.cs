@@ -32,6 +32,11 @@ namespace IND_CRM_API.App_Start
                 openAiTicketNormalizationService,
                 axLogger);
             var expenseSheetAiDatasetProvider = new ExpenseSheetAiDatasetProvider(sessionManager, axLogger);
+            var internalMailClient = new InternalMailClient(axLogger);
+            var expenseSheetNotificationService = new ExpenseSheetNotificationService(
+                sessionManager,
+                internalMailClient,
+                axLogger);
             var openAiRateLimitHandler = new IND_OpenAiRateLimitHandler(axLogger);
             var ecbExchangeRateProvider = new EcbExchangeRateProvider(axLogger);
             var frankfurterExchangeRateProvider = new FrankfurterExchangeRateProvider(axLogger);
@@ -59,7 +64,9 @@ namespace IND_CRM_API.App_Start
                 { typeof(IOpenAITicketNormalizationService), openAiTicketNormalizationService },
                 { typeof(IAiDatasetAnswerService), openAiDatasetAnswerService },
                 { typeof(IExpenseSheetAiDatasetProvider), expenseSheetAiDatasetProvider },
-                { typeof(IExchangeRateProvider), exchangeRateProvider }
+                { typeof(IExchangeRateProvider), exchangeRateProvider },
+                { typeof(IInternalMailClient), internalMailClient },
+                { typeof(IExpenseSheetNotificationService), expenseSheetNotificationService }
             };
 
             // Per-request Axapta session scope

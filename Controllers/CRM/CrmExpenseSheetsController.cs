@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Web.Http;
 using System.Web.Http.Description;
 using AxaptaCOMConnector;
+using IND_CRM_API.Contracts.Notifications;
 using IND_CRM_API.Contracts.Requests;
 using IND_CRM_API.Contracts.Responses;
 using IND_CRM_API.Controllers;
@@ -46,13 +47,26 @@ namespace IND_CRM_API.Controllers.CRM
         private const int MaxPageSize = 50;
 
         private readonly IAxaptaSessionManager _sessionManager;
+        private readonly IExpenseSheetNotificationService _expenseSheetNotificationService;
 
         /// <summary>
         /// Creates the controller with its dependencies.
         /// </summary>
-        public CrmExpenseSheetsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
+        public CrmExpenseSheetsController(IAxaptaSessionManager sessionManager, IAxLogger logger)
+            : this(sessionManager, null, logger)
+        {
+        }
+
+        /// <summary>
+        /// Creates the controller with optional expense sheet notification support.
+        /// </summary>
+        public CrmExpenseSheetsController(
+            IAxaptaSessionManager sessionManager,
+            IExpenseSheetNotificationService expenseSheetNotificationService,
+            IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
+            _expenseSheetNotificationService = expenseSheetNotificationService;
         }
 
         /// <summary>
@@ -750,6 +764,10 @@ namespace IND_CRM_API.Controllers.CRM
                     $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
+                var notificationBefore = ShouldReadExpenseSheetNotificationSnapshot(body)
+                    ? TryReadExpenseSheetDetailForNotification(ax, company, axUserId, hojaGastosId, traceId, "before")
+                    : null;
+
                 var con = ax.CreateContainer();
                 con.Append(company);
                 con.Append(axUserId);
@@ -786,6 +804,15 @@ namespace IND_CRM_API.Controllers.CRM
                     LogOut(status);
                     return Content(status, errorResponse);
                 }
+
+                TrySendExpenseSheetStatusNotification(
+                    ax,
+                    company,
+                    axUserId,
+                    username,
+                    hojaGastosId,
+                    notificationBefore,
+                    traceId);
 
                 var okResponse = new IndApiResponse<object>
                 {
@@ -2113,6 +2140,129 @@ namespace IND_CRM_API.Controllers.CRM
                 extras.Add(AxContainerReadHelper.SafeString(rowCon, i));
 
             return true;
+        }
+
+        // Reads a detail snapshot only for best-effort notification transition detection.
+        private ExpenseSheetDetailDto TryReadExpenseSheetDetailForNotification(
+            AxaptaComSession ax,
+            string company,
+            string axUserId,
+            string hojaGastosId,
+            string traceId,
+            string stage)
+        {
+            if (ax == null || string.IsNullOrWhiteSpace(company) || string.IsNullOrWhiteSpace(axUserId) || string.IsNullOrWhiteSpace(hojaGastosId))
+                return null;
+
+            try
+            {
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(hojaGastosId.Trim());
+
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "getExpenseSheet",
+                    con);
+
+                bool success;
+                string message;
+                List<string> extras;
+                IAxaptaContainer linesOut;
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out success, out message, out extras, out linesOut) || !success)
+                {
+                    Logger.Log(
+                        $"[EXPENSE-NOTIFY] snapshot stage={stage} skipped hojaGastosId={hojaGastosId} message={message} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                    return null;
+                }
+
+                var detail = MapExpenseSheetDetail(extras, linesOut);
+                if (detail == null)
+                {
+                    Logger.Log(
+                        $"[EXPENSE-NOTIFY] snapshot stage={stage} mapping-failed hojaGastosId={hojaGastosId} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+
+                return detail;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(
+                    $"[EXPENSE-NOTIFY] snapshot stage={stage} failed hojaGastosId={hojaGastosId} error={ex.Message} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+                return null;
+            }
+        }
+
+        // Sends the notification after AX success without changing the public update response.
+        private void TrySendExpenseSheetStatusNotification(
+            AxaptaComSession ax,
+            string company,
+            string axUserId,
+            string username,
+            string hojaGastosId,
+            ExpenseSheetDetailDto before,
+            string traceId)
+        {
+            if (before == null || _expenseSheetNotificationService == null || !_expenseSheetNotificationService.IsEnabled)
+                return;
+
+            try
+            {
+                var after = TryReadExpenseSheetDetailForNotification(ax, company, axUserId, hojaGastosId, traceId, "after");
+                if (after == null)
+                    return;
+
+                var result = _expenseSheetNotificationService.NotifyStatusChanged(new ExpenseSheetStatusChangedNotification
+                {
+                    CompanyId = company,
+                    HojaGastosId = hojaGastosId,
+                    ActorAxUserId = axUserId,
+                    AuthenticatedUsername = username,
+                    Language = ResolveRequestLanguage(),
+                    TraceId = traceId,
+                    Before = before,
+                    After = after
+                });
+
+                if (result != null && result.Skipped)
+                {
+                    Logger.Log(
+                        $"[EXPENSE-NOTIFY] skipped reason={result.Reason} hojaGastosId={hojaGastosId} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Info);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(
+                    $"[EXPENSE-NOTIFY] best-effort failed hojaGastosId={hojaGastosId} error={ex.Message} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+            }
+        }
+
+        // Avoids extra AX reads when notifications are disabled or no status was requested.
+        private bool ShouldReadExpenseSheetNotificationSnapshot(UpdateExpenseSheetHeaderRequest body)
+        {
+            return _expenseSheetNotificationService != null &&
+                   _expenseSheetNotificationService.IsEnabled &&
+                   body != null &&
+                   body.expenseSheetStatus.HasValue;
+        }
+
+        private string ResolveRequestLanguage()
+        {
+            try
+            {
+                var language = Request?.Headers?.AcceptLanguage?.FirstOrDefault();
+                return language == null ? null : language.ToString();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // Builds a standard error response for action calls.

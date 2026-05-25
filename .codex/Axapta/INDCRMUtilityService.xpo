@@ -477,6 +477,149 @@ Formatversion: 1
         #    return currency.CurrencyCode;
         #}
       ENDSOURCE
+      SOURCE #buildMailRecipientsJson
+        #// Purpose: Builds the generic internal API recipient JSON array from semicolon-separated emails.
+        #static server str buildMailRecipientsJson(str _toEmails)
+        #{
+        #    container recipientsCon;
+        #    str       normalizedEmails;
+        #    str       email;
+        #    str       recipientsJson = '';
+        #    int       i;
+        #    ;
+        #
+        #    normalizedEmails = strReplace(_toEmails, ',', ';');
+        #    recipientsCon = Global::str2ConKeepStrings(normalizedEmails, ';');
+        #
+        #    for (i = 1; i <= conLen(recipientsCon); i++)
+        #    {
+        #        email = strLRTrim(strFmt("%1", conPeek(recipientsCon, i)));
+        #        if (!email)
+        #            continue;
+        #
+        #        if (recipientsJson)
+        #            recipientsJson += ',';
+        #
+        #        recipientsJson += strFmt('{"email":"%1"}', INDCRMUtilityService::jsonEscape(email));
+        #    }
+        #
+        #    return '[' + recipientsJson + ']';
+        #}
+        #
+      ENDSOURCE
+      SOURCE #jsonEscape
+        #// Purpose: Escapes strings for the small JSON payload sent through the COM mail helper.
+        #static server str jsonEscape(str _value)
+        #{
+        #    str escaped = strFmt("%1", _value);
+        #    ;
+        #
+        #    escaped = strReplace(escaped, '\\', '\\\\');
+        #    escaped = strReplace(escaped, '"', '\\"');
+        #    escaped = strReplace(escaped, '\r', '\\r');
+        #    escaped = strReplace(escaped, '\n', '\\n');
+        #
+        #    return escaped;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #sendInternalApiMail
+        #// Purpose: Generic Axapta mail helper that calls IND_INTERNAL_API through the COM client DLL.
+        #static server boolean sendInternalApiMail(
+        #    str _companyId,
+        #    str _fromEmail,
+        #    str _toEmails,
+        #    str _subject,
+        #    str _htmlBody,
+        #    str _textBody,
+        #    str _sourceProcess,
+        #    str _eventType,
+        #    str _aggregateType,
+        #    str _aggregateId,
+        #    str _idempotencyKey,
+        #    str _correlationId = '')
+        #{
+        #    str baseUrl;
+        #    str clientId;
+        #    str clientSecret;
+        #    str recipientsJson;
+        #    str requestJson;
+        #    str responseJson;
+        #    str responseLower;
+        #    COM internalApiClient;
+        #    ;
+        #
+        #    baseUrl      = ParameterTable::find().INDInternalApiBaseUrl;
+        #    clientId     = ParameterTable::find().INDInternalApiClientId;
+        #    clientSecret = ParameterTable::find().INDInternalApiClientSecret;
+        #
+        #    if (!baseUrl || !clientId || !clientSecret)
+        #    {
+        #        warning("No se envio email: falta configuracion de IND_INTERNAL_API.");
+        #        return false;
+        #    }
+        #
+        #    if (!_fromEmail || !_toEmails || !_subject || (!_htmlBody && !_textBody))
+        #    {
+        #        warning("No se envio email: faltan From, To, Subject o Body.");
+        #        return false;
+        #    }
+        #
+        #    recipientsJson = INDCRMUtilityService::buildMailRecipientsJson(_toEmails);
+        #    if (recipientsJson == '[]')
+        #    {
+        #        warning("No se envio email: no hay destinatarios validos.");
+        #        return false;
+        #    }
+        #
+        #    requestJson =
+        #        '{' +
+        #        strFmt('"company":"%1",', INDCRMUtilityService::jsonEscape(_companyId)) +
+        #        strFmt('"from":{"email":"%1"},', INDCRMUtilityService::jsonEscape(_fromEmail)) +
+        #        strFmt('"to":%1,', recipientsJson) +
+        #        strFmt('"subject":"%1",', INDCRMUtilityService::jsonEscape(_subject)) +
+        #        strFmt('"htmlBody":"%1",', INDCRMUtilityService::jsonEscape(_htmlBody)) +
+        #        strFmt('"textBody":"%1",', INDCRMUtilityService::jsonEscape(_textBody)) +
+        #        '"saveToSentItems":false,' +
+        #        '"sourceSystem":"Axapta",' +
+        #        strFmt('"sourceProcess":"%1",', INDCRMUtilityService::jsonEscape(_sourceProcess)) +
+        #        strFmt('"eventType":"%1",', INDCRMUtilityService::jsonEscape(_eventType)) +
+        #        strFmt('"aggregateType":"%1",', INDCRMUtilityService::jsonEscape(_aggregateType)) +
+        #        strFmt('"aggregateId":"%1",', INDCRMUtilityService::jsonEscape(_aggregateId)) +
+        #        strFmt('"idempotencyKey":"%1",', INDCRMUtilityService::jsonEscape(_idempotencyKey)) +
+        #        strFmt('"correlationId":"%1"', INDCRMUtilityService::jsonEscape(_correlationId)) +
+        #        '}';
+        #
+        #    try
+        #    {
+        #        internalApiClient = new COM("IND.InternalApiClient");
+        #        responseJson = internalApiClient.SendMailJson(baseUrl, clientId, clientSecret, requestJson, _correlationId);
+        #        responseLower = strLwr(responseJson);
+        #
+        #        if (strScan(responseLower, 'acceptedbyprovider', 1, strLen(responseLower)) > 0 &&
+        #            strScan(responseLower, 'true', 1, strLen(responseLower)) > 0)
+        #        {
+        #            return true;
+        #        }
+        #
+        #        warning(strFmt("Email no aceptado por IND_INTERNAL_API. Respuesta: %1", responseJson));
+        #        return false;
+        #    }
+        #    catch (Exception::CLRError)
+        #    {
+        #        warning("Error CLR/COM enviando email por IND_INTERNAL_API.");
+        #        return false;
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        warning("Error enviando email por IND_INTERNAL_API.");
+        #        return false;
+        #    }
+        #
+        #    return false;
+        #}
+        #
+      ENDSOURCE
       SOURCE #validateInternalApiUser
         #// Method: validateInternalApiUser
         #// Purpose: Validate an internal API user and return the assigned companies.

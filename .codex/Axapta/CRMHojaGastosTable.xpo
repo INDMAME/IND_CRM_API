@@ -3980,11 +3980,25 @@ Formatversion: 1
         #    ttscommit;
         #
         #    if (primeraLinea == false)
+        #    {
         #        info(strfmt("Creado el asiento %1", voucher));
+        #
+        #        si = new SetIterator(_setHojasGasto);
+        #        while (si.more())
+        #        {
+        #            hojaGastosTable = CRMHojaGastosTable::FindRecId(si.value());
+        #            if (hojaGastosTable.RecId)
+        #                INDCRMExpenseSheetService::sendExpenseSheetPaidNotification(hojaGastosTable);
+        #
+        #            si.next();
+        #        }
+        #    }
         #    else
-        #        info("No se ha creado ningún asiento.");
+        #    {
+        #        info("No se ha creado ningun asiento.");
+        #    }
         #
-        #
+        #    return voucher;
         #}
       ENDSOURCE
       SOURCE #EnableButtonsFunciones

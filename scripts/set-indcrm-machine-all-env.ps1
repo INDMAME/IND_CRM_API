@@ -24,6 +24,7 @@ function Get-EnvironmentDefaults {
                 WebBaseUrl = "https://dev.insertec.biz:2053/"
                 WebPublicHost = "dev.insertec.biz"
                 WebPublicPort = "2053"
+                InternalApiBaseUrl = "https://dev.service.insertec.eu:2087/"
                 PfxPath = "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
                 BlobSegment = "DEV"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -45,6 +46,7 @@ function Get-EnvironmentDefaults {
                 WebBaseUrl = "https://crm.insertec.biz:7702/"
                 WebPublicHost = "crm.insertec.biz"
                 WebPublicPort = "7702"
+                InternalApiBaseUrl = "https://prod.service.insertec.eu:2096/"
                 PfxPath = "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx"
                 BlobSegment = "PROD"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -189,6 +191,12 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_HOST" -Category "Web" -DefaultValue $defaults.WebPublicHost
         New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_PORT" -Category "Web" -DefaultValue $defaults.WebPublicPort
         New-InteractiveSetting -Name "IND_E2E_BASE_URL" -Category "Web" -DefaultValue $defaults.WebBaseUrl
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_BASE_URL" -Category "InternalApi" -DefaultValue $defaults.InternalApiBaseUrl -Required $false
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_CLIENT_ID" -Category "InternalApi" -Required $false
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_CLIENT_SECRET" -Category "InternalApi" -Secret $true -Required $false
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_ENABLED" -Category "ExpenseNotifications" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_BEST_EFFORT" -Category "ExpenseNotifications" -DefaultValue "true"
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFY_TRANSITIONS" -Category "ExpenseNotifications" -DefaultValue "ExpenseSheetApprovalRequested,ExpenseSheetApproved"
         New-InteractiveSetting -Name "INDCRM_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.ServiceUser
         New-InteractiveSetting -Name "INDCRM_HTTP_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.HttpServiceUser
 

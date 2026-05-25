@@ -187,6 +187,8 @@
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketFromIARequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
+    <Compile Include="Contracts\Notifications\ExpenseSheetNotificationContracts.cs" />
+    <Compile Include="Contracts\Notifications\InternalMailContracts.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
     <Compile Include="Contracts\Responses\AskExpenseSheetsAiResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
@@ -245,6 +247,7 @@
     <Compile Include="Services\EcbObservationResult.cs" />
     <Compile Include="Services\ComPlusApplicationController.cs" />
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
+    <Compile Include="Services\ExpenseSheetNotificationService.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
     <Compile Include="Services\OpenErApiExchangeRateProvider.cs" />
@@ -261,6 +264,7 @@
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
     <Compile Include="Services\IAxLogger.cs" />
+    <Compile Include="Services\InternalMailClient.cs" />
     <Compile Include="Services\OpenAITicketNormalizationService.cs" />
     <Compile Include="Services\TicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
@@ -272,7 +276,9 @@
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
     <Compile Include="Services\Interfaces\IExpenseSheetAiDatasetProvider.cs" />
+    <Compile Include="Services\Interfaces\IExpenseSheetNotificationService.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
+    <Compile Include="Services\Interfaces\IInternalMailClient.cs" />
     <Compile Include="Services\Interfaces\IOpenAITicketNormalizationService.cs" />
     <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\ITicketAIProcessingService.cs" />

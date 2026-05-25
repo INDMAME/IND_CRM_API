@@ -68,6 +68,7 @@ function Get-CriticalSettings {
 
     $publicIpDefault = if ($EnvironmentName -eq "DEV") { "192.168.0.148" } else { "212.142.143.182" }
     $pfxPathDefault = if ($EnvironmentName -eq "DEV") { "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx" } else { "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx" }
+    $internalApiBaseUrlDefault = if ($EnvironmentName -eq "DEV") { "https://dev.service.insertec.eu:2087/" } else { "https://prod.service.insertec.eu:2096/" }
 
     return @(
         New-CriticalSetting -Name "USER_DEFAULT" -Category "AX" -DefaultValue "APIAX"
@@ -76,6 +77,9 @@ function Get-CriticalSettings {
         New-CriticalSetting -Name "CRM_CLIENT_ID" -Category "WebAuth"
         New-CriticalSetting -Name "CRM_CLIENT_SECRET" -Category "WebAuth" -Secret $true
         New-CriticalSetting -Name "CRM_AUTHORITY" -Category "WebAuth"
+        New-CriticalSetting -Name "INDCRM_INTERNAL_API_BASE_URL" -Category "InternalApi" -DefaultValue $internalApiBaseUrlDefault -Required $false
+        New-CriticalSetting -Name "INDCRM_INTERNAL_API_CLIENT_ID" -Category "InternalApi" -Required $false
+        New-CriticalSetting -Name "INDCRM_INTERNAL_API_CLIENT_SECRET" -Category "InternalApi" -Secret $true -Required $false
         New-CriticalSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
         New-CriticalSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
         New-CriticalSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
