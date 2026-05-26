@@ -46,6 +46,9 @@ namespace IND_CRM_API.Contracts.Notifications
         [JsonProperty("saveToSentItems")]
         public bool SaveToSentItems { get; set; }
 
+        [JsonProperty("importance")]
+        public string Importance { get; set; }
+
         [JsonProperty("sourceSystem")]
         public string SourceSystem { get; set; }
 

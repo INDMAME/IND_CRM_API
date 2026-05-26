@@ -22,6 +22,13 @@ The mail transport responsibility has been moved out of `IND_CRM_API` and into `
 - Email failures are best-effort: log and do not block the expense sheet business process.
 - Axapta placeholders were intentionally left as `ParameterTable.INDInternalApiBaseUrl`, `ParameterTable.INDInternalApiClientId`, `ParameterTable.INDInternalApiClientSecret`, and `ParameterTable.INDCrmWebBaseUrl` until the final technical configuration table exists.
 
+Mail sending has one internal HTTP endpoint and two Axapta-friendly COM/helper shapes:
+
+- Simple mail: `IND.InternalApiClient.SendMail(...)` and `INDCRMUtilityService::sendInternalApiMail(...)`.
+- Extended mail: `IND.InternalApiClient.SendMailEx(...)` and `INDCRMUtilityService::sendInternalApiMailEx(...)` for sender display name, CC, BCC, Reply-To, SaveToSentItems, and Importance.
+
+Both methods end at `POST /api/internal/v1/mail/messages`; the simple/extended split is a caller convenience, not two different HTTP endpoints.
+
 ## Current State
 
 ### Web project

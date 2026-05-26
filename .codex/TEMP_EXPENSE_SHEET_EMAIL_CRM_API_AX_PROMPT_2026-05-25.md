@@ -1,57 +1,85 @@
-# Prompt for Codex: Expense Sheet Email Notification Orchestration in IND_CRM_API and Axapta
+# Prompt for Codex: Expense Sheet Email Notifications in IND_CRM_API and Axapta
 
 Use this prompt in project `C:\INDProjects\IND_CRM_API`.
 
-Date: 2026-05-25
+Date: 2026-05-26
+Version: 2
 
-## Goal
+## Objective
 
-Implement the CRM and Axapta side of expense sheet email notifications.
+Implement and document the CRM-context and Axapta side of expense sheet email notifications.
 
-Responsibilities:
+`IND_CRM_API` is a backend-for-frontend/context API. It owns CRM expense sheet notification orchestration for web-originated transitions, but it must not send mail directly with Microsoft Graph.
 
-- `IND_CRM_API` owns CRM-specific notification orchestration for web-originated expense sheet status changes.
-- Axapta owns Axapta-originated notification triggers, including paid remittance notifications.
-- `IND_INTERNAL_API` owns the generic Microsoft Graph email transport.
-- `IND_CRM_APP` owns resolving the emailed web deep link when a user clicks it.
+Axapta owns Axapta-originated notification triggers, including the paid remittance notification.
 
-Do not send mail directly through Microsoft Graph from `IND_CRM_API`. Always call `IND_INTERNAL_API`.
+All real email transport must go through `IND_INTERNAL_API`.
+
+## Project boundaries
+
+This prompt covers:
+
+- `IND_CRM_API` notification orchestration.
+- `IND_CRM_API` configuration for calling `IND_INTERNAL_API`.
+- Axapta helper changes under `.codex/Axapta`.
+- Documentation and environment scripts in `IND_CRM_API`.
+
+This prompt does not cover:
+
+- Microsoft Graph implementation.
+- `INTSERV_GRAPH_*` keys.
+- Direct Graph calls from CRM API or Axapta.
+- CRM web deep-link resolver implementation.
+- One-click approval/rejection/payment links.
+
+Related ownership:
+
+- `IND_INTERNAL_API`: generic mail transport, Graph token, Graph `sendMail`, COM DLL.
+- `IND_CRM_API`: expense sheet event detection, recipients, localized subject/body, call to internal mail API.
+- Axapta: paid remittance trigger and generic COM helper for any AX process.
+- `IND_CRM_APP`: `/Gastos/ExpenseSheetLink` resolver.
 
 ## Required context to read first
 
-Read these files before editing code:
+Read current code/docs before editing:
 
-- `.codex/skills/ind-crm-backend-guardrails/SKILL.md`
-- `docs/plans/2026-05-22-expense-sheet-email-deeplinks-design_API.md`
-- `.codex/ENDPOINTS.md`
-- `README.md`
-- `App_Start/DependencyConfig.cs`
-- `Helpers/AppSettingsHelper.cs`
-- `Controllers/CRM/CrmExpenseSheetsController.cs`
-- `Contracts/Requests/UpdateExpenseSheetHeaderRequest.cs`
-- `Contracts/Responses/ExpenseSheetDetailDto.cs`
-- `scripts/set-indcrm-machine-env.ps1`
-- `scripts/set-indcrm-machine-critical-env.ps1`
-- `scripts/set-indcrm-machine-all-env.ps1`
-- `.codex/Axapta/INDCRMUtilityService.xpo`
-- `.codex/Axapta/INDCRMExpenseSheetService.xpo`
-- `.codex/Axapta/CRMHojaGastosTable.xpo`
+```text
+.codex/skills/ind-crm-backend-guardrails/SKILL.md
+docs/plans/2026-05-22-expense-sheet-email-deeplinks-design_API.md
+.codex/ENDPOINTS.md
+README.md
+App.config
+App_Start/DependencyConfig.cs
+Helpers/AppSettingsHelper.cs
+Controllers/CRM/CrmExpenseSheetsController.cs
+Contracts/Requests/UpdateExpenseSheetHeaderRequest.cs
+Contracts/Responses/ExpenseSheetDetailDto.cs
+Contracts/Notifications/InternalMailContracts.cs
+Services/InternalMailClient.cs
+Services/ExpenseSheetNotificationService.cs
+scripts/set-indcrm-machine-env.ps1
+scripts/set-indcrm-machine-critical-env.ps1
+scripts/set-indcrm-machine-all-env.ps1
+.codex/Axapta/INDCRMUtilityService.xpo
+.codex/Axapta/INDCRMExpenseSheetService.xpo
+.codex/Axapta/CRMHojaGastosTable.xpo
+```
 
-Follow repository rules:
+Follow local guardrails:
 
-- Target .NET Framework 4.8.
-- Keep x86 compatibility.
+- Keep .NET Framework 4.8 and x86.
 - Do not add new test projects.
 - Add new `.cs` files to `IND_CRM_API.csproj`.
-- Do not hardcode secrets or URLs.
-- Keep behavior best-effort for email failures.
+- Do not hardcode secrets, tenant IDs, client IDs, passwords, company IDs, or environment-specific URLs.
+- Preserve public response shapes unless the change is explicitly required.
+- Email failures are best-effort by default and must not block the business process.
 - Use existing logging patterns.
-- Use existing Axapta COM patterns.
-- Add brief comments to new classes and public methods.
+- Use existing Axapta COM wrapper/session patterns.
+- Add short English comments to new public classes and methods.
 
-## End-to-end flow
+## End-to-end events
 
-There are three notification events in scope:
+Only these notification event types are in scope:
 
 ```text
 ExpenseSheetApprovalRequested
@@ -59,27 +87,33 @@ ExpenseSheetApproved
 ExpenseSheetPaid
 ```
 
-Deep links always navigate to the CRM web detail page. They never approve, reject, pay, or mutate data by themselves.
+Event ownership:
 
-Canonical web resolver URL:
+```text
+ExpenseSheetApprovalRequested  CRM API/web-originated status transition only
+ExpenseSheetApproved           CRM API/web-originated status transition only
+ExpenseSheetPaid               Axapta payment/remittance posting only
+```
+
+Deep links always navigate to the CRM web detail resolver and never execute a business action.
+
+Canonical deep link:
 
 ```text
 {INDCRM_WEB_BASE_URL}/Gastos/ExpenseSheetLink?hojaGastosId={id}&targetCompanyId={companyId}&source={source}
 ```
 
-Final detail route after resolver:
+Final web detail route after `IND_CRM_APP` resolves the link:
 
 ```text
 /Gastos/ExpenseSheetDetail?hojaGastosId={id}
 ```
 
-`targetCompanyId` is used only by the web app resolver to switch/validate company context. Do not include it in the final detail URL unless the existing web route requires it.
+`targetCompanyId` is for web app company validation/switching. Do not include it in the final detail URL unless the current app route requires it.
 
-## IND_CRM_API implementation
+## IND_CRM_API configuration
 
-### New configuration keys
-
-Add these settings through the existing app settings helper and machine env scripts:
+Add or confirm these keys in `App.config`, `AppSettingsHelper` usage, docs, and env scripts:
 
 ```text
 INDCRM_INTERNAL_API_BASE_URL
@@ -91,141 +125,211 @@ INDCRM_EXPENSE_NOTIFY_TRANSITIONS
 INDCRM_WEB_BASE_URL
 ```
 
-Recommended defaults:
+Recommended defaults for scripts/docs:
 
 ```text
+INDCRM_INTERNAL_API_BASE_URL=<environment internal API base URL>
+INDCRM_INTERNAL_API_CLIENT_ID=<SET_ME_INTERNAL_API_CLIENT_ID>
+INDCRM_INTERNAL_API_CLIENT_SECRET=<SET_ME_INTERNAL_API_CLIENT_SECRET>
 INDCRM_EXPENSE_NOTIFICATIONS_ENABLED=false
 INDCRM_EXPENSE_NOTIFICATIONS_BEST_EFFORT=true
 INDCRM_EXPENSE_NOTIFY_TRANSITIONS=ExpenseSheetApprovalRequested,ExpenseSheetApproved
 ```
 
-`INDCRM_WEB_BASE_URL` already exists in this repo. Reuse it; do not introduce another CRM web base URL key.
-
-Do not store real secrets in source control.
-
-### Internal mail client
-
-Add a small client that authenticates against `IND_INTERNAL_API` and calls:
+Known environment defaults if the project already uses them:
 
 ```text
-POST /api/internal/v1/mail/messages
+DEV  INDCRM_INTERNAL_API_BASE_URL=https://dev.service.insertec.eu:2087/
+PROD INDCRM_INTERNAL_API_BASE_URL=https://prod.service.insertec.eu:2096/
 ```
 
-Suggested classes:
+Use placeholders for credentials. Never commit real values.
 
-- `Services/Interfaces/IInternalMailClient.cs`
-- `Services/InternalMailClient.cs`
-- `Contracts/Notifications/InternalMailRequest.cs`
-- `Contracts/Notifications/InternalMailResponse.cs`
+Do not add Graph keys to this project. The following keys belong only to `IND_INTERNAL_API` and must not be used by `IND_CRM_API`:
 
-The request sent to `IND_INTERNAL_API` must use the generic mail contract:
+```text
+GRAPH_TENANT_ID
+GRAPH_CLIENT_ID
+GRAPH_CLIENT_SECRET
+INTSERV_GRAPH_TENANT_ID
+INTSERV_GRAPH_CLIENT_ID
+INTSERV_GRAPH_CLIENT_SECRET
+```
+
+## Internal mail API contract used by CRM API
+
+`IND_CRM_API` calls this internal endpoint:
+
+```text
+POST {INDCRM_INTERNAL_API_BASE_URL}/api/internal/v1/mail/messages
+```
+
+The endpoint is authenticated by first logging in to `IND_INTERNAL_API` with:
+
+```text
+INDCRM_INTERNAL_API_CLIENT_ID
+INDCRM_INTERNAL_API_CLIENT_SECRET
+```
+
+The internal API service user must have scope:
+
+```text
+internal.mail.send
+```
+
+Use the generic mail contract. Keep the CRM request DTO aligned with `IND_INTERNAL_API`, including optional extended fields even if expense sheet notifications do not use all of them today:
 
 ```json
 {
   "company": "es01",
-  "from": { "email": "sender@example.com" },
-  "to": [{ "email": "recipient@example.com" }],
+  "from": { "email": "sender@example.com", "displayName": "Sender Name" },
+  "to": [{ "email": "recipient@example.com", "displayName": "Recipient Name" }],
+  "cc": [],
+  "bcc": [],
+  "replyTo": [],
   "subject": "Localized subject",
-  "htmlBody": "<p>Localized message</p><p><a href=\"...\">...</a></p>",
-  "textBody": "Localized message\n...",
+  "htmlBody": "<p>Localized message</p><p><a href=\"...\">Open expense sheet</a></p>",
+  "textBody": "Localized message\nOpen expense sheet: ...",
   "saveToSentItems": false,
+  "importance": "normal",
   "sourceSystem": "IND_CRM_API",
   "sourceProcess": "ExpenseSheetNotifications",
   "eventType": "ExpenseSheetApproved",
   "aggregateType": "ExpenseSheet",
   "aggregateId": "12345",
   "idempotencyKey": "ExpenseSheetApproved:es01:12345:2",
-  "correlationId": "existing-request-correlation-id"
+  "correlationId": "request-trace-id"
 }
 ```
 
-Use existing HTTP helper conventions. If none exist, use `HttpClient` with bounded timeout and defensive error handling.
+Allowed `importance` values:
 
-### Notification service
+```text
+low
+normal
+high
+```
 
-Add a focused service:
+Default to `normal`.
 
-- `IExpenseSheetNotificationService`
-- `ExpenseSheetNotificationService`
+Do not log full email bodies. Body values may contain large HTML, including inline base64 image strings in other global email use cases.
+
+## Internal mail client in IND_CRM_API
+
+Keep or add:
+
+```text
+Services/Interfaces/IInternalMailClient.cs
+Services/InternalMailClient.cs
+Contracts/Notifications/InternalMailContracts.cs
+```
 
 Responsibilities:
 
-1. Detect which notification event should be sent.
-2. Build the web deep link using `INDCRM_WEB_BASE_URL`.
-3. Resolve sender and recipients through Axapta-backed data.
-4. Build minimal localized subject/body.
-5. Call `IInternalMailClient`.
-6. Log success or failure.
-7. Never block the expense sheet business action when email fails and best-effort is enabled.
+1. Validate required local configuration.
+2. Login to `IND_INTERNAL_API`.
+3. Call `POST /api/internal/v1/mail/messages`.
+4. Return a small result with accepted/provider/correlation details.
+5. Log sanitized failures.
+6. Never leak client secret, bearer token, or full email body.
 
-Email body should be minimal:
+If `IND_INTERNAL_API` is unavailable and best-effort is enabled, log and return a non-accepted result without breaking the caller.
 
-- A short localized message.
-- The expense sheet identifier.
-- The deep link to the CRM web detail resolver.
+Use bounded timeouts and existing HTTP conventions. Do not introduce a new dependency unless there is already a strong project precedent.
 
-Do not add approve/reject/payment action links.
+## Expense sheet notification service
 
-### Recipient rules
+Keep or add:
 
-All email addresses come from `INDPersonaTable.Email`.
+```text
+Services/Interfaces/IExpenseSheetNotificationService.cs
+Services/ExpenseSheetNotificationService.cs
+```
 
-Actor/sender:
+Responsibilities:
 
-- For web-originated updates, sender is the logged CRM/Axapta user from the current request context.
-- Resolve `INDPersonaTable.Email` for that user.
-- If the sender email is missing, log and skip sending.
+1. Detect the notification event from before/after sheet state.
+2. Check `INDCRM_EXPENSE_NOTIFICATIONS_ENABLED`.
+3. Check `INDCRM_EXPENSE_NOTIFY_TRANSITIONS`.
+4. Build the web deep link using `INDCRM_WEB_BASE_URL`.
+5. Resolve sender and recipients through Axapta-backed data.
+6. Build localized subject, HTML body, and text body.
+7. Call `IInternalMailClient`.
+8. Log success, skipped sends, and failures.
+9. Respect `INDCRM_EXPENSE_NOTIFICATIONS_BEST_EFFORT`.
+
+The body must be minimal:
+
+- Short localized message.
+- Expense sheet ID.
+- Link to `/Gastos/ExpenseSheetLink`.
+
+Do not add approve/reject/payment action buttons. The user must manually open the detail and act in the app.
+
+## Recipient and sender rules
+
+All email addresses come from:
+
+```text
+INDPersonaTable.Email
+```
+
+Sender for web-originated notifications:
+
+- Logged CRM/Axapta user for the current request.
+- Resolve that user to `INDPersonaTable.Email`.
+- If missing, log and skip sending.
 
 Recipients:
 
-- `ExpenseSheetApprovalRequested`: recipient list is the user or users that can approve the current expense sheet in Axapta. Resolve using Axapta authoritative logic, not client-side assumptions.
-- `ExpenseSheetApproved`: recipient is the creator/requester of the sheet. Use `CRMHojaGastosTable.INDCreatedByUserId` and resolve `INDPersonaTable.Email`.
-- `ExpenseSheetPaid`: recipient is the creator/requester of the sheet. Use `CRMHojaGastosTable.INDCreatedByUserId` and resolve `INDPersonaTable.Email`.
+```text
+ExpenseSheetApprovalRequested -> approver user(s) according to Axapta authoritative logic
+ExpenseSheetApproved          -> CRMHojaGastosTable.INDCreatedByUserId
+ExpenseSheetPaid              -> CRMHojaGastosTable.INDCreatedByUserId
+```
+
+For created-by recipients, resolve:
+
+```text
+CRMHojaGastosTable.INDCreatedByUserId -> INDPersonaTable.Email
+```
 
 If a recipient email is missing, log and skip sending. Do not block the business process.
 
-If the existing Axapta export does not expose a reliable way to resolve approvers for `ExpenseSheetApprovalRequested`, add a method to `INDCRMExpenseSheetService.xpo` to do it from the same source used by the approval UI/workflow. If that source cannot be found, stop and ask before guessing.
+Do not guess approvers in C#. If Axapta does not expose reliable approver resolution, add/adjust a method in `INDCRMExpenseSheetService.xpo` that uses the same Axapta source as the approval workflow/UI. If the source is unclear, stop and ask.
 
-### Status transition detection in CRM API
+## CRM API transition detection
 
-Update `CrmExpenseSheetsController.UpdateExpenseSheetHeader` only after understanding current behavior.
+Update `CrmExpenseSheetsController.UpdateExpenseSheetHeader` only after confirming current behavior.
 
-Required behavior:
+Required flow:
 
 1. Read current sheet detail before the update.
-2. Execute the existing update.
-3. If the update succeeds, read the sheet detail again from Axapta.
+2. Execute the existing Axapta update.
+3. If the update succeeds, read sheet detail again.
 4. Compare before/after status.
-5. Send notification best-effort only for configured transitions.
-6. Return the same API response shape as today.
+5. Send notification only when status actually changes into a configured event state.
+6. Keep the same public API response shape as today.
 
-Transition mapping:
+Mapping:
 
 ```text
-ExpenseSheetApprovalRequested: status changes to the approval requested state.
-ExpenseSheetApproved: status changes to the approved state.
+ExpenseSheetApprovalRequested -> status changes to approval requested state
+ExpenseSheetApproved          -> status changes to approved state
+ExpenseSheetPaid              -> never sent by web/API update
 ```
-
-Do not trigger `ExpenseSheetPaid` from web/API update. That event is Axapta-only.
 
 Avoid duplicate sends:
 
-- Send only when status actually changes.
-- Build a deterministic idempotency key:
-
 ```text
-{eventType}:{companyId}:{hojaGastosId}:{afterStatus}
+idempotencyKey={eventType}:{companyId}:{hojaGastosId}:{afterStatus}
 ```
 
-If there is no storage for idempotency in this repo, still pass the key to `IND_INTERNAL_API` for logging and future hardening.
+Pass the key to `IND_INTERNAL_API` even if durable idempotency storage is not yet implemented in this repo.
 
-### Localization in CRM API
+## Localization in IND_CRM_API
 
-Use the existing localization approach if this API already has one.
-
-If there is no localization infrastructure in `IND_CRM_API`, keep subjects and bodies in one small resource/helper class with keys per event and language, and select language from the existing request/user/company context. Do not invent a large localization framework.
-
-Messages must exist for all languages supported by the CRM app:
+Messages must exist for all app-supported languages:
 
 ```text
 es-ES
@@ -236,23 +340,34 @@ pt
 zh-Hans
 ```
 
-If no language can be resolved, fallback to `es-ES`.
+If the API already has localization infrastructure, use it. If not, keep a small focused helper/resource class for this feature.
 
-## Axapta implementation
+Fallback:
+
+```text
+es-ES
+```
+
+Subjects and bodies should be short and business-oriented.
+
+Do not depend on the web app to translate the email body after the email has already been sent.
+
+## Axapta design
 
 Axapta needs two layers:
 
-1. A generic internal mail helper in `INDCRMUtilityService.xpo`.
-2. Expense-sheet-specific notification helpers in `INDCRMExpenseSheetService.xpo`.
+1. Generic mail helper in `INDCRMUtilityService.xpo`.
+2. Expense-sheet-specific helpers in `INDCRMExpenseSheetService.xpo`.
 
 ### Generic helper in INDCRMUtilityService.xpo
 
-Add a generic method that any Axapta process can use to send email through `IND_INTERNAL_API` via the COM DLL.
+`INDCRMUtilityService` must expose a reusable email utility for any Axapta process.
 
-Suggested static method:
+Keep two public static methods:
 
 ```xpp
-public static boolean sendInternalApiMail(
+// Simple generic mail send. Supports From, To, subject, HTML/text body and trace metadata.
+public static server boolean sendInternalApiMail(
     str _companyId,
     str _fromEmail,
     str _toEmails,
@@ -264,55 +379,137 @@ public static boolean sendInternalApiMail(
     str _aggregateType,
     str _aggregateId,
     str _idempotencyKey,
-    str _correlationId = ''
-)
+    str _correlationId = '')
 ```
-
-Use these temporary parameter fields exactly as placeholders. The user will later replace them with the real technical configuration table:
 
 ```xpp
-ParameterTable.INDInternalApiBaseUrl
-ParameterTable.INDInternalApiClientId
-ParameterTable.INDInternalApiClientSecret
+// Extended generic mail send. Adds sender display name, CC, BCC, Reply-To, saveToSentItems and importance.
+public static server boolean sendInternalApiMailEx(
+    str _companyId,
+    str _fromEmail,
+    str _fromDisplayName,
+    str _toEmails,
+    str _ccEmails,
+    str _bccEmails,
+    str _replyToEmails,
+    str _subject,
+    str _htmlBody,
+    str _textBody,
+    boolean _saveToSentItems,
+    str _importance,
+    str _sourceProcess,
+    str _eventType,
+    str _aggregateType,
+    str _aggregateId,
+    str _idempotencyKey,
+    str _correlationId = '')
 ```
 
-The generic helper must:
+Rules:
 
-- Build the generic mail JSON expected by `IND_INTERNAL_API`.
-- Instantiate the COM-visible client DLL.
-- Call `SendMailJson` or the convenience `SendMail` method exposed by `IND.InternalApiClient`.
-- Catch CLR/COM exceptions.
-- Log failures best-effort.
-- Return `true` only when the internal API accepts the send.
+- `sendInternalApiMail` must delegate to `sendInternalApiMailEx`.
+- `sendInternalApiMailEx` must instantiate COM `IND.InternalApiClient`.
+- `sendInternalApiMailEx` must call COM `SendMailEx`.
+- Do not build raw JSON in this helper for normal use.
+- Keep `SendMailJson` only as an advanced/diagnostic DLL method in `IND_INTERNAL_API`; do not make it the standard Axapta helper.
+- `toEmails`, `ccEmails`, `bccEmails`, and `replyToEmails` are semicolon-separated lists.
+- `importance` must normalize to `low`, `normal`, or `high`; default to `normal`.
+- Missing config, From, To, Subject, or Body returns `false` and logs a warning.
+- COM/CLR failures return `false` and log a warning.
+- Do not throw from generic mail helper in normal business flows.
+- Do not log full bodies, because they may contain very large HTML/base64 strings.
 
-Do not include CRM-specific URL generation here.
-Do not include expense-sheet-specific subject/body logic here.
+Temporary config placeholders:
 
-### Expense sheet helper in INDCRMExpenseSheetService.xpo
+```xpp
+ParameterTable::find().INDInternalApiBaseUrl
+ParameterTable::find().INDInternalApiClientId
+ParameterTable::find().INDInternalApiClientSecret
+```
 
-Add expense-sheet-specific methods here, not in `INDCRMUtilityService.xpo`.
+The user will later move these placeholders to the final technical configuration table.
 
-Suggested methods:
+### COM DLL method signatures expected by Axapta
+
+Simple COM method:
+
+```text
+IND.InternalApiClient.SendMail(
+    baseUrl,
+    username,
+    password,
+    fromEmail,
+    toEmails,
+    subject,
+    htmlBody,
+    textBody,
+    company,
+    sourceSystem,
+    sourceProcess,
+    eventType,
+    aggregateType,
+    aggregateId,
+    idempotencyKey,
+    correlationId)
+```
+
+Extended COM method:
+
+```text
+IND.InternalApiClient.SendMailEx(
+    baseUrl,
+    username,
+    password,
+    fromEmail,
+    fromDisplayName,
+    toEmails,
+    ccEmails,
+    bccEmails,
+    replyToEmails,
+    subject,
+    htmlBody,
+    textBody,
+    saveToSentItems,
+    importance,
+    company,
+    sourceSystem,
+    sourceProcess,
+    eventType,
+    aggregateType,
+    aggregateId,
+    idempotencyKey,
+    correlationId)
+```
+
+COM `SendMail` and `SendMailEx` must return `true` only when `IND_INTERNAL_API` accepts the request.
+
+If the DLL was already registered on the AOS machine, deployment may require rebuilding/registering the COM DLL and reimporting the type library depending on how Axapta references it.
+
+## Expense-sheet helpers in INDCRMExpenseSheetService.xpo
+
+CRM/expense-sheet-specific logic belongs here, not in `INDCRMUtilityService`.
+
+Add or keep:
 
 ```xpp
 public static str buildExpenseSheetWebLink(str _companyId, str _hojaGastosId, str _source = 'axapta')
 ```
 
-Use this temporary parameter field as a placeholder:
+Temporary web base URL placeholder:
 
 ```xpp
-ParameterTable.INDCrmWebBaseUrl
+ParameterTable::find().INDCrmWebBaseUrl
 ```
 
 Build:
 
 ```text
-{ParameterTable.INDCrmWebBaseUrl}/Gastos/ExpenseSheetLink?hojaGastosId={id}&targetCompanyId={companyId}&source={source}
+{ParameterTable::find().INDCrmWebBaseUrl}/Gastos/ExpenseSheetLink?hojaGastosId={id}&targetCompanyId={companyId}&source={source}
 ```
 
-URL-encode query values if an existing AX helper exists. If no helper exists, implement minimal safe encoding for spaces and reserved query characters.
+URL-encode query values. If there is no existing AX helper, implement minimal safe encoding for common query characters.
 
-Add:
+Add/keep:
 
 ```xpp
 public static boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expenseSheet)
@@ -320,82 +517,143 @@ public static boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expen
 
 Behavior:
 
-- Triggered only from Axapta when the expense sheet payment remittance is posted/paid.
-- From email: `INDPersonaTable.Email` for the logged Axapta user, normally `curUserId()`.
+- Triggered only from Axapta after payment/remittance posting succeeds.
+- From email: `INDPersonaTable.Email` for current logged AX user, normally `curUserId()`.
 - To email: `INDPersonaTable.Email` for `CRMHojaGastosTable.INDCreatedByUserId`.
 - Link source: `axapta`.
 - Event type: `ExpenseSheetPaid`.
 - Source process: `AxaptaExpenseSheetPayment`.
 - Aggregate type: `ExpenseSheet`.
-- Aggregate ID: `CRMHojaGastosTable.HojaGastosId`.
-- Body: minimal localized message plus link.
-- If from/to email is missing, log and return false without blocking payment posting.
-- Call `INDCRMUtilityService::sendInternalApiMail`.
+- Aggregate ID: `CRMHojaGastosTable.HojaGastosId` or the actual field used by the class.
+- Body: minimal localized message plus detail link.
+- Missing from/to email logs and returns false.
+- Email failure does not block payment posting.
+- Calls `INDCRMUtilityService::sendInternalApiMail` or `sendInternalApiMailEx`.
 
-Add recipient resolver methods for API usage if needed:
+Add/keep recipient resolver methods if needed by the API:
 
 ```xpp
 public static container getExpenseSheetNotificationRecipients(str _companyId, str _hojaGastosId, str _eventType)
 public static str getPersonaEmailByUserId(str _userId)
 ```
 
-Use `INDPersonaTable.Email`. Validate actual field names in AOT before finalizing.
+Use `INDPersonaTable.Email`. Validate exact AX field names in AOT before finalizing.
 
-### Axapta payment/remittance trigger
+## Axapta paid/remittance trigger
 
-Find the authoritative method that marks or posts the payment remittance for expense sheets. The current export suggests checking `CRMHojaGastosTable.xpo`, especially payment/posting methods such as `ContabilizaAsientoHojaGastos`, but validate the actual flow before editing.
+Find the authoritative method that posts or marks paid expense sheet remittances. The current export suggests reviewing:
 
-After the posting succeeds, call:
+```text
+.codex/Axapta/CRMHojaGastosTable.xpo
+```
+
+especially methods around:
+
+```text
+ContabilizaAsientoHojaGastos
+```
+
+After posting succeeds and only after the business operation is accepted, call:
 
 ```xpp
 INDCRMExpenseSheetService::sendExpenseSheetPaidNotification(expenseSheetRecord);
 ```
 
-Do not call before the posting is committed/successful.
+Do not call before success/commit.
+
 Do not throw if email fails.
-Log any failure.
+
+## X++ smoke test documentation
+
+Update the Axapta documentation/change log with two copy-paste jobs:
+
+- `Job_INDInternalApi_SendMail_Simple`
+- `Job_INDInternalApi_SendMail_Extended`
+
+Each job must include comments explaining every meaningful variable:
+
+```text
+baseUrl         -> IND_INTERNAL_API base URL, ending with slash if current helper expects it
+apiUser         -> internal API client/user id
+apiPassword     -> internal API client secret/password
+fromEmail       -> sender mailbox used by Graph
+fromDisplayName -> optional sender name for extended send
+toEmails        -> semicolon-separated To recipients
+ccEmails        -> semicolon-separated CC recipients
+bccEmails       -> semicolon-separated BCC recipients
+replyToEmails   -> semicolon-separated Reply-To addresses
+subject         -> email subject
+htmlBody        -> HTML body; may be large
+textBody        -> plain text fallback; may be empty if htmlBody exists
+company         -> optional company metadata; if sent, must be allowed by internal API JWT claims
+saveToSentItems -> extended flag forwarded to Graph
+importance      -> low, normal, or high
+sourceSystem    -> AXAPTA for Axapta callers
+sourceProcess   -> process that sends the email
+eventType       -> business event/type for logs
+aggregateType   -> entity type for traceability
+aggregateId     -> entity id for traceability
+idempotencyKey  -> deterministic duplicate-control key
+correlationId   -> trace id shared across logs
+```
+
+The jobs should use the two COM methods directly so AX developers can validate the DLL independently from the CRM-specific helpers.
 
 ## Logging requirements
 
 Log in all involved layers:
 
-- Axapta: when sender/recipient/config is missing, COM call fails, or internal API returns error.
-- `IND_CRM_API`: when notification is skipped, internal API call fails, or unexpected mapping occurs.
-- `IND_INTERNAL_API`: when Graph config is missing, Graph token fails, Graph send fails, or Graph accepts send.
+- Axapta: missing config, missing sender/recipient, COM call failure, internal API rejection.
+- `IND_CRM_API`: skipped notification, missing mapping, failed internal API auth/send, accepted send.
+- `IND_INTERNAL_API`: Graph config/token/send status, provider acceptance, provider rejection.
 
-Do not log Graph secrets, tokens, or full email bodies.
+Never log:
 
-## Documentation updates
+- Internal API client secret.
+- Graph secret/token.
+- Full HTML/text body.
 
-Update docs in this repo:
+## Documentation updates in IND_CRM_API
 
-- `.codex/ENDPOINTS.md`
-- `docs/plans/2026-05-22-expense-sheet-email-deeplinks-design_API.md`
-- Any existing release/config doc that lists machine environment variables
+Update:
+
+```text
+.codex/ENDPOINTS.md
+docs/plans/2026-05-22-expense-sheet-email-deeplinks-design_API.md
+.codex/AX_INDCRMUtilityService_CHANGES_2026-05-25.md
+README.md or the existing configuration/release doc
+scripts/set-indcrm-machine-env.ps1
+scripts/set-indcrm-machine-critical-env.ps1
+scripts/set-indcrm-machine-all-env.ps1
+```
 
 Document:
 
-- New CRM API config keys.
-- New Axapta `ParameterTable` placeholders.
-- Event ownership:
-  - `ExpenseSheetApprovalRequested`: web/API status transition.
-  - `ExpenseSheetApproved`: web/API status transition.
-  - `ExpenseSheetPaid`: Axapta payment posting only.
-- Link format.
-- Best-effort behavior.
+- New CRM API keys.
+- Explicit statement that Graph keys are not configured in CRM API.
 - Internal API endpoint dependency.
+- Event ownership.
+- Deep-link format.
+- Best-effort behavior.
+- Axapta `ParameterTable` placeholders.
+- Simple and extended AX/COM send methods.
+- Large body note: CRM/Axapta should not trim body values, but provider limits still apply.
 
 ## Verification
 
 Build:
 
 ```powershell
+.\scripts\build-api.ps1 -Configuration Debug
+```
+
+or use `Release` if preparing deployment:
+
+```powershell
 .\scripts\build-api.ps1 -Configuration Release
 ```
 
-If the repo uses another build script, use the established one.
-
-Manual verification checklist:
+Manual checklist:
 
 - Updating an expense sheet without a status transition sends no email.
 - Transition to approval requested sends one best-effort email to approvers.
@@ -405,5 +663,7 @@ Manual verification checklist:
 - Missing recipient email logs and does not block.
 - Internal API failure logs and does not block when best-effort is enabled.
 - Deep link uses `/Gastos/ExpenseSheetLink`.
-- No Graph keys exist in `IND_CRM_API`.
-- No expense-sheet business logic exists in `IND_INTERNAL_API`.
+- `IND_CRM_API` has no Graph keys and makes no Graph calls.
+- `IND_INTERNAL_API` has no expense-sheet-specific business logic.
+- Simple AX smoke job can send.
+- Extended AX smoke job can send with CC/BCC/Reply-To/importance.

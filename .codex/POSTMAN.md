@@ -2,7 +2,7 @@
 
 Colecciones
 - DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
-- DEV soporte: `Notes/DEV/IND_CRM_API V04.postman_collection.json`
+- DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V05.postman_collection.json`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -26,6 +26,13 @@ Ambiente (variables sugeridas)
 - `ticketFileName` = nombre final del archivo del ticket (autocompletado)
 - `persistedTicketFileId` = fileId de ticket creado por `expensefromticket` cuando `persistTicket=true`
 - `lastTraceId` = ultimo traceId retornado por API (autocompletado)
+- `expenseNotificationSheetId` = hoja editable usada para probar notificaciones de hojas de gasto desde CRM API
+- `expenseNotificationDescription` = descripcion enviada en el PUT de prueba de notificacion
+- `expenseNotificationCurrencyCode` = divisa enviada en el PUT de prueba; por defecto usa `defaultCurrencyCode`
+- `expenseNotificationApprovalRequestedStatus` = valor AX que representa solicitud de aprobacion; por defecto `1`
+- `expenseNotificationApprovedStatus` = valor AX que representa aprobado; por defecto `2`
+- `expenseNotificationUpdateRequestJson` = body generado por los requests de notificacion
+- `expenseNotificationLastTraceId` = ultimo traceId de las pruebas de notificacion
 - `quickCreateCompletedStage` = ultima etapa completada de `quick-create` (autocompletado)
 - `quickCreateHojaGastosId` = hoja vinculada por `quick-create` cuando aplica (autocompletado)
 - `quickCreateLinkedToSheet` = indica si `quick-create` vinculo el ticket a una hoja (autocompletado)
@@ -36,7 +43,7 @@ Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
-- La coleccion `DEV V04` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
+- La coleccion `DEV V05` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
 - `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
@@ -81,4 +88,9 @@ Notas
 - V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
 - V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:2083` para el nuevo despliegue publico separado por host y puerto.
 - V04 de DEV actualiza la coleccion activa con `projId` en contratos de lineas de hoja de gastos, alias `projId` para quick-create y ejemplos de tickets con `ticketDate`, `ticketTime`, `ocrJson`, `normalizedJson` y `fileExtension`.
+- V05 de DEV agrega `CRM Expense Sheets / Email Notifications` con:
+  - `Get Expense Sheet - Notification Baseline`
+  - `Notify Approval Requested - Update Status`
+  - `Notify Approved - Update Status`
+- Las pruebas V05 validan la orquestacion de `IND_CRM_API`; el envio final es best-effort y debe confirmarse en logs de `IND_CRM_API`, `IND_INTERNAL_API` y bandeja del destinatario. `ExpenseSheetPaid` es Axapta-only y no se prueba desde Postman de esta API.
 - DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.
