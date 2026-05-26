@@ -2,7 +2,7 @@
 
 Colecciones
 - DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
-- DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V05.postman_collection.json`
+- DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V06.postman_collection.json`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -43,7 +43,7 @@ Notas
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
-- La coleccion `DEV V05` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
+- La coleccion `DEV V06` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
 - `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
@@ -93,4 +93,8 @@ Notas
   - `Notify Approval Requested - Update Status`
   - `Notify Approved - Update Status`
 - Las pruebas V05 validan la orquestacion de `IND_CRM_API`; el envio final es best-effort y debe confirmarse en logs de `IND_CRM_API`, `IND_INTERNAL_API` y bandeja del destinatario. `ExpenseSheetPaid` es Axapta-only y no se prueba desde Postman de esta API.
+- V06 de DEV alinea las pruebas de notificaciones con la regla actor-vs-owner:
+  - `X-IND-AxUserId: {{axUserId}}` es el `ActorAxUserId` que `IND_CRM_API` pasa a Axapta.
+  - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.
+  - La consola de Postman muestra `actorAxUserId` junto con el evento esperado.
 - DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.

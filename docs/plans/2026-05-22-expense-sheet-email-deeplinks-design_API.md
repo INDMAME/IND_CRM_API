@@ -353,16 +353,14 @@ Do not send an email for:
 
 ### 5. Recipient resolution
 
-This is the main business decision still to close.
-
-Recommended approach:
+Current decision:
 
 - Add an API-side resolver that gets recipients from the authoritative workflow source.
-- Do not infer approvers only from the web session.
-- Prefer an AX/CRM method that returns the recipients for a given transition:
+- Do not infer participants in the controller.
+- Use an AX/CRM method that returns the recipients for a given transition:
 
 ```text
-getExpenseSheetNotificationRecipients(company, hojaGastosId, fromStatus, toStatus, actorAxUserId)
+getExpenseSheetNotificationRecipients(company, hojaGastosId, eventType, actorAxUserId)
 ```
 
 Resolver output:
@@ -380,7 +378,11 @@ Rules:
 
 - Drop empty or invalid email addresses.
 - De-duplicate recipients case-insensitively.
-- Do not send to the actor unless the transition policy says so.
+- Resolve `actorAxUserId` to `CRMUsuarioTable.UserId`.
+- Resolve the expense sheet owner from `CRMHojaGastosTable.UserId`.
+- `ExpenseSheetApprovalRequested`: sender is the sheet owner; recipient is the actor CRM user.
+- `ExpenseSheetApproved`: sender is the actor CRM user; recipient is the sheet owner.
+- If actor CRM user and owner CRM user are the same, skip the email as self-managed.
 - Log missing recipient cases with `traceId`, `company`, `hojaGastosId`, `fromStatus`, and `toStatus`.
 
 ### 6. Mail transport client

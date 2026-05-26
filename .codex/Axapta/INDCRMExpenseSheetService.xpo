@@ -2314,30 +2314,35 @@ Formatversion: 1
       ENDSOURCE
       SOURCE #getExpenseSheetNotificationRecipients
         #// Purpose: Resolves notification recipients for expense sheet status events.
+        #// Input: [CompanyId, HojaGastosId, EventType, ActorAxUserId].
         #static server container getExpenseSheetNotificationRecipients(container _data)
         #{
         #    DataAreaId         companyId;
         #    CRMHojaGastosId    hojaId;
         #    str                eventType;
+        #    UserId             actorAxUserId;
+        #    CRMUserId          actorCrmUserId;
+        #    CRMUserId          ownerCrmUserId;
+        #    CRMUserId          recipientCrmUserId;
         #    CRMHojaGastosTable header;
-        #    CRMUsuarioTable    crmUsuarioTable;
-        #    INDPersonaTable    personaTable;
-        #    Set                setSubordinados;
         #    container          recipientsCon = conNull();
         #    container          recipientRow;
-        #    str                creatorEmail;
-        #    str                creatorName;
+        #    str                recipientEmail;
+        #    str                recipientName;
+        #    str                recipientRole;
         #    ;
         #
         #    companyId = INDCRMUtilityService::getCompany(_data);
         #    if (!companyId)
         #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
         #
-        #    if (conLen(_data) < 3)
-        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan CompanyId, HojaGastosId y EventType.', conNull()), conNull()];
+        #    if (conLen(_data) < 4)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan CompanyId, HojaGastosId, EventType y ActorAxUserId.', conNull()), conNull()];
         #
         #    hojaId    = conPeek(_data, 2);
         #    eventType = conPeek(_data, 3);
+        #
+        #    actorAxUserId = conPeek(_data, 4);
         #
         #    changecompany(companyId)
         #    {
@@ -2345,35 +2350,52 @@ Formatversion: 1
         #        if (!header.RecId)
         #            return [INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull()), conNull()];
         #
-        #        if (eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetPaid')
+        #        ownerCrmUserId = header.UserId;
+        #        if (!ownerCrmUserId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Usuario CRM propietario de la hoja no encontrado.', conNull()), conNull()];
+        #
+        #        if (actorAxUserId)
         #        {
-        #            creatorEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(header.INDCreatedByUserId);
-        #            creatorName  = INDCRMExpenseSheetService::getPersonaNameByUserId(header.INDCreatedByUserId);
-        #            if (creatorEmail)
-        #            {
-        #                recipientRow = [creatorEmail, creatorName, 'Owner', strFmt('%1', header.INDCreatedByUserId)];
-        #                recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
-        #            }
+        #            actorCrmUserId = SysUserInfo::getCRMUsuarioTable(actorAxUserId).UserId;
+        #
+        #            if (!actorCrmUserId)
+        #                actorCrmUserId = CRMUsuarioTable::Find(actorAxUserId).UserId;
+        #
+        #            // Allow callers that already pass a CRM UserId.
+        #            if (!actorCrmUserId)
+        #                actorCrmUserId = actorAxUserId;
         #        }
-        #        else if (eventType == 'ExpenseSheetApprovalRequested')
+        #
+        #        if (!actorCrmUserId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Usuario CRM actor no encontrado.', conNull()), conNull()];
+        #
+        #        if (actorCrmUserId == ownerCrmUserId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'No se requiere email para hojas autogestionadas.', conNull()), conNull()];
+        #
+        #        if (eventType == 'ExpenseSheetApprovalRequested')
         #        {
-        #            while select crmUsuarioTable
-        #            {
-        #                setSubordinados = crmUsuarioTable.SetSubordinados();
-        #                if (setSubordinados && setSubordinados.in(header.UserId) && crmUsuarioTable.UserId != header.UserId)
-        #                {
-        #                    personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #                    if (personaTable.RecId && personaTable.Email)
-        #                    {
-        #                        recipientRow = [personaTable.Email, personaTable.Name, 'Approver', strFmt('%1', crmUsuarioTable.UserId)];
-        #                        recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
-        #                    }
-        #                }
-        #            }
+        #            // Owner asks the actor to approve; recipient is the actor.
+        #            recipientCrmUserId = actorCrmUserId;
+        #            recipientRole      = 'Approver';
+        #        }
+        #        else if (eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetPaid')
+        #        {
+        #            // Actor approves or pays; recipient is the expense sheet owner.
+        #            recipientCrmUserId = ownerCrmUserId;
+        #            recipientRole      = 'Owner';
         #        }
         #        else
         #        {
         #            return [INDCRMUtilityService::buildHeader(false, 'EventType no soportado.', conNull()), conNull()];
+        #        }
+        #
+        #        recipientEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
+        #        recipientName  = INDCRMExpenseSheetService::getPersonaNameByUserId(recipientCrmUserId);
+        #
+        #        if (recipientEmail)
+        #        {
+        #            recipientRow = [recipientEmail, recipientName, recipientRole, strFmt('%1', recipientCrmUserId)];
+        #            recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
         #        }
         #    }
         #

@@ -26,9 +26,7 @@ Web link format:
 
 Recipient rules:
 
-- `ExpenseSheetApprovalRequested`: approvers whose subordinate set contains the sheet owner.
-- `ExpenseSheetApproved`: `CRMHojaGastosTable.INDCreatedByUserId`.
-- `ExpenseSheetPaid`: `CRMHojaGastosTable.INDCreatedByUserId`.
+- Superseded on 2026-05-26 by actor-vs-owner CRM rules. See `.codex/AX_INDCRMExpenseSheetService_CHANGES_2026-05-26.md`.
 
 All email addresses are resolved from `INDPersonaTable.Email`.
 
@@ -41,5 +39,5 @@ All email addresses are resolved from `INDPersonaTable.Email`.
 ## Risks
 
 - Validate the exact `INDPersonaTable.Email` field name in the target AOT before import.
-- Validate that iterating `CRMUsuarioTable.SetSubordinados()` is acceptable for approver lookup volume.
+- Recipient resolution was corrected on 2026-05-26; do not use `CRMUsuarioTable.SetSubordinados()` for this email flow.
 - Replace `ParameterTable.INDCrmWebBaseUrl` with the final configuration table/field.

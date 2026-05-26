@@ -86,10 +86,11 @@ namespace IND_CRM_API.Services
                     return ExpenseSheetNotificationResult.Skip("internal-mail-not-configured");
                 }
 
+                var senderUserId = ResolveSenderUserId(eventType, notification);
                 var sender = ResolvePersonaEmail(
                     notification.AuthenticatedUsername,
                     notification.CompanyId,
-                    notification.ActorAxUserId,
+                    senderUserId,
                     notification.TraceId);
 
                 if (sender == null || string.IsNullOrWhiteSpace(sender.Email) || !IsValidEmail(sender.Email))
@@ -103,6 +104,7 @@ namespace IND_CRM_API.Services
                     notification.CompanyId,
                     notification.HojaGastosId,
                     eventType,
+                    notification.ActorAxUserId,
                     notification.TraceId,
                     sender.Email);
 
@@ -171,15 +173,25 @@ namespace IND_CRM_API.Services
             }
         }
 
-        private PersonaEmail ResolvePersonaEmail(string username, string companyId, string axUserId, string traceId)
+        private static string ResolveSenderUserId(string eventType, ExpenseSheetStatusChangedNotification notification)
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(companyId) || string.IsNullOrWhiteSpace(axUserId))
+            // Approval request is sent by the expense sheet owner to the actor who will approve it.
+            if (string.Equals(eventType, EventApprovalRequested, StringComparison.OrdinalIgnoreCase))
+                return notification?.After?.UserId;
+
+            // Approval confirmation is sent by the actor to the expense sheet owner.
+            return notification?.ActorAxUserId;
+        }
+
+        private PersonaEmail ResolvePersonaEmail(string username, string companyId, string userId, string traceId)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(companyId) || string.IsNullOrWhiteSpace(userId))
                 return null;
 
             var ax = _sessionManager.GetAxInstanceForUser(username);
             var con = ax.CreateContainer();
             con.Append(companyId);
-            con.Append(axUserId);
+            con.Append(userId);
 
             var resultObj = ax.CallStaticClassMethod(
                 "INDCRMExpenseSheetService",
@@ -192,7 +204,7 @@ namespace IND_CRM_API.Services
             IAxaptaContainer lines;
             if (!TryReadHeader(resultObj as IAxaptaContainer, out success, out message, out extras, out lines) || !success)
             {
-                _logger.Log($"[EXPENSE-NOTIFY] persona email not resolved user={axUserId} message={message} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
+                _logger.Log($"[EXPENSE-NOTIFY] persona email not resolved user={userId} message={message} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
                 return null;
             }
 
@@ -208,6 +220,7 @@ namespace IND_CRM_API.Services
             string companyId,
             string hojaGastosId,
             string eventType,
+            string actorAxUserId,
             string traceId,
             string senderEmail)
         {
@@ -219,6 +232,7 @@ namespace IND_CRM_API.Services
             con.Append(companyId);
             con.Append(hojaGastosId);
             con.Append(eventType);
+            con.Append(actorAxUserId);
 
             var resultObj = ax.CallStaticClassMethod(
                 "INDCRMExpenseSheetService",

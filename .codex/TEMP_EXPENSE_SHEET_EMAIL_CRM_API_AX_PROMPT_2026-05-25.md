@@ -275,29 +275,21 @@ All email addresses come from:
 INDPersonaTable.Email
 ```
 
-Sender for web-originated notifications:
-
-- Logged CRM/Axapta user for the current request.
-- Resolve that user to `INDPersonaTable.Email`.
-- If missing, log and skip sending.
-
-Recipients:
+Sender and recipient rules for web-originated notifications:
 
 ```text
-ExpenseSheetApprovalRequested -> approver user(s) according to Axapta authoritative logic
-ExpenseSheetApproved          -> CRMHojaGastosTable.INDCreatedByUserId
-ExpenseSheetPaid              -> CRMHojaGastosTable.INDCreatedByUserId
+ExpenseSheetApprovalRequested -> From: CRMHojaGastosTable.UserId owner, To: actor CRM user
+ExpenseSheetApproved          -> From: actor CRM user, To: CRMHojaGastosTable.UserId owner
+ExpenseSheetPaid              -> Axapta-originated paid notification; To: CRMHojaGastosTable.UserId owner
 ```
 
-For created-by recipients, resolve:
+Resolve all participants to `INDPersonaTable.Email`. The actor is received as `ActorAxUserId` and must be converted to `CRMUsuarioTable.UserId` through `SysUserInfo::getCRMUsuarioTable`. The expense sheet owner is `CRMHojaGastosTable.UserId`.
 
-```text
-CRMHojaGastosTable.INDCreatedByUserId -> INDPersonaTable.Email
-```
+If actor CRM user and owner CRM user are the same, log and skip sending because the sheet is self-managed.
 
 If a recipient email is missing, log and skip sending. Do not block the business process.
 
-Do not guess approvers in C#. If Axapta does not expose reliable approver resolution, add/adjust a method in `INDCRMExpenseSheetService.xpo` that uses the same Axapta source as the approval workflow/UI. If the source is unclear, stop and ask.
+Do not guess participants in the controller. Keep participant resolution in `ExpenseSheetNotificationService` plus `INDCRMExpenseSheetService.xpo`.
 
 ## CRM API transition detection
 
@@ -551,7 +543,7 @@ public static container getExpenseSheetNotificationRecipients(str _companyId, st
 public static str getPersonaEmailByUserId(str _userId)
 ```
 
-Use `INDPersonaTable.Email`. Validate exact AX field names in AOT before finalizing.
+The actual container contract for `getExpenseSheetNotificationRecipients` is `[CompanyId, HojaGastosId, EventType, ActorAxUserId]`. Use `INDPersonaTable.Email`. Validate exact AX field names in AOT before finalizing.
 
 ## Axapta paid/remittance trigger
 
