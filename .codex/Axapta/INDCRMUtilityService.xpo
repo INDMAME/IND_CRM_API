@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMUtilityService descargados en Miércoles 20/05/2026
+; Navision Axapta Class: INDCRMUtilityService descargados en Martes 26/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -478,7 +478,7 @@ Formatversion: 1
         #}
       ENDSOURCE
       SOURCE #sendInternalApiMail
-        #// Purpose: Generic Axapta mail helper that calls IND_INTERNAL_API through the COM client DLL.
+        #// Purpose: CRM-facing mail facade. The global DLL call lives in INDInternalApiClientServer.
         #static server boolean sendInternalApiMail(
         #    str _companyId,
         #    str _fromEmail,
@@ -495,19 +495,13 @@ Formatversion: 1
         #{
         #    ;
         #
-        #    return INDCRMUtilityService::sendInternalApiMailEx(
+        #    return INDInternalApiClientServer::sendInternalApiMail(
         #        _companyId,
         #        _fromEmail,
-        #        '',
         #        _toEmails,
-        #        '',
-        #        '',
-        #        '',
         #        _subject,
         #        _htmlBody,
         #        _textBody,
-        #        false,
-        #        'normal',
         #        _sourceProcess,
         #        _eventType,
         #        _aggregateType,
@@ -518,7 +512,7 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #sendInternalApiMailEx
-        #// Purpose: Extended generic mail helper with CC, BCC, Reply-To, display name and importance support.
+        #// Purpose: CRM-facing extended mail facade. The global DLL call lives in INDInternalApiClientServer.
         #static server boolean sendInternalApiMailEx(
         #    str _companyId,
         #    str _fromEmail,
@@ -539,78 +533,27 @@ Formatversion: 1
         #    str _idempotencyKey,
         #    str _correlationId = '')
         #{
-        #    str baseUrl;
-        #    str clientId;
-        #    str clientSecret;
-        #    str importance;
-        #    boolean sentOk;
-        #    COM internalApiClient;
         #    ;
         #
-        #    baseUrl      = ParameterTable::find().INDInternalApiBaseUrl;
-        #    clientId     = ParameterTable::find().INDInternalApiClientId;
-        #    clientSecret = ParameterTable::find().INDInternalApiClientSecret;
-        #
-        #    if (!baseUrl || !clientId || !clientSecret)
-        #    {
-        #        warning("No se envio email: falta configuracion de IND_INTERNAL_API.");
-        #        return false;
-        #    }
-        #
-        #    if (!_fromEmail || !_toEmails || !_subject || (!_htmlBody && !_textBody))
-        #    {
-        #        warning("No se envio email: faltan From, To, Subject o Body.");
-        #        return false;
-        #    }
-        #
-        #    importance = strLwr(strLRTrim(_importance));
-        #    if (!importance || (importance != 'low' && importance != 'normal' && importance != 'high'))
-        #        importance = 'normal';
-        #
-        #    try
-        #    {
-        #        internalApiClient = new COM("IND.InternalApiClient");
-        #        sentOk = internalApiClient.SendMailEx(
-        #            baseUrl,
-        #            clientId,
-        #            clientSecret,
-        #            _fromEmail,
-        #            _fromDisplayName,
-        #            _toEmails,
-        #            _ccEmails,
-        #            _bccEmails,
-        #            _replyToEmails,
-        #            _subject,
-        #            _htmlBody,
-        #            _textBody,
-        #            _saveToSentItems,
-        #            importance,
-        #            _companyId,
-        #            'Axapta',
-        #            _sourceProcess,
-        #            _eventType,
-        #            _aggregateType,
-        #            _aggregateId,
-        #            _idempotencyKey,
-        #            _correlationId);
-        #
-        #        if (!sentOk)
-        #            warning("Email no aceptado por IND_INTERNAL_API.");
-        #
-        #        return sentOk;
-        #    }
-        #    catch (Exception::CLRError)
-        #    {
-        #        warning("Error CLR/COM enviando email por IND_INTERNAL_API.");
-        #        return false;
-        #    }
-        #    catch (Exception::Error)
-        #    {
-        #        warning("Error enviando email por IND_INTERNAL_API.");
-        #        return false;
-        #    }
-        #
-        #    return false;
+        #    return INDInternalApiClientServer::sendInternalApiMailEx(
+        #        _companyId,
+        #        _fromEmail,
+        #        _fromDisplayName,
+        #        _toEmails,
+        #        _ccEmails,
+        #        _bccEmails,
+        #        _replyToEmails,
+        #        _subject,
+        #        _htmlBody,
+        #        _textBody,
+        #        _saveToSentItems,
+        #        _importance,
+        #        _sourceProcess,
+        #        _eventType,
+        #        _aggregateType,
+        #        _aggregateId,
+        #        _idempotencyKey,
+        #        _correlationId);
         #}
         #
       ENDSOURCE

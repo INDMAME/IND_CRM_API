@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 21/05/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Martes 26/05/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -113,6 +113,29 @@ Formatversion: 1
         #            strFmt('%1', date2Str(_ticketHeader.TicketDate, 123, 2,2,2,2,4)),
         #            strFmt('%1', _ticketHeader.TicketTime)
         #           ];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #buildExpenseSheetWebLink
+        #// Purpose: Builds the CRM web resolver link for one expense sheet.
+        #static server str buildExpenseSheetWebLink(str _companyId, str _hojaGastosId, str _source = 'axapta')
+        #{
+        #    str webBaseUrl;
+        #    ;
+        #
+        #    webBaseUrl = INDDefaultParameters::find().InternalAPIUrlService;//APIURLInternalService;
+        #    webBaseUrl = strLRTrim(webBaseUrl);
+        #
+        #    while (strLen(webBaseUrl) > 0 && subStr(webBaseUrl, strLen(webBaseUrl), 1) == '/')
+        #        webBaseUrl = subStr(webBaseUrl, 1, strLen(webBaseUrl) - 1);
+        #
+        #    if (!webBaseUrl || !_companyId || !_hojaGastosId)
+        #        return '';
+        #
+        #    return webBaseUrl +
+        #           '/Gastos/ExpenseSheetLink?hojaGastosId=' + INDCRMExpenseSheetService::urlEncode(_hojaGastosId) +
+        #           '&targetCompanyId=' + INDCRMExpenseSheetService::urlEncode(_companyId) +
+        #           '&source=' + INDCRMExpenseSheetService::urlEncode(_source);
         #}
         #
       ENDSOURCE
@@ -2179,280 +2202,6 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
-      SOURCE #urlEncode
-        #// Purpose: Minimal query-string encoder for expense sheet web links.
-        #static server str urlEncode(str _value)
-        #{
-        #    str encoded = strFmt("%1", _value);
-        #    ;
-        #
-        #    encoded = strReplace(encoded, '%', '%25');
-        #    encoded = strReplace(encoded, ' ', '%20');
-        #    encoded = strReplace(encoded, '&', '%26');
-        #    encoded = strReplace(encoded, '?', '%3F');
-        #    encoded = strReplace(encoded, '=', '%3D');
-        #    encoded = strReplace(encoded, '#', '%23');
-        #    encoded = strReplace(encoded, '+', '%2B');
-        #    encoded = strReplace(encoded, '/', '%2F');
-        #
-        #    return encoded;
-        #}
-        #
-      ENDSOURCE
-      SOURCE #buildExpenseSheetWebLink
-        #// Purpose: Builds the CRM web resolver link for one expense sheet.
-        #static server str buildExpenseSheetWebLink(str _companyId, str _hojaGastosId, str _source = 'axapta')
-        #{
-        #    str webBaseUrl;
-        #    ;
-        #
-        #    webBaseUrl = ParameterTable::find().INDCrmWebBaseUrl;
-        #    webBaseUrl = strLRTrim(webBaseUrl);
-        #
-        #    while (strLen(webBaseUrl) > 0 && subStr(webBaseUrl, strLen(webBaseUrl), 1) == '/')
-        #        webBaseUrl = subStr(webBaseUrl, 1, strLen(webBaseUrl) - 1);
-        #
-        #    if (!webBaseUrl || !_companyId || !_hojaGastosId)
-        #        return '';
-        #
-        #    return webBaseUrl +
-        #           '/Gastos/ExpenseSheetLink?hojaGastosId=' + INDCRMExpenseSheetService::urlEncode(_hojaGastosId) +
-        #           '&targetCompanyId=' + INDCRMExpenseSheetService::urlEncode(_companyId) +
-        #           '&source=' + INDCRMExpenseSheetService::urlEncode(_source);
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getPersonaEmailByUserId
-        #// Purpose: Resolves INDPersonaTable.Email for AX or CRM user identifiers.
-        #static server str getPersonaEmailByUserId(UserId _userId)
-        #{
-        #    INDPersonaTable personaTable;
-        #    CRMUsuarioTable crmUsuarioTable;
-        #    ;
-        #
-        #    if (!_userId)
-        #        return '';
-        #
-        #    personaTable = INDPersonaTable::findByAxUserId(_userId);
-        #    if (personaTable.RecId && personaTable.Email)
-        #        return personaTable.Email;
-        #
-        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_userId);
-        #    if (crmUsuarioTable.RecId)
-        #    {
-        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #        if (personaTable.RecId && personaTable.Email)
-        #            return personaTable.Email;
-        #    }
-        #
-        #    crmUsuarioTable = CRMUsuarioTable::Find(_userId);
-        #    if (crmUsuarioTable.RecId)
-        #    {
-        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #        if (personaTable.RecId && personaTable.Email)
-        #            return personaTable.Email;
-        #    }
-        #
-        #    personaTable = INDPersonaTable::Find(_userId);
-        #    if (personaTable.RecId && personaTable.Email)
-        #        return personaTable.Email;
-        #
-        #    return '';
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getPersonaNameByUserId
-        #// Purpose: Resolves a display name for AX or CRM user identifiers.
-        #static server str getPersonaNameByUserId(UserId _userId)
-        #{
-        #    INDPersonaTable personaTable;
-        #    CRMUsuarioTable crmUsuarioTable;
-        #    ;
-        #
-        #    if (!_userId)
-        #        return '';
-        #
-        #    personaTable = INDPersonaTable::findByAxUserId(_userId);
-        #    if (personaTable.RecId && personaTable.Name)
-        #        return personaTable.Name;
-        #
-        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_userId);
-        #    if (crmUsuarioTable.RecId)
-        #    {
-        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #        if (personaTable.RecId && personaTable.Name)
-        #            return personaTable.Name;
-        #    }
-        #
-        #    crmUsuarioTable = CRMUsuarioTable::Find(_userId);
-        #    if (crmUsuarioTable.RecId)
-        #    {
-        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #        if (personaTable.RecId && personaTable.Name)
-        #            return personaTable.Name;
-        #    }
-        #
-        #    personaTable = INDPersonaTable::Find(_userId);
-        #    if (personaTable.RecId && personaTable.Name)
-        #        return personaTable.Name;
-        #
-        #    return '';
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getPersonaEmailByUserIdForApi
-        #// Purpose: API wrapper for email resolution. Output extras: [email, displayName].
-        #static server container getPersonaEmailByUserIdForApi(container _data)
-        #{
-        #    DataAreaId companyId;
-        #    UserId     userId;
-        #    str        email;
-        #    str        displayName;
-        #    ;
-        #
-        #    companyId = INDCRMUtilityService::getCompany(_data);
-        #    if (!companyId)
-        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
-        #
-        #    if (conLen(_data) < 2)
-        #        return INDCRMUtilityService::buildHeader(false, 'UserId es obligatorio.', conNull());
-        #
-        #    userId = conPeek(_data, 2);
-        #
-        #    changecompany(companyId)
-        #    {
-        #        email       = INDCRMExpenseSheetService::getPersonaEmailByUserId(userId);
-        #        displayName = INDCRMExpenseSheetService::getPersonaNameByUserId(userId);
-        #    }
-        #
-        #    if (!email)
-        #        return INDCRMUtilityService::buildHeader(false, 'Email no encontrado.', conNull());
-        #
-        #    return INDCRMUtilityService::buildHeader(true, 'OK', [email, displayName]);
-        #}
-        #
-      ENDSOURCE
-      SOURCE #getExpenseSheetNotificationRecipients
-        #// Purpose: Resolves notification recipients for expense sheet status events.
-        #static server container getExpenseSheetNotificationRecipients(container _data)
-        #{
-        #    DataAreaId         companyId;
-        #    CRMHojaGastosId    hojaId;
-        #    str                eventType;
-        #    CRMHojaGastosTable header;
-        #    CRMUsuarioTable    crmUsuarioTable;
-        #    INDPersonaTable    personaTable;
-        #    Set                setSubordinados;
-        #    container          recipientsCon = conNull();
-        #    container          recipientRow;
-        #    str                creatorEmail;
-        #    str                creatorName;
-        #    ;
-        #
-        #    companyId = INDCRMUtilityService::getCompany(_data);
-        #    if (!companyId)
-        #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
-        #
-        #    if (conLen(_data) < 3)
-        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan CompanyId, HojaGastosId y EventType.', conNull()), conNull()];
-        #
-        #    hojaId    = conPeek(_data, 2);
-        #    eventType = conPeek(_data, 3);
-        #
-        #    changecompany(companyId)
-        #    {
-        #        header = CRMHojaGastosTable::Find(hojaId);
-        #        if (!header.RecId)
-        #            return [INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull()), conNull()];
-        #
-        #        if (eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetPaid')
-        #        {
-        #            creatorEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(header.INDCreatedByUserId);
-        #            creatorName  = INDCRMExpenseSheetService::getPersonaNameByUserId(header.INDCreatedByUserId);
-        #            if (creatorEmail)
-        #            {
-        #                recipientRow = [creatorEmail, creatorName, 'Owner', strFmt('%1', header.INDCreatedByUserId)];
-        #                recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
-        #            }
-        #        }
-        #        else if (eventType == 'ExpenseSheetApprovalRequested')
-        #        {
-        #            while select crmUsuarioTable
-        #            {
-        #                setSubordinados = crmUsuarioTable.SetSubordinados();
-        #                if (setSubordinados && setSubordinados.in(header.UserId) && crmUsuarioTable.UserId != header.UserId)
-        #                {
-        #                    personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
-        #                    if (personaTable.RecId && personaTable.Email)
-        #                    {
-        #                        recipientRow = [personaTable.Email, personaTable.Name, 'Approver', strFmt('%1', crmUsuarioTable.UserId)];
-        #                        recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
-        #                    }
-        #                }
-        #            }
-        #        }
-        #        else
-        #        {
-        #            return [INDCRMUtilityService::buildHeader(false, 'EventType no soportado.', conNull()), conNull()];
-        #        }
-        #    }
-        #
-        #    if (conLen(recipientsCon) == 0)
-        #        return [INDCRMUtilityService::buildHeader(false, 'Sin destinatarios con email.', conNull()), conNull()];
-        #
-        #    return [INDCRMUtilityService::buildHeader(true, 'OK', conNull()), recipientsCon];
-        #}
-        #
-      ENDSOURCE
-      SOURCE #sendExpenseSheetPaidNotification
-        #// Purpose: Sends the Axapta-only notification after an expense sheet payment is posted.
-        #static server boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expenseSheet)
-        #{
-        #    DataAreaId companyId;
-        #    str        fromEmail;
-        #    str        toEmail;
-        #    str        link;
-        #    str        subject;
-        #    str        htmlBody;
-        #    str        textBody;
-        #    str        idempotencyKey;
-        #    ;
-        #
-        #    if (!_expenseSheet.RecId)
-        #        return false;
-        #
-        #    companyId = curext();
-        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(curUserId());
-        #    toEmail   = INDCRMExpenseSheetService::getPersonaEmailByUserId(_expenseSheet.INDCreatedByUserId);
-        #    link      = INDCRMExpenseSheetService::buildExpenseSheetWebLink(companyId, _expenseSheet.HojaGastosId, 'axapta');
-        #
-        #    if (!fromEmail || !toEmail || !link)
-        #    {
-        #        warning(strFmt('No se envio email de pago para hoja %1: faltan From, To o link.', _expenseSheet.HojaGastosId));
-        #        return false;
-        #    }
-        #
-        #    subject = strFmt('Hoja de gastos %1 pagada', _expenseSheet.HojaGastosId);
-        #    textBody = strFmt('La hoja de gastos %1 ha sido pagada.\n%2', _expenseSheet.HojaGastosId, link);
-        #    htmlBody = strFmt('<p>La hoja de gastos %1 ha sido pagada.</p><p><a href="%2">%2</a></p>', _expenseSheet.HojaGastosId, link);
-        #    idempotencyKey = strFmt('ExpenseSheetPaid:%1:%2:%3', companyId, _expenseSheet.HojaGastosId, _expenseSheet.Voucher);
-        #
-        #    return INDCRMUtilityService::sendInternalApiMail(
-        #        companyId,
-        #        fromEmail,
-        #        toEmail,
-        #        subject,
-        #        htmlBody,
-        #        textBody,
-        #        'AxaptaExpenseSheetPayment',
-        #        'ExpenseSheetPaid',
-        #        'ExpenseSheet',
-        #        _expenseSheet.HojaGastosId,
-        #        idempotencyKey,
-        #        strFmt('%1', _expenseSheet.RecId));
-        #}
-        #
-      ENDSOURCE
       SOURCE #getExpenseSheet
         #// Method: indExpenseSheetGet
         #// Purpose: Get header + lines by CompanyId + crmUserId + HojaGastosId.
@@ -2560,6 +2309,78 @@ Formatversion: 1
         #    }
         #
         #    return [INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull()), conNull()];
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getExpenseSheetNotificationRecipients
+        #// Purpose: Resolves notification recipients for expense sheet status events.
+        #static server container getExpenseSheetNotificationRecipients(container _data)
+        #{
+        #    DataAreaId         companyId;
+        #    CRMHojaGastosId    hojaId;
+        #    str                eventType;
+        #    CRMHojaGastosTable header;
+        #    CRMUsuarioTable    crmUsuarioTable;
+        #    INDPersonaTable    personaTable;
+        #    Set                setSubordinados;
+        #    container          recipientsCon = conNull();
+        #    container          recipientRow;
+        #    str                creatorEmail;
+        #    str                creatorName;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #    if (!companyId)
+        #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
+        #
+        #    if (conLen(_data) < 3)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan CompanyId, HojaGastosId y EventType.', conNull()), conNull()];
+        #
+        #    hojaId    = conPeek(_data, 2);
+        #    eventType = conPeek(_data, 3);
+        #
+        #    changecompany(companyId)
+        #    {
+        #        header = CRMHojaGastosTable::Find(hojaId);
+        #        if (!header.RecId)
+        #            return [INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull()), conNull()];
+        #
+        #        if (eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetPaid')
+        #        {
+        #            creatorEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(header.INDCreatedByUserId);
+        #            creatorName  = INDCRMExpenseSheetService::getPersonaNameByUserId(header.INDCreatedByUserId);
+        #            if (creatorEmail)
+        #            {
+        #                recipientRow = [creatorEmail, creatorName, 'Owner', strFmt('%1', header.INDCreatedByUserId)];
+        #                recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
+        #            }
+        #        }
+        #        else if (eventType == 'ExpenseSheetApprovalRequested')
+        #        {
+        #            while select crmUsuarioTable
+        #            {
+        #                setSubordinados = crmUsuarioTable.SetSubordinados();
+        #                if (setSubordinados && setSubordinados.in(header.UserId) && crmUsuarioTable.UserId != header.UserId)
+        #                {
+        #                    personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
+        #                    if (personaTable.RecId && personaTable.Email)
+        #                    {
+        #                        recipientRow = [personaTable.Email, personaTable.Name, 'Approver', strFmt('%1', crmUsuarioTable.UserId)];
+        #                        recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
+        #                    }
+        #                }
+        #            }
+        #        }
+        #        else
+        #        {
+        #            return [INDCRMUtilityService::buildHeader(false, 'EventType no soportado.', conNull()), conNull()];
+        #        }
+        #    }
+        #
+        #    if (conLen(recipientsCon) == 0)
+        #        return [INDCRMUtilityService::buildHeader(false, 'Sin destinatarios con email.', conNull()), conNull()];
+        #
+        #    return [INDCRMUtilityService::buildHeader(true, 'OK', conNull()), recipientsCon];
         #}
         #
       ENDSOURCE
@@ -3284,6 +3105,116 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #getPersonaEmailByUserId
+        #// Purpose: Resolves INDPersonaTable.Email for AX or CRM user identifiers.
+        #static server str getPersonaEmailByUserId(UserId _userId)
+        #{
+        #    INDPersonaTable personaTable;
+        #    CRMUsuarioTable crmUsuarioTable;
+        #    ;
+        #
+        #    if (!_userId)
+        #        return '';
+        #
+        #    personaTable = INDPersonaTable::findByAxUserId(_userId);
+        #    if (personaTable.RecId && personaTable.Email)
+        #        return personaTable.Email;
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_userId);
+        #    if (crmUsuarioTable.RecId)
+        #    {
+        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
+        #        if (personaTable.RecId && personaTable.Email)
+        #            return personaTable.Email;
+        #    }
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find(_userId);
+        #    if (crmUsuarioTable.RecId)
+        #    {
+        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
+        #        if (personaTable.RecId && personaTable.Email)
+        #            return personaTable.Email;
+        #    }
+        #
+        #    personaTable = INDPersonaTable::Find(_userId);
+        #    if (personaTable.RecId && personaTable.Email)
+        #        return personaTable.Email;
+        #
+        #    return '';
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getPersonaEmailByUserIdForApi
+        #// Purpose: API wrapper for email resolution. Output extras: [email, displayName].
+        #static server container getPersonaEmailByUserIdForApi(container _data)
+        #{
+        #    DataAreaId companyId;
+        #    UserId     userId;
+        #    str        email;
+        #    str        displayName;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 2)
+        #        return INDCRMUtilityService::buildHeader(false, 'UserId es obligatorio.', conNull());
+        #
+        #    userId = conPeek(_data, 2);
+        #
+        #    changecompany(companyId)
+        #    {
+        #        email       = INDCRMExpenseSheetService::getPersonaEmailByUserId(userId);
+        #        displayName = INDCRMExpenseSheetService::getPersonaNameByUserId(userId);
+        #    }
+        #
+        #    if (!email)
+        #        return INDCRMUtilityService::buildHeader(false, 'Email no encontrado.', conNull());
+        #
+        #    return INDCRMUtilityService::buildHeader(true, 'OK', [email, displayName]);
+        #}
+        #
+      ENDSOURCE
+      SOURCE #getPersonaNameByUserId
+        #// Purpose: Resolves a display name for AX or CRM user identifiers.
+        #static server str getPersonaNameByUserId(UserId _userId)
+        #{
+        #    INDPersonaTable personaTable;
+        #    CRMUsuarioTable crmUsuarioTable;
+        #    ;
+        #
+        #    if (!_userId)
+        #        return '';
+        #
+        #    personaTable = INDPersonaTable::findByAxUserId(_userId);
+        #    if (personaTable.RecId && personaTable.Name)
+        #        return personaTable.Name;
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_userId);
+        #    if (crmUsuarioTable.RecId)
+        #    {
+        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
+        #        if (personaTable.RecId && personaTable.Name)
+        #            return personaTable.Name;
+        #    }
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find(_userId);
+        #    if (crmUsuarioTable.RecId)
+        #    {
+        #        personaTable = INDPersonaTable::findByCRM(crmUsuarioTable.RecId);
+        #        if (personaTable.RecId && personaTable.Name)
+        #            return personaTable.Name;
+        #    }
+        #
+        #    personaTable = INDPersonaTable::Find(_userId);
+        #    if (personaTable.RecId && personaTable.Name)
+        #        return personaTable.Name;
+        #
+        #    return '';
+        #}
+        #
+      ENDSOURCE
       SOURCE #getProjectsList
         #// Method: getProjectsList
         #// Purpose: Returns container of projects with INDTransDateCierreCostes empty (0D) filtered by INDSearchKey.
@@ -3507,6 +3438,299 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #propagateExpenseSheetCurrencyDefaults
+        #// Method: propagateExpenseSheetCurrencyDefaults
+        #// Purpose: Applies header currency and exchange rate to all expense sheet lines after external confirmation.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = HojaGastosId
+        #//  - _data[4] = recalculateAmountMST (optional: 1 yes, 0 no; default yes)
+        #//  - _data[5] = force (optional: 1 yes, 0 no; default no)
+        #static server container propagateExpenseSheetCurrencyDefaults(container _data)
+        #{
+        #    DataAreaId          companyId;
+        #    CRMUserId           crmUserId;
+        #    UserId              axUserId;
+        #    CRMHojaGastosId     hojaId;
+        #    CRMHojaGastosTable  header;
+        #    boolean             recalculateAmountMST;
+        #    boolean             force;
+        #    str 16              recalculateRaw;
+        #    str 16              forceRaw;
+        #    int                 updated;
+        #    int                 startLine;
+        #    str                 msg;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 3)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan al menos 3 campos.', conNull());
+        #
+        #    axUserId             = conPeek(_data, 2);
+        #    hojaId               = conPeek(_data, 3);
+        #    recalculateAmountMST = true;
+        #    force                = false;
+        #
+        #    if (conLen(_data) >= 4)
+        #    {
+        #        recalculateRaw = strLwr(strLRTrim(strFmt('%1', conPeek(_data, 4))));
+        #        recalculateAmountMST = !(recalculateRaw == '0' || recalculateRaw == 'false' || recalculateRaw == 'no');
+        #    }
+        #
+        #    if (conLen(_data) >= 5)
+        #    {
+        #        forceRaw = strLwr(strLRTrim(strFmt('%1', conPeek(_data, 5))));
+        #        force = forceRaw == '1' || forceRaw == 'true' || forceRaw == 'yes';
+        #    }
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId || !hojaId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #
+        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
+        #
+        #            if (!header.RecId)
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
+        #
+        #            if (INDCRMUtilityService::isHeaderLocked(header))
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
+        #
+        #            if (header.isVariousCurrencyDefault())
+        #                return INDCRMUtilityService::buildHeader(false, 'CurrencyCode de cabecera es el valor varios; indique una divisa real antes de propagar.', conNull());
+        #
+        #            if (!force && header.hasMultiCurrencyLines())
+        #                return INDCRMUtilityService::buildHeader(false, 'La hoja de gastos tiene lineas con multiples divisas; no se puede propagar la divisa de cabecera.', conNull());
+        #
+        #            if (!header.CurrencyCode)
+        #                return INDCRMUtilityService::buildHeader(false, 'CurrencyCode de cabecera es obligatorio para propagar divisa.', conNull());
+        #
+        #            if (header.CurrencyCode != CompanyInfo::standardCurrency() && header.ExchRate <= 0)
+        #                return INDCRMUtilityService::buildHeader(false, strFmt('ExchRate debe ser mayor que 0 cuando CurrencyCode no es %1.', CompanyInfo::standardCurrency()), conNull());
+        #
+        #            updated = header.updateCurrencyDefaultsInLines(recalculateAmountMST);
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Divisa y tipo de cambio propagados correctamente.',
+        #                                                     [header.HojaGastosId, strFmt('%1', updated), recalculateAmountMST ? '1' : '0']);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #propagateExpenseSheetProjectDefault
+        #// Method: propagateExpenseSheetProjectDefault
+        #// Purpose: Applies header project to all expense sheet lines after external confirmation.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = HojaGastosId
+        #static server container propagateExpenseSheetProjectDefault(container _data)
+        #{
+        #    DataAreaId          companyId;
+        #    CRMUserId           crmUserId;
+        #    UserId              axUserId;
+        #    CRMHojaGastosId     hojaId;
+        #    CRMHojaGastosTable  header;
+        #    int                 updated;
+        #    int                 startLine;
+        #    str                 msg;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 3)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
+        #
+        #    axUserId = conPeek(_data, 2);
+        #    hojaId   = conPeek(_data, 3);
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId || !hojaId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #
+        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
+        #
+        #            if (!header.RecId)
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
+        #
+        #            if (INDCRMUtilityService::isHeaderLocked(header))
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
+        #
+        #            if (header.isVariousProjectDefault())
+        #                return INDCRMUtilityService::buildHeader(false, 'ProjId de cabecera es el valor varios; indique un proyecto real antes de propagar.', conNull());
+        #
+        #            if (!header.ProjId)
+        #                return INDCRMUtilityService::buildHeader(false, 'ProjId de cabecera es obligatorio para propagar proyecto.', conNull());
+        #
+        #            updated = header.updateProjectDefaultInLines();
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Proyecto de cabecera propagado correctamente.',
+        #                                                     [header.HojaGastosId, strFmt('%1', updated), '0']);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
+      SOURCE #propagateExpenseSheetReimbursableExpense
+        #// Method: propagateExpenseSheetReimbursableExpense
+        #// Purpose: Applies header reimbursable expense value to all expense sheet lines after external confirmation.
+        #// Input:
+        #//  - _data[1] = CompanyId
+        #//  - _data[2] = axUserId
+        #//  - _data[3] = HojaGastosId
+        #static server container propagateExpenseSheetReimbursableExpense(container _data)
+        #{
+        #    DataAreaId          companyId;
+        #    CRMUserId           crmUserId;
+        #    UserId              axUserId;
+        #    CRMHojaGastosId     hojaId;
+        #    CRMHojaGastosTable  header;
+        #    int                 updated;
+        #    int                 startLine;
+        #    str                 msg;
+        #    ;
+        #
+        #    companyId = INDCRMUtilityService::getCompany(_data);
+        #
+        #    if (!companyId)
+        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
+        #
+        #    if (conLen(_data) < 3)
+        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
+        #
+        #    axUserId = conPeek(_data, 2);
+        #    hojaId   = conPeek(_data, 3);
+        #
+        #    startLine = infolog.line();
+        #
+        #    try
+        #    {
+        #        changecompany(companyId)
+        #        {
+        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
+        #            if (!crmUserId || !hojaId)
+        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
+        #
+        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
+        #
+        #            if (!header.RecId)
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
+        #
+        #            if (INDCRMUtilityService::isHeaderLocked(header))
+        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
+        #
+        #            if (header.isVariousReimbursableExpenseDefault())
+        #                return INDCRMUtilityService::buildHeader(false, 'ReimbursableExpense de cabecera es Both; indique No o Yes antes de propagar.', conNull());
+        #
+        #            updated = header.updateReimbursableExpenseInLines();
+        #
+        #            return INDCRMUtilityService::buildHeader(true, 'Gasto reembolsable propagado correctamente.',
+        #                                                     [header.HojaGastosId, strFmt('%1', updated), '0']);
+        #        }
+        #    }
+        #    catch (Exception::Deadlock)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        ttsabort;
+        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        ttsabort;
+        #
+        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
+        #        if (!msg)
+        #            msg = 'Error en el proceso. Revisar infolog.';
+        #
+        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
+        #    }
+        #
+        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
+        #}
+        #
+      ENDSOURCE
       SOURCE #refreshTicketStatusByFileId
         #// Method: refreshTicketStatusByFileId
         #// Purpose: Keeps INDTicketInfoTable.Status in sync with expense-sheet line assignment.
@@ -3556,6 +3780,55 @@ Formatversion: 1
         #
         #        ticketHeader.update();
         #    }
+        #}
+        #
+      ENDSOURCE
+      SOURCE #sendExpenseSheetPaidNotification
+        #// Purpose: Sends the Axapta-only notification after an expense sheet payment is posted.
+        #static server boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expenseSheet)
+        #{
+        #    DataAreaId companyId;
+        #    str        fromEmail;
+        #    str        toEmail;
+        #    str        link;
+        #    str        subject;
+        #    str        htmlBody;
+        #    str        textBody;
+        #    str        idempotencyKey;
+        #    ;
+        #
+        #    if (!_expenseSheet.RecId)
+        #        return false;
+        #
+        #    companyId = curext();
+        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(curUserId());
+        #    toEmail   = INDCRMExpenseSheetService::getPersonaEmailByUserId(_expenseSheet.INDCreatedByUserId);
+        #    link      = INDCRMExpenseSheetService::buildExpenseSheetWebLink(companyId, _expenseSheet.HojaGastosId, 'axapta');
+        #
+        #    if (!fromEmail || !toEmail || !link)
+        #    {
+        #        warning(strFmt('No se envio email de pago para hoja %1: faltan From, To o link.', _expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    subject = strFmt('Hoja de gastos %1 pagada', _expenseSheet.HojaGastosId);
+        #    textBody = strFmt('La hoja de gastos %1 ha sido pagada.\n%2', _expenseSheet.HojaGastosId, link);
+        #    htmlBody = strFmt('<p>La hoja de gastos %1 ha sido pagada.</p><p><a href="%2">%2</a></p>', _expenseSheet.HojaGastosId, link);
+        #    idempotencyKey = strFmt('ExpenseSheetPaid:%1:%2:%3', companyId, _expenseSheet.HojaGastosId, _expenseSheet.Voucher);
+        #
+        #    return INDCRMUtilityService::sendInternalApiMail(
+        #        companyId,
+        #        fromEmail,
+        #        toEmail,
+        #        subject,
+        #        htmlBody,
+        #        textBody,
+        #        'AxaptaExpenseSheetPayment',
+        #        'ExpenseSheetPaid',
+        #        'ExpenseSheet',
+        #        _expenseSheet.HojaGastosId,
+        #        idempotencyKey,
+        #        strFmt('%1', _expenseSheet.RecId));
         #}
         #
       ENDSOURCE
@@ -4943,6 +5216,26 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #urlEncode
+        #// Purpose: Minimal query-string encoder for expense sheet web links.
+        #static server str urlEncode(str _value)
+        #{
+        #    str encoded = strFmt("%1", _value);
+        #    ;
+        #
+        #    encoded = strReplace(encoded, '%', '%25');
+        #    encoded = strReplace(encoded, ' ', '%20');
+        #    encoded = strReplace(encoded, '&', '%26');
+        #    encoded = strReplace(encoded, '?', '%3F');
+        #    encoded = strReplace(encoded, '=', '%3D');
+        #    encoded = strReplace(encoded, '#', '%23');
+        #    encoded = strReplace(encoded, '+', '%2B');
+        #    encoded = strReplace(encoded, '/', '%2F');
+        #
+        #    return encoded;
+        #}
+        #
+      ENDSOURCE
       SOURCE #validateTicketDateTimeForApi
         #// Method: validateTicketDateTimeForApi
         #// Purpose: Runs INDTicketInfoTable date/time uniqueness validation before API writes.
@@ -4959,299 +5252,6 @@ Formatversion: 1
         #        msg = 'Ya existe otro ticket con la misma fecha y hora.';
         #
         #    return msg;
-        #}
-        #
-      ENDSOURCE
-      SOURCE #propagateExpenseSheetCurrencyDefaults
-        #// Method: propagateExpenseSheetCurrencyDefaults
-        #// Purpose: Applies header currency and exchange rate to all expense sheet lines after external confirmation.
-        #// Input:
-        #//  - _data[1] = CompanyId
-        #//  - _data[2] = axUserId
-        #//  - _data[3] = HojaGastosId
-        #//  - _data[4] = recalculateAmountMST (optional: 1 yes, 0 no; default yes)
-        #//  - _data[5] = force (optional: 1 yes, 0 no; default no)
-        #static server container propagateExpenseSheetCurrencyDefaults(container _data)
-        #{
-        #    DataAreaId          companyId;
-        #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
-        #    CRMHojaGastosId     hojaId;
-        #    CRMHojaGastosTable  header;
-        #    boolean             recalculateAmountMST;
-        #    boolean             force;
-        #    str 16              recalculateRaw;
-        #    str 16              forceRaw;
-        #    int                 updated;
-        #    int                 startLine;
-        #    str                 msg;
-        #    ;
-        #
-        #    companyId = INDCRMUtilityService::getCompany(_data);
-        #
-        #    if (!companyId)
-        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
-        #
-        #    if (conLen(_data) < 3)
-        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan al menos 3 campos.', conNull());
-        #
-        #    axUserId             = conPeek(_data, 2);
-        #    hojaId               = conPeek(_data, 3);
-        #    recalculateAmountMST = true;
-        #    force                = false;
-        #
-        #    if (conLen(_data) >= 4)
-        #    {
-        #        recalculateRaw = strLwr(strLRTrim(strFmt('%1', conPeek(_data, 4))));
-        #        recalculateAmountMST = !(recalculateRaw == '0' || recalculateRaw == 'false' || recalculateRaw == 'no');
-        #    }
-        #
-        #    if (conLen(_data) >= 5)
-        #    {
-        #        forceRaw = strLwr(strLRTrim(strFmt('%1', conPeek(_data, 5))));
-        #        force = forceRaw == '1' || forceRaw == 'true' || forceRaw == 'yes';
-        #    }
-        #
-        #    startLine = infolog.line();
-        #
-        #    try
-        #    {
-        #        changecompany(companyId)
-        #        {
-        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #            if (!crmUserId || !hojaId)
-        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
-        #
-        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
-        #
-        #            if (!header.RecId)
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
-        #
-        #            if (INDCRMUtilityService::isHeaderLocked(header))
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
-        #
-        #            if (header.isVariousCurrencyDefault())
-        #                return INDCRMUtilityService::buildHeader(false, 'CurrencyCode de cabecera es el valor varios; indique una divisa real antes de propagar.', conNull());
-        #
-        #            if (!force && header.hasMultiCurrencyLines())
-        #                return INDCRMUtilityService::buildHeader(false, 'La hoja de gastos tiene lineas con multiples divisas; no se puede propagar la divisa de cabecera.', conNull());
-        #
-        #            if (!header.CurrencyCode)
-        #                return INDCRMUtilityService::buildHeader(false, 'CurrencyCode de cabecera es obligatorio para propagar divisa.', conNull());
-        #
-        #            if (header.CurrencyCode != CompanyInfo::standardCurrency() && header.ExchRate <= 0)
-        #                return INDCRMUtilityService::buildHeader(false, strFmt('ExchRate debe ser mayor que 0 cuando CurrencyCode no es %1.', CompanyInfo::standardCurrency()), conNull());
-        #
-        #            updated = header.updateCurrencyDefaultsInLines(recalculateAmountMST);
-        #
-        #            return INDCRMUtilityService::buildHeader(true, 'Divisa y tipo de cambio propagados correctamente.',
-        #                                                     [header.HojaGastosId, strFmt('%1', updated), recalculateAmountMST ? '1' : '0']);
-        #        }
-        #    }
-        #    catch (Exception::Deadlock)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
-        #    }
-        #    catch (Exception::DDEerror)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
-        #    }
-        #    catch (Exception::Internal)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
-        #    }
-        #    catch (Exception::Error)
-        #    {
-        #        ttsabort;
-        #
-        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
-        #        if (!msg)
-        #            msg = 'Error en el proceso. Revisar infolog.';
-        #
-        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
-        #    }
-        #
-        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
-        #}
-        #
-      ENDSOURCE
-      SOURCE #propagateExpenseSheetProjectDefault
-        #// Method: propagateExpenseSheetProjectDefault
-        #// Purpose: Applies header project to all expense sheet lines after external confirmation.
-        #// Input:
-        #//  - _data[1] = CompanyId
-        #//  - _data[2] = axUserId
-        #//  - _data[3] = HojaGastosId
-        #static server container propagateExpenseSheetProjectDefault(container _data)
-        #{
-        #    DataAreaId          companyId;
-        #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
-        #    CRMHojaGastosId     hojaId;
-        #    CRMHojaGastosTable  header;
-        #    int                 updated;
-        #    int                 startLine;
-        #    str                 msg;
-        #    ;
-        #
-        #    companyId = INDCRMUtilityService::getCompany(_data);
-        #
-        #    if (!companyId)
-        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
-        #
-        #    if (conLen(_data) < 3)
-        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
-        #
-        #    axUserId = conPeek(_data, 2);
-        #    hojaId   = conPeek(_data, 3);
-        #
-        #    startLine = infolog.line();
-        #
-        #    try
-        #    {
-        #        changecompany(companyId)
-        #        {
-        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #            if (!crmUserId || !hojaId)
-        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
-        #
-        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
-        #
-        #            if (!header.RecId)
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
-        #
-        #            if (INDCRMUtilityService::isHeaderLocked(header))
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
-        #
-        #            if (header.isVariousProjectDefault())
-        #                return INDCRMUtilityService::buildHeader(false, 'ProjId de cabecera es el valor varios; indique un proyecto real antes de propagar.', conNull());
-        #
-        #            if (!header.ProjId)
-        #                return INDCRMUtilityService::buildHeader(false, 'ProjId de cabecera es obligatorio para propagar proyecto.', conNull());
-        #
-        #            updated = header.updateProjectDefaultInLines();
-        #
-        #            return INDCRMUtilityService::buildHeader(true, 'Proyecto de cabecera propagado correctamente.',
-        #                                                     [header.HojaGastosId, strFmt('%1', updated), '0']);
-        #        }
-        #    }
-        #    catch (Exception::Deadlock)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
-        #    }
-        #    catch (Exception::DDEerror)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
-        #    }
-        #    catch (Exception::Internal)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
-        #    }
-        #    catch (Exception::Error)
-        #    {
-        #        ttsabort;
-        #
-        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
-        #        if (!msg)
-        #            msg = 'Error en el proceso. Revisar infolog.';
-        #
-        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
-        #    }
-        #
-        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
-        #}
-        #
-      ENDSOURCE
-      SOURCE #propagateExpenseSheetReimbursableExpense
-        #// Method: propagateExpenseSheetReimbursableExpense
-        #// Purpose: Applies header reimbursable expense value to all expense sheet lines after external confirmation.
-        #// Input:
-        #//  - _data[1] = CompanyId
-        #//  - _data[2] = axUserId
-        #//  - _data[3] = HojaGastosId
-        #static server container propagateExpenseSheetReimbursableExpense(container _data)
-        #{
-        #    DataAreaId          companyId;
-        #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
-        #    CRMHojaGastosId     hojaId;
-        #    CRMHojaGastosTable  header;
-        #    int                 updated;
-        #    int                 startLine;
-        #    str                 msg;
-        #    ;
-        #
-        #    companyId = INDCRMUtilityService::getCompany(_data);
-        #
-        #    if (!companyId)
-        #        return INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull());
-        #
-        #    if (conLen(_data) < 3)
-        #        return INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan 3 campos.', conNull());
-        #
-        #    axUserId = conPeek(_data, 2);
-        #    hojaId   = conPeek(_data, 3);
-        #
-        #    startLine = infolog.line();
-        #
-        #    try
-        #    {
-        #        changecompany(companyId)
-        #        {
-        #            crmUserId = SysUserInfo::getCRMUsuarioTable(axUserId).UserId;
-        #            if (!crmUserId || !hojaId)
-        #                return INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull());
-        #
-        #            header = INDCRMUtilityService::findHeaderForUpdate(crmUserId, hojaId);
-        #
-        #            if (!header.RecId)
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull());
-        #
-        #            if (INDCRMUtilityService::isHeaderLocked(header))
-        #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
-        #
-        #            if (header.isVariousReimbursableExpenseDefault())
-        #                return INDCRMUtilityService::buildHeader(false, 'ReimbursableExpense de cabecera es Both; indique No o Yes antes de propagar.', conNull());
-        #
-        #            updated = header.updateReimbursableExpenseInLines();
-        #
-        #            return INDCRMUtilityService::buildHeader(true, 'Gasto reembolsable propagado correctamente.',
-        #                                                     [header.HojaGastosId, strFmt('%1', updated), '0']);
-        #        }
-        #    }
-        #    catch (Exception::Deadlock)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Deadlock detectado. Reintentar la operacion.', conNull());
-        #    }
-        #    catch (Exception::DDEerror)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, INDCRMUtilityService::getInfologMessagesSince(startLine), conNull());
-        #    }
-        #    catch (Exception::Internal)
-        #    {
-        #        ttsabort;
-        #        return INDCRMUtilityService::buildHeader(false, 'Error interno del sistema.', conNull());
-        #    }
-        #    catch (Exception::Error)
-        #    {
-        #        ttsabort;
-        #
-        #        msg = INDCRMUtilityService::getInfologMessagesSince(startLine);
-        #        if (!msg)
-        #            msg = 'Error en el proceso. Revisar infolog.';
-        #
-        #        return INDCRMUtilityService::buildHeader(false, msg, conNull());
-        #    }
-        #
-        #    return INDCRMUtilityService::buildHeader(false, 'Error no controlado.', conNull());
         #}
         #
       ENDSOURCE

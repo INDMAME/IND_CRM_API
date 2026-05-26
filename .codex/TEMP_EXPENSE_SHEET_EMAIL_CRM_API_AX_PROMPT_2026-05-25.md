@@ -61,6 +61,7 @@ scripts/set-indcrm-machine-env.ps1
 scripts/set-indcrm-machine-critical-env.ps1
 scripts/set-indcrm-machine-all-env.ps1
 .codex/Axapta/INDCRMUtilityService.xpo
+.codex/Axapta/INDInternalApiClientServer.xpo
 .codex/Axapta/INDCRMExpenseSheetService.xpo
 .codex/Axapta/CRMHojaGastosTable.xpo
 ```
@@ -354,14 +355,15 @@ Do not depend on the web app to translate the email body after the email has alr
 
 ## Axapta design
 
-Axapta needs two layers:
+Axapta needs three layers:
 
-1. Generic mail helper in `INDCRMUtilityService.xpo`.
-2. Expense-sheet-specific helpers in `INDCRMExpenseSheetService.xpo`.
+1. Global internal API/DLL helper in `INDInternalApiClientServer.xpo`.
+2. CRM/API compatibility facade in `INDCRMUtilityService.xpo`.
+3. Expense-sheet-specific helpers in `INDCRMExpenseSheetService.xpo`.
 
-### Generic helper in INDCRMUtilityService.xpo
+### Global helper in INDInternalApiClientServer.xpo
 
-`INDCRMUtilityService` must expose a reusable email utility for any Axapta process.
+`INDInternalApiClientServer` must expose the reusable email utility for any Axapta process and must be the only Axapta class that calls the mail DLL directly.
 
 Keep two public static methods:
 
@@ -408,8 +410,9 @@ public static server boolean sendInternalApiMailEx(
 Rules:
 
 - `sendInternalApiMail` must delegate to `sendInternalApiMailEx`.
-- `sendInternalApiMailEx` must instantiate COM `IND.InternalApiClient`.
-- `sendInternalApiMailEx` must call COM `SendMailEx`.
+- `sendInternalApiMailEx` must instantiate/call the imported DLL wrapper, normally `INDIntApiINDInternalApiClient`.
+- `sendInternalApiMailEx` must call DLL method `SendMailEx`.
+- Send `sourceSystem` as `AXAPTA`.
 - Do not build raw JSON in this helper for normal use.
 - Keep `SendMailJson` only as an advanced/diagnostic DLL method in `IND_INTERNAL_API`; do not make it the standard Axapta helper.
 - `toEmails`, `ccEmails`, `bccEmails`, and `replyToEmails` are semicolon-separated lists.
@@ -428,6 +431,17 @@ ParameterTable::find().INDInternalApiClientSecret
 ```
 
 The user will later move these placeholders to the final technical configuration table.
+
+### CRM facade in INDCRMUtilityService.xpo
+
+`INDCRMUtilityService` must keep the same two public methods and signatures for compatibility with existing CRM/API-bound calls, but it must not instantiate the DLL directly.
+
+Rules:
+
+- `INDCRMUtilityService::sendInternalApiMail(...)` delegates to `INDInternalApiClientServer::sendInternalApiMail(...)`.
+- `INDCRMUtilityService::sendInternalApiMailEx(...)` delegates to `INDInternalApiClientServer::sendInternalApiMailEx(...)`.
+- No `new COM("IND.InternalApiClient")` or direct `SendMailEx` call belongs in `INDCRMUtilityService`.
+- Global Axapta callers should call `INDInternalApiClientServer` directly.
 
 ### COM DLL method signatures expected by Axapta
 
