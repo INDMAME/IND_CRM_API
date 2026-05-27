@@ -92,8 +92,8 @@ Notas
   - `Get Expense Sheet - Notification Baseline`
   - `Notify Approval Requested - Update Status`
   - `Notify Approved - Update Status`
-- Las pruebas V05 validan la orquestacion de `IND_CRM_API`; el envio final es best-effort y debe confirmarse en logs de `IND_CRM_API`, `IND_INTERNAL_API` y bandeja del destinatario. `ExpenseSheetPaid` es Axapta-only y no se prueba desde Postman de esta API.
-- V06 de DEV alinea las pruebas de notificaciones con la regla actor-vs-owner:
+- Las pruebas V05/V06 quedan como historicas para validar el `PUT` de hojas de gasto. Desde 2026-05-27 el envio de emails de estado lo decide Axapta en `INDCRMExpenseSheetService`; Postman de `IND_CRM_API` solo confirma que el update llega a AX y no valida envio directo desde la API.
+- V06 de DEV alinea las pruebas historicas con la regla actor-vs-owner:
   - `X-IND-AxUserId: {{axUserId}}` es el `ActorAxUserId` que `IND_CRM_API` pasa a Axapta.
   - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.
   - La consola de Postman muestra `actorAxUserId` junto con el evento esperado.

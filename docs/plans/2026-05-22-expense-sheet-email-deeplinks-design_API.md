@@ -3,6 +3,24 @@
 Date: 2026-05-22
 Scope: `IND_CRM_API` and `IND_CRM_APP`
 
+## Implementation Update 2026-05-27
+
+Expense-sheet status notification ownership has moved to Axapta for all supported transitions. `IND_CRM_API` keeps the same public update endpoint and still passes `X-IND-AxUserId` to `INDCRMExpenseSheetService.updateExpenseSheetHeader`, but it no longer reads before/after snapshots or sends these emails directly.
+
+Axapta now owns transition detection, sender/recipient resolution, deep-link construction, and the best-effort call to the internal mail helper.
+
+Supported events:
+
+- `Draft -> InReview`: `ExpenseSheetApprovalRequested`
+- `InReview -> Approved`: `ExpenseSheetApproved`
+- `InReview -> Rejected`: `ExpenseSheetRejected`
+- `Rejected -> InReview`: `ExpenseSheetRejectionCancelled`
+- `Any -> Paid`: `ExpenseSheetPaid`
+
+No email is sent when the previous and new AX statuses are the same.
+
+For `ExpenseSheetPaid`, the definitive remittance integration point remains pending. The AX helper includes a `userPagador` bypass parameter so the payment process can pass the payment actor when that method is confirmed.
+
 ## Goal
 
 Define the technical implementation for expense sheet email notifications sent through Microsoft Graph and for email links that open the target expense sheet after login, including company context switching.
@@ -13,12 +31,11 @@ The email button is only a navigation aid. Opening the link must never approve, 
 
 The mail transport responsibility has been moved out of `IND_CRM_API` and into `IND_INTERNAL_API`.
 
-- `IND_CRM_API` now orchestrates CRM expense sheet notifications and calls `IND_INTERNAL_API` `POST /api/internal/v1/mail/messages`.
+- Superseded on 2026-05-27: `IND_CRM_API` no longer orchestrates expense-sheet status emails; Axapta owns the send decision and calls the internal mail helper.
 - Microsoft Graph keys must not be configured in `IND_CRM_API`; they belong to `IND_INTERNAL_API` as `INTSERV_GRAPH_*`.
-- `IND_CRM_API` uses `INDCRM_INTERNAL_API_BASE_URL`, `INDCRM_INTERNAL_API_CLIENT_ID`, and `INDCRM_INTERNAL_API_CLIENT_SECRET` to authenticate against the internal utility API.
+- The CRM API internal-mail keys may remain for generic/legacy callers, but expense-sheet status notifications now use Axapta `ParameterTable` placeholders for the internal utility API credentials.
 - `INDCRM_WEB_BASE_URL` remains the single source for CRM web email links.
-- `ExpenseSheetApprovalRequested` and `ExpenseSheetApproved` are detected after successful `PUT /api/crm/expensesheets/{hojaGastosId}` status transitions.
-- `ExpenseSheetPaid` is owned by Axapta payment posting and calls the generic COM/internal API mail helper directly.
+- `ExpenseSheetApprovalRequested`, `ExpenseSheetApproved`, `ExpenseSheetRejected`, `ExpenseSheetRejectionCancelled`, and `ExpenseSheetPaid` are detected in Axapta after the business status change is accepted.
 - Email failures are best-effort: log and do not block the expense sheet business process.
 - Axapta placeholders were intentionally left as `ParameterTable.INDInternalApiBaseUrl`, `ParameterTable.INDInternalApiClientId`, `ParameterTable.INDInternalApiClientSecret`, and `ParameterTable.INDCrmWebBaseUrl` until the final technical configuration table exists.
 
@@ -260,6 +277,8 @@ Suggested English default text:
 
 ### 1. Notification ownership
 
+Superseded by the 2026-05-27 alignment above. The API should no longer own expense-sheet status email creation; Axapta owns it because status changes can originate from both CRM API and native Axapta workflows.
+
 The API should own email notification creation because the real status mutation lives there. The web should not send the email after proxying the status update, because other future status-changing processes could bypass the web.
 
 Initial trigger:
@@ -271,6 +290,8 @@ Initial trigger:
 No public email endpoint is required for v1 unless there is an explicit resend/admin requirement.
 
 ### 2. Add notification services
+
+Superseded for expense-sheet status notifications on 2026-05-27. These API services may remain as historical/legacy code, but they must not be wired into `PUT /api/crm/expensesheets/{hojaGastosId}` for the current Axapta-owned design.
 
 Recommended new API files:
 
@@ -299,6 +320,8 @@ Recommended dependency style:
 - Use `HttpClient` only to call `IND_INTERNAL_API`.
 
 ### 3. Status transition detection
+
+Superseded for expense-sheet status notifications on 2026-05-27. Transition detection now lives in `INDCRMExpenseSheetService::resolveExpenseSheetNotificationEvent` and is invoked after AX commits the status change.
 
 `UpdateExpenseSheetHeaderRequest` can include `expenseSheetStatus`, but the API needs a reliable before/after transition.
 
@@ -525,7 +548,7 @@ Implementation rule:
 
 Superseded CRM API notification keys:
 
-The original design placed Graph keys in `IND_CRM_API`. That is no longer the active implementation. Keep Graph configuration in `IND_INTERNAL_API` and use only the CRM/internal API keys below in this project.
+The original design placed Graph keys in `IND_CRM_API`. That is no longer the active implementation. Keep Graph configuration in `IND_INTERNAL_API`. As of 2026-05-27, expense-sheet status emails are sent from Axapta, so the CRM/internal API keys below are legacy/generic CRM API mail settings and are not required for the current expense-sheet status notification path.
 
 ```text
 InternalMail:BaseUrl                       -> INDCRM_INTERNAL_API_BASE_URL

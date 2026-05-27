@@ -116,8 +116,54 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #buildExpenseSheetNotificationMessage
+        #// Devuelve el texto base del email segun el evento de la hoja de gastos.
+        #static server str buildExpenseSheetNotificationMessage(str _eventType, CRMHojaGastosId _hojaId)
+        #{
+        #    if (_eventType == 'ExpenseSheetApprovalRequested')
+        #        return strFmt('La hoja de gastos %1 esta lista para revision.', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetApproved')
+        #        return strFmt('La hoja de gastos %1 ha sido aprobada.', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetRejected')
+        #        return strFmt('La hoja de gastos %1 ha sido rechazada.', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetRejectionCancelled')
+        #        return strFmt('Se ha cancelado el rechazo de la hoja de gastos %1.', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetPaid')
+        #        return strFmt('La hoja de gastos %1 ha sido pagada.', _hojaId);
+        #
+        #    return '';
+        #}
+        #
+      ENDSOURCE
+      SOURCE #buildExpenseSheetNotificationSubject
+        #// Devuelve el asunto del email segun el evento de la hoja de gastos.
+        #static server str buildExpenseSheetNotificationSubject(str _eventType, CRMHojaGastosId _hojaId)
+        #{
+        #    if (_eventType == 'ExpenseSheetApprovalRequested')
+        #        return strFmt('Hoja de gastos %1 pendiente de aprobacion', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetApproved')
+        #        return strFmt('Hoja de gastos %1 aprobada', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetRejected')
+        #        return strFmt('Hoja de gastos %1 rechazada', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetRejectionCancelled')
+        #        return strFmt('Hoja de gastos %1 con rechazo cancelado', _hojaId);
+        #
+        #    if (_eventType == 'ExpenseSheetPaid')
+        #        return strFmt('Hoja de gastos %1 pagada', _hojaId);
+        #
+        #    return '';
+        #}
+        #
+      ENDSOURCE
       SOURCE #buildExpenseSheetWebLink
-        #// Purpose: Builds the CRM web resolver link for one expense sheet.
+        #// Construye el link del resolver web CRM para una hoja de gastos.
         #static server str buildExpenseSheetWebLink(str _companyId, str _hojaGastosId, str _source = 'axapta')
         #{
         #    str webBaseUrl;
@@ -196,7 +242,7 @@ Formatversion: 1
         #    CRMHojaGastosLine  line;
         #
         #    CRMUserId crmUserId;
-        #    UserId    axUserId;
+        #    str 20    axUserId;
         #
         #    str  descr;
         #    str  currencyCode;
@@ -764,7 +810,7 @@ Formatversion: 1
         #    int                lineCount;
         #    int                startLine;
         #
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          existingFileId;
         #
@@ -1220,7 +1266,7 @@ Formatversion: 1
         #    int                lineCount;
         #    int                startLine;
         #
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          existingFileId;
         #
@@ -1584,7 +1630,7 @@ Formatversion: 1
         #static server container createExpenseSheetTicketLine(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          fileId;
         #    str                lineDescr;
@@ -1746,7 +1792,7 @@ Formatversion: 1
         #    DataAreaId       companyId;
         #
         #    CRMUserId        crmUserId;
-        #    UserId           axUserId;
+        #    str 20           axUserId;
         #    CRMHojaGastosId  hojaId;
         #    RecId            lineRecId;
         #    int              deleteWholeSheet;
@@ -1894,7 +1940,7 @@ Formatversion: 1
         #static server container deleteExpenseSheetTicket(container _data)
         #{
         #    DataAreaId          companyId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMUserId           crmUserId;
         #    INDFileId           fileId;
         #    RecId               lineRecId;
@@ -2053,7 +2099,7 @@ Formatversion: 1
         #static server container deleteExpenseSheetTicketLine(container _data)
         #{
         #    DataAreaId          companyId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMUserId           crmUserId;
         #    INDFileId           fileId;
         #    RecId               lineRecId;
@@ -2209,7 +2255,7 @@ Formatversion: 1
         #{
         #    DataAreaId          companyId;
         #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMHojaGastosId     hojaId;
         #
         #    CRMHojaGastosTable  header;
@@ -2312,15 +2358,213 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #resolveCrmUserIdFromAny
+        #// Convierte un usuario AX o CRM al UserId CRM para comparar emisor y destinatario.
+        #static server CRMUserId resolveCrmUserIdFromAny(str 20 _userId)
+        #{
+        #    CRMUsuarioTable crmUsuarioTable;
+        #    ;
+        #
+        #    if (!_userId)
+        #        return '';
+        #
+        #    crmUsuarioTable = SysUserInfo::getCRMUsuarioTable(_userId);
+        #    if (crmUsuarioTable.UserId)
+        #        return crmUsuarioTable.UserId;
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_userId);
+        #    if (crmUsuarioTable.UserId)
+        #        return crmUsuarioTable.UserId;
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find(_userId);
+        #    if (crmUsuarioTable.UserId)
+        #        return crmUsuarioTable.UserId;
+        #
+        #    // Ultimo recurso: el llamador ya pudo haber enviado un UserId CRM.
+        #    return _userId;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #resolveExpenseSheetNotificationEvent
+        #// Resuelve el evento de email permitido para una transicion de estado.
+        #static server str resolveExpenseSheetNotificationEvent(INDExpenseSheetStatus _fromStatus,
+        #                                                       INDExpenseSheetStatus _toStatus)
+        #{
+        #    if (_toStatus == INDExpenseSheetStatus::Paid)
+        #        return 'ExpenseSheetPaid';
+        #
+        #    if (_fromStatus == INDExpenseSheetStatus::Rejected &&
+        #        _toStatus   == INDExpenseSheetStatus::InReview)
+        #        return 'ExpenseSheetRejectionCancelled';
+        #
+        #    if (_fromStatus == INDExpenseSheetStatus::Draft &&
+        #        _toStatus   == INDExpenseSheetStatus::InReview)
+        #        return 'ExpenseSheetApprovalRequested';
+        #
+        #    if (_fromStatus == INDExpenseSheetStatus::InReview &&
+        #        _toStatus   == INDExpenseSheetStatus::Approved)
+        #        return 'ExpenseSheetApproved';
+        #
+        #    if (_fromStatus == INDExpenseSheetStatus::InReview &&
+        #        _toStatus   == INDExpenseSheetStatus::Rejected)
+        #        return 'ExpenseSheetRejected';
+        #
+        #    return '';
+        #}
+        #
+      ENDSOURCE
+      SOURCE #sendExpenseSheetStatusNotification
+        #// Envia el email de hoja de gastos para las transiciones soportadas. No bloquea el proceso si falla.
+        #static server boolean sendExpenseSheetStatusNotification(CRMHojaGastosTable    _expenseSheet,
+        #                                                         INDExpenseSheetStatus _fromStatus,
+        #                                                         INDExpenseSheetStatus _toStatus,
+        #                                                         str 20                _actorUserId = '',
+        #                                                         str 20                _userPagador = '',
+        #                                                         str                   _source = 'axapta',
+        #                                                         str                   _correlationId = '')
+        #{
+        #    DataAreaId         companyId;
+        #    CRMHojaGastosTable expenseSheet;
+        #    str                eventType;
+        #    str 20             senderUserId;
+        #    str 20             recipientUserId;
+        #    CRMUserId          senderCrmUserId;
+        #    CRMUserId          recipientCrmUserId;
+        #    str                fromEmail;
+        #    str                toEmail;
+        #    str                link;
+        #    str                subject;
+        #    str                message;
+        #    str                htmlBody;
+        #    str                textBody;
+        #    str                idempotencyKey;
+        #    ;
+        #
+        #    if (!_expenseSheet.RecId)
+        #    {
+        #        warning('No se envio email de hoja de gastos: falta el registro de cabecera.');
+        #        return false;
+        #    }
+        #
+        #    if (_fromStatus == _toStatus)
+        #        return false;
+        #
+        #    eventType = INDCRMExpenseSheetService::resolveExpenseSheetNotificationEvent(_fromStatus, _toStatus);
+        #    if (!eventType)
+        #        return false;
+        #
+        #    companyId = curext();
+        #    expenseSheet = CRMHojaGastosTable::FindRecId(_expenseSheet.RecId);
+        #    if (!expenseSheet.RecId)
+        #        expenseSheet = _expenseSheet;
+        #
+        #    if (!_actorUserId)
+        #        _actorUserId = curUserId();
+        #
+        #    if (eventType == 'ExpenseSheetApprovalRequested')
+        #    {
+        #        // La hoja solicita aprobacion: emite el propietario y recibe el actor indicado.
+        #        senderUserId    = expenseSheet.UserId;
+        #        recipientUserId = _actorUserId;
+        #    }
+        #    else if (eventType == 'ExpenseSheetPaid')
+        #    {
+        #        // Pago: permite informar un usuario pagador mientras se cierra el punto exacto de remesas.
+        #        senderUserId    = _userPagador ? _userPagador : _actorUserId;
+        #        recipientUserId = expenseSheet.INDCreatedByUserId ? expenseSheet.INDCreatedByUserId : expenseSheet.UserId;
+        #    }
+        #    else
+        #    {
+        #        // Aprobacion, rechazo y anulacion de rechazo: emite el actor y recibe el propietario.
+        #        senderUserId    = _actorUserId;
+        #        recipientUserId = expenseSheet.UserId;
+        #    }
+        #
+        #    senderCrmUserId    = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(senderUserId);
+        #    recipientCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(recipientUserId);
+        #
+        #    if (!senderCrmUserId || !recipientCrmUserId)
+        #    {
+        #        warning(strFmt('No se envio email %1 para hoja %2: no se pudieron resolver usuarios CRM.', eventType, expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    if (senderCrmUserId == recipientCrmUserId)
+        #    {
+        #        info(strFmt('No se envio email %1 para hoja %2: emisor y destinatario son el mismo usuario CRM.', eventType, expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(senderUserId);
+        #    if (!fromEmail && senderCrmUserId != senderUserId)
+        #        fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(senderCrmUserId);
+        #
+        #    toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientUserId);
+        #    if (!toEmail && recipientCrmUserId != recipientUserId)
+        #        toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
+        #
+        #    link = INDCRMExpenseSheetService::buildExpenseSheetWebLink(companyId, expenseSheet.HojaGastosId, _source);
+        #
+        #    if (!fromEmail || !toEmail || !link)
+        #    {
+        #        warning(strFmt('No se envio email %1 para hoja %2: faltan From, To o link.', eventType, expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    subject = INDCRMExpenseSheetService::buildExpenseSheetNotificationSubject(eventType, expenseSheet.HojaGastosId);
+        #    message = INDCRMExpenseSheetService::buildExpenseSheetNotificationMessage(eventType, expenseSheet.HojaGastosId);
+        #    textBody = strFmt('%1\n%2', message, link);
+        #    htmlBody = strFmt('<p>%1</p><p><a href="%2">%2</a></p>', message, link);
+        #
+        #    if (!_correlationId)
+        #        _correlationId = strFmt('%1-%2-%3', expenseSheet.HojaGastosId, today(), timeNow());
+        #
+        #    idempotencyKey = strFmt('%1:%2:%3:%4:%5:%6',
+        #                             eventType,
+        #                             companyId,
+        #                             expenseSheet.HojaGastosId,
+        #                             _fromStatus,
+        #                             _toStatus,
+        #                             _correlationId);
+        #
+        #    try
+        #    {
+        #        return INDCRMUtilityService::sendInternalApiMail(
+        #            companyId,
+        #            fromEmail,
+        #            toEmail,
+        #            subject,
+        #            htmlBody,
+        #            textBody,
+        #            'AxaptaExpenseSheetStatus',
+        #            eventType,
+        #            'ExpenseSheet',
+        #            expenseSheet.HojaGastosId,
+        #            idempotencyKey,
+        #            _correlationId);
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        warning(strFmt('Fallo de mejor esfuerzo enviando email %1 para hoja %2.', eventType, expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        warning(strFmt('Fallo interno de mejor esfuerzo enviando email %1 para hoja %2.', eventType, expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #}
+        #
+      ENDSOURCE
       SOURCE #getExpenseSheetNotificationRecipients
-        #// Purpose: Resolves notification recipients for expense sheet status events.
-        #// Input: [CompanyId, HojaGastosId, EventType, ActorAxUserId].
+        #// Resuelve los destinatarios para los eventos de email de hojas de gastos.
+        #// Entrada: [CompanyId, HojaGastosId, EventType, ActorAxUserId].
         #static server container getExpenseSheetNotificationRecipients(container _data)
         #{
         #    DataAreaId         companyId;
         #    CRMHojaGastosId    hojaId;
         #    str                eventType;
-        #    UserId             actorAxUserId;
+        #    str 20             actorAxUserId;
         #    CRMUserId          actorCrmUserId;
         #    CRMUserId          ownerCrmUserId;
         #    CRMUserId          recipientCrmUserId;
@@ -2356,14 +2600,7 @@ Formatversion: 1
         #
         #        if (actorAxUserId)
         #        {
-        #            actorCrmUserId = SysUserInfo::getCRMUsuarioTable(actorAxUserId).UserId;
-        #
-        #            if (!actorCrmUserId)
-        #                actorCrmUserId = CRMUsuarioTable::Find(actorAxUserId).UserId;
-        #
-        #            // Allow callers that already pass a CRM UserId.
-        #            if (!actorCrmUserId)
-        #                actorCrmUserId = actorAxUserId;
+        #            actorCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(actorAxUserId);
         #        }
         #
         #        if (!actorCrmUserId)
@@ -2374,14 +2611,20 @@ Formatversion: 1
         #
         #        if (eventType == 'ExpenseSheetApprovalRequested')
         #        {
-        #            // Owner asks the actor to approve; recipient is the actor.
+        #            // Solicitud de aprobacion: recibe el usuario actor que debe revisar la hoja.
         #            recipientCrmUserId = actorCrmUserId;
         #            recipientRole      = 'Approver';
         #        }
-        #        else if (eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetPaid')
+        #        else if (eventType == 'ExpenseSheetApproved' ||
+        #                 eventType == 'ExpenseSheetRejected' ||
+        #                 eventType == 'ExpenseSheetRejectionCancelled' ||
+        #                 eventType == 'ExpenseSheetPaid')
         #        {
-        #            // Actor approves or pays; recipient is the expense sheet owner.
-        #            recipientCrmUserId = ownerCrmUserId;
+        #            // Cambio de estado: recibe el propietario o creador de la hoja segun el evento.
+        #            if (eventType == 'ExpenseSheetPaid' && header.INDCreatedByUserId)
+        #                recipientCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(header.INDCreatedByUserId);
+        #            else
+        #                recipientCrmUserId = ownerCrmUserId;
         #            recipientRole      = 'Owner';
         #        }
         #        else
@@ -2411,7 +2654,7 @@ Formatversion: 1
         #{
         #    DataAreaId           _company;
         #
-        #    UserId               axUserId;
+        #    str 20               axUserId;
         #    CRMUserId            crmUserId;
         #
         #    str 1000             filterTxt;
@@ -2632,7 +2875,7 @@ Formatversion: 1
         #static server container getExpenseSheetTicket(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          fileId;
         #
@@ -2750,7 +2993,7 @@ Formatversion: 1
         #static server container getExpenseSheetTicketsLinkList(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    str 1000           filterTxt;
         #    str 1000           likePattern;
@@ -2883,7 +3126,7 @@ Formatversion: 1
         #static server container getExpenseSheetTicketsList(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    str 1000           filterTxt;
         #    str 1000           likePattern;
@@ -3030,7 +3273,7 @@ Formatversion: 1
         #static server container getFuelPriceKm(container _data)
         #{
         #    DataAreaId companyId;
-        #    UserId     axUserId;
+        #    str 20     axUserId;
         #    CRMUserId  crmUserId;
         #    str        transDateStr;
         #    date       transDate;
@@ -3128,8 +3371,8 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #getPersonaEmailByUserId
-        #// Purpose: Resolves INDPersonaTable.Email for AX or CRM user identifiers.
-        #static server str getPersonaEmailByUserId(UserId _userId)
+        #// Resuelve INDPersonaTable.Email desde un identificador de usuario AX o CRM.
+        #static server str getPersonaEmailByUserId(str 20 _userId)
         #{
         #    INDPersonaTable personaTable;
         #    CRMUsuarioTable crmUsuarioTable;
@@ -3167,11 +3410,11 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #getPersonaEmailByUserIdForApi
-        #// Purpose: API wrapper for email resolution. Output extras: [email, displayName].
+        #// Envoltorio API para resolver email. Extras de salida: [email, displayName].
         #static server container getPersonaEmailByUserIdForApi(container _data)
         #{
         #    DataAreaId companyId;
-        #    UserId     userId;
+        #    str 20     userId;
         #    str        email;
         #    str        displayName;
         #    ;
@@ -3199,8 +3442,8 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #getPersonaNameByUserId
-        #// Purpose: Resolves a display name for AX or CRM user identifiers.
-        #static server str getPersonaNameByUserId(UserId _userId)
+        #// Resuelve el nombre visible desde un identificador de usuario AX o CRM.
+        #static server str getPersonaNameByUserId(str 20 _userId)
         #{
         #    INDPersonaTable personaTable;
         #    CRMUsuarioTable crmUsuarioTable;
@@ -3299,7 +3542,7 @@ Formatversion: 1
         #static server container getSubordinatesByUser(container _data)
         #{
         #    DataAreaId                 companyId;
-        #    UserId                     axUserId;
+        #    str 20                     axUserId;
         #    CRMUserId                  crmUserId;
         #    CRMUsuarioTable            crmUsuarioTable,crmUsuarioTableSub;
         #    CRMUsuarioSubordinadoTable subordinadoTable;
@@ -3376,7 +3619,7 @@ Formatversion: 1
         #static server container getSubordinatesByUser_backup(container _data)
         #{
         #    DataAreaId                 companyId;
-        #    UserId                     axUserId;
+        #    str 20                     axUserId;
         #    CRMUserId                  crmUserId;
         #    CRMUsuarioTable            crmUsuarioTable;
         #    CRMUsuarioSubordinadoTable subordinadoTable;
@@ -3473,7 +3716,7 @@ Formatversion: 1
         #{
         #    DataAreaId          companyId;
         #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMHojaGastosId     hojaId;
         #    CRMHojaGastosTable  header;
         #    boolean             recalculateAmountMST;
@@ -3587,7 +3830,7 @@ Formatversion: 1
         #{
         #    DataAreaId          companyId;
         #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMHojaGastosId     hojaId;
         #    CRMHojaGastosTable  header;
         #    int                 updated;
@@ -3677,7 +3920,7 @@ Formatversion: 1
         #{
         #    DataAreaId          companyId;
         #    CRMUserId           crmUserId;
-        #    UserId              axUserId;
+        #    str 20              axUserId;
         #    CRMHojaGastosId     hojaId;
         #    CRMHojaGastosTable  header;
         #    int                 updated;
@@ -3756,7 +3999,7 @@ Formatversion: 1
       SOURCE #refreshTicketStatusByFileId
         #// Method: refreshTicketStatusByFileId
         #// Purpose: Keeps INDTicketInfoTable.Status in sync with expense-sheet line assignment.
-        #static server void refreshTicketStatusByFileId(UserId _axUserId, INDFileId _fileId)
+        #static server void refreshTicketStatusByFileId(str 20 _axUserId, INDFileId _fileId)
         #{
         #    CRMHojaGastosLine  assignedLine;
         #    INDTicketInfoTable ticketHeader;
@@ -3806,58 +4049,25 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #sendExpenseSheetPaidNotification
-        #// Purpose: Sends the Axapta-only notification after an expense sheet payment is posted.
-        #static server boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expenseSheet)
+        #// Envia la notificacion de pago reutilizando el metodo global de estados.
+        #static server boolean sendExpenseSheetPaidNotification(CRMHojaGastosTable _expenseSheet,
+        #                                                       str 20             _userPagador = '')
         #{
-        #    DataAreaId companyId;
-        #    str        fromEmail;
-        #    str        toEmail;
-        #    str        link;
-        #    str        subject;
-        #    str        htmlBody;
-        #    str        textBody;
-        #    str        idempotencyKey;
-        #    ;
-        #
-        #    if (!_expenseSheet.RecId)
-        #        return false;
-        #
-        #    companyId = curext();
-        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(curUserId());
-        #    toEmail   = INDCRMExpenseSheetService::getPersonaEmailByUserId(_expenseSheet.INDCreatedByUserId);
-        #    link      = INDCRMExpenseSheetService::buildExpenseSheetWebLink(companyId, _expenseSheet.HojaGastosId, 'axapta');
-        #
-        #    if (!fromEmail || !toEmail || !link)
-        #    {
-        #        warning(strFmt('No se envio email de pago para hoja %1: faltan From, To o link.', _expenseSheet.HojaGastosId));
-        #        return false;
-        #    }
-        #
-        #    subject = strFmt('Hoja de gastos %1 pagada', _expenseSheet.HojaGastosId);
-        #    textBody = strFmt('La hoja de gastos %1 ha sido pagada.\n%2', _expenseSheet.HojaGastosId, link);
-        #    htmlBody = strFmt('<p>La hoja de gastos %1 ha sido pagada.</p><p><a href="%2">%2</a></p>', _expenseSheet.HojaGastosId, link);
-        #    idempotencyKey = strFmt('ExpenseSheetPaid:%1:%2:%3', companyId, _expenseSheet.HojaGastosId, _expenseSheet.Voucher);
-        #
-        #    return INDCRMUtilityService::sendInternalApiMail(
-        #        companyId,
-        #        fromEmail,
-        #        toEmail,
-        #        subject,
-        #        htmlBody,
-        #        textBody,
-        #        'AxaptaExpenseSheetPayment',
-        #        'ExpenseSheetPaid',
-        #        'ExpenseSheet',
-        #        _expenseSheet.HojaGastosId,
-        #        idempotencyKey,
-        #        strFmt('%1', _expenseSheet.RecId));
+        #    return INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #        _expenseSheet,
+        #        _expenseSheet.ExpenseSheetStatus,
+        #        INDExpenseSheetStatus::Paid,
+        #        _userPagador ? _userPagador : curUserId(),
+        #        _userPagador,
+        #        'axapta',
+        #        strFmt('paid-%1-%2', _expenseSheet.HojaGastosId, timeNow()));
         #}
         #
       ENDSOURCE
       SOURCE #updateExpenseSheetHeader
-        #// Method: indExpenseSheetUpdateHeader
-        #// Purpose: Update header fields. Block if Voucher is set.
-        #// Input:
+        #// Metodo: indExpenseSheetUpdateHeader
+        #// Actualiza campos de cabecera y bloquea cambios si existe Voucher.
+        #// Entrada:
         #//  - _data[1] = CompanyId
         #//  - _data[2] = axUserId
         #//  - _data[3] = HojaGastosId
@@ -3873,7 +4083,7 @@ Formatversion: 1
         #{
         #    DataAreaId            companyId;
         #    CRMUserId             crmUserId;
-        #    UserId                axUserId;
+        #    str 20                axUserId;
         #    CRMHojaGastosId       hojaId;
         #    str                   descr;
         #    str                   currencyCode;
@@ -3890,6 +4100,9 @@ Formatversion: 1
         #    INDExchangeRateMode   exchangeRateMode;
         #    INDReimbursableExpense reimbursableExpense;
         #    CRMHojaGastosTable    header;
+        #    INDExpenseSheetStatus oldExpenseSheetStatus;
+        #    INDExpenseSheetStatus newExpenseSheetStatus;
+        #    boolean               sendStatusNotification;
         #    str 16                expenseSheetStatusRaw;
         #    str 16                exchangeRateModeRaw;
         #    str 16                estadoComentariosRaw;
@@ -3963,6 +4176,7 @@ Formatversion: 1
         #    }
         #
         #
+        #    sendStatusNotification = false;
         #    try
         #    {
         #        changecompany(companyId)
@@ -3986,6 +4200,8 @@ Formatversion: 1
         #                ttsabort;
         #                return INDCRMUtilityService::buildHeader(false, 'Hoja de gastos bloqueada. Voucher informado.', conNull());
         #            }
+        #
+        #            oldExpenseSheetStatus = header.ExpenseSheetStatus;
         #
         #            if (currencyCode)
         #            {
@@ -4029,7 +4245,22 @@ Formatversion: 1
         #
         #            header.update();
         #
+        #            newExpenseSheetStatus = header.ExpenseSheetStatus;
+        #            sendStatusNotification = hasExpenseSheetStatus && oldExpenseSheetStatus != newExpenseSheetStatus;
+        #
         #            ttscommit;
+        #
+        #            if (sendStatusNotification)
+        #            {
+        #                INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #                    header,
+        #                    oldExpenseSheetStatus,
+        #                    newExpenseSheetStatus,
+        #                    axUserId,
+        #                    '',
+        #                    'crm-api',
+        #                    strFmt('crm-api-%1-%2', hojaId, timeNow()));
+        #            }
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Hoja de gastos actualizada correctamente.', conNull());
         #        }
@@ -4075,7 +4306,7 @@ Formatversion: 1
         #    DataAreaId companyId;
         #
         #    CRMUserId         crmUserId;
-        #    UserId            axUserId;
+        #    str 20            axUserId;
         #    CRMHojaGastosId   hojaId;
         #    RecId             lineRecId;
         #
@@ -4355,7 +4586,7 @@ Formatversion: 1
         #static server container updateExpenseSheetTicket(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          fileId;
         #
@@ -4698,7 +4929,7 @@ Formatversion: 1
         #    container          linesIn;
         #    container          lineIn;
         #
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          fileId;
         #
@@ -5077,7 +5308,7 @@ Formatversion: 1
         #static server container updateExpenseSheetTicketLine(container _data)
         #{
         #    DataAreaId         companyId;
-        #    UserId             axUserId;
+        #    str 20             axUserId;
         #    CRMUserId          crmUserId;
         #    INDFileId          fileId;
         #    RecId              lineRecId;

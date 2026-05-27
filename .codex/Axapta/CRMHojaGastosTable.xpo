@@ -1132,6 +1132,10 @@ Formatversion: 1
         #    AccountNum          dimension;
         #    Amount              amount;
         #    CRMHojaGastosTable  hojaGastosTableUpdate;
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    CRMHojaGastosTable  hojaGastosTableNotificacion;
+        #    INDExpenseSheetStatus oldExpenseSheetStatus;
+        #    INDExpenseSheetStatus newExpenseSheetStatus;
         #
         #    INDPersonaTable     personaTableAxaptaUser  = INDPersonaTable::findByAxUserId(curUserId());
         #    boolean             allowSelfManagement     = personaTableAxaptaUser.AllowSelfManagement;
@@ -1148,12 +1152,18 @@ Formatversion: 1
         #        //SI la hoja de Gastos se Aprueba se deja en estado APROBADA. Si se "desaprueba" pasa a estado "Solicitada Aprobación"
         #        hojaGastosTableUpdate                       = CRMHojaGastosTable::FindRecId(this.RecId, true);
         #        if (hojaGastosTableUpdate){
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            oldExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
         #            hojaGastosTableUpdate.ExpenseSheetStatus    = _operacion == 1 ? INDExpenseSheetStatus::Approved : (allowSelfManagement ? INDExpenseSheetStatus::Draft : INDExpenseSheetStatus::InReview);
         #            //hojaGastosTableUpdate.VoucherPhysical       = _operacion == 1 ? voucher     : ""; //Si estoy aprobando la HG guardo el asiento donde se ha registrado el devengo del coste.
         #            //hojaGastosTableUpdate.DatePhysical          = _operacion == 1 ? transDate  : datenull(); //Si estoy aprobando la HG guardo la fecha cuando se ha registrado el devengo del coste.
         #
         #            hojaGastosTableUpdate.EstadoComentarios     = _estadoComentarios;
         #            hojaGastosTableUpdate.TransDateAprobacion   = _operacion == 1 ? today() : datenull();
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            newExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            hojaGastosTableNotificacion                 = hojaGastosTableUpdate;
         #            hojaGastosTableUpdate.doUpdate();
         #
         #            //Lanzo este proceso de nuevo porque el voucher no se lee en el proceso desde el doUpdate ya que no se ha hecho la inserción en la BBDD cuando se busca la información.
@@ -1175,6 +1185,17 @@ Formatversion: 1
         #    //IJL.11/05/26. De momento no registramos el asiento contable.
         #    if (! postJournal){
         #        UpdateStatus();
+        #        //MMS - Ajustes CRM - 2026.05.27
+        #        // Envio de mejor esfuerzo fuera del cambio de estado principal.
+        #        if (hojaGastosTableNotificacion.RecId)
+        #            INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #                hojaGastosTableNotificacion,
+        #                oldExpenseSheetStatus,
+        #                newExpenseSheetStatus,
+        #                curUserId(),
+        #                '',
+        #                'axapta',
+        #                strFmt('approve-%1-%2', this.HojaGastosId, timeNow()));
         #        return;
         #    }
         #
@@ -1333,6 +1354,18 @@ Formatversion: 1
         #*/
         #    ttscommit;
         #
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    // Envio de mejor esfuerzo fuera del tts para no bloquear la aprobacion.
+        #    if (hojaGastosTableNotificacion.RecId)
+        #        INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #            hojaGastosTableNotificacion,
+        #            oldExpenseSheetStatus,
+        #            newExpenseSheetStatus,
+        #            curUserId(),
+        #            '',
+        #            'axapta',
+        #            strFmt('approve-%1-%2', this.HojaGastosId, timeNow()));
+        #
         #/*
         #    //Creamos las líneas de gasto por detalle por cuenta y dimensión
         #
@@ -1457,6 +1490,10 @@ Formatversion: 1
         #    AccountNum          dimension;
         #    Amount              amount;
         #    CRMHojaGastosTable  hojaGastosTableUpdate;
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    CRMHojaGastosTable  hojaGastosTableNotificacion;
+        #    INDExpenseSheetStatus oldExpenseSheetStatus;
+        #    INDExpenseSheetStatus newExpenseSheetStatus;
         #
         #    INDPersonaTable     personaTableAxaptaUser  = INDPersonaTable::findByAxUserId(curUserId());
         #    boolean             allowSelfManagement     = personaTableAxaptaUser.AllowSelfManagement;
@@ -2040,6 +2077,8 @@ Formatversion: 1
         #        //SI la hoja de Gastos se Aprueba se deja en estado APROBADA. Si se "desaprueba" pasa a estado "Solicitada Aprobación"
         #        hojaGastosTableUpdate                       = CRMHojaGastosTable::FindRecId(this.RecId, true);
         #        if (hojaGastosTableUpdate){
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            oldExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
         #            hojaGastosTableUpdate.ExpenseSheetStatus    = _operacion == 1 ? INDExpenseSheetStatus::Approved : (allowSelfManagement ? INDExpenseSheetStatus::Draft : INDExpenseSheetStatus::InReview);
         #
         #            if (INDDataAreaParameterTable::Find().ActivarFuncionalidadesMexico && hojaGastosTableUpdate.ExpenseSheetStatus == INDExpenseSheetStatus::InReview)
@@ -2049,6 +2088,10 @@ Formatversion: 1
         #
         #            hojaGastosTableUpdate.EstadoComentarios     = _estadoComentarios;
         #            hojaGastosTableUpdate.TransDateAprobacion   = _operacion == 1 ? today() : datenull();
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            newExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
+        #            //MMS - Ajustes CRM - 2026.05.27
+        #            hojaGastosTableNotificacion                 = hojaGastosTableUpdate;
         #            hojaGastosTableUpdate.doUpdate();
         #
         #            //Lanzo este proceso de nuevo porque el voucher no se lee en el proceso desde el doUpdate ya que no se ha hecho la inserción en la BBDD cuando se busca la información.
@@ -2060,6 +2103,17 @@ Formatversion: 1
         #    }
         #    ttscommit;
         #
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    // Envio de mejor esfuerzo fuera del tts para no bloquear la aprobacion MEX.
+        #    if (hojaGastosTableNotificacion.RecId)
+        #        INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #            hojaGastosTableNotificacion,
+        #            oldExpenseSheetStatus,
+        #            newExpenseSheetStatus,
+        #            curUserId(),
+        #            '',
+        #            'axapta',
+        #            strFmt('approve-mex-%1-%2', this.HojaGastosId, timeNow()));
         #
         #}
       ENDSOURCE
@@ -2092,6 +2146,10 @@ Formatversion: 1
         #    AccountNum          dimension;
         #    Amount              amount;
         #    CRMHojaGastosTable  hojaGastosTableUpdate;
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    CRMHojaGastosTable  hojaGastosTableNotificacion;
+        #    INDExpenseSheetStatus oldExpenseSheetStatus;
+        #    INDExpenseSheetStatus newExpenseSheetStatus;
         #
         #    INDPersonaTable     personaTableAxaptaUser  = INDPersonaTable::findByAxUserId(curUserId());
         #    boolean             allowSelfManagement     = personaTableAxaptaUser.AllowSelfManagement;
@@ -2188,11 +2246,17 @@ Formatversion: 1
         #    //SI la hoja de Gastos se Aprueba se deja en estado APROBADA. Si se "desaprueba" pasa a estado "Solicitada Aprobación"
         #    hojaGastosTableUpdate                       = CRMHojaGastosTable::FindRecId(this.RecId, true);
         #    if (hojaGastosTableUpdate){
+        #        //MMS - Ajustes CRM - 2026.05.27
+        #        oldExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
         #        hojaGastosTableUpdate.ExpenseSheetStatus    = _operacion == 1 ? INDExpenseSheetStatus::Approved : (allowSelfManagement ? INDExpenseSheetStatus::Draft : INDExpenseSheetStatus::InReview);
         #        hojaGastosTableUpdate.VoucherPhysical       = _operacion == 1 ? voucher     : ""; //Si estoy aprobando la HG guardo el asiento donde se ha registrado el devengo del coste.
         #        hojaGastosTableUpdate.DatePhysical          = _operacion == 1 ? _transDate  : datenull(); //Si estoy aprobando la HG guardo la fecha cuando se ha registrado el devengo del coste.
         #
         #        hojaGastosTableUpdate.EstadoComentarios     = _estadoComentarios;
+        #        //MMS - Ajustes CRM - 2026.05.27
+        #        newExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
+        #        //MMS - Ajustes CRM - 2026.05.27
+        #        hojaGastosTableNotificacion                 = hojaGastosTableUpdate;
         #        hojaGastosTableUpdate.doUpdate();
         #
         #        //Lanzo este proceso de nuevo porque el voucher no se lee en el proceso desde el doUpdate ya que no se ha hecho la inserción en la BBDD cuando se busca la información.
@@ -2203,6 +2267,18 @@ Formatversion: 1
         #    }
         #
         #    ttscommit;
+        #
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    // Envio de mejor esfuerzo fuera del tts para no bloquear la aprobacion total.
+        #    if (hojaGastosTableNotificacion.RecId)
+        #        INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #            hojaGastosTableNotificacion,
+        #            oldExpenseSheetStatus,
+        #            newExpenseSheetStatus,
+        #            curUserId(),
+        #            '',
+        #            'axapta',
+        #            strFmt('approve-total-%1-%2', this.HojaGastosId, timeNow()));
         #}
         #
         #
@@ -3550,6 +3626,8 @@ Formatversion: 1
         #                  FreeText              _estadoComentarios = "")
         #{
         #    CRMHojaGastosTable      hojaGastosTableUpdate;
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    INDExpenseSheetStatus   oldExpenseSheetStatus;
         #    ;
         #
         #    if (! this.RecId)
@@ -3557,10 +3635,23 @@ Formatversion: 1
         #
         #    ttsbegin;
         #    hojaGastosTableUpdate                       = CRMHojaGastosTable::FindRecId(this.RecId, true);
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    oldExpenseSheetStatus                       = hojaGastosTableUpdate.ExpenseSheetStatus;
         #    hojaGastosTableUpdate.ExpenseSheetStatus    = _newStatus;
         #    hojaGastosTableUpdate.EstadoComentarios     = hojaGastosTableUpdate.EstadoComentarios ? strfmt("%1\n\n%2", hojaGastosTableUpdate.EstadoComentarios, _estadoComentarios) : _estadoComentarios;
         #    hojaGastosTableUpdate.doUpdate();
         #    ttscommit;
+        #
+        #    //MMS - Ajustes CRM - 2026.05.27
+        #    // El email se lanza fuera del tts para no bloquear el cambio de estado.
+        #    INDCRMExpenseSheetService::sendExpenseSheetStatusNotification(
+        #        hojaGastosTableUpdate,
+        #        oldExpenseSheetStatus,
+        #        _newStatus,
+        #        curUserId(),
+        #        '',
+        #        'axapta',
+        #        strFmt('table-%1-%2', hojaGastosTableUpdate.HojaGastosId, timeNow()));
         #}
       ENDSOURCE
       SOURCE #UpdateViajeEnLineas
@@ -3988,7 +4079,10 @@ Formatversion: 1
         #        {
         #            hojaGastosTable = CRMHojaGastosTable::FindRecId(si.value());
         #            if (hojaGastosTable.RecId)
-        #                INDCRMExpenseSheetService::sendExpenseSheetPaidNotification(hojaGastosTable);
+        #            {
+        #                //MMS - Ajustes CRM - 2026.05.27
+        #                INDCRMExpenseSheetService::sendExpenseSheetPaidNotification(hojaGastosTable, curUserId());
+        #            }
         #
         #            si.next();
         #        }

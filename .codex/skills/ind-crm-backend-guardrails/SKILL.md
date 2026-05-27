@@ -42,6 +42,8 @@ Before editing code:
 - Analyze the current flow and identify the exact modules, contracts, and boundaries affected.
 - Present a short plan in bullets for any non-trivial change.
 - Propose the smallest safe change that solves the request.
+- Review the plan for loose ends before coding: ownership of the trigger, sender/recipient rules, duplicated execution paths, configuration source, rollback/transaction boundary, idempotency, logging, and documentation impact.
+- When multiple projects must align, explicitly state which project owns each responsibility and which companion prompts/docs must be updated.
 - If there are multiple valid approaches, present concise options with a recommendation and ask before implementing.
 - If requirements are unclear or behavior could change in different valid ways, ask a clarifying question before coding.
 - Only proceed on assumption when the assumption is low-risk, backward-compatible, and explicitly called out.
@@ -86,7 +88,10 @@ Execution:
 2. Create or update `.codex/AX_<ClassName>_CHANGES_YYYY-MM-DD.md`.
 3. Keep that file current with objective, methods touched, contract adjustments, risks, and pending API work.
 4. Implement AX first when the contract originates there, then align DTOs, mappers, endpoints, and docs.
-5. Do not close AX->API work if the temporary change log is stale or incomplete.
+5. Document every new or changed Axapta method with a simple Spanish explanation in the XPO source comments.
+6. Keep external calls such as HTTP/DLL/email outside `tts` whenever possible; they must be best-effort and must not block the committed business transaction.
+7. When touching Axapta table or form XPO code, mark each new or changed code block with `//MMS - Ajustes CRM - YYYY.MM.DD`, using the actual current date. This marker is not required for class-only work unless the user asks for it.
+8. Do not close AX->API work if the temporary change log is stale or incomplete.
 
 ## Documentation hygiene
 - Do not duplicate root `.codex` docs into new parallel files unless there is a strong reason.
