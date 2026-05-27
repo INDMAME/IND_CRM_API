@@ -169,7 +169,7 @@ Formatversion: 1
         #    str webBaseUrl;
         #    ;
         #
-        #    webBaseUrl = INDDefaultParameters::find().InternalAPIUrlService;//APIURLInternalService;
+        #    webBaseUrl = INDDefaultParameters::find().CRMAppUrl;//APIURLInternalService;
         #    webBaseUrl = strLRTrim(webBaseUrl);
         #
         #    while (strLen(webBaseUrl) > 0 && subStr(webBaseUrl, strLen(webBaseUrl), 1) == '/')
@@ -2259,6 +2259,7 @@ Formatversion: 1
         #    CRMHojaGastosId     hojaId;
         #
         #    CRMHojaGastosTable  header;
+        #    CRMHojaGastosTable  debugHeader;
         #    CRMHojaGastosLine   line;
         #    Amount              monto;
         #    Price               price;
@@ -2267,6 +2268,10 @@ Formatversion: 1
         #    container           lineRow;
         #    int                 startLine,gastoTypeInt,expenseSheetStatus,exchangeRateMode,reimbursableExpense,lineReimbursableExpense;
         #    str                 msg;
+        #    str                 debugSheetExists;
+        #    str                 debugSheetUserId;
+        #    str                 debugSheetCreatedByUserId;
+        #    str                 debugSheetStatus;
         #    ;
         #
         #    companyId = INDCRMUtilityService::getCompany(_data);
@@ -2289,14 +2294,50 @@ Formatversion: 1
         #            crmUserId = CRMUsuarioTable::Find(axUserId).UserId;
         #
         #        if (!crmUserId || !hojaId)
-        #            return [INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.', conNull()), conNull()];
+        #            return [INDCRMUtilityService::buildHeader(false, 'crmUserId y HojaGastosId son obligatorios.',
+        #                                                   [
+        #                                                    'stage=missing-required',
+        #                                                    strFmt('companyId=%1', companyId),
+        #                                                    strFmt('axUserId=%1', axUserId),
+        #                                                    strFmt('crmUserId=%1', crmUserId),
+        #                                                    strFmt('hojaGastosId=%1', hojaId)
+        #                                                   ]), conNull()];
+        #
+        #        debugSheetExists = '0';
+        #        debugSheetUserId = '';
+        #        debugSheetCreatedByUserId = '';
+        #        debugSheetStatus = '';
+        #
+        #        // Diagnostic lookup: detects whether the sheet exists but belongs to another CRM user.
+        #        select firstonly debugHeader
+        #            where debugHeader.HojaGastosId == hojaId;
+        #
+        #        if (debugHeader.RecId)
+        #        {
+        #            debugSheetExists = '1';
+        #            debugSheetUserId = debugHeader.UserId;
+        #            debugSheetCreatedByUserId = debugHeader.INDCreatedByUserId;
+        #            debugSheetStatus = strFmt('%1', debugHeader.ExpenseSheetStatus);
+        #        }
         #
         #        select firstonly header
         #            where header.UserId       == crmUserId
         #               && header.HojaGastosId == hojaId;
         #
         #        if (!header.RecId)
-        #            return [INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.', conNull()), conNull()];
+        #            return [INDCRMUtilityService::buildHeader(false, 'Hoja de gastos no encontrada.',
+        #                                                   [
+        #                                                    'stage=detail-access',
+        #                                                    'rule=header.UserId==crmUserId&&header.HojaGastosId==hojaId',
+        #                                                    strFmt('companyId=%1', companyId),
+        #                                                    strFmt('axUserId=%1', axUserId),
+        #                                                    strFmt('crmUserId=%1', crmUserId),
+        #                                                    strFmt('hojaGastosId=%1', hojaId),
+        #                                                    strFmt('sheetExists=%1', debugSheetExists),
+        #                                                    strFmt('sheetUserId=%1', debugSheetUserId),
+        #                                                    strFmt('sheetCreatedBy=%1', debugSheetCreatedByUserId),
+        #                                                    strFmt('sheetStatus=%1', debugSheetStatus)
+        #                                                   ]), conNull()];
         #
         #        monto               = header.TotalAmount();
         #        exchangeRateMode    = header.ExchangeRateMode;

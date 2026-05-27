@@ -587,7 +587,7 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} company={company} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -603,6 +603,11 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out var linesOut))
                 {
+                    Logger.Log(
+                        $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-response-unreadable " +
+                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+
                     var errorResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -618,6 +623,12 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!success)
                 {
                     var errorResponse = BuildActionError(message, traceId, out var status);
+                    Logger.Log(
+                        $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-validation-failed " +
+                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                        $"axMessage={ToLogValue(message)} mappedStatus={(int)status} mappedErrorCode={ToLogValue(errorResponse.ErrorCode)} " +
+                        $"axExtras={FormatAxExtrasForLog(extras)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
                     LogOut(status);
                     return Content(status, errorResponse);
                 }
@@ -644,6 +655,10 @@ namespace IND_CRM_API.Controllers.CRM
                     Items = new List<ExpenseSheetDetailDto> { detail },
                     TraceId = traceId
                 };
+                Logger.Log(
+                    $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=allow reason=ax-detail-found " +
+                    $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                    $"sheetUserId={ToLogValue(detail.UserId)} lineCount={(detail.Lines == null ? 0 : detail.Lines.Count)} traceId={traceId}");
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
             }
@@ -2079,6 +2094,28 @@ namespace IND_CRM_API.Controllers.CRM
             return value.HasValue
                 ? value.Value.ToString(CultureInfo.InvariantCulture)
                 : "null";
+        }
+
+        // Formats optional text for compact diagnostic logs.
+        private static string ToLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? "-"
+                : value.Trim().Replace("\r", " ").Replace("\n", " ");
+        }
+
+        // Formats AX header extras without leaking them back through the API response.
+        private static string FormatAxExtrasForLog(IEnumerable<string> extras)
+        {
+            if (extras == null)
+                return "-";
+
+            var values = extras
+                .Take(20)
+                .Select((value, index) => $"{index + 1}:{ToLogValue(value)}")
+                .ToList();
+
+            return values.Count == 0 ? "-" : string.Join("|", values);
         }
 
         // Converts bool to AX int (1/0).
