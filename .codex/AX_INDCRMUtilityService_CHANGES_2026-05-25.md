@@ -30,6 +30,8 @@ Temporary configuration placeholders:
 - `ParameterTable.INDInternalApiClientId`
 - `ParameterTable.INDInternalApiClientSecret`
 
+Current runtime resolution lives in `INDInternalApiClientServer`: it uses `INDDefaultParameters.InternalAPIUrlService`, `INDDefaultParameters.APIUserId`, and `INDDefaultParameters.INDAPIIntServiceUser().Password` first, matching the working manual jobs, and only falls back to these placeholders if the default-parameter values are empty.
+
 ## Behavior
 
 - Does not contain CRM or expense sheet link logic.
@@ -43,5 +45,5 @@ Temporary configuration placeholders:
 
 - The actual Axapta technical configuration table/fields must replace the temporary `ParameterTable` placeholders.
 - `INDInternalApiClientServer` must be imported before this facade compiles.
-- The COM DLL/type library must expose `SendMailEx` before the global helper can send mail.
+- The simple mail facade can use the existing COM `SendMail` method. `SendMailEx` is only required for extended mail properties such as CC, BCC, Reply-To, SaveToSentItems, and Importance.
 - Smoke test jobs for direct COM `SendMail` and `SendMailEx` calls are documented in `C:\INDProjects\IND_INTERNAL_API\.codex\IND_INTERNAL_API_CLIENT_DLL.md`.

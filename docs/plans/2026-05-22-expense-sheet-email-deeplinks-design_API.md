@@ -46,6 +46,8 @@ Mail sending has one internal HTTP endpoint and two Axapta-friendly helper shape
 
 Both methods end at `POST /api/internal/v1/mail/messages`; the simple/extended split is a caller convenience, not two different HTTP endpoints.
 
+Axapta compatibility note: the simple helper calls COM `IND.InternalApiClient.SendMail` directly and does not delegate to `sendInternalApiMailEx`. This keeps the expense-sheet notification path independent from a regenerated AX Business Class wrapper or `SendMailEx`.
+
 ## Current State
 
 ### Web project
