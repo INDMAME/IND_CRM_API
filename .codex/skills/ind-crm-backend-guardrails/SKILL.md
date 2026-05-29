@@ -43,6 +43,7 @@ Before editing code:
 - Present a short plan in bullets for any non-trivial change.
 - Propose the smallest safe change that solves the request.
 - Review the plan for loose ends before coding: ownership of the trigger, sender/recipient rules, duplicated execution paths, configuration source, rollback/transaction boundary, idempotency, logging, and documentation impact.
+- When the user asks to plan or analyze an Axapta/API change, explicitly scan for loose ends and alignment gaps before editing: status transitions, owner/actor semantics, fallback behavior, template/configuration validity, related projects, and import/compile impact.
 - When multiple projects must align, explicitly state which project owns each responsibility and which companion prompts/docs must be updated.
 - If there are multiple valid approaches, present concise options with a recommendation and ask before implementing.
 - If requirements are unclear or behavior could change in different valid ways, ask a clarifying question before coding.

@@ -293,7 +293,7 @@ No public email endpoint is required for v1 unless there is an explicit resend/a
 
 ### 2. Add notification services
 
-Superseded for expense-sheet status notifications on 2026-05-27. These API services may remain as historical/legacy code, but they must not be wired into `PUT /api/crm/expensesheets/{hojaGastosId}` for the current Axapta-owned design.
+Superseded for expense-sheet status notifications on 2026-05-27. These API services were removed from `IND_CRM_API` on 2026-05-29 because the current Axapta-owned design sends through `INDCRMExpenseSheetService -> INDCRMUtilityService -> IND_INTERNAL_API`.
 
 Recommended new API files:
 

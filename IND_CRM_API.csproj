@@ -155,9 +155,6 @@
     <Reference Include="Topshelf, Version=4.3.0.0, Culture=neutral, PublicKeyToken=b800c4cfcdeea87b, processorArchitecture=MSIL">
       <HintPath>packages\Topshelf.4.3.0\lib\net452\Topshelf.dll</HintPath>
     </Reference>
-    <Reference Include="WebActivatorEx, Version=2.0.0.0, Culture=neutral, PublicKeyToken=7b26dc2a43f6a0d4, processorArchitecture=MSIL">
-      <HintPath>packages\WebActivatorEx.2.0\lib\net40\WebActivatorEx.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App_Start\DependencyConfig.cs" />
@@ -165,7 +162,6 @@
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
     <Compile Include="App_Start\IND_OpenAiRateLimitHandler.cs" />
     <Compile Include="App_Start\McpToolsDocumentFilter.cs" />
-    <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
     <Compile Include="App_Start\IndGlobalExceptionLogger.cs" />
@@ -187,8 +183,6 @@
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketFromIARequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
-    <Compile Include="Contracts\Notifications\ExpenseSheetNotificationContracts.cs" />
-    <Compile Include="Contracts\Notifications\InternalMailContracts.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
     <Compile Include="Contracts\Responses\AskExpenseSheetsAiResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
@@ -232,7 +226,6 @@
     <Compile Include="Controllers\System\SystemController.cs" />
     <Compile Include="Helpers\ContainerDebugHelper.cs" />
     <Compile Include="Helpers\McpToolsLoader.cs" />
-    <Compile Include="Helpers\PagingHelper.cs" />
     <Compile Include="Helpers\UserCompanyAccessCache.cs" />
     <Compile Include="Helpers\UserContextTokenService.cs" />
     <Compile Include="Program.cs" />
@@ -243,16 +236,13 @@
     <Compile Include="Services\AxSession.cs" />
     <Compile Include="Services\AzureReceiptAnalyzerService.cs" />
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
-    <Compile Include="Services\EcbHttpClient.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
     <Compile Include="Services\ComPlusApplicationController.cs" />
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
-    <Compile Include="Services\ExpenseSheetNotificationService.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
     <Compile Include="Services\OpenErApiExchangeRateProvider.cs" />
     <Compile Include="Services\ExchangeRateProviderErrorCodes.cs" />
-    <Compile Include="Services\ExchangeRateProviderResult.cs" />
     <Compile Include="Services\ExchangeRateResult.cs" />
     <Compile Include="Services\ExchangeRateService.cs" />
     <Compile Include="Services\FileAxLogger.cs" />
@@ -264,7 +254,6 @@
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
     <Compile Include="Services\IAxLogger.cs" />
-    <Compile Include="Services\InternalMailClient.cs" />
     <Compile Include="Services\OpenAITicketNormalizationService.cs" />
     <Compile Include="Services\TicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
@@ -274,11 +263,8 @@
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
-    <Compile Include="Services\Interfaces\IEcbHttpClient.cs" />
     <Compile Include="Services\Interfaces\IExpenseSheetAiDatasetProvider.cs" />
-    <Compile Include="Services\Interfaces\IExpenseSheetNotificationService.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
-    <Compile Include="Services\Interfaces\IInternalMailClient.cs" />
     <Compile Include="Services\Interfaces\IOpenAITicketNormalizationService.cs" />
     <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\ITicketAIProcessingService.cs" />
