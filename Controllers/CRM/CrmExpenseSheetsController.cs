@@ -44,6 +44,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ReimbursableExpenseNo = 0;
         private const int ReimbursableExpenseBoth = 2;
         private const int MaxPageSize = 50;
+        private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
 
         private readonly IAxaptaSessionManager _sessionManager;
 
@@ -760,10 +761,12 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
+                var actorAxUserId = GetOptionalHeaderValue(ActorAxUserIdHeaderName);
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
-                    $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
+                    $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} actorAxUserId={ToLogValue(actorAxUserId)} " +
+                    $"estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -774,7 +777,13 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
                 con.Append(body.projId?.Trim() ?? string.Empty);
-                AppendUpdateHeaderOptionalFields(con, body.expenseSheetStatus, body.exchangeRateMode, body.estadoComentarios, body.reimbursableExpense);
+                AppendUpdateHeaderOptionalFields(
+                    con,
+                    body.expenseSheetStatus,
+                    body.exchangeRateMode,
+                    body.estadoComentarios,
+                    body.reimbursableExpense,
+                    actorAxUserId);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1990,13 +1999,15 @@ namespace IND_CRM_API.Controllers.CRM
             int? expenseSheetStatus,
             int? exchangeRateMode,
             string estadoComentarios,
-            int? reimbursableExpense)
+            int? reimbursableExpense,
+            string actorAxUserId = null)
         {
             if (container == null)
                 return;
 
             var hasEstadoComentarios = estadoComentarios != null;
-            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios && !reimbursableExpense.HasValue)
+            var hasActorAxUserId = !string.IsNullOrWhiteSpace(actorAxUserId);
+            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios && !reimbursableExpense.HasValue && !hasActorAxUserId)
                 return;
 
             const string noOptionalValueToken = "null";
@@ -2006,7 +2017,7 @@ namespace IND_CRM_API.Controllers.CRM
             else
                 container.Append(noOptionalValueToken);
 
-            if (exchangeRateMode.HasValue || hasEstadoComentarios || reimbursableExpense.HasValue)
+            if (exchangeRateMode.HasValue || hasEstadoComentarios || reimbursableExpense.HasValue || hasActorAxUserId)
             {
                 if (exchangeRateMode.HasValue)
                     container.Append(exchangeRateMode.Value);
@@ -2015,12 +2026,37 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (hasEstadoComentarios)
                     container.Append(estadoComentarios.Trim());
-                else if (reimbursableExpense.HasValue)
+                else if (reimbursableExpense.HasValue || hasActorAxUserId)
                     container.Append(noOptionalValueToken);
 
                 if (reimbursableExpense.HasValue)
                     container.Append(reimbursableExpense.Value);
+                else if (hasActorAxUserId)
+                    container.Append(noOptionalValueToken);
+
+                if (hasActorAxUserId)
+                    container.Append(actorAxUserId.Trim());
             }
+        }
+
+        // Reads optional forwarding headers without making them part of the public body contract.
+        private string GetOptionalHeaderValue(string headerName)
+        {
+            try
+            {
+                IEnumerable<string> values;
+                if (Request?.Headers != null &&
+                    Request.Headers.TryGetValues(headerName, out values))
+                {
+                    return values?.FirstOrDefault()?.Trim();
+                }
+            }
+            catch
+            {
+                // Keep optional headers best-effort so legacy API behavior remains stable.
+            }
+
+            return null;
         }
 
         // Appends optional line fields to AX container using stable positions after legacy columns.
