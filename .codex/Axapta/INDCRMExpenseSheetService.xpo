@@ -4466,13 +4466,20 @@ Formatversion: 1
         #
         #    try
         #    {
-        #        return INDCRMUtilityService::sendInternalApiMail(
+        #        // Usa el envio extendido para marcar la notificacion con importancia alta en Outlook.
+        #        return INDCRMUtilityService::sendInternalApiMailEx(
         #            companyId,
         #            fromEmail,
+        #            '',
         #            toEmail,
+        #            '',
+        #            '',
+        #            '',
         #            subject,
         #            htmlBody,
         #            textBody,
+        #            false,
+        #            strFmt('%1', enum2value(INDEmailImportance::high)),
         #            'AxaptaExpenseSheetStatus',
         #            eventType,
         #            'ExpenseSheet',

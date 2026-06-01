@@ -41,7 +41,7 @@ El servicio construye `%12` como `data:image/png;base64,<Logo>` si el valor no v
 En los HTML el logo siempre debe quedar como:
 
 ```html
-<img src="%12" alt="Insertec" />
+<img src="%12" alt="insertec" width="180" height="48" style="display:block;width:180px;max-width:180px;height:auto;border:0;outline:none;text-decoration:none;" />
 ```
 
 ## Vigencia
@@ -59,6 +59,8 @@ La tabla valida que no existan rangos solapados para el mismo `TargetModule` + `
 
 - No hardcodear URLs; el enlace lo entrega Axapta en `%6`.
 - No pegar Base64 dentro del HTML; usar el campo `Logo`.
-- Los HTML usan estilos inline y no dependen de CSS externo ni Google Fonts.
+- Los HTML usan `Arial, Helvetica, sans-serif` como fuente estandar de email.
+- Los HTML usan estilos inline, tablas, `bgcolor`, `align` y `valign`; no dependen de CSS externo, Google Fonts, `position:absolute`, sombras ni `border-radius`.
+- El logo se limita con atributo HTML `width="180"` y estilo inline para evitar que clientes de correo ignoren el ancho CSS.
 - Mantener los asuntos por debajo de 100 caracteres, que es el tamano actual de `SubjectTemplate`.
 - Tras importar en Axapta, probar un envio real para confirmar que `strFmt` resuelve correctamente `%10`, `%11` y `%12` en Axapta 3.0.
