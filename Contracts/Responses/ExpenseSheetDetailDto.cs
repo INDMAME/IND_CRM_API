@@ -25,6 +25,8 @@ namespace IND_CRM_API.Contracts.Responses
         // Reimbursable expense enum value returned by AX.
         public int? ReimbursableExpense { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
+        // Display name resolved from CRMUsuarioTable for the sheet owner.
+        public string UserName { get; set; }
     }
 
     /// <summary>

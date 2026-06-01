@@ -106,7 +106,8 @@ Endpoints
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense
+  Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense
+  Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja (`userId`). Se agrega al contrato de detalle como campo adicional compatible con clientes anteriores.
   Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)

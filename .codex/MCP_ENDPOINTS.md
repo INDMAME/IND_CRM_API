@@ -143,7 +143,8 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `reimbursableExpense`
+- Respuesta (header) incluye: `userId`, `userName`, `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `reimbursableExpense`
+- Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja.
 - Respuesta (lineas) incluye: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `exchRate`
 - Nota de routing: `hojaGastosId` excluye el literal `tickets` para evitar colision con `/api/crm/expensesheets/tickets`.
 

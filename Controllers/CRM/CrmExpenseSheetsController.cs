@@ -2346,6 +2346,7 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
+            // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName
             // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense
             // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
             // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
@@ -2373,6 +2374,7 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.Voucher = NormalizeVoucher(headerExtras[10]);
                 detail.CreatedDate = FormatApiDate(headerExtras[11]);
                 detail.ReimbursableExpense = headerExtras.Count >= 13 ? ToInt(headerExtras[12]) : null;
+                detail.UserName = headerExtras.Count >= 14 ? headerExtras[13] : string.Empty;
             }
             else if (headerExtras.Count == 11)
             {
@@ -2389,6 +2391,7 @@ namespace IND_CRM_API.Controllers.CRM
                     detail.ProjId = headerExtras[8];
                     detail.Voucher = NormalizeVoucher(headerExtras[9]);
                     detail.CreatedDate = FormatApiDate(headerExtras[10]);
+                    detail.UserName = string.Empty;
                 }
                 else
                 {
@@ -2403,6 +2406,7 @@ namespace IND_CRM_API.Controllers.CRM
                     detail.ProjId = headerExtras[9];
                     detail.Voucher = NormalizeVoucher(headerExtras[10]);
                     detail.CreatedDate = null;
+                    detail.UserName = string.Empty;
                 }
             }
             else if (headerExtras.Count == 10)
@@ -2418,6 +2422,7 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.ProjId = headerExtras[8];
                 detail.Voucher = NormalizeVoucher(headerExtras[9]);
                 detail.CreatedDate = null;
+                detail.UserName = string.Empty;
             }
             else if (headerExtras.Count >= 8)
             {
@@ -2432,6 +2437,7 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.ProjId = headerExtras[6];
                 detail.Voucher = NormalizeVoucher(headerExtras[7]);
                 detail.CreatedDate = null;
+                detail.UserName = string.Empty;
             }
             else
             {
@@ -2446,6 +2452,7 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.ProjId = headerExtras[5];
                 detail.Voucher = NormalizeVoucher(headerExtras[6]);
                 detail.CreatedDate = null;
+                detail.UserName = string.Empty;
             }
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
