@@ -230,15 +230,20 @@ Endpoints
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
   Body optional: `accountNum`.
+  AX filtra los propietarios visibles con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
   Response rows incluyen `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod` y `Description`.
-- GET /api/crm/activities/{recId} (Authorize + X-IND-Company)
+- GET /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
   Response rows incluyen el detalle de visita con `ContactMethod`.
-- GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company)
+- GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company + X-IND-AxUserId)
+  AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
   Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`.
-- DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company)
+  AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+- DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 
 ## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

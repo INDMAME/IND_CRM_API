@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Propuesta funcional y técnica - Capa simple de visibilidad por módulo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --text: #e5edf5;
+      --muted: #a8b3c2;
+      --line: #314154;
+      --soft: #182232;
+      --panel: #111a27;
+      --accent: #58c4ff;
+      --tech: #fb923c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #07111f;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 48px 56px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      color: #f3f7fb;
+      line-height: 1.25;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 36px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--line);
+      font-size: 22px;
+    }
+
+    h3 {
+      margin: 28px 0 12px;
+      font-size: 18px;
+    }
+
+    h4 {
+      margin: 22px 0 10px;
+      font-size: 15px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 16px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #241a12;
+      color: var(--tech);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.94em;
+      font-weight: 600;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 12px 0 20px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #070d18;
+      color: #e5edf5;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: var(--tech);
+      font-weight: 500;
+    }
+
+    table {
+      width: 100%;
+      margin: 14px 0 22px;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      background: #0e1724;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #f3f7fb;
+      background: #162235;
+      font-weight: 700;
+    }
+
+    .meta {
+      margin-bottom: 28px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .callout {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      background: #0d2537;
+    }
+
+    .inventory-item {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0e1724;
+    }
+
+    .inventory-item h4 {
+      margin-top: 0;
+      text-transform: none;
+      color: #f3f7fb;
+      font-size: 16px;
+    }
+
+    .toc {
+      margin: 20px 0 30px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0e1724;
+    }
+
+    .page-break {
+      break-before: page;
+    }
+
+    @media print {
+      body {
+        background: #07111f;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      main {
+        max-width: none;
+        margin: 0;
+        padding: 24mm 18mm;
+        border: 0;
+        box-shadow: none;
+      }
+
+      h2,
+      h3 {
+        break-after: avoid;
+      }
+
+      .inventory-item {
+        break-inside: avoid;
+      }
+
+      table {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Propuesta funcional y técnica - Capa simple de visibilidad por módulo</h1>
+    <p class="meta">
+      Fuente:
+      <a href="https://app.notion.com/p/374d344f518881fe9edfd22555d7c8b0">Propuesta funcional</a>
+      y
+      <a href="https://app.notion.com/p/374d344f51888191b2f7caa55bd8dc6d">Propuesta técnica</a>.
+      Exportado: 2026-06-04.
+    </p>
+
+    <div class="callout">
+      <strong>Resumen:</strong> la solución añade una capa de visibilidad a nivel registro sobre el permiso web actual de Axapta. Mantiene la autorización por empresa, aplicación y módulo, y añade reglas para decidir si un usuario ve solo sus registros, su jerarquía, targets manuales o todos los registros permitidos.
+    </div>
+
+    <nav class="toc" aria-label="Índice">
+      <h2>Índice</h2>
+      <ol>
+        <li><a href="#funcional">Propuesta funcional</a></li>
+        <li><a href="#tecnica">Propuesta técnica</a></li>
+      </ol>
+    </nav>
+
+    <section id="funcional">
+      <h2>1. Propuesta funcional</h2>
+
+      <h3>Resumen ejecutivo</h3>
+      <p>Esta propuesta define una capa simple de visibilidad de datos sobre la configuración actual de permisos web de Axapta.</p>
+      <p>La base actual se mantiene:</p>
+      <pre><code>INDCiasPermitidas
+-&gt; INDWebModuleAccessLevel
+-&gt; INDWebModule
+-&gt; INDWebApp</code></pre>
+      <p>El cambio principal es añadir una capa de visibilidad por registros que se pueda configurar de forma funcional, sin reutilizar <code>CRMUsuarioSubordinadoTable</code>.</p>
+      <p>La versión simplificada queda así:</p>
+      <pre><code>Permiso web actual por empresa, aplicación y módulo
++ modo base de visibilidad en INDWebModuleAccessLevel
++ jerarquía base por empresa
++ targets manuales para agregar o quitar personas por módulo</code></pre>
+      <p>La jerarquía no se define por <code>ModuleCode</code> ni por <code>AppCode</code>. Se define solo por empresa, mediante <code>CompanyId</code>. Después, cada módulo ajusta esa jerarquía con <code>INDModuleDataVisibilityTarget</code>, agregando o quitando personas concretas desde la fila de permiso web del módulo.</p>
+      <p>Los campos de persona de las nuevas tablas se relacionan directamente con <code>INDPersonaTable.Alias</code>.</p>
+
+      <h3>Convención de nombres</h3>
+      <ul>
+        <li>Los objetos nuevos de Axapta llevan prefijo <code>IND</code>.</li>
+        <li>Los campos internos no necesitan ese prefijo.</li>
+        <li>Ejemplo: el campo funcional <code>DataVisibilityMode</code> usa el enum técnico <code>INDDataVisibilityMode</code>.</li>
+        <li>Ejemplo: el campo funcional <code>HierarchyDepth</code> usa el enum técnico <code>INDDataVisibilityHierarchyDepth</code>.</li>
+        <li>Ejemplo: el campo funcional <code>TargetScope</code> usa el enum técnico <code>INDDataVisibilityTargetScope</code>.</li>
+      </ul>
+
+      <h3>Nuevo control de profundidad de jerarquía</h3>
+      <p>Se añade el campo <code>HierarchyDepth</code> para decidir hasta dónde baja la jerarquía cuando el modo de visibilidad usa subordinados.</p>
+      <ul>
+        <li><code>DirectOnly / Solo directos</code>: solo incluye subordinados directos del usuario o del target configurado.</li>
+        <li><code>FullDescendants / Jerarquía completa</code>: incluye todos los descendientes hacia abajo, sin límite funcional de niveles.</li>
+      </ul>
+      <p>Este campo aplica cuando <code>DataVisibilityMode</code> usa jerarquía, por ejemplo <code>OwnAndHierarchy</code> o <code>HierarchyOnly</code>, y también cuando un target manual tiene <code>TargetScope = TargetAndHierarchy</code>.</p>
+      <p>Valor por defecto recomendado: <code>FullDescendants</code>, para mantener el comportamiento planteado originalmente en la propuesta.</p>
+
+      <h3>Objetivo funcional</h3>
+      <p>Permitir que una persona pueda ver:</p>
+      <ul>
+        <li>Solo sus registros.</li>
+        <li>Sus registros y la jerarquía de personas configurada para la empresa, pudiendo limitarla a subordinados directos o permitir jerarquía completa.</li>
+        <li>Solo la jerarquía de la empresa, pudiendo limitarla a subordinados directos o permitir jerarquía completa.</li>
+        <li>Solo personas agregadas manualmente para un módulo.</li>
+        <li>Todos los registros permitidos por empresa y módulo.</li>
+      </ul>
+      <p>Además, permitir ajustes manuales por módulo:</p>
+      <ul>
+        <li>Agregar una persona concreta.</li>
+        <li>Agregar una persona y su jerarquía según la profundidad configurada.</li>
+        <li>Quitar una persona concreta.</li>
+        <li>Quitar una persona y su jerarquía según la profundidad configurada.</li>
+      </ul>
+
+      <div class="callout">
+        <strong>Regla clave:</strong> si una persona aparece por varias vías de visibilidad, pero existe al menos una configuración vigente que la marque como <code>Quitar</code>, esa persona queda fuera del resultado visible.
+      </div>
+
+      <h3>Regla clave: quitar siempre prevalece</h3>
+      <p>Esta regla debe quedar como principio funcional y técnico de la solución.</p>
+      <pre><code>Jerarquía base agrega a PGARCIA
+Target manual agrega a PGARCIA
+Target manual quita a PGARCIA
+Resultado final: PGARCIA no visible</code></pre>
+      <p>La regla aplica también cuando se quita una jerarquía completa. Si una persona pertenece a una rama quitada, queda descartada aunque otra línea la agregue por jerarquía o por target manual.</p>
+
+      <h3>Base actual que se conserva</h3>
+      <ul>
+        <li><code>INDWebUserEntraIdentity</code> sigue vinculando Entra con el usuario Axapta.</li>
+        <li><code>INDCiasPermitidas</code> sigue indicando a qué empresas tiene acceso el usuario.</li>
+        <li><code>INDWebModuleAccessLevel</code> sigue indicando a qué módulos tiene acceso el usuario y con qué <code>AccessRights</code>.</li>
+        <li><code>INDWebModule</code> e <code>INDWebApp</code> siguen siendo el catálogo de módulos y aplicaciones.</li>
+        <li>El frontend seguirá usando los permisos para mostrar u ocultar acciones.</li>
+        <li>La API y Axapta seguirán haciendo la validación real de seguridad.</li>
+      </ul>
+
+      <h3>Cambio funcional importante</h3>
+      <ul>
+        <li>La jerarquía base se define solo por <code>CompanyId</code>.</li>
+        <li>Esa misma jerarquía puede servir para todas las aplicaciones y módulos de la empresa.</li>
+        <li>Las diferencias por módulo se gestionan desde <code>INDModuleDataVisibilityTarget</code>.</li>
+        <li><code>INDModuleDataVisibilityTarget</code> puede agregar o quitar personas para un permiso de módulo concreto.</li>
+      </ul>
+      <pre><code>Empresa: AZM
+Jerarquía base:
+MMEZA -&gt; JLOPEZ -&gt; PGARCIA</code></pre>
+      <p>Para <code>VISITAS_GESTION</code>, se puede usar la jerarquía completa. Para <code>GASTOS_HOJA_GASTO</code>, se puede quitar a <code>PGARCIA</code> sin tocar la jerarquía base.</p>
+
+      <h3>Cómo se configura en Axapta</h3>
+      <p>En la pantalla actual de <code>Accesos Web</code>, dentro de los módulos web, se añadirían columnas resumen.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Código sitio web</th>
+            <th><code>ModuleCode</code></th>
+            <th><code>AccessRights</code></th>
+            <th>Visibilidad</th>
+            <th>Profundidad</th>
+            <th>Mutaciones</th>
+            <th>Targets</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CRM</td>
+            <td><code>VISITAS_GESTION</code></td>
+            <td>Control total</td>
+            <td>Propios + jerarquía</td>
+            <td>Completa</td>
+            <td>Propios</td>
+            <td>2 agregados</td>
+          </tr>
+          <tr>
+            <td>CRM</td>
+            <td><code>GASTOS_HOJA_GASTO</code></td>
+            <td>Control total</td>
+            <td>Propios + jerarquía</td>
+            <td>Solo directos</td>
+            <td>Reglas del módulo</td>
+            <td>1 quitado</td>
+          </tr>
+          <tr>
+            <td>CRM</td>
+            <td><code>GASTOS_TICKETS</code></td>
+            <td>Edición</td>
+            <td>Solo propios</td>
+            <td>No aplica</td>
+            <td>Reglas del módulo</td>
+            <td>0</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Botones recomendados:</p>
+      <ul>
+        <li><code>Jerarquía</code>: configura la jerarquía base de la empresa.</li>
+        <li><code>Targets</code>: configura reglas manuales de agregar/quitar para el módulo seleccionado.</li>
+      </ul>
+
+      <section class="inventory-item">
+        <h4>Ejemplo funcional 1: agregar persona puntual</h4>
+        <pre><code>Usuario: MMEZA
+Empresa: AZM
+AppCode: CRM
+Módulo: VISITAS_GESTION
+DataVisibilityMode: OwnAndHierarchy
+Target: JLOPEZ
+TargetAction: Add / Agregar
+TargetScope: TargetOnly / Solo persona</code></pre>
+        <ul>
+          <li>MMEZA ve sus propios registros.</li>
+          <li>MMEZA ve su jerarquía base de la empresa <code>AZM</code>.</li>
+          <li>MMEZA también ve los registros de <code>JLOPEZ</code> en el módulo configurado.</li>
+          <li>No ve la jerarquía de <code>JLOPEZ</code> por esta regla puntual.</li>
+        </ul>
+      </section>
+
+      <section class="inventory-item">
+        <h4>Ejemplo funcional 2: agregar persona con jerarquía</h4>
+        <pre><code>Target: JLOPEZ
+TargetAction: Add / Agregar
+TargetScope: TargetAndHierarchy / Persona + jerarquía
+HierarchyDepth: FullDescendants / Jerarquía completa</code></pre>
+        <ul>
+          <li>Se agrega <code>JLOPEZ</code>.</li>
+          <li>También se agregan todos los descendientes de <code>JLOPEZ</code> dentro de la misma empresa porque <code>HierarchyDepth = FullDescendants</code>.</li>
+          <li>Si <code>HierarchyDepth = DirectOnly</code>, solo se agregarían sus subordinados directos.</li>
+        </ul>
+      </section>
+
+      <section class="inventory-item">
+        <h4>Ejemplo funcional 3: ver solo subordinados directos</h4>
+        <pre><code>DataVisibilityMode: OwnAndHierarchy
+HierarchyDepth: DirectOnly / Solo directos</code></pre>
+        <p>Jerarquía:</p>
+        <pre><code>Director
+  -&gt; Jefe A
+      -&gt; Usuario 1
+      -&gt; Usuario 2</code></pre>
+        <ul>
+          <li>El Director ve sus propios registros.</li>
+          <li>El Director ve los registros de <code>Jefe A</code>.</li>
+          <li>El Director no ve los registros de <code>Usuario 1</code> ni <code>Usuario 2</code>, porque son subordinados del subordinado.</li>
+          <li>Esta configuración sirve cuando se quiere permitir control directo sin heredar equipos completos de otros jefes.</li>
+        </ul>
+      </section>
+
+      <section class="inventory-item">
+        <h4>Ejemplo funcional 4: quitar persona puntual</h4>
+        <pre><code>DataVisibilityMode: OwnAndHierarchy
+Target: PGARCIA
+TargetAction: Remove / Quitar
+TargetScope: TargetOnly / Solo persona</code></pre>
+        <ul>
+          <li>Primero se resuelve la visibilidad base.</li>
+          <li>Después se quita <code>PGARCIA</code> del resultado visible para el módulo configurado.</li>
+          <li>No se quitan sus descendientes.</li>
+        </ul>
+      </section>
+
+      <section class="inventory-item">
+        <h4>Ejemplo funcional 5: quitar persona y su jerarquía</h4>
+        <pre><code>Target: JLOPEZ
+TargetAction: Remove / Quitar
+TargetScope: TargetAndHierarchy / Persona + jerarquía
+HierarchyDepth: FullDescendants / Jerarquía completa</code></pre>
+        <ul>
+          <li>Se quita <code>JLOPEZ</code> del resultado visible del módulo configurado.</li>
+          <li>También se quitan todos los descendientes de <code>JLOPEZ</code> dentro de la misma empresa porque <code>HierarchyDepth = FullDescendants</code>.</li>
+          <li>Si <code>HierarchyDepth = DirectOnly</code>, solo se quitarían sus subordinados directos.</li>
+          <li>Esta regla permite recortar una rama completa o solo el primer nivel sin modificar la jerarquía base.</li>
+        </ul>
+      </section>
+
+      <h3>Herencia, duplicados y prioridad</h3>
+      <p>La jerarquía soporta dos formas de profundidad configurables por módulo:</p>
+      <ul>
+        <li><code>DirectOnly / Solo directos</code>: recorre únicamente el primer nivel de subordinados.</li>
+        <li><code>FullDescendants / Jerarquía completa</code>: recorre todos los niveles descendentes hasta que no haya más personas.</li>
+      </ul>
+      <pre><code>Director
+  -&gt; Jefe A
+      -&gt; Usuario X
+  -&gt; Jefe B
+      -&gt; Usuario X</code></pre>
+      <p>Resultado efectivo:</p>
+      <pre><code>Jefe A, Jefe B, Usuario X</code></pre>
+      <ul>
+        <li>Con <code>FullDescendants</code>, la jerarquía se recorre hasta que no haya más descendientes.</li>
+        <li>Con <code>DirectOnly</code>, solo se toma el primer nivel de subordinados.</li>
+        <li>Si una persona aparece por varias ramas, aparece una sola vez.</li>
+        <li>Si hay ciclos, el resolver corta la rama usando un conjunto de personas ya visitadas.</li>
+        <li><code>Remove / Quitar</code> tiene prioridad sobre <code>Add / Agregar</code>, sobre la jerarquía base, sobre <code>HierarchyDepth</code> y sobre <code>AllUsers</code>.</li>
+        <li>Las reglas solo se consideran vigentes si sus fechas <code>ValidFrom</code> y <code>ValidTo</code> aplican al día de consulta.</li>
+        <li>No se permite configurar al propio usuario visor como target manual; para excluir propios se debe usar un modo base que no incluya propios.</li>
+      </ul>
+
+      <h3>Decisiones funcionales cerradas</h3>
+      <ul>
+        <li>La propuesta válida para análisis es la versión simplificada.</li>
+        <li>La jerarquía base se define por empresa, no por aplicación ni por módulo.</li>
+        <li>Las diferencias por módulo se resuelven con targets manuales.</li>
+        <li>Los targets manuales pueden agregar o quitar.</li>
+        <li>En jerarquías y targets, <code>Active</code> será un dato informativo calculado por <code>ValidFrom</code> y <code>ValidTo</code>; no se mantiene un <code>IsActive</code> físico.</li>
+        <li>Se añade <code>HierarchyDepth</code>, basado en el enum técnico <code>INDDataVisibilityHierarchyDepth</code>, para definir si la jerarquía baja solo a subordinados directos o a todos los descendientes.</li>
+        <li>El antiguo check <code>IncludeTargetHierarchy</code> se sustituye por el campo <code>TargetScope</code>, basado en el enum técnico <code>INDDataVisibilityTargetScope</code>.</li>
+        <li>Los campos de persona usan <code>INDPersonaTable.Alias</code>.</li>
+        <li><code>INDPersonaTable.Alias</code> se considera único para esta solución.</li>
+        <li>Las personas con <code>INDPersonaTable.Blocked = Sí</code> quedan excluidas siempre de la visibilidad y de la configuración vigente.</li>
+      </ul>
+
+      <h3>Decisiones confirmadas y aclaraciones antes de implementar</h3>
+      <ul>
+        <li><code>INDPersonaTable.Alias</code> es único y será la identidad funcional de visibilidad.</li>
+        <li>Las relaciones de jerarquía y targets se validan siempre contra <code>INDPersonaTable.Alias</code>.</li>
+        <li>Solo se consideran personas con <code>INDPersonaTable.Blocked = No</code>; una persona bloqueada no debe aparecer como visible ni poder guardarse como configuración vigente.</li>
+        <li>No se permite que una persona sea su propio subordinado: <code>ParentPersonAlias</code> debe ser distinto de <code>ChildPersonAlias</code>.</li>
+        <li>No se permite configurar al usuario visor como su propio target manual; su propia visibilidad se controla con <code>DataVisibilityMode</code>.</li>
+        <li>La profundidad de subordinados se controla con <code>HierarchyDepth</code>: <code>DirectOnly</code> para primer nivel o <code>FullDescendants</code> para toda la rama.</li>
+        <li>"Propietario real del registro" no significa el jefe que accede al módulo. Es el campo de cada tabla de negocio que identifica de quién es el registro y que debe poder mapearse a <code>INDPersonaTable.Alias</code>.</li>
+        <li>En el módulo piloto de visitas queda como actividad técnica identificar qué campo actúa como propietario, responsable, creador o usuario asignado del registro.</li>
+      </ul>
+    </section>
+
+    <section id="tecnica" class="page-break">
+      <h2>2. Propuesta técnica</h2>
+
+      <h3>Objetivo técnico</h3>
+      <p>Esta sección contiene el detalle técnico de la capa simple de visibilidad por módulo.</p>
+
+      <h3>Convención de nombres AX</h3>
+      <p>Los objetos nuevos de Axapta deben llevar prefijo <code>IND</code> para identificarlos como objetos Insertec: enums, tablas, formularios, clases, EDTs si se crean, menús y elementos de menú.</p>
+      <p>Los campos internos de una tabla nueva o existente no necesitan el prefijo <code>IND</code>. Por ejemplo, el campo puede llamarse <code>DataVisibilityMode</code>, pero el enum AX que usa debe llamarse <code>INDDataVisibilityMode</code>. El campo <code>HierarchyDepth</code> debe usar el enum AX <code>INDDataVisibilityHierarchyDepth</code>.</p>
+
+      <h3>1. Campos nuevos en tabla existente</h3>
+      <h4>Tabla existente: <code>INDWebModuleAccessLevel</code></h4>
+      <p>Esta tabla sigue siendo la base del permiso web por usuario, empresa, aplicación y módulo. La propuesta simple añade aquí el modo base de visibilidad y la política de mutaciones.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Campo nuevo</th>
+            <th>Tipo conceptual</th>
+            <th>Obligatorio</th>
+            <th>Valor por defecto</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>DataVisibilityMode</code></td>
+            <td><code>INDDataVisibilityMode</code></td>
+            <td>Sí</td>
+            <td><code>OwnOnly</code></td>
+            <td>Define el conjunto base de personas visibles para el módulo.</td>
+          </tr>
+          <tr>
+            <td><code>HierarchyDepth</code></td>
+            <td><code>INDDataVisibilityHierarchyDepth</code></td>
+            <td>Sí</td>
+            <td><code>FullDescendants</code></td>
+            <td>Define si la jerarquía baja solo al primer nivel o a todos los descendientes. Solo aplica cuando se usa jerarquía.</td>
+          </tr>
+          <tr>
+            <td><code>MutationPolicy</code></td>
+            <td><code>INDMutationPolicy</code></td>
+            <td>Sí</td>
+            <td><code>ModuleBusinessRules</code></td>
+            <td>Define cómo tratar edición y eliminación sobre registros visibles.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>2. Enum AX nuevo: <code>INDDataVisibilityMode</code></h3>
+      <p>El modo define el conjunto base. Después se aplican los targets manuales.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Valor</th>
+            <th>Significado</th>
+            <th>Incluye persona actual</th>
+            <th>Incluye jerarquía base</th>
+            <th>Usa targets</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>OwnOnly</code></td>
+            <td>Solo registros propios.</td>
+            <td>Sí</td>
+            <td>No</td>
+            <td>Sí, como ajuste posterior.</td>
+          </tr>
+          <tr>
+            <td><code>OwnAndHierarchy</code></td>
+            <td>Propios + jerarquía base de la empresa.</td>
+            <td>Sí</td>
+            <td>Sí</td>
+            <td>Sí, como ajuste posterior.</td>
+          </tr>
+          <tr>
+            <td><code>HierarchyOnly</code></td>
+            <td>Solo jerarquía base, sin propios.</td>
+            <td>No</td>
+            <td>Sí</td>
+            <td>Sí, como ajuste posterior.</td>
+          </tr>
+          <tr>
+            <td><code>ManualTargetsOnly</code></td>
+            <td>Solo personas agregadas manualmente.</td>
+            <td>No</td>
+            <td>No</td>
+            <td>Sí.</td>
+          </tr>
+          <tr>
+            <td><code>AllUsers</code></td>
+            <td>Todos los registros de la empresa/módulo.</td>
+            <td>N/A</td>
+            <td>N/A</td>
+            <td>Sí, principalmente para quitar excepciones.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3. Enum AX nuevo: <code>INDDataVisibilityHierarchyDepth</code></h3>
+      <p>Este enum define hasta dónde se recorre la jerarquía cuando el modo base o un target manual incluye jerarquía.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Valor</th>
+            <th>Significado</th>
+            <th>Uso recomendado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>DirectOnly</code></td>
+            <td>Incluye únicamente subordinados directos del usuario visor o del target configurado.</td>
+            <td>Cuando un jefe debe ver solo su equipo directo, sin heredar equipos de jefes subordinados.</td>
+          </tr>
+          <tr>
+            <td><code>FullDescendants</code></td>
+            <td>Incluye todos los descendientes hacia abajo, sin límite funcional de niveles.</td>
+            <td>Cuando un jefe superior debe ver jefaturas completas y sus equipos.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Valor por defecto recomendado: <code>FullDescendants</code>, para conservar el comportamiento inicial de jerarquía completa.</p>
+
+      <h3>4. Enum AX nuevo: <code>INDMutationPolicy</code></h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Valor</th>
+            <th>Descripción</th>
+            <th>Uso recomendado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>OwnOnly</code></td>
+            <td>Solo permite editar/eliminar registros propios.</td>
+            <td>Lectura amplia, escritura conservadora.</td>
+          </tr>
+          <tr>
+            <td><code>SameAsVisibility</code></td>
+            <td>Permite editar/eliminar todo lo visible.</td>
+            <td>Solo si negocio lo aprueba.</td>
+          </tr>
+          <tr>
+            <td><code>ModuleBusinessRules</code></td>
+            <td>El módulo aplica sus reglas específicas.</td>
+            <td>Hojas de gastos y tickets inicialmente.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5. Enum AX nuevo: <code>INDDataVisibilityTargetAction</code></h3>
+      <p>Este enum se usa en <code>INDModuleDataVisibilityTarget</code> para indicar si una persona configurada se agrega o se quita.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Valor técnico</th>
+            <th>Etiqueta visual</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Add</code></td>
+            <td>Agregar</td>
+            <td>Agrega la persona indicada al resultado visible del módulo.</td>
+          </tr>
+          <tr>
+            <td><code>Remove</code></td>
+            <td>Quitar</td>
+            <td>Quita la persona indicada del resultado visible del módulo. Siempre prevalece.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Valor por defecto recomendado: <code>Add</code>.</p>
+
+      <h3>6. Enum AX nuevo: <code>INDDataVisibilityTargetScope</code></h3>
+      <p>Este enum sustituye el antiguo check <code>IncludeTargetHierarchy</code>. La idea es que la UI no muestre un check ambiguo, sino un alcance claro.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Valor técnico</th>
+            <th>Etiqueta visual</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>TargetOnly</code></td>
+            <td>Solo persona</td>
+            <td>La acción aplica solo sobre <code>TargetPersonAlias</code>.</td>
+          </tr>
+          <tr>
+            <td><code>TargetAndHierarchy</code></td>
+            <td>Persona + jerarquía</td>
+            <td>La acción aplica sobre <code>TargetPersonAlias</code> y su jerarquía usando la profundidad configurada en <code>HierarchyDepth</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>7. Tabla nueva: <code>INDModuleDataVisibilityHierarchyLine</code></h3>
+      <p>Sirve para configurar la jerarquía base por empresa. Ya no depende de <code>ModuleCode</code> ni de <code>AppCode</code>. Los campos de persona se relacionan con <code>INDPersonaTable.Alias</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Campo</th>
+            <th>Tipo conceptual</th>
+            <th>Obligatorio</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>RecId</code></td>
+            <td>int64</td>
+            <td>Sí</td>
+            <td>Identificador interno del registro.</td>
+          </tr>
+          <tr>
+            <td><code>CompanyId</code></td>
+            <td>DataAreaId/string</td>
+            <td>Sí</td>
+            <td>Empresa donde aplica la relación. Debe corresponder con <code>INDCiasPermitidas.CiaId</code>.</td>
+          </tr>
+          <tr>
+            <td><code>ParentPersonAlias</code></td>
+            <td>string / EDT Alias</td>
+            <td>Sí</td>
+            <td>Alias de <code>INDPersonaTable</code> que actúa como responsable o superior.</td>
+          </tr>
+          <tr>
+            <td><code>ChildPersonAlias</code></td>
+            <td>string / EDT Alias</td>
+            <td>Sí</td>
+            <td>Alias de <code>INDPersonaTable</code> que queda debajo del responsable.</td>
+          </tr>
+          <tr>
+            <td><code>Active</code></td>
+            <td><code>display NoYes</code></td>
+            <td>No persistente</td>
+            <td>Campo informativo calculado con <code>ValidFrom</code> y <code>ValidTo</code> respecto al día actual.</td>
+          </tr>
+          <tr>
+            <td><code>ValidFrom</code></td>
+            <td>date</td>
+            <td>No</td>
+            <td>Fecha desde la que aplica la relación.</td>
+          </tr>
+          <tr>
+            <td><code>ValidTo</code></td>
+            <td>date</td>
+            <td>No</td>
+            <td>Fecha hasta la que aplica la relación.</td>
+          </tr>
+          <tr>
+            <td><code>ReasonText</code></td>
+            <td>string/text</td>
+            <td>No</td>
+            <td>Motivo funcional de la relación.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Relaciones recomendadas</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Campo</th>
+            <th>Relación</th>
+            <th>Comentario</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CompanyId</code></td>
+            <td><code>INDCiasPermitidas.CiaId</code> / empresa de trabajo</td>
+            <td>Debe validar empresa existente.</td>
+          </tr>
+          <tr>
+            <td><code>ParentPersonAlias</code></td>
+            <td><code>INDPersonaTable.Alias</code></td>
+            <td>Lookup de persona superior.</td>
+          </tr>
+          <tr>
+            <td><code>ChildPersonAlias</code></td>
+            <td><code>INDPersonaTable.Alias</code></td>
+            <td>Lookup de persona descendente.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Índices recomendados</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Índice</th>
+            <th>Campos</th>
+            <th>Duplicados</th>
+            <th>Uso</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>HierarchyUniqueIdx</code></td>
+            <td><code>CompanyId + ParentPersonAlias + ChildPersonAlias + ValidFrom + ValidTo</code></td>
+            <td>No duplicados exactos</td>
+            <td>Evitar relaciones duplicadas para la misma vigencia.</td>
+          </tr>
+          <tr>
+            <td><code>HierarchyParentIdx</code></td>
+            <td><code>CompanyId + ParentPersonAlias + ValidFrom + ValidTo</code></td>
+            <td>Sí</td>
+            <td>Resolver descendientes vigentes.</td>
+          </tr>
+          <tr>
+            <td><code>HierarchyChildIdx</code></td>
+            <td><code>CompanyId + ChildPersonAlias + ValidFrom + ValidTo</code></td>
+            <td>Sí</td>
+            <td>Validar dependencias, vigencias y ciclos.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Validaciones obligatorias</h4>
+      <ul>
+        <li>No permitir <code>ParentPersonAlias = ChildPersonAlias</code>.</li>
+        <li>Validar que ambos alias existan en <code>INDPersonaTable</code>.</li>
+        <li>Validar que ambos alias tengan <code>INDPersonaTable.Blocked = No</code>.</li>
+        <li>Validar vigencias si se usan <code>ValidFrom</code> y <code>ValidTo</code>.</li>
+        <li>Avisar o bloquear ciclos al guardar, aunque el resolver también debe protegerse.</li>
+      </ul>
+
+      <h3>8. Tabla nueva: <code>INDModuleDataVisibilityTarget</code></h3>
+      <p>Sirve para modificar la visibilidad efectiva de un permiso de módulo concreto. Puede agregar o quitar personas. Los campos de persona se relacionan con <code>INDPersonaTable.Alias</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Campo</th>
+            <th>Tipo conceptual</th>
+            <th>Obligatorio</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>RecId</code></td>
+            <td>int64</td>
+            <td>Sí</td>
+            <td>Identificador interno del registro.</td>
+          </tr>
+          <tr>
+            <td><code>ModuleAccessLevelRecId</code></td>
+            <td>int64</td>
+            <td>Sí</td>
+            <td>Relación con la fila de permiso web del módulo.</td>
+          </tr>
+          <tr>
+            <td><code>TargetPersonAlias</code></td>
+            <td>string / EDT Alias</td>
+            <td>Sí</td>
+            <td>Alias de <code>INDPersonaTable</code> que se agrega o se quita.</td>
+          </tr>
+          <tr>
+            <td><code>TargetAction</code></td>
+            <td><code>INDDataVisibilityTargetAction</code></td>
+            <td>Sí</td>
+            <td>Indica si el target se agrega o se quita.</td>
+          </tr>
+          <tr>
+            <td><code>TargetScope</code></td>
+            <td><code>INDDataVisibilityTargetScope</code></td>
+            <td>Sí</td>
+            <td>Indica si la acción aplica solo a la persona o también a su jerarquía.</td>
+          </tr>
+          <tr>
+            <td><code>Active</code></td>
+            <td><code>display NoYes</code></td>
+            <td>No persistente</td>
+            <td>Campo informativo calculado con <code>ValidFrom</code> y <code>ValidTo</code> respecto al día actual.</td>
+          </tr>
+          <tr>
+            <td><code>ValidFrom</code></td>
+            <td>date</td>
+            <td>No</td>
+            <td>Fecha desde la que aplica la regla.</td>
+          </tr>
+          <tr>
+            <td><code>ValidTo</code></td>
+            <td>date</td>
+            <td>No</td>
+            <td>Fecha hasta la que aplica la regla.</td>
+          </tr>
+          <tr>
+            <td><code>ReasonText</code></td>
+            <td>string/text</td>
+            <td>No</td>
+            <td>Motivo funcional de agregar o quitar.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Relaciones recomendadas</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Campo</th>
+            <th>Relación</th>
+            <th>Comentario</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ModuleAccessLevelRecId</code></td>
+            <td><code>INDWebModuleAccessLevel.RecId</code></td>
+            <td>Permite aplicar la regla a un usuario, empresa, aplicación y módulo concretos.</td>
+          </tr>
+          <tr>
+            <td><code>TargetPersonAlias</code></td>
+            <td><code>INDPersonaTable.Alias</code></td>
+            <td>Lookup de persona agregada o quitada. Solo personas con <code>Blocked = No</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Validaciones obligatorias</h4>
+      <ul>
+        <li>Validar que <code>TargetPersonAlias</code> exista en <code>INDPersonaTable</code>.</li>
+        <li>Validar que <code>TargetPersonAlias</code> tenga <code>INDPersonaTable.Blocked = No</code>.</li>
+        <li>No permitir que <code>TargetPersonAlias</code> sea el alias del usuario visor asociado a <code>ModuleAccessLevelRecId</code>.</li>
+        <li>Validar <code>ValidFrom &lt;= ValidTo</code> si ambas fechas existen.</li>
+        <li>No mantener <code>IsActive</code> físico; <code>Active</code> será un display calculado por vigencia.</li>
+        <li>Mantener <code>TargetAction = Remove / Quitar</code> como regla de mayor prioridad.</li>
+      </ul>
+
+      <h4>Índices recomendados</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Índice</th>
+            <th>Campos</th>
+            <th>Duplicados</th>
+            <th>Uso</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>TargetUniqueIdx</code></td>
+            <td><code>ModuleAccessLevelRecId + TargetPersonAlias + TargetAction + TargetScope + ValidFrom + ValidTo</code></td>
+            <td>No duplicados exactos</td>
+            <td>Evitar reglas duplicadas para la misma persona, acción, alcance y vigencia.</td>
+          </tr>
+          <tr>
+            <td><code>TargetLookupIdx</code></td>
+            <td><code>ModuleAccessLevelRecId + ValidFrom + ValidTo</code></td>
+            <td>Sí</td>
+            <td>Resolver targets vigentes del módulo.</td>
+          </tr>
+          <tr>
+            <td><code>TargetActionIdx</code></td>
+            <td><code>ModuleAccessLevelRecId + TargetAction + ValidFrom + ValidTo</code></td>
+            <td>Sí</td>
+            <td>Separar agregados y quitados vigentes.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>9. Resolución de visibilidad</h3>
+      <p>Para el MVP puede resolverse con métodos estáticos de tabla y <code>INDCRMUtilityService</code>. Si se crea una clase específica para centralizar el algoritmo, el nombre recomendado del objeto AX es <code>INDControlDataVisibilityResolver</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Paso</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Validar empresa, usuario y <code>AccessRights</code> del módulo.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Resolver el alias funcional del usuario visor desde <code>INDPersonaTable</code>.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Construir el conjunto base según el campo <code>DataVisibilityMode</code>.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Resolver jerarquía base con <code>CompanyId</code> y <code>HierarchyDepth</code> cuando aplique.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Aplicar targets <code>Add / Agregar</code> vigentes del permiso de módulo. Si el target usa <code>TargetAndHierarchy</code>, aplicar <code>HierarchyDepth</code>.</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Aplicar targets <code>Remove / Quitar</code> vigentes del permiso de módulo. Si el target usa <code>TargetAndHierarchy</code>, aplicar <code>HierarchyDepth</code>.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Eliminar duplicados y devolver un conjunto único de alias visibles.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Filtrar listados y detalles por propietario del registro.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Regla de prioridad: <code>Remove / Quitar</code> gana sobre cualquier regla de <code>Add / Agregar</code>, sobre jerarquía, sobre <code>HierarchyDepth</code> y sobre <code>AllUsers</code>. Si una persona aparece en varios bloques, una sola línea vigente de quitar basta para descartarla.</p>
+
+      <h3>10. Propietario del registro</h3>
+      <p>Para que el filtro sea consistente, cada módulo debe poder resolver el propietario del registro a <code>INDPersonaTable.Alias</code>.</p>
+      <p>El propietario real del registro no es el jefe que consulta ni el usuario que abre la pantalla. Es el dato del registro de negocio que indica a qué persona pertenece el registro visible: creador, responsable, comercial, empleado, usuario asignado o equivalente según el módulo.</p>
+      <p>La integración debe mapear ese valor a <code>INDPersonaTable.Alias</code> antes de aplicar el filtro.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Módulo</th>
+            <th>Campo propietario recomendado</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Módulos nuevos</td>
+            <td>Alias de <code>INDPersonaTable</code> directo o mapeable.</td>
+            <td>Recomendado.</td>
+          </tr>
+          <tr>
+            <td>Visitas</td>
+            <td><code>INDCreatedByUserId</code> o campo equivalente mapeado a <code>INDPersonaTable.Alias</code>.</td>
+            <td>Pendiente de confirmar.</td>
+          </tr>
+          <tr>
+            <td>Hojas de gastos</td>
+            <td><code>CRMHojaGastosTable.UserId</code> como <code>CRMUserId</code>.</td>
+            <td>Legacy; no migrar en fase 1.</td>
+          </tr>
+          <tr>
+            <td>Tickets</td>
+            <td>Pendiente de confirmar.</td>
+            <td>No migrar sin análisis.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>11. Denegación por defecto</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Situación</th>
+            <th>Comportamiento</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>No hay <code>DataVisibilityMode</code></td>
+            <td>Aplicar <code>OwnOnly</code>.</td>
+          </tr>
+          <tr>
+            <td>No se puede resolver alias del usuario visor</td>
+            <td>No conceder visibilidad ampliada.</td>
+          </tr>
+          <tr>
+            <td>No se puede resolver propietario del registro</td>
+            <td>No conceder visibilidad ampliada.</td>
+          </tr>
+          <tr>
+            <td>Persona inexistente o bloqueada</td>
+            <td>Excluir siempre del resultado visible y no permitir como configuración vigente.</td>
+          </tr>
+          <tr>
+            <td>Configuración circular</td>
+            <td>Cortar rama al detectar alias ya visitado.</td>
+          </tr>
+          <tr>
+            <td>Módulo legacy no migrado</td>
+            <td>Mantener comportamiento actual.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>12. Impacto en <code>PermissionsRevision</code></h3>
+      <p>Debe cambiar <code>PermissionsRevision</code> cuando cambie cualquiera de estos elementos:</p>
+      <ul>
+        <li><code>AccessRights</code>.</li>
+        <li><code>DataVisibilityMode</code>.</li>
+        <li><code>HierarchyDepth</code>.</li>
+        <li><code>MutationPolicy</code>.</li>
+        <li><code>INDModuleDataVisibilityHierarchyLine</code>.</li>
+        <li><code>INDModuleDataVisibilityTarget</code>.</li>
+        <li>Vigencias de jerarquías y targets.</li>
+      </ul>
+
+      <h3>13. Tablas que no se reutilizan</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tabla</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CRMUsuarioSubordinadoTable</code></td>
+            <td>Usa <code>CRMUserId</code>, no <code>INDPersonaTable.Alias</code>; no separa por empresa y no tiene vigencia ni estado activo.</td>
+          </tr>
+          <tr>
+            <td><code>CRMUsuarioTable</code></td>
+            <td>Puede servir para mapeos legacy, pero no debe ser la identidad principal de la nueva jerarquía.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

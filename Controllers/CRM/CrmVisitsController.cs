@@ -16,6 +16,8 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmVisitsController : BaseCrmController
     {
         private readonly IAxaptaSessionManager _sessionManager;
+        private const string ControlDataVisibilityAppCode = "CRM";
+        private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
          
         public CrmVisitsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
@@ -98,6 +100,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
                 con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 Logger.Log("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -207,6 +211,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.ValidationError);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
@@ -237,7 +245,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] DeleteVisitaAsistente llamado por {username} refRecIdActividad={body.refRecIdActividad} asistenteId={body.asistenteId}");
+                Logger.Log($"[API-IN] DeleteVisitaAsistente llamado por {username} axUserId={axUserId} refRecIdActividad={body.refRecIdActividad} asistenteId={body.asistenteId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -245,6 +253,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",

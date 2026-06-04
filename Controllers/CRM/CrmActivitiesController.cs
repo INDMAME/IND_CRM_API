@@ -28,6 +28,8 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ContactMethodInPerson = 0;
         private const int ContactMethodPhoneCall = 1;
         private const int ContactMethodOnlineMeeting = 2;
+        private const string ControlDataVisibilityAppCode = "CRM";
+        private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
         private readonly IAxaptaSessionManager _sessionManager;
  
         public CrmActivitiesController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
@@ -148,6 +150,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
                 con.Append(body.contactMethod ?? ContactMethodInPerson);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 Logger.Log("Container enviado a AX (CreateActivity):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -333,6 +337,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
                 con.Append(body.contactMethod ?? ContactMethodInPerson);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -436,6 +442,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (recId == 0)
             {
                 var validationResponse = new IndApiResponse<object>
@@ -460,6 +470,9 @@ namespace IND_CRM_API.Controllers.CRM
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
                 con.Append(company);
                 con.Append(recId.ToString());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -564,6 +577,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (recId == 0)
             {
                 var validationResponse = new IndApiResponse<object>
@@ -589,6 +606,9 @@ namespace IND_CRM_API.Controllers.CRM
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
                 con.Append(company);
                 con.Append(recId.ToString());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -673,6 +693,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (string.IsNullOrWhiteSpace(code))
             {
                 var validationResponse = new IndApiResponse<ActivityDetailDto>
@@ -697,6 +721,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var con = ax.CreateContainer();
                 con.Append(company);
                 con.Append(code.Trim());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -1076,6 +1103,8 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(fromDate.ToString("yyyyMMdd"));
                 con.Append(toDate.ToString("yyyyMMdd"));
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
