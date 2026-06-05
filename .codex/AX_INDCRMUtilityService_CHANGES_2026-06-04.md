@@ -4,18 +4,18 @@
 Expose reusable `INDControlDataVisibility` wrappers from `INDCRMUtilityService` so API and module services can use one standard entry point.
 
 ## Methods added
-- `controlDataVisibilityFindModuleAccessLevel(...)`
-- `controlDataVisibilityResolveVisiblePersonAliasSet(...)`
-- `controlDataVisibilityResolveVisibleAxUserIdSet(...)`
-- `controlDataVisibilityResolveVisibleCrmUserIdSet(...)`
-- `controlDataVisibilityCanViewOwnerAlias(...)`
-- `controlDataVisibilityCanViewOwnerAxUserId(...)`
-- `controlDataVisibilityCanMutateOwnerAxUserId(...)`
-- `controlDataVisibilityGetVisibleUsers(container _data)`
+- `ctrlFindModuleAccessLevel(...)`
+- `ctrlResolveVisiblePersonAliasSet(...)`
+- `ctrlResolveVisibleAxUserIdSet(...)`
+- `ctrlResolveVisibleCrmUserIdSet(...)`
+- `ctrlCanViewOwnerAlias(...)`
+- `ctrlCanViewOwnerAxUserId(...)`
+- `ctrlCanMutateOwnerAxUserId(...)`
+- `ctrlGetVisibleUsers(container _data)`
 
 ## Behavior
 - Delegates the core hierarchy algorithm to `INDControlDataVisibilityResolver`.
-- Keeps the public naming identifiable through the `controlDataVisibility` prefix.
+- Keeps the public naming short for Axapta import limits while the objects remain identifiable through `INDControlDataVisibility`.
 - Returns visible users by AX user id and optional legacy CRM user id for diagnostics and future modules.
 - Does not call or replace `CRMUsuarioSubordinadoTable`; expense sheets keep their existing subordinate logic.
 

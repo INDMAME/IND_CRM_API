@@ -116,7 +116,8 @@ Formatversion: 1
         #    CRMTipoVisita       _visitType;
         #    INDContactMethod    _contactMethod;
         #    CRMUserId           _userId;
-        #    CRMUserId           _createdByUserId; // Nuevo: usuario autenticado real
+        #    CRMUserId           _legacyCrmUserId;
+        #    UserId              _createdByUserId; // Nuevo: usuario autenticado real
         #    Description         _desc;
         #    TransDate           _transDate;
         #    CRMAccountTable     accountTable;
@@ -164,12 +165,16 @@ Formatversion: 1
         #            numberSeq    = NumberSeq::newGetNum(CustParameters::numRefCustVsititaRefractariosId());
         #            accountTable = CRMAccountTable::FindByAccountNum(_accountNum);
         #
+        #            //MMS - Ajustes CRM - 2026.06.05
+        #            // El propietario funcional es AX; UserId legacy se informa con el usuario CRM si existe mapeo.
+        #            _legacyCrmUserId = INDCRMVisitsService::resolveLegacyCrmUserIdByAxUserId(_createdByUserId);
+        #
         #            actividadTable.clear();
         #            actividadTable.ActividadId          = numberSeq.num();
         #            actividadTable.AccountNum           = _accountNum;
         #            actividadTable.ActividadType        = CRMActividadType::Visita;
         #            actividadTable.TipoVisita           = _visitType;
-        #            actividadTable.UserId               = _userId;
+        #            actividadTable.UserId               = _legacyCrmUserId ? _legacyCrmUserId : _userId;
         #            actividadTable.Description          = _desc;
         #            actividadTable.TransDate            = _transDate;
         #            actividadTable.Comentarios          = _coments;
@@ -229,7 +234,7 @@ Formatversion: 1
         #    CRMCustVendVisitaAsistente      _asistenteTipo;
         #    Name                            _asistenteId;
         #    RefRecId                        _contactoRecId;
-        #    CRMUserId                       _createdByUserId; // Nuevo: usuario autenticado real
+        #    UserId                          _createdByUserId; // Nuevo: usuario autenticado real
         #    CRMActividadTable               actividadTable;
         #    CRMCustVendVisitaAsistenteTable visita;
         #    str                             _appCode;
@@ -785,10 +790,11 @@ Formatversion: 1
         #}
       ENDSOURCE
       SOURCE #getActivityOwnerAxUserId
-        #//MMS - Ajustes CRM - 2026.06.04
-        #// Usa INDCreatedByUserId como propietario funcional del piloto de visitas.
+        #//MMS - Ajustes CRM - 2026.06.05
+        #// Usa INDCreatedByUserId como propietario funcional y soporta visitas antiguas con UserId CRM.
         #static UserId getActivityOwnerAxUserId(CRMActividadTable _activity)
         #{
+        #    CRMUsuarioTable crmUsuarioTable;
         #    ;
         #
         #    if (!_activity.RecId)
@@ -796,7 +802,20 @@ Formatversion: 1
         #        return "";
         #    }
         #
-        #    return _activity.INDCreatedByUserId;
+        #    if (_activity.INDCreatedByUserId)
+        #    {
+        #        return _activity.INDCreatedByUserId;
+        #    }
+        #
+        #    if (_activity.UserId)
+        #    {
+        #        crmUsuarioTable = CRMUsuarioTable::Find(_activity.UserId);
+        #
+        #        if (crmUsuarioTable.AxaptaUserId)
+        #            return crmUsuarioTable.AxaptaUserId;
+        #    }
+        #
+        #    return "";
         #}
       ENDSOURCE
       SOURCE #getActivityOwnerCrmUserId
@@ -810,6 +829,36 @@ Formatversion: 1
         #    ownerAlias = INDCRMVisitsService::getActivityOwnerAlias(_activity);
         #
         #    return INDControlDataVisibilityResolver::resolveCrmUserIdByAlias(ownerAlias);
+        #}
+      ENDSOURCE
+      SOURCE #resolveLegacyCrmUserIdByAxUserId
+        #//MMS - Ajustes CRM - 2026.06.05
+        #// Convierte un usuario AX al usuario CRM legacy usado por tablas antiguas de visitas.
+        #static CRMUserId resolveLegacyCrmUserIdByAxUserId(UserId _axUserId)
+        #{
+        #    CRMUsuarioTable crmUsuarioTable;
+        #    INDPersonaTable person;
+        #    ;
+        #
+        #    if (!_axUserId)
+        #        return "";
+        #
+        #    crmUsuarioTable = CRMUsuarioTable::Find_AxaptaUserId(_axUserId);
+        #
+        #    if (crmUsuarioTable.UserId)
+        #        return crmUsuarioTable.UserId;
+        #
+        #    person = INDControlDataVisibilityResolver::resolveActivePersonByAxUserId(_axUserId);
+        #
+        #    if (person.RefRecIdCRM)
+        #    {
+        #        crmUsuarioTable = CRMUsuarioTable::FindRecId(person.RefRecIdCRM);
+        #
+        #        if (crmUsuarioTable.UserId)
+        #            return crmUsuarioTable.UserId;
+        #    }
+        #
+        #    return "";
         #}
       ENDSOURCE
       SOURCE #getContactoContainer
@@ -886,7 +935,8 @@ Formatversion: 1
         #    CRMAccountNum       _accountNum;
         #    CRMTipoVisita       _visitType;
         #    INDContactMethod    _contactMethod;
-        #    CRMUserId           _userId;
+        #    UserId              _userId;
+        #    CRMUserId           _legacyCrmUserId;
         #    Description         _desc;
         #    TransDate           _transDate;
         #    CRMAccountTable     accountTable;
@@ -947,9 +997,17 @@ Formatversion: 1
         #            {
         #                accountTable = CRMAccountTable::FindByAccountNum(_accountNum);
         #
+        #                //MMS - Ajustes CRM - 2026.06.05
+        #                // En actualizacion no se reasigna el propietario funcional; solo se normaliza UserId legacy si hay mapeo.
+        #                if (!actividadTable.INDCreatedByUserId)
+        #                    actividadTable.INDCreatedByUserId = _userId;
+        #
+        #                _legacyCrmUserId = INDCRMVisitsService::resolveLegacyCrmUserIdByAxUserId(actividadTable.INDCreatedByUserId);
+        #
         #                actividadTable.AccountNum         = _accountNum;
         #                actividadTable.TipoVisita         = _visitType;
-        #                actividadTable.UserId             = _userId;
+        #                if (_legacyCrmUserId)
+        #                    actividadTable.UserId         = _legacyCrmUserId;
         #                actividadTable.Description        = _desc;
         #                actividadTable.TransDate          = _transDate;
         #                actividadTable.Comentarios        = _coments;

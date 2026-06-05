@@ -199,7 +199,7 @@ Formatversion: 1
           AliasFor            #
           ExtendedDataType    
             ARRAY 
-              #
+              #RefRecId
               #
             ENDARRAY
           FieldUpdate         #Absolute
@@ -422,9 +422,14 @@ Formatversion: 1
         #    if (!INDModuleDataVisibilityTarget::isActiveOnDate(_target, _asOfDate))
         #        return resultSet;
         #
-        #    select firstOnly targetPerson
-        #        where targetPerson.Alias   == _target.TargetPersonAlias
-        #           && targetPerson.Blocked == NoYes::No;
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // La persona objetivo se resuelve en la empresa indicada por el llamador.
+        #    changecompany (_companyId)
+        #    {
+        #        select firstOnly targetPerson
+        #            where targetPerson.Alias   == _target.TargetPersonAlias
+        #               && targetPerson.Blocked == NoYes::No;
+        #    }
         #
         #    if (!targetPerson.RecId)
         #        return resultSet;
@@ -480,28 +485,33 @@ Formatversion: 1
         #    if (_asOfDate == dateNull())
         #        _asOfDate = today();
         #
-        #    while select target
-        #        where target.INDWebModuleAccessLevel == _moduleAccessLevelRecId
-        #           && target.TargetAction            == _action
-        #           && (target.ValidFrom == dateNull() || target.ValidFrom <= _asOfDate)
-        #           && (target.ValidTo   == dateNull() || target.ValidTo   >= _asOfDate)
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // Los targets son por empresa; se cambia de company antes de leer la tabla.
+        #    changecompany (_companyId)
         #    {
-        #        lineSet = INDModuleDataVisibilityTarget::resolveTargetLine(
-        #            _companyId,
-        #            target,
-        #            _depth,
-        #            _asOfDate);
-        #
-        #        lineIterator = new SetIterator(lineSet);
-        #
-        #        while (lineIterator.more())
+        #        while select target
+        #            where target.INDWebModuleAccessLevel == _moduleAccessLevelRecId
+        #               && target.TargetAction            == _action
+        #               && (target.ValidFrom == dateNull() || target.ValidFrom <= _asOfDate)
+        #               && (target.ValidTo   == dateNull() || target.ValidTo   >= _asOfDate)
         #        {
-        #            personAlias = lineIterator.value();
+        #            lineSet = INDModuleDataVisibilityTarget::resolveTargetLine(
+        #                _companyId,
+        #                target,
+        #                _depth,
+        #                _asOfDate);
         #
-        #            if (personAlias)
-        #                resultSet.add(personAlias);
+        #            lineIterator = new SetIterator(lineSet);
         #
-        #            lineIterator.next();
+        #            while (lineIterator.more())
+        #            {
+        #                personAlias = lineIterator.value();
+        #
+        #                if (personAlias)
+        #                    resultSet.add(personAlias);
+        #
+        #                lineIterator.next();
+        #            }
         #        }
         #    }
         #

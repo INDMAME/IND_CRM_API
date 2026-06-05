@@ -168,6 +168,7 @@ Formatversion: 1
         #                                                     str  100    _moduleCode)
         #{
         #    INDCiasPermitidas       ciasPerm;
+        #    INDWebApp               webApp;
         #    INDWebModule            webModule;
         #    INDWebModuleAccessLevel moduleAccessLevel;
         #    ;
@@ -188,7 +189,10 @@ Formatversion: 1
         #        join webModule
         #            where webModule.AppCode    == moduleAccessLevel.AppCode
         #               && webModule.ModuleCode == moduleAccessLevel.ModuleCode
-        #               && webModule.IsActive   == NoYes::Yes;
+        #               && webModule.IsActive   == NoYes::Yes
+        #        join webApp
+        #            where webApp.AppCode       == webModule.AppCode
+        #               && webApp.IsActive      == NoYes::Yes;
         #    }
         #
         #    return moduleAccessLevel;

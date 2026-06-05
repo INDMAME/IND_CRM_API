@@ -33,7 +33,7 @@ Formatversion: 1
     #
     #    if (conLen(result) < 2)
     #    {
-    #        error("controlDataVisibilityGetVisibleUsers no devolvio Header + Lines.");
+    #        error("ctrlGetVisibleUsers no devolvio Header + Lines.");
     #        return;
     #    }
     #
@@ -68,7 +68,7 @@ Formatversion: 1
     #
     #    if (!visibleAxUsers)
     #    {
-    #        error("controlDataVisibilityResolveVisibleAxUserIdSet devolvio null.");
+    #        error("ctrlResolveVisibleAxUserIdSet devolvio null.");
     #        return;
     #    }
     #

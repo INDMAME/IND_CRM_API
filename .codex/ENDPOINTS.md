@@ -225,7 +225,8 @@ Endpoints
 ## Activities / Visits
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
-  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`.
+  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
+  Nota: `userId` y `createdByUserId` del body no gobiernan el actor; API usa siempre `X-IND-AxUserId`.
   Si `contactMethod` no se envia, AX recibe `0` (InPerson).
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
@@ -240,10 +241,18 @@ Endpoints
   Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
-  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`.
+  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`.
+  Nota: `userId` del body no gobierna el actor; API usa siempre `X-IND-AxUserId`.
   AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+- POST /api/crm/visits/createVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `refRecIdActividad`, `asistenteTipo`, `asistenteId`, `contactoRecId`.
+  Body optional: `createdByUserId`; si se envia distinto del header, API lo ignora y usa `X-IND-AxUserId`.
+  AX valida modificacion de la visita con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+- DELETE /api/crm/visits/deleteVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)
+  Body required: `refRecIdActividad`, `asistenteId`.
+  AX valida modificacion de la visita con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 
 ## Projects
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)

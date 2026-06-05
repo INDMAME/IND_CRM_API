@@ -335,6 +335,76 @@ Formatversion: 1
         #    return descendants.in(_parentAlias);
         #}
       ENDSOURCE
+      SOURCE #wouldCreateCycleInRange
+        #//MMS - Ajustes CRM - 2026.06.05
+        #// Valida ciclos considerando toda la vigencia de la relacion nueva o modificada.
+        #static boolean wouldCreateCycleInRange(DataAreaId _companyId,
+        #                                      str        _parentAlias,
+        #                                      str        _childAlias,
+        #                                      date       _validFrom,
+        #                                      date       _validTo)
+        #{
+        #    INDModuleDataVisibilityHierarchyLine line;
+        #    date                                 checkDate;
+        #    boolean                              ret = false;
+        #    ;
+        #
+        #    if (!_companyId || !_parentAlias || !_childAlias)
+        #        return false;
+        #
+        #    if (_parentAlias == _childAlias)
+        #        return true;
+        #
+        #    checkDate = _validFrom != dateNull() ? _validFrom : today();
+        #
+        #    if (_validTo != dateNull() && checkDate > _validTo)
+        #        checkDate = _validTo;
+        #
+        #    if (INDModuleDataVisibilityHierarchyLine::wouldCreateCycle(
+        #            _companyId,
+        #            _parentAlias,
+        #            _childAlias,
+        #            checkDate))
+        #    {
+        #        return true;
+        #    }
+        #
+        #    changecompany (_companyId)
+        #    {
+        #        while select ValidFrom, ValidTo from line
+        #            where line.dataAreaId == _companyId
+        #               && (line.ValidFrom == dateNull()
+        #                || _validTo == dateNull()
+        #                || line.ValidFrom <= _validTo)
+        #               && (_validFrom == dateNull()
+        #                || line.ValidTo == dateNull()
+        #                || _validFrom <= line.ValidTo)
+        #        {
+        #            checkDate = line.ValidFrom != dateNull()
+        #                ? line.ValidFrom
+        #                : (_validFrom != dateNull() ? _validFrom : today());
+        #
+        #            if (_validFrom != dateNull() && checkDate < _validFrom)
+        #                checkDate = _validFrom;
+        #
+        #            if (_validTo != dateNull() && checkDate > _validTo)
+        #                checkDate = _validTo;
+        #
+        #            if (INDModuleDataVisibilityHierarchyLine::wouldCreateCycle(
+        #                    _companyId,
+        #                    _parentAlias,
+        #                    _childAlias,
+        #                    checkDate))
+        #            {
+        #                ret = true;
+        #                break;
+        #            }
+        #        }
+        #    }
+        #
+        #    return ret;
+        #}
+      ENDSOURCE
       SOURCE #resolveDescendants
         #static Set resolveDescendants(DataAreaId                     _companyId,
         #                              str                            _rootAlias,
@@ -426,16 +496,21 @@ Formatversion: 1
         #    if (!_companyId || !_childAlias)
         #        return ret;
         #
-        #    while select ParentPersonAlias from line
-        #        where line.dataAreaId       == _companyId
-        #           && line.ChildPersonAlias == _childAlias
-        #           && (line.ValidFrom       == dateNull()
-        #            || line.ValidFrom       <= _asOfDate)
-        #           && (line.ValidTo         == dateNull()
-        #            || line.ValidTo         >= _asOfDate)
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // La consulta respeta explicitamente la empresa recibida aunque el llamador este en otra company.
+        #    changecompany (_companyId)
         #    {
-        #        if (line.ParentPersonAlias)
-        #            aliases.add(line.ParentPersonAlias);
+        #        while select ParentPersonAlias from line
+        #            where line.dataAreaId       == _companyId
+        #               && line.ChildPersonAlias == _childAlias
+        #               && (line.ValidFrom       == dateNull()
+        #                || line.ValidFrom       <= _asOfDate)
+        #               && (line.ValidTo         == dateNull()
+        #                || line.ValidTo         >= _asOfDate)
+        #        {
+        #            if (line.ParentPersonAlias)
+        #                aliases.add(line.ParentPersonAlias);
+        #        }
         #    }
         #
         #    iterator = new SetIterator(aliases);
@@ -469,16 +544,21 @@ Formatversion: 1
         #    if (!_companyId || !_parentAlias)
         #        return ret;
         #
-        #    while select ChildPersonAlias from line
-        #        where line.dataAreaId        == _companyId
-        #           && line.ParentPersonAlias == _parentAlias
-        #           && (line.ValidFrom        == dateNull()
-        #            || line.ValidFrom        <= _asOfDate)
-        #           && (line.ValidTo          == dateNull()
-        #            || line.ValidTo          >= _asOfDate)
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // La consulta respeta explicitamente la empresa recibida aunque el llamador este en otra company.
+        #    changecompany (_companyId)
         #    {
-        #        if (line.ChildPersonAlias)
-        #            aliases.add(line.ChildPersonAlias);
+        #        while select ChildPersonAlias from line
+        #            where line.dataAreaId        == _companyId
+        #               && line.ParentPersonAlias == _parentAlias
+        #               && (line.ValidFrom        == dateNull()
+        #                || line.ValidFrom        <= _asOfDate)
+        #               && (line.ValidTo          == dateNull()
+        #                || line.ValidTo          >= _asOfDate)
+        #        {
+        #            if (line.ChildPersonAlias)
+        #                aliases.add(line.ChildPersonAlias);
+        #        }
         #    }
         #
         #    iterator = new SetIterator(aliases);
@@ -509,14 +589,19 @@ Formatversion: 1
         #    if (!_companyId || !_parentAlias || !_childAlias)
         #        return false;
         #
-        #    select firstOnly RecId from line
-        #        where line.dataAreaId        == _companyId
-        #           && line.ParentPersonAlias == _parentAlias
-        #           && line.ChildPersonAlias  == _childAlias
-        #           && (line.ValidFrom        == dateNull()
-        #            || line.ValidFrom        <= _asOfDate)
-        #           && (line.ValidTo          == dateNull()
-        #            || line.ValidTo          >= _asOfDate);
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // La consulta respeta explicitamente la empresa recibida aunque el llamador este en otra company.
+        #    changecompany (_companyId)
+        #    {
+        #        select firstOnly RecId from line
+        #            where line.dataAreaId        == _companyId
+        #               && line.ParentPersonAlias == _parentAlias
+        #               && line.ChildPersonAlias  == _childAlias
+        #               && (line.ValidFrom        == dateNull()
+        #                || line.ValidFrom        <= _asOfDate)
+        #               && (line.ValidTo          == dateNull()
+        #                || line.ValidTo          >= _asOfDate);
+        #    }
         #
         #    return line.RecId != 0;
         #}
@@ -567,7 +652,6 @@ Formatversion: 1
         #    INDPersonaTable                      parentPerson;
         #    INDPersonaTable                      childPerson;
         #    INDModuleDataVisibilityHierarchyLine duplicateLine;
-        #    date                                 asOfDate = today();
         #    boolean                              rangesOverlap;
         #    ;
         #
@@ -643,11 +727,12 @@ Formatversion: 1
         #     && this.dataAreaId
         #     && this.ParentPersonAlias
         #     && this.ChildPersonAlias
-        #     && INDModuleDataVisibilityHierarchyLine::wouldCreateCycle(
+        #     && INDModuleDataVisibilityHierarchyLine::wouldCreateCycleInRange(
         #            this.dataAreaId,
         #            this.ParentPersonAlias,
         #            this.ChildPersonAlias,
-        #            asOfDate))
+        #            this.ValidFrom,
+        #            this.ValidTo))
         #    {
         #        ret = checkFailed("La relacion genera un ciclo en la jerarquia.");
         #    }

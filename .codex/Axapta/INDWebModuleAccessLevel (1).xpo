@@ -154,7 +154,7 @@ Formatversion: 1
               #
               #
             ENDARRAY
-          StringSize          #50
+          StringSize          #100
           Adjustment          #Left
         ENDPROPERTIES
         
@@ -203,7 +203,7 @@ Formatversion: 1
               #
               #
             ENDARRAY
-          StringSize          #100
+          StringSize          #35
           Adjustment          #Left
         ENDPROPERTIES
         
@@ -434,19 +434,30 @@ Formatversion: 1
         #int activeVisibilityTargetCount(INDDataVisibilityTargetAction _action)
         #{
         #    INDModuleDataVisibilityTarget target;
+        #    DataAreaId                    companyId;
         #    date                          asOfDate = today();
         #    int                           ret;
         #    ;
         #
-        #    while select RecId from target
-        #        where target.INDWebModuleAccessLevel == this.RecId
-        #           && target.TargetAction            == _action
-        #           && (target.ValidFrom              == dateNull()
-        #            || target.ValidFrom              <= asOfDate)
-        #           && (target.ValidTo                == dateNull()
-        #            || target.ValidTo                >= asOfDate)
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // Los targets son por empresa; el contador usa la empresa del permiso web.
+        #    companyId = this.INDCiasPermitidas().CiaId;
+        #
+        #    if (!companyId)
+        #        companyId = curext();
+        #
+        #    changecompany (companyId)
         #    {
-        #        ret++;
+        #        while select RecId from target
+        #            where target.INDWebModuleAccessLevel == this.RecId
+        #               && target.TargetAction            == _action
+        #               && (target.ValidFrom              == dateNull()
+        #                || target.ValidFrom              <= asOfDate)
+        #               && (target.ValidTo                == dateNull()
+        #                || target.ValidTo                >= asOfDate)
+        #        {
+        #            ret++;
+        #        }
         #    }
         #
         #    return ret;
@@ -479,8 +490,11 @@ Formatversion: 1
         #    INDWebUserEntraIdentity INDWebUserEntraIdentity;
         #    ;
         #
+        #    //MMS - Ajustes CRM - 2026.06.05
+        #    // La identidad Entra se valida por usuario y app para evitar cruces entre sitios web.
         #    select firstOnly INDWebUserEntraIdentity
-        #        where INDWebUserEntraIdentity.UserId == this.INDCiasPermitidas().UserId;
+        #        where INDWebUserEntraIdentity.UserId  == this.INDCiasPermitidas().UserId
+        #           && INDWebUserEntraIdentity.AppCode == this.AppCode;
         #
         #    return INDWebUserEntraIdentity;
         #}
@@ -495,8 +509,10 @@ Formatversion: 1
         #
         #    if (ret)
         #    {
+        #        //MMS - Ajustes CRM - 2026.06.05
+        #        // Se permite preparar permisos antes de crear la identidad Entra; login sigue bloqueando si no hay mapeo.
         #        if (!this.INDWebUserEntraIdentity())
-        #            ret = checkFailed("Debe existir la configuración de Microsoft Entra para poder guardar el permiso.");
+        #            warning("No existe configuracion de Microsoft Entra para este usuario y app. El permiso no sera usable hasta crear el mapeo.");
         #    }
         #
         #    return ret;
