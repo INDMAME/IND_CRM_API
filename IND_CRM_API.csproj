@@ -185,6 +185,7 @@
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
     <Compile Include="Contracts\Responses\AskExpenseSheetsAiResponse.cs" />
+    <Compile Include="Contracts\Responses\DataVisibilityVisibleUserDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetCurrencyDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
@@ -205,6 +206,7 @@
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
+    <Compile Include="Controllers\CRM\CrmDataVisibilityController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetsController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetTicketsController.cs" />
     <Compile Include="Controllers\CRM\CrmProjectsController.cs" />

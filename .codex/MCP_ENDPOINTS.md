@@ -327,6 +327,15 @@ Endpoints
 
 ## Activities / Visits
 
+### Endpoint: crm_data_visibility_visible_users
+- HTTP: GET `/api/crm/data-visibility/visible-users`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Query: `appCode` opcional (default `CRM`), `moduleCode` opcional (default `VISITAS_GESTION`), `asOfDate` opcional (`yyyyMMdd` o `yyyy-MM-dd`), `includeCrmUserId` opcional (default `true`)
+- Uso: lista usuarios AX visibles para el usuario actual con `INDControlDataVisibility`.
+- Nota: personas visibles sin `INDPersonaTable.UserId` no se devuelven. No usa la jerarquia legacy de Hojas de gastos.
+- Respuesta: rows con `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`
+
 ### Endpoint: crm_activities_create
 - HTTP: POST `/api/crm/activities/create`
 - Auth: Bearer token
@@ -337,13 +346,22 @@ Endpoints
 - HTTP: POST `/api/crm/activities/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `fromDate`, `toDate`, `accountNum` opcional, `page`, `pageSize`
+- Body: `fromDate`, `toDate`, `accountNum` opcional, `ownerAxUserId` opcional, `page`, `pageSize`
+- Visibilidad: AX filtra por el set visible de `CRM / VISITAS_GESTION`; si `ownerAxUserId` se envia, solo reduce el resultado a ese usuario visible.
 - Respuesta: rows con `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod`, `Description`
+
+### Endpoint: crm_activities_get_by_recid
+- HTTP: GET `/api/crm/activities/{recId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+- Respuesta: `ActivityDetailDto` dentro de `Items[0]`, incluyendo `ContactMethod`
 
 ### Endpoint: crm_activities_get_by_code
 - HTTP: GET `/api/crm/activities/by-code/{code}`
 - Auth: Bearer token
-- Headers: `Authorization`, `X-IND-Company`
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - Respuesta: `ActivityDetailDto` dentro de `Items[0]`, incluyendo `ContactMethod`
 
 ### Endpoint: crm_activities_update
@@ -351,6 +369,27 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `accountNum`, `visitType`, `description`, `transDate`, `contactMethod` opcional (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`
+- Visibilidad: AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_activities_delete
+- HTTP: DELETE `/api/crm/activities/{recId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_visits_create_assistant
+- HTTP: POST `/api/crm/visits/createVisitaAsistente`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `refRecIdActividad`, `asistenteTipo`, `asistenteId`, `contactoRecId`
+- Visibilidad: AX valida modificacion de la actividad padre con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_visits_delete_assistant
+- HTTP: DELETE `/api/crm/visits/deleteVisitaAsistente`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `refRecIdActividad`, `asistenteId`
+- Visibilidad: AX valida modificacion de la actividad padre con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 
 ## Projects
 

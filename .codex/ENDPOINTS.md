@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-04-16)
+# IND_CRM_API Endpoints (actualizado 2026-06-09)
 
 Base URL: `{{baseUrl}}`
 
@@ -223,6 +223,11 @@ Endpoints
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
 
 ## Activities / Visits
+- GET /api/crm/data-visibility/visible-users?appCode=CRM&moduleCode=VISITAS_GESTION&includeCrmUserId=true (Authorize + X-IND-Company + X-IND-AxUserId)
+  Query optional: `appCode` default `CRM`, `moduleCode` default `VISITAS_GESTION`, `asOfDate` (yyyyMMdd o yyyy-MM-dd), `includeCrmUserId` default `true`.
+  AX resuelve usuarios visibles con `INDControlDataVisibility`; no usa subordinados legacy de Hojas de gastos.
+  Personas visibles sin usuario AX no se devuelven en la lista.
+  Response rows incluyen `Alias`, `AxUserId`, `CrmUserId`, `Name` y `Source`.
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
@@ -230,8 +235,9 @@ Endpoints
   Si `contactMethod` no se envia, AX recibe `0` (InPerson).
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
-  Body optional: `accountNum`.
+  Body optional: `accountNum`, `ownerAxUserId`.
   AX filtra los propietarios visibles con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+  Si `ownerAxUserId` se envia, AX devuelve solo visitas de ese propietario siempre que este dentro del set visible del usuario de header.
   Response rows incluyen `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod` y `Description`.
 - GET /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.

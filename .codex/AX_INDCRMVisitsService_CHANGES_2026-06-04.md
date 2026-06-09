@@ -15,6 +15,7 @@ Apply the new parallel `INDControlDataVisibility` hierarchy to visits while keep
 
 ## Behavior
 - Lists visits through the visible AX user id set for `CRM / VISITAS_GESTION`.
+- `getActivityContainer` accepts optional `ownerAxUserId` at the end of the container to reduce the already visible set to one visible owner.
 - Validates read access for detail lookup by `RecId` and by activity code.
 - Validates mutation access for update, delete and visit assistant create/delete.
 - Uses `CRMActividadTable.INDCreatedByUserId` as the owner field for the visits pilot.

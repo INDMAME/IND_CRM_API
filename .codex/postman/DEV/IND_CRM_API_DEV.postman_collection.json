@@ -1268,6 +1268,82 @@
                               ]
                  },
                  {
+                     "name":  "CRM Data Visibility",
+                     "item":  [
+                                  {
+                                      "name":  "Get Visible Users - Visits",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Status OK\u0027, function () { pm.response.to.have.status(200); });",
+                                                                                    "var j = {};",
+                                                                                    "try { j = pm.response.json(); } catch (e) { j = {}; }",
+                                                                                    "var items = j.Items || j.items || [];",
+                                                                                    "if (items.length \u003e 0) {",
+                                                                                    "  var first = items[0] || {};",
+                                                                                    "  var axUserId = first.AxUserId || first.axUserId || \u0027\u0027;",
+                                                                                    "  var alias = first.Alias || first.alias || \u0027\u0027;",
+                                                                                    "  pm.environment.set(\u0027visibleOwnerAxUserId\u0027, axUserId);",
+                                                                                    "  pm.environment.set(\u0027visibleOwnerAlias\u0027, alias);",
+                                                                                    "}",
+                                                                                    "pm.environment.set(\u0027visibleUsersTotal\u0027, String(items.length));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{tokenId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-Company",
+                                                                         "value":  "{{companyId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-AxUserId",
+                                                                         "value":  "{{axUserId}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/crm/data-visibility/visible-users?appCode=CRM\u0026moduleCode=VISITAS_GESTION\u0026includeCrmUserId=true",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "crm",
+                                                                               "data-visibility",
+                                                                               "visible-users"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "appCode",
+                                                                                    "value":  "CRM"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "moduleCode",
+                                                                                    "value":  "VISITAS_GESTION"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "includeCrmUserId",
+                                                                                    "value":  "true"
+                                                                                }
+                                                                            ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ]
+                 },
+                 {
                      "name":  "CRM Activities",
                      "item":  [
                                   {
@@ -1337,7 +1413,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"fromDate\": \"2026-02-01\",\n  \"toDate\": \"2026-03-02\",\n  //\"accountNum\": \"AZ15-0002\",\n  \"page\": 1,\n  \"pageSize\": 50\n}"
+                                                                   "raw":  "{\n  \"fromDate\": \"20200101\",\n  \"toDate\": \"20991231\",\n  \"ownerAxUserId\": \"{{visibleOwnerAxUserId}}\",\n  //\"accountNum\": \"AZ15-0002\",\n  \"page\": 1,\n  \"pageSize\": 50\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/activities/list",
@@ -1569,6 +1645,10 @@
                                                                      {
                                                                          "key":  "Content-Type",
                                                                          "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "X-IND-AxUserId",
+                                                                         "value":  "{{axUserId}}"
                                                                      }
                                                                  ],
                                                       "body":  {

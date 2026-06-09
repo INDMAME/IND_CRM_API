@@ -28,3 +28,9 @@ Align the new global data-visibility hierarchy so it can coexist with the legacy
 - Create or confirm app `CRM` and module `VISITAS_GESTION`.
 - Confirm each test user has `INDPersonaTable.UserId` and, if needed for web login, `INDWebUserEntraIdentity` for `CRM`.
 - Run `Job_INDDVUsers`, `Job_INDDVVisits`, `Job_INDDVDetail`, and `Job_INDDVGuard`.
+
+## Update 2026-06-09
+- API adds `GET /api/crm/data-visibility/visible-users` to expose `INDCRMUtilityService::ctrlGetVisibleUsers` for the current `X-IND-AxUserId`.
+- `INDCRMVisitsService.getActivityContainer` accepts optional container index 8 as `ownerAxUserId`; the filter only reduces the already visible owner set for `CRM / VISITAS_GESTION`.
+- Postman DEV adds `CRM Data Visibility / Get Visible Users - Visits` and uses `visibleOwnerAxUserId` in `CRM Activities / List Activities (POST)`.
+- `INDCRMUtilityService.ctrlGetVisibleUsers` now filters its response through `ctrlResolveVisibleAxUserIdSet`, so visible persons without `INDPersonaTable.UserId` are not returned by the API list.

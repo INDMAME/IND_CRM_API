@@ -43,6 +43,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string fromDate { get; set; }
             public string toDate { get; set; }
             public string accountNum { get; set; }
+            public string ownerAxUserId { get; set; }
             public int? page { get; set; }
             public int? pageSize { get; set; }
         }
@@ -1105,6 +1106,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
                 con.Append(ControlDataVisibilityAppCode);
                 con.Append(ControlDataVisibilityVisitsModuleCode);
+                con.Append(body.ownerAxUserId?.Trim() ?? string.Empty);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",

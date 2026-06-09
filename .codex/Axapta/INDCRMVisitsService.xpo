@@ -670,6 +670,7 @@ Formatversion: 1
         #    DataAreaId                      _company;
         #    CRMAccountNum                   _accountNum;
         #    CRMUserId                       _userId;
+        #    UserId                          _ownerAxUserId;
         #    str                             _appCode;
         #    str                             _moduleCode;
         #    boolean                         useControlDataVisibility;
@@ -695,6 +696,7 @@ Formatversion: 1
         #    _accountNum = conPeek(_data, 5);
         #    _appCode    = conLen(_data) >= 6 ? conPeek(_data, 6) : "CRM";
         #    _moduleCode = conLen(_data) >= 7 ? conPeek(_data, 7) : "VISITAS_GESTION";
+        #    _ownerAxUserId = conLen(_data) >= 8 ? conPeek(_data, 8) : "";
         #
         #    useControlDataVisibility = conLen(_data) >= 6 && _userId;
         #
@@ -709,13 +711,27 @@ Formatversion: 1
         #                _moduleCode);
         #        }
         #
+        #        //MMS - Ajustes CRM - 2026.06.09
+        #        // El filtro de propietario solo reduce el set visible; nunca amplia permisos.
+        #        if (useControlDataVisibility
+        #         && _ownerAxUserId
+        #         && (!visibleAxUserIds || !visibleAxUserIds.in(_ownerAxUserId)))
+        #        {
+        #            visibleAxUserIds = new Set(Types::String);
+        #        }
+        #
         #        q = new Query();
         #        qbds = q.addDataSource(tableNum(CRMActividadTable));
         #        qbds.addSortField(fieldNum(CRMActividadTable, INDCreatedByUserId));
         #        qbds.orderMode(OrderMode::OrderBy);
         #
-        #        if (_userId && !useControlDataVisibility)
-        #            qbds.addRange(fieldNum(CRMActividadTable, INDCreatedByUserId)).value(_userId);
+        #        if (!useControlDataVisibility)
+        #        {
+        #            if (_ownerAxUserId)
+        #                qbds.addRange(fieldNum(CRMActividadTable, INDCreatedByUserId)).value(_ownerAxUserId);
+        #            else if (_userId)
+        #                qbds.addRange(fieldNum(CRMActividadTable, INDCreatedByUserId)).value(_userId);
+        #        }
         #
         #        if (useControlDataVisibility)
         #        {
@@ -738,6 +754,12 @@ Formatversion: 1
         #
         #            if (useControlDataVisibility
         #             && !INDCRMVisitsService::activityIsVisibleInResolvedSet(actividadTable, visibleAxUserIds))
+        #            {
+        #                continue;
+        #            }
+        #
+        #            if (_ownerAxUserId
+        #             && INDCRMVisitsService::getActivityOwnerAxUserId(actividadTable) != _ownerAxUserId)
         #            {
         #                continue;
         #            }

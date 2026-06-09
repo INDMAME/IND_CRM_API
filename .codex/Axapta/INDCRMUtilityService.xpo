@@ -204,6 +204,7 @@ Formatversion: 1
         #    str             includeCrmUserIdRaw;
         #    boolean         includeCrmUserId;
         #    Set             visibleAliases;
+        #    Set             visibleAxUsers;
         #    SetIterator     si;
         #    str             personAlias;
         #    UserId          axUserId;
@@ -255,11 +256,23 @@ Formatversion: 1
         #        moduleCode,
         #        asOfDate);
         #
+        #    //MMS - Ajustes CRM - 2026.06.09
+        #    // La lista expuesta por API solo debe contener personas con usuario AX resoluble.
+        #    visibleAxUsers = INDCRMUtilityService::ctrlResolveVisibleAxUserIdSet(
+        #        viewerAxUserId,
+        #        companyId,
+        #        appCode,
+        #        moduleCode,
+        #        asOfDate);
         #    if (!visibleAliases)
         #    {
         #        visibleAliases = new Set(Types::String);
         #    }
         #
+        #    if (!visibleAxUsers)
+        #    {
+        #        visibleAxUsers = new Set(Types::String);
+        #    }
         #    lines = conNull();
         #    si = new SetIterator(visibleAliases);
         #
@@ -276,7 +289,9 @@ Formatversion: 1
         #                : "";
         #        }
         #
-        #        if (person.RecId)
+        #        if (person.RecId
+        #         && axUserId
+        #         && visibleAxUsers.in(axUserId))
         #        {
         #            lines += [[
         #                strFmt("%1", personAlias),

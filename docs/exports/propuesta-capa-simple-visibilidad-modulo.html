@@ -218,11 +218,15 @@
       <a href="https://app.notion.com/p/374d344f518881fe9edfd22555d7c8b0">Propuesta funcional</a>
       y
       <a href="https://app.notion.com/p/374d344f51888191b2f7caa55bd8dc6d">Propuesta técnica</a>.
-      Exportado: 2026-06-04.
+      Exportado: 2026-06-04. Actualizado localmente: 2026-06-09.
     </p>
 
     <div class="callout">
       <strong>Resumen:</strong> la solución añade una capa de visibilidad a nivel registro sobre el permiso web actual de Axapta. Mantiene la autorización por empresa, aplicación y módulo, y añade reglas para decidir si un usuario ve solo sus registros, su jerarquía, targets manuales o todos los registros permitidos.
+    </div>
+
+    <div class="callout">
+      <strong>Estado 2026-06-09:</strong> el piloto activo es <code>CRM / VISITAS_GESTION</code>. Hojas de gastos conserva su lógica legacy de subordinados basada en <code>CRMUsuarioSubordinadoTable</code>; no se migra ni se reemplaza en esta fase. La API CRM expone <code>GET /api/crm/data-visibility/visible-users</code> y el listado de visitas acepta <code>ownerAxUserId</code> para filtrar dentro de los usuarios visibles. La lista de usuarios visibles solo devuelve personas que tengan <code>INDPersonaTable.UserId</code> resoluble.
     </div>
 
     <nav class="toc" aria-label="Índice">
@@ -319,7 +323,7 @@ Resultado final: PGARCIA no visible</code></pre>
       <pre><code>Empresa: AZM
 Jerarquía base:
 MMEZA -&gt; JLOPEZ -&gt; PGARCIA</code></pre>
-      <p>Para <code>VISITAS_GESTION</code>, se puede usar la jerarquía completa. Para <code>GASTOS_HOJA_GASTO</code>, se puede quitar a <code>PGARCIA</code> sin tocar la jerarquía base.</p>
+      <p>Para <code>VISITAS_GESTION</code>, se usa la nueva jerarquía como piloto. <code>GASTOS_HOJA_GASTO</code> queda como módulo legacy en fase 1: mantiene su lógica actual de subordinados y no debe mezclarse con <code>INDControlDataVisibility</code> hasta una migración posterior.</p>
 
       <h3>Cómo se configura en Axapta</h3>
       <p>En la pantalla actual de <code>Accesos Web</code>, dentro de los módulos web, se añadirían columnas resumen.</p>
@@ -348,11 +352,11 @@ MMEZA -&gt; JLOPEZ -&gt; PGARCIA</code></pre>
           <tr>
             <td>CRM</td>
             <td><code>GASTOS_HOJA_GASTO</code></td>
-            <td>Control total</td>
-            <td>Propios + jerarquía</td>
-            <td>Solo directos</td>
-            <td>Reglas del módulo</td>
-            <td>1 quitado</td>
+            <td>Legacy</td>
+            <td>Subordinados actuales</td>
+            <td>No aplica fase 1</td>
+            <td>Reglas legacy</td>
+            <td>No migrado</td>
           </tr>
           <tr>
             <td>CRM</td>
@@ -492,7 +496,7 @@ HierarchyDepth: FullDescendants / Jerarquía completa</code></pre>
         <li>No se permite configurar al usuario visor como su propio target manual; su propia visibilidad se controla con <code>DataVisibilityMode</code>.</li>
         <li>La profundidad de subordinados se controla con <code>HierarchyDepth</code>: <code>DirectOnly</code> para primer nivel o <code>FullDescendants</code> para toda la rama.</li>
         <li>"Propietario real del registro" no significa el jefe que accede al módulo. Es el campo de cada tabla de negocio que identifica de quién es el registro y que debe poder mapearse a <code>INDPersonaTable.Alias</code>.</li>
-        <li>En el módulo piloto de visitas queda como actividad técnica identificar qué campo actúa como propietario, responsable, creador o usuario asignado del registro.</li>
+        <li>En el módulo piloto de visitas, el propietario funcional implementado es <code>CRMActividadTable.INDCreatedByUserId</code>, con compatibilidad legacy para resolver <code>CRMActividadTable.UserId</code> cuando sea necesario.</li>
       </ul>
     </section>
 
@@ -643,7 +647,7 @@ HierarchyDepth: FullDescendants / Jerarquía completa</code></pre>
           <tr>
             <td><code>ModuleBusinessRules</code></td>
             <td>El módulo aplica sus reglas específicas.</td>
-            <td>Hojas de gastos y tickets inicialmente.</td>
+            <td>Módulos legacy o reglas específicas posteriores. Hojas de gastos no se migra en fase 1.</td>
           </tr>
         </tbody>
       </table>
@@ -1029,8 +1033,8 @@ HierarchyDepth: FullDescendants / Jerarquía completa</code></pre>
           </tr>
           <tr>
             <td>Visitas</td>
-            <td><code>INDCreatedByUserId</code> o campo equivalente mapeado a <code>INDPersonaTable.Alias</code>.</td>
-            <td>Pendiente de confirmar.</td>
+            <td><code>CRMActividadTable.INDCreatedByUserId</code>, mapeado a <code>INDPersonaTable.UserId</code> y <code>INDPersonaTable.Alias</code>.</td>
+            <td>Implementado para piloto <code>VISITAS_GESTION</code>.</td>
           </tr>
           <tr>
             <td>Hojas de gastos</td>

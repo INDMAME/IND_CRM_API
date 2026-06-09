@@ -37,6 +37,9 @@ Ambiente (variables sugeridas)
 - `quickCreateHojaGastosId` = hoja vinculada por `quick-create` cuando aplica (autocompletado)
 - `quickCreateLinkedToSheet` = indica si `quick-create` vinculo el ticket a una hoja (autocompletado)
 - `quickCreateProcessedByAI` = indica si `quick-create` finalizo con datos IA aplicados (autocompletado)
+- `visibleOwnerAxUserId` = primer usuario AX visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
+- `visibleOwnerAlias` = primer alias visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
+- `visibleUsersTotal` = numero de usuarios visibles devueltos por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
 
 Notas
 - La linea `PROD` conserva intacto el historico existente; la linea `DEV` arranca en `V01` basada en la `V30` mas reciente.
@@ -45,6 +48,7 @@ Notas
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
 - La coleccion `DEV V06` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
 - `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
+- `CRM Data Visibility / Get Visible Users - Visits` valida `INDControlDataVisibility` para `CRM / VISITAS_GESTION`, solo devuelve personas con usuario AX y guarda `visibleOwnerAxUserId` para filtrar `CRM Activities / List Activities (POST)`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
