@@ -3273,7 +3273,7 @@
                                   },
                                   {
                                       "name":  "Email Notifications",
-                                      "description":  "CRM API smoke tests for expense sheet email notification orchestration. Run Auth/Login and Auth/Entra Context first, then set expenseNotificationSheetId to an editable sheet. X-IND-AxUserId/{{axUserId}} is sent to Axapta as ActorAxUserId. Use a sheet whose owner CRM user differs from axUserId when expecting an email; self-managed sheets intentionally skip email. These requests validate CRM API orchestration; final email delivery is confirmed in IND_INTERNAL_API/Graph logs and inboxes.",
+                                      "description":  "CRM API smoke tests for expense sheet email notification orchestration. Run Auth/Login and Auth/Entra Context first, then set expenseNotificationSheetId to an editable sheet. X-IND-AxUserId/{{axUserId}} is sent to Axapta as ActorAxUserId. Use a sheet whose owner CRM user differs from axUserId when expecting an email; self-managed sheets intentionally skip email. These requests validate CRM API orchestration; final email delivery is confirmed in IND_INTERNAL_API/Graph logs and inboxes. Transport is AX/DLL SendMailEx-only; attachmentFilePaths is passed empty for these status notifications.",
                                       "item":  [
                                                    {
                                                        "name":  "Get Expense Sheet - Notification Baseline",

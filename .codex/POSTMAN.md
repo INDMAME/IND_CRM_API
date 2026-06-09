@@ -3,6 +3,7 @@
 Colecciones
 - DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
 - DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V06.postman_collection.json`
+- Prompt frontend visitas/jerarquia: `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -49,6 +50,7 @@ Notas
 - La coleccion `DEV V06` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
 - `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
 - `CRM Data Visibility / Get Visible Users - Visits` valida `INDControlDataVisibility` para `CRM / VISITAS_GESTION`, solo devuelve personas con usuario AX y guarda `visibleOwnerAxUserId` para filtrar `CRM Activities / List Activities (POST)`.
+- Para adaptar el frontend de visitas, usar el prompt `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`; indica no modificar Notion, planificar cambios por componentes/servicios y usar `visible-users` + `ownerAxUserId`.
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
@@ -97,6 +99,7 @@ Notas
   - `Notify Approval Requested - Update Status`
   - `Notify Approved - Update Status`
 - Las pruebas V05/V06 quedan como historicas para validar el `PUT` de hojas de gasto. Desde 2026-05-27 el envio de emails de estado lo decide Axapta en `INDCRMExpenseSheetService`; Postman de `IND_CRM_API` solo confirma que el update llega a AX y no valida envio directo desde la API.
+- Desde 2026-06-09 el transporte AX/DLL de correo usa solo `SendMailEx`. El nuevo parametro opcional `attachmentFilePaths` contiene rutas absolutas staged separadas por `;`; las pruebas actuales de hojas de gastos lo envian vacio porque las notificaciones de estado no adjuntan ficheros.
 - V06 de DEV alinea las pruebas historicas con la regla actor-vs-owner:
   - `X-IND-AxUserId: {{axUserId}}` es el `ActorAxUserId` que `IND_CRM_API` pasa a Axapta.
   - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.

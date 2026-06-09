@@ -39,14 +39,15 @@ The mail transport responsibility has been moved out of `IND_CRM_API` and into `
 - Email failures are best-effort: log and do not block the expense sheet business process.
 - Axapta placeholders were intentionally left as `ParameterTable.INDInternalApiBaseUrl`, `ParameterTable.INDInternalApiClientId`, `ParameterTable.INDInternalApiClientSecret`, and `ParameterTable.INDCrmWebBaseUrl` until the final technical configuration table exists.
 
-Mail sending has one internal HTTP endpoint and two Axapta-friendly helper shapes. Direct DLL calls belong to `INDInternalApiClientServer`; `INDCRMUtilityService` keeps a CRM/API compatibility facade with the same method signatures.
+Mail sending now has one supported Axapta/DLL shape. Direct DLL calls belong to `INDInternalApiClientServer`; `INDCRMUtilityService` keeps only the CRM/API facade for the same extended method.
 
-- Simple mail: `INDInternalApiClientServer::sendInternalApiMail(...)`; `INDCRMUtilityService::sendInternalApiMail(...)` delegates to it.
-- Extended mail: `INDInternalApiClientServer::sendInternalApiMailEx(...)`; `INDCRMUtilityService::sendInternalApiMailEx(...)` delegates to it.
+- Current mail facade: `INDCRMUtilityService::sendInternalApiMailEx(...)`.
+- Current DLL boundary: `INDInternalApiClientServer::sendInternalApiMailEx(...)`.
+- Current COM method: `IND.InternalApiClient.SendMailEx(...)`.
 
-Both methods end at `POST /api/internal/v1/mail/messages`; the simple/extended split is a caller convenience, not two different HTTP endpoints.
+The basic/raw mail helpers were removed from the active AX exports on 2026-06-09. Existing no-attachment sends must call `sendInternalApiMailEx` and pass `""`/`''` for `attachmentFilePaths`.
 
-Axapta compatibility note: the simple helper calls COM `IND.InternalApiClient.SendMail` directly and does not delegate to `sendInternalApiMailEx`. This keeps the expense-sheet notification path independent from a regenerated AX Business Class wrapper or `SendMailEx`.
+`SendMailEx` receives `attachmentFilePaths` immediately after `textBody` and before `saveToSentItems`. The value is optional and contains absolute staged paths separated by `;`. Files must already exist in the folder configured in Axapta as `INDDefaultParameters.FilePathEmails`; the DLL reads them from AOS, infers content type, converts to Base64 and calls `IND_INTERNAL_API`. `IND_CRM_API` must not read files or receive Base64 for this flow.
 
 ## Current State
 
@@ -90,9 +91,9 @@ Axapta compatibility note: the simple helper calls COM `IND.InternalApiClient.Se
 ## Target Flow
 
 1. A status-changing process updates an expense sheet through `IND_CRM_API`.
-2. The API detects whether the operation produced a relevant status transition.
-3. If the transition should notify someone, the API builds an expense sheet notification command.
-4. The API sends the email through Microsoft Graph.
+2. `IND_CRM_API` forwards the update to Axapta and keeps the public endpoint contract stable.
+3. Axapta detects whether the operation produced a relevant status transition.
+4. If the transition should notify someone, Axapta sends the email best-effort through `INDCRMUtilityService::sendInternalApiMailEx` and COM `SendMailEx`.
 5. The email CTA points to a web deep-link resolver, not directly to the detail page.
 6. If the user is not authenticated, the web redirects to login with a safe local `returnUrl`.
 7. After Entra login, the web returns to the resolver URL.
@@ -412,23 +413,30 @@ Rules:
 
 ### 6. Mail transport client
 
-Superseded direct Graph design: `IND_CRM_API` must not call Microsoft Graph directly. It calls `IND_INTERNAL_API`, and `IND_INTERNAL_API` owns Microsoft Graph `sendMail`.
+Current implementation: `IND_CRM_API` must not call Microsoft Graph directly and does not expose a public CRM mail-send endpoint. Expense-sheet status mail is decided by Axapta and sent through `INDInternalApiClientServer::sendInternalApiMailEx`, which calls the COM DLL method `SendMailEx`.
 
-CRM API call:
+`SendMailEx` contract order at the body/save boundary:
 
 ```text
-POST {INDCRM_INTERNAL_API_BASE_URL}/api/internal/v1/mail/messages
+htmlBody,
+textBody,
+attachmentFilePaths,
+saveToSentItems,
+importance
+```
+
+`attachmentFilePaths` is optional. Empty/null means no attachments. When populated, it contains absolute staged file paths separated by semicolon (`;`). The files must already be copied to the shared folder configured in Axapta as `INDDefaultParameters.FilePathEmails`. `IND_CRM_API` must not read those files and must not accept Base64 for this flow.
+
+The DLL/`IND_INTERNAL_API` side owns file loading and provider delivery. Current limits are 10 attachments, 25 MB per file and 50 MB total before Base64.
+
+Internal API call made by the DLL:
+
+```text
+POST {IND_INTERNAL_API_BASE_URL}/api/internal/v1/mail/messages
 Authorization: Bearer {internal-api-token}
 ```
 
-CRM API internal auth:
-
-```text
-POST {INDCRM_INTERNAL_API_BASE_URL}/api/auth/login
-Body: { "Username": INDCRM_INTERNAL_API_CLIENT_ID, "Password": INDCRM_INTERNAL_API_CLIENT_SECRET }
-```
-
-The generic mail payload includes sender, recipients, subject, HTML/text body, event metadata, aggregate metadata, idempotency key, and correlation id.
+The generic mail payload includes sender, recipients, subject, HTML/text body, optional staged attachments, event metadata, aggregate metadata, idempotency key, and correlation id.
 
 Direct Graph details remain here only as internal API implementation context.
 
@@ -733,9 +741,9 @@ Required:
 - Status update with configured transition sends one notification command.
 - AX update failure sends no notification.
 - Missing recipients logs and skips notification.
-- Graph token failure is logged and does not fail status update when best-effort is true.
-- Graph `sendMail` failure is logged and does not fail status update when best-effort is true.
-- Graph disabled configuration skips sending and logs as disabled.
+- `SendMailEx`/IND_INTERNAL_API failure is logged and does not fail status update when best-effort is true.
+- Missing staged attachments, invalid paths or size-limit failures are handled in the DLL/IND_INTERNAL_API layer and must not roll back the expense-sheet status change.
+- Internal mail disabled configuration skips sending and logs as disabled.
 - Recipient de-duplication works case-insensitively.
 - Email link contains encoded `hojaGastosId` and `targetCompanyId`.
 
@@ -761,9 +769,9 @@ Required:
 1. Implement and test returnUrl preservation in `IND_CRM_APP`.
 2. Implement the expense sheet resolver and company switch validation.
 3. Validate the resolver manually with same-company, cross-company, unauthenticated, and no-access cases.
-4. Add API notification service interfaces and disabled-by-default configuration.
-5. Add transition detection after successful `UpdateExpenseSheetHeader`.
-6. Add recipient resolver once the source is confirmed.
-7. Add Graph mail client and environment configuration.
+4. Keep `IND_CRM_API` free of direct mail-send services for expense-sheet status notifications.
+5. Validate Axapta transition detection after successful `UpdateExpenseSheetHeader`.
+6. Validate recipient resolver once the source is confirmed.
+7. Validate `SendMailEx` registration and `attachmentFilePaths` ordering in AOS.
 8. Enable best-effort email in a non-production environment.
 9. Run end-to-end tests from status update to email CTA to expense sheet detail.

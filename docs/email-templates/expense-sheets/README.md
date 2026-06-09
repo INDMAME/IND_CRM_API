@@ -55,6 +55,18 @@ La plantilla vigente se resuelve por:
 
 La tabla valida que no existan rangos solapados para el mismo `TargetModule` + `LanguageId`.
 
+## Transporte
+
+El envio real lo decide Axapta desde `INDCRMExpenseSheetService` y sale por `INDCRMUtilityService::sendInternalApiMailEx` hacia `INDInternalApiClientServer::sendInternalApiMailEx`.
+
+Desde 2026-06-09 el unico metodo COM/DLL soportado es `SendMailEx`. Su contrato incluye `attachmentFilePaths` despues de `textBody` y antes de `saveToSentItems`.
+
+- Para notificaciones de hojas de gastos se envia `attachmentFilePaths` vacio.
+- Si un flujo futuro adjunta ficheros, debe pasar rutas absolutas ya staged y separadas por `;`.
+- Esas rutas deben apuntar a ficheros copiados en la carpeta configurada en Axapta con `INDDefaultParameters.FilePathEmails`.
+- `IND_CRM_API` no recibe ni almacena Base64 para este flujo; solo transporta o deja vacias las rutas staged.
+- La DLL lee los ficheros desde AOS, infiere content type y aplica los limites vigentes: maximo 10 adjuntos, 25 MB por fichero y 50 MB total antes de Base64.
+
 ## Notas de importacion
 
 - No hardcodear URLs; el enlace lo entrega Axapta en `%6`.

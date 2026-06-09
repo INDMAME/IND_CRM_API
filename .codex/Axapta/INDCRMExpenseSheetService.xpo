@@ -4549,6 +4549,7 @@ Formatversion: 1
         #                                                            subject,
         #                                                            htmlBody,
         #                                                            textBody,
+        #                                                            '',
         #                                                            false,
         #                                                            INDInternalApiClientServer::normalizeInternalApiMailImportance(strFmt("%1", INDEmailImportance::high)),
         #                                                            'AxaptaExpenseSheetStatus',
