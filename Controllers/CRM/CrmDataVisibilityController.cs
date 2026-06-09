@@ -169,7 +169,11 @@ namespace IND_CRM_API.Controllers.CRM
                     AxUserId = axUserId,
                     CrmUserId = AxContainerReadHelper.SafeString(row, 3),
                     Name = AxContainerReadHelper.SafeString(row, 4),
-                    Source = AxContainerReadHelper.SafeString(row, 5)
+                    Source = AxContainerReadHelper.SafeString(row, 5),
+                    MutationPolicy = AxContainerReadHelper.SafeString(row, 6),
+                    MutationPolicyInt = ToNullableInt(AxContainerReadHelper.SafeString(row, 7)),
+                    MutationPolicyLabel = AxContainerReadHelper.SafeString(row, 8),
+                    CanMutate = ToBool(AxContainerReadHelper.SafeString(row, 9))
                 });
             }
 
@@ -181,6 +185,28 @@ namespace IND_CRM_API.Controllers.CRM
                 Items = items,
                 TraceId = traceId
             };
+        }
+
+        private static int? ToNullableInt(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return null;
+        }
+
+        private static bool ToBool(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var normalized = value.Trim();
+            return normalized == "1" ||
+                   normalized.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Equals("yes", StringComparison.OrdinalIgnoreCase);
         }
 
         private static IndApiResponse<object> BuildError(string message, string errorCode, string traceId)

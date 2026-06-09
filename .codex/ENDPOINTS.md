@@ -227,7 +227,8 @@ Endpoints
   Query optional: `appCode` default `CRM`, `moduleCode` default `VISITAS_GESTION`, `asOfDate` (yyyyMMdd o yyyy-MM-dd), `includeCrmUserId` default `true`.
   AX resuelve usuarios visibles con `INDControlDataVisibility`; no usa subordinados legacy de Hojas de gastos.
   Personas visibles sin usuario AX no se devuelven en la lista.
-  Response rows incluyen `Alias`, `AxUserId`, `CrmUserId`, `Name` y `Source`.
+  Response rows incluyen `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`, `MutationPolicy`, `MutationPolicyInt`, `MutationPolicyLabel` y `CanMutate`.
+  `CanMutate` gobierna update/delete sobre registros del propietario visible; create sigue usando siempre el `X-IND-AxUserId` del actor y no debe crear en nombre de subordinados.
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.

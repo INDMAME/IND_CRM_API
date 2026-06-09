@@ -16,14 +16,15 @@ Referencias Notion de contexto:
 
 ## Objetivo funcional
 
-Implementar en el frontend CRM el filtro de visitas por jerarquia usando la nueva capa `INDControlDataVisibility`.
+Implementar en el frontend CRM el filtro de visitas por jerarquia usando la nueva capa `INDControlDataVisibility` y usar `CanMutate` para habilitar update/delete sobre registros de propietarios visibles.
 
 El usuario debe poder:
 - Ver sus propias visitas cuando no tenga jerarquia o permisos ampliados.
 - Ver todas las visitas de los usuarios visibles por su jerarquia/configuracion cuando el backend lo permita.
 - Filtrar explicitamente por un usuario visible concreto, con una experiencia similar al filtro de subordinados de Hojas de gastos.
+- Editar o eliminar registros visibles solo cuando el item de `visible-users` del propietario tenga `CanMutate = true`.
 
-Importante: esta adaptacion aplica solo a visitas. No modificar Hojas de gastos, tickets ni la logica legacy de subordinados.
+Importante: esta adaptacion aplica solo a visitas. No modificar Hojas de gastos, tickets ni la logica legacy de subordinados. Hojas de gastos debe seguir usando su flujo actual basado en subordinados legacy; no mezclarlo con `INDControlDataVisibility` en esta fase.
 
 ## Contexto tecnico ya implementado en API/AX
 
@@ -58,7 +59,11 @@ Respuesta esperada:
       "AxUserId": "MMEZA",
       "CrmUserId": "000123",
       "Name": "Marco Meza",
-      "Source": "INDControlDataVisibility"
+      "Source": "INDControlDataVisibility",
+      "MutationPolicy": "SameAsVisibility",
+      "MutationPolicyInt": 1,
+      "MutationPolicyLabel": "Igual que visibilidad",
+      "CanMutate": true
     }
   ],
   "TraceId": "..."
@@ -70,6 +75,9 @@ Reglas clave:
 - Personas configuradas en jerarquia pero sin usuario AX no deben aparecer en el filtro.
 - No usar `GET /api/crm/expensesheets/subordinates` para visitas.
 - No usar `CRMUsuarioSubordinadoTable` en frontend para visitas.
+- `CanMutate` gobierna update/delete sobre registros cuyo propietario sea el `AxUserId` de esa fila visible.
+- Create no debe crear visitas en nombre de subordinados. La creacion mantiene como actor/propietario el `X-IND-AxUserId` del usuario actual.
+- `MutationPolicy` se expone para diagnostico/UX; la decision directa de botones debe basarse en `CanMutate` combinado con los permisos visuales existentes del modulo.
 
 El listado de visitas ya acepta filtro opcional:
 
@@ -123,7 +131,24 @@ Comportamiento:
 - Si el usuario elige una persona concreta, llamar `activities/list` con `ownerAxUserId`.
 - Al cambiar empresa, usuario/contexto, fechas o filtros, invalidar/recalcular la lista de usuarios visibles.
 - Mantener paginacion y filtros actuales de visitas.
-- Mantener permisos visuales actuales por `AccessRights`; la jerarquia solo afecta alcance de datos, no debe conceder acciones nuevas por si sola.
+- Mantener permisos visuales actuales por `AccessRights`; la jerarquia solo afecta alcance de datos. Para update/delete combinar `AccessRights` con `CanMutate`. Para create no usar `CanMutate` ni permitir crear en nombre de subordinados.
+
+## Estandar reutilizable solicitado
+
+No resolver esto como codigo aislado del listado de visitas. Crear o extender una capa compartida de visibilidad por modulo que luego se pueda reutilizar en otros modulos CRM migrados a `INDControlDataVisibility`.
+
+Recomendacion:
+- Servicio compartido: `getVisibleUsers({ appCode, moduleCode, includeCrmUserId })`.
+- Hook/composable compartido: `useModuleDataVisibility({ appCode, moduleCode })`.
+- Helper compartido: `canMutateOwner(visibleUsers, ownerAxUserId)` o mapa `ownerAxUserId -> CanMutate`.
+- Tipos compartidos para `DataVisibilityVisibleUser` y cache por `companyId + axUserId + permissionsRevision + appCode + moduleCode`.
+
+La implementacion especifica de visitas solo debe configurar `appCode = CRM`, `moduleCode = VISITAS_GESTION` y conectar:
+- filtro `ownerAxUserId`.
+- mapa de permisos de mutacion por propietario.
+- estados UI del selector.
+
+No migrar Hojas de gastos a esta capa compartida en este trabajo. La capa debe permitir reutilizacion futura, pero sin cambiar consumidores legacy actuales.
 
 ## Plan tecnico solicitado para frontend
 
@@ -140,6 +165,10 @@ type DataVisibilityVisibleUser = {
   crmUserId?: string;
   name: string;
   source: string;
+  mutationPolicy?: "OwnOnly" | "SameAsVisibility" | "ModuleBusinessRules" | string;
+  mutationPolicyInt?: 0 | 1 | 2 | number;
+  mutationPolicyLabel?: string;
+  canMutate: boolean;
 };
 ```
 
@@ -148,6 +177,7 @@ type DataVisibilityVisibleUser = {
 - `selectedOwnerAxUserId`
 - `visibleUsersLoading`
 - `visibleUsersError`
+- `visibleUsersByAxUserId` o helper equivalente para resolver `CanMutate` por propietario
 
 5. Cambios en el request de listado de visitas:
 - agregar `ownerAxUserId?: string`
@@ -155,8 +185,9 @@ type DataVisibilityVisibleUser = {
 
 6. Estrategia de carga:
 - cargar usuarios visibles despues de tener contexto valido (`companyId`, `axUserId`, token/context headers).
-- cachear por `companyId + axUserId + permissionsRevision + moduleCode`.
+- cachear por `companyId + axUserId + permissionsRevision + appCode + moduleCode`.
 - refrescar si cambia `permissionsRevision`.
+- construir un indice por `axUserId` para validar update/delete de forma consistente en listados y detalle.
 
 7. Estados UI:
 - loading del selector
@@ -164,6 +195,7 @@ type DataVisibilityVisibleUser = {
 - lista vacia
 - un solo usuario visible
 - multiples usuarios visibles
+- botones update/delete deshabilitados cuando el propietario no tenga `canMutate = true`
 
 8. Pruebas:
 - usuario sin jerarquia: solo ve propias visitas.
@@ -172,6 +204,9 @@ type DataVisibilityVisibleUser = {
 - persona sin usuario AX no aparece en selector.
 - cambio de empresa refresca usuarios visibles.
 - manipular `ownerAxUserId` desde cliente no amplia visibilidad.
+- subordinado visible con `canMutate = false`: se puede ver pero no editar/eliminar.
+- subordinado visible con `canMutate = true`: update/delete quedan habilitados si `AccessRights` tambien lo permite.
+- create nunca permite seleccionar subordinado como propietario.
 
 ## Flujo de validacion con Postman antes/despues del frontend
 
@@ -191,6 +226,8 @@ Ejecutar:
 La request `Get Visible Users - Visits` guarda:
 - `visibleOwnerAxUserId`
 - `visibleOwnerAlias`
+- `visibleOwnerCanMutate`
+- `visibleOwnerMutationPolicy`
 - `visibleUsersTotal`
 
 La request `List Activities (POST)` ya incluye:
@@ -206,6 +243,9 @@ Para probar "Todos los usuarios visibles", quitar temporalmente `ownerAxUserId` 
 - El frontend no llama endpoints legacy de subordinados para visitas.
 - El filtro de visitas usa `GET /api/crm/data-visibility/visible-users`.
 - El selector no muestra personas sin `AxUserId`.
+- El frontend usa `CanMutate` para update/delete y no intenta interpretar la jerarquia por su cuenta.
+- Create de visitas no permite crear registros en nombre de subordinados.
+- La logica se implementa en servicio/hook/helper compartido por modulo, no como codigo acoplado solo a un componente.
 - `Todos los usuarios visibles` lista visitas de todo el set permitido por AX.
 - Seleccionar un usuario visible envia `ownerAxUserId`.
 - Cambiar empresa o contexto refresca usuarios visibles.
@@ -219,3 +259,4 @@ Para probar "Todos los usuarios visibles", quitar temporalmente `ownerAxUserId` 
 - Si `visible-users` falla, no bloquear toda la pantalla: mantener listado sin `ownerAxUserId` o mostrar mensaje segun patron actual del frontend.
 - No usar `CrmUserId` como identidad principal para visitas; se mantiene solo como dato compatible.
 - La migracion de Hojas de gastos a `INDControlDataVisibility` queda fuera de este alcance.
+- `CanMutate` viene calculado por AX/API y es la fuente de verdad para update/delete por propietario visible.

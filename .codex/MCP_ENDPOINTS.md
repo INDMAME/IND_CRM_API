@@ -334,7 +334,8 @@ Endpoints
 - Query: `appCode` opcional (default `CRM`), `moduleCode` opcional (default `VISITAS_GESTION`), `asOfDate` opcional (`yyyyMMdd` o `yyyy-MM-dd`), `includeCrmUserId` opcional (default `true`)
 - Uso: lista usuarios AX visibles para el usuario actual con `INDControlDataVisibility`.
 - Nota: personas visibles sin `INDPersonaTable.UserId` no se devuelven. No usa la jerarquia legacy de Hojas de gastos.
-- Respuesta: rows con `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`
+- Respuesta: rows con `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`, `MutationPolicy`, `MutationPolicyInt`, `MutationPolicyLabel`, `CanMutate`
+- `CanMutate` aplica a update/delete sobre registros del propietario visible. La creacion de visitas no se hace en nombre de subordinados.
 
 ### Endpoint: crm_activities_create
 - HTTP: POST `/api/crm/activities/create`

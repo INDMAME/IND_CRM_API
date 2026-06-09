@@ -210,6 +210,12 @@ Formatversion: 1
         #    UserId          axUserId;
         #    CRMUserId       crmUserId;
         #    INDPersonaTable person;
+        #    INDWebModuleAccessLevel moduleAccessLevel;
+        #    INDMutationPolicy mutationPolicy;
+        #    int             mutationPolicyInt;
+        #    str             mutationPolicyText;
+        #    str             mutationPolicyLabel;
+        #    boolean         canMutate;
         #    str             viewerAlias;
         #    container       header;
         #    container       lines;
@@ -247,6 +253,35 @@ Formatversion: 1
         #    changecompany (companyId)
         #    {
         #        viewerAlias = INDControlDataVisibilityResolver::resolvePersonAliasByAxUserId(viewerAxUserId);
+        #    }
+        #
+        #    //MMS - Ajustes CRM - 2026.06.09
+        #    // Exponer la politica de modificacion permite que la web active update/delete sin replicar reglas AX.
+        #    moduleAccessLevel = INDCRMUtilityService::ctrlFindModuleAccessLevel(
+        #        viewerAxUserId,
+        #        companyId,
+        #        appCode,
+        #        moduleCode);
+        #    mutationPolicy = moduleAccessLevel.RecId
+        #        ? moduleAccessLevel.MutationPolicy
+        #        : INDMutationPolicy::ModuleBusinessRules;
+        #    mutationPolicyInt = mutationPolicy;
+        #    mutationPolicyText = enum2str(mutationPolicy);
+        #
+        #    switch (mutationPolicy)
+        #    {
+        #        case INDMutationPolicy::OwnOnly:
+        #            mutationPolicyLabel = "Solo propios";
+        #            break;
+        #
+        #        case INDMutationPolicy::SameAsVisibility:
+        #            mutationPolicyLabel = "Igual que visibilidad";
+        #            break;
+        #
+        #        case INDMutationPolicy::ModuleBusinessRules:
+        #        default:
+        #            mutationPolicyLabel = "Reglas del modulo";
+        #            break;
         #    }
         #
         #    visibleAliases = INDCRMUtilityService::ctrlResolveVisiblePersonAliasSet(
@@ -293,12 +328,23 @@ Formatversion: 1
         #         && axUserId
         #         && visibleAxUsers.in(axUserId))
         #        {
+        #            canMutate = INDCRMUtilityService::ctrlCanMutateOwnerAxUserId(
+        #                viewerAxUserId,
+        #                companyId,
+        #                appCode,
+        #                moduleCode,
+        #                axUserId);
+        #
         #            lines += [[
         #                strFmt("%1", personAlias),
         #                strFmt("%1", axUserId),
         #                strFmt("%1", crmUserId),
         #                strFmt("%1", person.Name),
-        #                "INDControlDataVisibility"
+        #                "INDControlDataVisibility",
+        #                strFmt("%1", mutationPolicyText),
+        #                strFmt("%1", mutationPolicyInt),
+        #                strFmt("%1", mutationPolicyLabel),
+        #                strFmt("%1", canMutate ? 1 : 0)
         #            ]];
         #        }
         #

@@ -1286,8 +1286,13 @@
                                                                                     "  var first = items[0] || {};",
                                                                                     "  var axUserId = first.AxUserId || first.axUserId || \u0027\u0027;",
                                                                                     "  var alias = first.Alias || first.alias || \u0027\u0027;",
+                                                                                    "  var mutationPolicy = first.MutationPolicy || first.mutationPolicy || \u0027\u0027;",
+                                                                                    "  var rawCanMutate = first.CanMutate !== undefined ? first.CanMutate : first.canMutate;",
+                                                                                    "  var canMutate = rawCanMutate === true || rawCanMutate === 1 || rawCanMutate === \u00271\u0027 || String(rawCanMutate).toLowerCase() === \u0027true\u0027;",
                                                                                     "  pm.environment.set(\u0027visibleOwnerAxUserId\u0027, axUserId);",
                                                                                     "  pm.environment.set(\u0027visibleOwnerAlias\u0027, alias);",
+                                                                                    "  pm.environment.set(\u0027visibleOwnerCanMutate\u0027, String(canMutate));",
+                                                                                    "  pm.environment.set(\u0027visibleOwnerMutationPolicy\u0027, mutationPolicy);",
                                                                                     "}",
                                                                                     "pm.environment.set(\u0027visibleUsersTotal\u0027, String(items.length));"
                                                                                 ]

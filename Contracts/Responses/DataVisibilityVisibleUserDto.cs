@@ -19,5 +19,17 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Origen de la resolucion de visibilidad.</summary>
         public string Source { get; set; }
+
+        /// <summary>Politica AX que define el alcance de update/delete sobre este propietario.</summary>
+        public string MutationPolicy { get; set; }
+
+        /// <summary>Valor entero del enum AX INDMutationPolicy.</summary>
+        public int? MutationPolicyInt { get; set; }
+
+        /// <summary>Etiqueta funcional de la politica de modificacion.</summary>
+        public string MutationPolicyLabel { get; set; }
+
+        /// <summary>Indica si el usuario actual puede modificar registros de este propietario visible.</summary>
+        public bool CanMutate { get; set; }
     }
 }
