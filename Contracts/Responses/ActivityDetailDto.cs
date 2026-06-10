@@ -48,6 +48,12 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Lista de asistentes vinculados.</summary>
         public List<ActivityAssistantDto> Asistentes { get; set; }
+
+        /// <summary>Functional AX owner user for the activity.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional activity owner.</summary>
+        public string OwnerName { get; set; }
     }
 
     /// <summary>

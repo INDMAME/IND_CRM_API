@@ -6320,6 +6320,8 @@ namespace IND_CRM_API.Controllers.CRM
                 NormalizedJson = headerExtras.Count > 14 ? headerExtras[14] : null,
                 TicketDate = headerExtras.Count > 15 ? FormatOptionalApiDate(headerExtras[15]) : string.Empty,
                 TicketTime = headerExtras.Count > 16 ? FormatApiTime(headerExtras[16]) : string.Empty,
+                OwnerAxUserId = headerExtras.Count > 17 ? headerExtras[17] : string.Empty,
+                OwnerName = headerExtras.Count > 18 ? headerExtras[18] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -6393,6 +6395,12 @@ namespace IND_CRM_API.Controllers.CRM
                         : string.Empty,
                     TicketTime = AxContainerReadHelper.SafeLength(row) >= 11
                         ? FormatApiTime(AxContainerReadHelper.SafeString(row, 11))
+                        : string.Empty,
+                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 12
+                        ? AxContainerReadHelper.SafeString(row, 12)
+                        : string.Empty,
+                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 13
+                        ? AxContainerReadHelper.SafeString(row, 13)
                         : string.Empty
                 });
             }
@@ -6471,6 +6479,12 @@ namespace IND_CRM_API.Controllers.CRM
                         : string.Empty,
                     TicketTime = AxContainerReadHelper.SafeLength(row) >= 10
                         ? FormatApiTime(AxContainerReadHelper.SafeString(row, 10))
+                        : string.Empty,
+                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 11
+                        ? AxContainerReadHelper.SafeString(row, 11)
+                        : string.Empty,
+                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 12
+                        ? AxContainerReadHelper.SafeString(row, 12)
                         : string.Empty
                 });
             }

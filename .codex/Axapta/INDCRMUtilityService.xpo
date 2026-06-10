@@ -211,12 +211,9 @@ Formatversion: 1
         #    CRMUserId       crmUserId;
         #    INDPersonaTable person;
         #    INDWebModuleAccessLevel moduleAccessLevel;
-        #    INDMutationPolicy mutationPolicy;
-        #    int             mutationPolicyInt;
-        #    str             mutationPolicyText;
+        #    str             viewerAlias;
         #    str             mutationPolicyLabel;
         #    boolean         canMutate;
-        #    str             viewerAlias;
         #    container       header;
         #    container       lines;
         #    ;
@@ -255,35 +252,6 @@ Formatversion: 1
         #        viewerAlias = INDControlDataVisibilityResolver::resolvePersonAliasByAxUserId(viewerAxUserId);
         #    }
         #
-        #    //MMS - Ajustes CRM - 2026.06.09
-        #    // Exponer la politica de modificacion permite que la web active update/delete sin replicar reglas AX.
-        #    moduleAccessLevel = INDCRMUtilityService::ctrlFindModuleAccessLevel(
-        #        viewerAxUserId,
-        #        companyId,
-        #        appCode,
-        #        moduleCode);
-        #    mutationPolicy = moduleAccessLevel.RecId
-        #        ? moduleAccessLevel.MutationPolicy
-        #        : INDMutationPolicy::ModuleBusinessRules;
-        #    mutationPolicyInt = mutationPolicy;
-        #    mutationPolicyText = enum2str(mutationPolicy);
-        #
-        #    switch (mutationPolicy)
-        #    {
-        #        case INDMutationPolicy::OwnOnly:
-        #            mutationPolicyLabel = "Solo propios";
-        #            break;
-        #
-        #        case INDMutationPolicy::SameAsVisibility:
-        #            mutationPolicyLabel = "Igual que visibilidad";
-        #            break;
-        #
-        #        case INDMutationPolicy::ModuleBusinessRules:
-        #        default:
-        #            mutationPolicyLabel = "Reglas del modulo";
-        #            break;
-        #    }
-        #
         #    visibleAliases = INDCRMUtilityService::ctrlResolveVisiblePersonAliasSet(
         #        viewerAxUserId,
         #        companyId,
@@ -291,6 +259,16 @@ Formatversion: 1
         #        moduleCode,
         #        asOfDate);
         #
+        #    moduleAccessLevel = INDCRMUtilityService::ctrlFindModuleAccessLevel(
+        #        viewerAxUserId,
+        #        companyId,
+        #        appCode,
+        #        moduleCode);
+        #
+        #    if (moduleAccessLevel.RecId)
+        #    {
+        #        mutationPolicyLabel = moduleAccessLevel.mutationPolicyLabel();
+        #    }
         #    //MMS - Ajustes CRM - 2026.06.09
         #    // La lista expuesta por API solo debe contener personas con usuario AX resoluble.
         #    visibleAxUsers = INDCRMUtilityService::ctrlResolveVisibleAxUserIdSet(
@@ -341,10 +319,10 @@ Formatversion: 1
         #                strFmt("%1", crmUserId),
         #                strFmt("%1", person.Name),
         #                "INDControlDataVisibility",
-        #                strFmt("%1", mutationPolicyText),
-        #                strFmt("%1", mutationPolicyInt),
+        #                strFmt("%1", moduleAccessLevel.MutationPolicy),
+        #                strFmt("%1", enum2int(moduleAccessLevel.MutationPolicy)),
         #                strFmt("%1", mutationPolicyLabel),
-        #                strFmt("%1", canMutate ? 1 : 0)
+        #                strFmt("%1", canMutate)
         #            ]];
         #        }
         #
@@ -781,8 +759,42 @@ Formatversion: 1
         #    return currency.CurrencyCode;
         #}
       ENDSOURCE
+      SOURCE #sendInternalApiMail
+        #// Purpose: CRM-facing mail facade. The global DLL call lives in INDInternalApiClientServer.
+        #static server boolean sendInternalApiMail(
+        #    str _companyId,
+        #    str _fromEmail,
+        #    str _toEmails,
+        #    str _subject,
+        #    str _htmlBody,
+        #    str _textBody,
+        #    str _sourceProcess,
+        #    str _eventType,
+        #    str _aggregateType,
+        #    str _aggregateId,
+        #    str _idempotencyKey,
+        #    str _correlationId = '')
+        #{
+        #    ;
+        #
+        #    return INDInternalApiClientServer::sendInternalApiMail(
+        #        _companyId,
+        #        _fromEmail,
+        #        _toEmails,
+        #        _subject,
+        #        _htmlBody,
+        #        _textBody,
+        #        _sourceProcess,
+        #        _eventType,
+        #        _aggregateType,
+        #        _aggregateId,
+        #        _idempotencyKey,
+        #        _correlationId);
+        #}
+        #
+      ENDSOURCE
       SOURCE #sendInternalApiMailEx
-        #// Purpose: CRM-facing mail facade for the SendMailEx-only DLL contract.
+        #// Purpose: CRM-facing extended mail facade. The global DLL call lives in INDInternalApiClientServer.
         #static server boolean sendInternalApiMailEx(
         #    str _companyId,
         #    str _fromEmail,
@@ -794,7 +806,6 @@ Formatversion: 1
         #    str _subject,
         #    str _htmlBody,
         #    str _textBody,
-        #    str _attachmentFilePaths,
         #    boolean _saveToSentItems,
         #    str _importance,
         #    str _sourceProcess,
@@ -817,7 +828,6 @@ Formatversion: 1
         #        _subject,
         #        _htmlBody,
         #        _textBody,
-        #        _attachmentFilePaths,
         #        _saveToSentItems,
         #        _importance,
         #        _sourceProcess,

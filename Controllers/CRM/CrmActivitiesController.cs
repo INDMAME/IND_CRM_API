@@ -973,6 +973,8 @@ namespace IND_CRM_API.Controllers.CRM
             var hasContactMethod = row.Length() >= 14;
             var descriptionIndex = hasContactMethod ? 10 : 9;
             var asistentesIndex = hasContactMethod ? 14 : 13;
+            var ownerAxUserIdIndex = asistentesIndex + 1;
+            var ownerNameIndex = asistentesIndex + 2;
 
             var dto = new ActivityDetailDto
             {
@@ -989,6 +991,8 @@ namespace IND_CRM_API.Controllers.CRM
                 Comentarios = SafeString(row, descriptionIndex + 1),
                 Antecedentes = SafeString(row, descriptionIndex + 2),
                 Conclusiones = SafeString(row, descriptionIndex + 3),
+                OwnerAxUserId = row.Length() >= ownerAxUserIdIndex ? SafeString(row, ownerAxUserIdIndex) : string.Empty,
+                OwnerName = row.Length() >= ownerNameIndex ? SafeString(row, ownerNameIndex) : string.Empty,
                 Asistentes = new List<ActivityAssistantDto>()
             };
 

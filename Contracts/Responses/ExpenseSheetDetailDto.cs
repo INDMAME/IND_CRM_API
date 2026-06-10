@@ -27,6 +27,11 @@ namespace IND_CRM_API.Contracts.Responses
         public List<ExpenseSheetLineDto> Lines { get; set; }
         // Display name resolved from CRMUsuarioTable for the sheet owner.
         public string UserName { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX header contract.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional owner returned at the end of the AX header contract.</summary>
+        public string OwnerName { get; set; }
     }
 
     /// <summary>

@@ -24,5 +24,10 @@ namespace IND_CRM_API.Contracts.Responses
         public string EstadoComentarios { get; set; }
         // Reimbursable expense enum value returned by AX.
         public int? ReimbursableExpense { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX row.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional owner returned at the end of the AX row.</summary>
+        public string OwnerName { get; set; }
     }
 }

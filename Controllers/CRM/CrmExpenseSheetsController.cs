@@ -2375,6 +2375,8 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.CreatedDate = FormatApiDate(headerExtras[11]);
                 detail.ReimbursableExpense = headerExtras.Count >= 13 ? ToInt(headerExtras[12]) : null;
                 detail.UserName = headerExtras.Count >= 14 ? headerExtras[13] : string.Empty;
+                detail.OwnerAxUserId = headerExtras.Count >= 15 ? headerExtras[14] : string.Empty;
+                detail.OwnerName = headerExtras.Count >= 16 ? headerExtras[15] : string.Empty;
             }
             else if (headerExtras.Count == 11)
             {
@@ -2552,7 +2554,9 @@ namespace IND_CRM_API.Controllers.CRM
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
                         CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
-                        ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14))
+                        ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
+                        OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
+                        OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty
                     });
                     continue;
                 }

@@ -24,6 +24,11 @@ namespace IND_CRM_API.Contracts.Responses
         public string HojaGastosIdDisplay { get; set; }
         public string OcrJson { get; set; }
         public string NormalizedJson { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX ticket detail contract.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional ticket owner.</summary>
+        public string OwnerName { get; set; }
         public List<ExpenseSheetTicketLineDto> Lines { get; set; }
     }
 
@@ -57,6 +62,11 @@ namespace IND_CRM_API.Contracts.Responses
         public string TicketDate { get; set; }
         public string TicketTime { get; set; }
         public string FileName { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX ticket list row.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional ticket owner.</summary>
+        public string OwnerName { get; set; }
     }
 
     /// <summary>
@@ -74,6 +84,11 @@ namespace IND_CRM_API.Contracts.Responses
         public string FileName { get; set; }
         public bool? ProcessedByAI { get; set; }
         public int? GastoType { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX link-list row.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional ticket owner.</summary>
+        public string OwnerName { get; set; }
     }
 
     /// <summary>

@@ -158,7 +158,9 @@ namespace IND_CRM_API.Helpers
                     ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                     ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
                     CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
-                    ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14))
+                    ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
+                    OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
+                    OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty
                 };
             }
 
