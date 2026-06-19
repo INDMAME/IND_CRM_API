@@ -8,7 +8,7 @@ namespace IND_CRM_API.Contracts.Requests
     public class CreateActivityRequest
     {
         [Required] public string accountNum { get; set; } 
-        [Required] public string visitType { get; set; }
+        [Required] public int? visitType { get; set; }
         public string userId { get; set; }
         public string createdByUserId { get; set; }
         [Required] public string description { get; set; } 

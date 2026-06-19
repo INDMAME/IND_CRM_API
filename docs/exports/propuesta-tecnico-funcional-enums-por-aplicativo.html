@@ -174,7 +174,7 @@
 
     <h2>Diseño funcional</h2>
     <p>La solución queda cerrada sobre una tabla nueva: <code>INDAxEnumAppCatalogTable</code>. Esta tabla controla qué opciones de los enums de Axapta se exponen para cada aplicativo, usando <code>INDAxEnumsTable</code> como diccionario técnico base.</p>
-    <p>La configuración queda por aplicativo, por ejemplo <code>CRM</code>. No se enlaza inicialmente con módulo, pantalla o endpoint. Como la web consume APIs for frontend, no se separa visibilidad web y visibilidad API: una única bandera <code>Visible</code> controla si la opción se devuelve para el aplicativo.</p>
+    <p>La configuración queda por aplicativo, por ejemplo <code>CRM</code>. No se enlaza inicialmente con módulo, pantalla o endpoint. La exposición web/API se controla con <code>Active</code>; no existe campo funcional <code>Visible</code>.</p>
 
     <h3>Reglas funcionales</h3>
     <ul>
@@ -184,7 +184,7 @@
       <li>La agrupación de opciones se obtiene siempre desde <code>INDAxEnumsTable</code>, usando <code>AxEnumName</code> o <code>AxEnumId</code>.</li>
       <li><code>AxEnumName</code> será la búsqueda principal porque es legible y expresa el objeto AX real.</li>
       <li><code>AxEnumId</code> también es un valor válido y se expondrá por un endpoint o método separado.</li>
-      <li><code>Visible = Yes</code> significa que la opción se devuelve para el aplicativo.</li>
+      <li><code>Active = Yes</code> significa que la opción se devuelve para el aplicativo.</li>
       <li>La API y la web siguen enviando el <code>EnumValue</code> numérico real de AX.</li>
     </ul>
 
@@ -199,9 +199,8 @@
     <h3>Campos de <code>INDAxEnumAppCatalogTable</code></h3>
     <ul>
       <li><code>AppCode</code>: código del aplicativo, por ejemplo <code>CRM</code>.</li>
-      <li><code>AxEnumRefRecId</code>: referencia directa a <code>INDAxEnumsTable.RecId</code>.</li>
-      <li><code>Visible</code>: control único de exposición web/API para el aplicativo.</li>
-      <li><code>SortOrder</code>: orden de presentación; fallback a <code>INDAxEnumsTable.EnumIndex</code>.</li>
+      <li><code>AxEnumsTableRefRecId</code>: referencia directa a <code>INDAxEnumsTable.RecId</code>.</li>
+      <li><code>SortOrder</code>: orden de presentación. <code>0</code> es válido y no significa vacío.</li>
       <li><code>LabelOverride</code>: texto opcional; fallback a <code>INDAxEnumsTable.Description</code>.</li>
       <li><code>DescriptionOverride</code>: descripción opcional; fallback a <code>INDAxEnumsTable.Description</code>.</li>
       <li><code>Active</code>: permite desactivar configuración sin borrar filas.</li>
@@ -209,7 +208,7 @@
 
     <h3>Relación lógica</h3>
     <ul>
-      <li><code>INDAxEnumAppCatalogTable.AxEnumRefRecId</code> apunta directamente a <code>INDAxEnumsTable.RecId</code>.</li>
+      <li><code>INDAxEnumAppCatalogTable.AxEnumsTableRefRecId</code> apunta directamente a <code>INDAxEnumsTable.RecId</code>.</li>
       <li>La tabla nueva no duplica <code>AxEnumName</code>, <code>AxEnumId</code>, <code>EnumValue</code>, <code>EnumIndex</code> ni <code>Description</code>.</li>
       <li><code>AxEnumName</code> y <code>AxEnumId</code> se leen siempre desde <code>INDAxEnumsTable</code>.</li>
     </ul>
@@ -218,7 +217,7 @@
     <ol>
       <li>Buscar filas en <code>INDAxEnumsTable</code> por <code>AxEnumName</code>.</li>
       <li>Tomar los <code>RecId</code> de esas filas.</li>
-      <li>Buscar en <code>INDAxEnumAppCatalogTable</code> por <code>AppCode</code>, <code>AxEnumRefRecId</code>, <code>Active</code> y <code>Visible</code>.</li>
+      <li>Buscar en <code>INDAxEnumAppCatalogTable</code> por <code>AppCode</code>, <code>AxEnumsTableRefRecId</code> y <code>Active</code>.</li>
       <li>Construir la respuesta leyendo <code>AxEnumName</code>, <code>AxEnumId</code>, <code>EnumValue</code>, <code>EnumIndex</code> y <code>Description</code> desde <code>INDAxEnumsTable</code>.</li>
     </ol>
 
@@ -226,49 +225,60 @@
     <ol>
       <li>Buscar filas en <code>INDAxEnumsTable</code> por <code>AxEnumId</code>.</li>
       <li>Tomar los <code>RecId</code> de esas filas.</li>
-      <li>Buscar en <code>INDAxEnumAppCatalogTable</code> por <code>AppCode</code>, <code>AxEnumRefRecId</code>, <code>Active</code> y <code>Visible</code>.</li>
+      <li>Buscar en <code>INDAxEnumAppCatalogTable</code> por <code>AppCode</code>, <code>AxEnumsTableRefRecId</code> y <code>Active</code>.</li>
       <li>Construir la misma respuesta que la búsqueda por nombre.</li>
     </ol>
 
-    <h2>API futura</h2>
+    <h2>API implementada</h2>
     <p>Endpoint principal por nombre:</p>
     <pre><code>GET /api/crm/enums/by-name?appCode=CRM&amp;axEnumNames=CRMGastoType,INDExpenseSheetStatus</code></pre>
     <p>Endpoint separado por id:</p>
     <pre><code>GET /api/crm/enums/by-id?appCode=CRM&amp;axEnumIds=123,456</code></pre>
 
-    <h3>Respuesta conceptual</h3>
+    <h3>Respuesta implementada</h3>
     <pre><code>{
-  "AppCode": "CRM",
-  "AxEnumName": "CRMGastoType",
-  "AxEnumId": 123,
+  "Success": true,
+  "Message": "OK",
+  "Total": 1,
   "Items": [
     {
-      "Value": 5,
-      "EnumIndex": 5,
-      "Label": "Comida",
-      "Description": "Comida",
-      "Visible": true,
-      "SortOrder": 50
+      "Company": "DAT",
+      "AppCode": "CRM",
+      "AxEnumName": "CRMGastoType",
+      "AxEnumId": 123,
+      "Found": true,
+      "Options": [
+        {
+          "Value": 5,
+          "EnumIndex": 5,
+          "Label": "Comida",
+          "Description": "Comida",
+          "Active": true,
+          "SortOrder": 0,
+          "AxEnumsTableRefRecId": 5637144576
+        }
+      ]
     }
-  ]
+  ],
+  "TraceId": "..."
 }</code></pre>
     <p>La API debe llamar a <code>INDCRMUtilityService</code> y no hacer joins complejos desde C#. Así el contrato queda estable aunque cambie la implementación interna en AX.</p>
 
     <h3>Métodos sugeridos en <code>INDAxEnumAppCatalogTable</code></h3>
     <ul>
-      <li><code>find(appCode, axEnumRefRecId, forUpdate = false)</code>: devuelve la configuración exacta para una opción de enum en un aplicativo.</li>
-      <li><code>findByAxEnumName(appCode, axEnumName)</code>: busca en <code>INDAxEnumsTable</code> por <code>AxEnumName</code> y cruza por <code>AxEnumRefRecId</code>.</li>
-      <li><code>findByAxEnumId(appCode, axEnumId)</code>: busca en <code>INDAxEnumsTable</code> por <code>AxEnumId</code> y cruza por <code>AxEnumRefRecId</code>.</li>
+      <li><code>find(appCode, axEnumsTableRefRecId, forUpdate = false)</code>: devuelve la configuración exacta para una opción de enum en un aplicativo.</li>
+      <li><code>findByAxEnumName(appCode, axEnumName)</code>: busca en <code>INDAxEnumsTable</code> por <code>AxEnumName</code> y cruza por <code>AxEnumsTableRefRecId</code>.</li>
+      <li><code>findByAxEnumId(appCode, axEnumId)</code>: busca en <code>INDAxEnumsTable</code> por <code>AxEnumId</code> y cruza por <code>AxEnumsTableRefRecId</code>.</li>
       <li><code>effectiveLabel()</code>: usa <code>LabelOverride</code> si existe; si no, usa <code>INDAxEnumsTable.Description</code>.</li>
-      <li><code>validateWrite()</code>: valida campos obligatorios, existencia de <code>AxEnumRefRecId</code>, duplicados y reglas de estado.</li>
+      <li><code>validateWrite()</code>: valida campos obligatorios, existencia de <code>AxEnumsTableRefRecId</code>, duplicados y reglas de estado.</li>
     </ul>
 
     <h3>Reglas de <code>validateWrite()</code></h3>
     <ul>
-      <li><code>AppCode</code> y <code>AxEnumRefRecId</code> son obligatorios.</li>
-      <li><code>AxEnumRefRecId</code> debe existir en <code>INDAxEnumsTable</code>.</li>
-      <li>No debe existir duplicado activo para <code>AppCode + AxEnumRefRecId</code>.</li>
-      <li><code>Visible = Yes</code> no se permite si <code>Active = No</code>.</li>
+      <li><code>AppCode</code> y <code>AxEnumsTableRefRecId</code> son obligatorios.</li>
+      <li><code>AxEnumsTableRefRecId</code> debe existir en <code>INDAxEnumsTable</code>.</li>
+      <li>No debe existir duplicado activo para <code>AppCode + AxEnumsTableRefRecId</code>.</li>
+      <li>No puede repetirse el mismo <code>SortOrder</code> para dos valores activos distintos del mismo enum y aplicativo.</li>
     </ul>
 
     <h3>Métodos sugeridos en <code>INDCRMUtilityService</code></h3>
@@ -304,14 +314,14 @@
       <li>Si <code>INDAxEnumsTable</code> puede regenerarse cambiando <code>RecId</code>, definir antes un proceso controlado de relink por <code>AxEnumName + EnumValue</code>.</li>
       <li>Usar <code>AxEnumName</code> como búsqueda principal.</li>
       <li>Usar <code>AxEnumId</code> por endpoint/método separado porque también es un valor válido.</li>
-      <li>Crear relación AX desde <code>INDAxEnumAppCatalogTable.AxEnumRefRecId</code> hacia <code>INDAxEnumsTable.RecId</code>.</li>
-      <li>Crear índice único para evitar duplicados activos por <code>AppCode + AxEnumRefRecId</code>.</li>
-      <li>Crear índices de consulta por <code>AppCode + Active + Visible</code> y por <code>AxEnumRefRecId</code>.</li>
+      <li>Crear relación AX desde <code>INDAxEnumAppCatalogTable.AxEnumsTableRefRecId</code> hacia <code>INDAxEnumsTable.RecId</code>.</li>
+      <li>Crear índice único para evitar duplicados activos por <code>AppCode + AxEnumsTableRefRecId</code>.</li>
+      <li>Crear índices de consulta por <code>AppCode + Active</code> y por <code>AxEnumsTableRefRecId</code>.</li>
       <li>Revisar o crear índice en <code>INDAxEnumsTable</code> por <code>AxEnumName</code> y por <code>AxEnumId</code>.</li>
       <li>Usar <code>Active = No</code> para retirar configuraciones; evitar borrado físico salvo limpieza controlada.</li>
       <li>Devolver siempre <code>EnumValue</code> desde <code>INDAxEnumsTable</code>; nunca desde un valor duplicado en la tabla nueva.</li>
       <li>Validar <code>appCode</code> contra contexto/permiso del usuario cuando el endpoint sea público para frontend.</li>
-      <li>Si se solicita un enum que no existe, devolver error controlado; si existe pero no tiene opciones visibles, devolver lista vacía.</li>
+      <li>Si se solicita un enum que no existe, devolver error controlado; si existe pero no tiene opciones activas, devolver lista vacía.</li>
       <li>Mantener compatibilidad: los endpoints existentes siguen recibiendo y devolviendo enteros.</li>
     </ul>
 
@@ -388,7 +398,7 @@
         <li>Valores conocidos: pendiente confirmar en <code>INDAxEnumsTable</code>.</li>
         <li>Campos API: <code>visitType</code>.</li>
         <li>Usos: creación y edición de actividades/visitas.</li>
-        <li>Observación: actualmente viaja como string en API, pero AX lo trata como enum <code>CRMTipoVisita</code>.</li>
+        <li>Observación: ahora viaja como valor numérico en API y AX lo trata como enum <code>CRMTipoVisita</code>.</li>
         <li>Prioridad: media.</li>
       </ul>
     </section>
@@ -399,7 +409,7 @@
         <li>Valores conocidos: pendiente confirmar en <code>INDAxEnumsTable</code>.</li>
         <li>Campos API: <code>asistenteTipo</code>.</li>
         <li>Usos: creación de asistentes de visita.</li>
-        <li>Observación: actualmente viaja como string en API, pero AX lo trata como enum <code>CRMCustVendVisitaAsistente</code>.</li>
+        <li>Observación: ahora viaja como valor numérico en API y AX lo trata como enum <code>CRMCustVendVisitaAsistente</code>.</li>
         <li>Prioridad: media.</li>
       </ul>
     </section>
@@ -441,15 +451,15 @@
       </ul>
     </section>
 
-    <h2>Fases recomendadas</h2>
+    <h2>Estado de implementación</h2>
     <ol>
-      <li>Crear tabla AX <code>INDAxEnumAppCatalogTable</code> con relación por <code>AxEnumRefRecId</code>.</li>
-      <li>Crear los métodos mínimos de tabla.</li>
-      <li>Agregar <code>getEnumValuesByName(container _data)</code> a <code>INDCRMUtilityService</code>.</li>
-      <li>Agregar <code>getEnumValuesById(container _data)</code> a <code>INDCRMUtilityService</code>.</li>
-      <li>Crear endpoint API de lectura por nombre.</li>
-      <li>Crear endpoint API de lectura por id.</li>
-      <li>Hacer que la web consuma el endpoint por nombre para pintar selects.</li>
+      <li>Tabla AX <code>INDAxEnumAppCatalogTable</code> creada con relación por <code>AxEnumsTableRefRecId</code>.</li>
+      <li>Métodos mínimos de tabla y validaciones creados.</li>
+      <li><code>getEnumValuesByName(container _data)</code> agregado a <code>INDCRMUtilityService</code>.</li>
+      <li><code>getEnumValuesById(container _data)</code> agregado a <code>INDCRMUtilityService</code>.</li>
+      <li>Endpoint API de lectura por nombre creado en <code>CrmEnumsController</code>.</li>
+      <li>Endpoint API de lectura por id creado en <code>CrmEnumsController</code>.</li>
+      <li>Pendiente: hacer que la web consuma el endpoint por nombre para pintar selects.</li>
     </ol>
 
     <h2>Recomendación final</h2>

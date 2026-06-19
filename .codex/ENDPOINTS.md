@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-06-09)
+# IND_CRM_API Endpoints (actualizado 2026-06-19)
 
 Base URL: `{{baseUrl}}`
 
@@ -68,6 +68,20 @@ Endpoints
 ## MCP
 - GET /api/mcp/tools (Authorize)
   Response: catalogo MCP (MCP_TOOLS.json)
+
+## CRM Enums
+- GET /api/crm/enums/by-name?appCode=CRM&axEnumNames=CRMGastoType,INDExpenseSheetStatus (Authorize + X-IND-Company)
+  Query optional: `appCode` default `CRM`, `axEnumNames` lista separada por comas.
+  Si `axEnumNames` se omite o llega vacio, devuelve todos los enums activos configurados para el aplicativo y company.
+  Response: `IndPagedResponse<CrmEnumCatalogDto>`.
+  Cada item incluye `Company`, `AppCode`, `AxEnumName`, `AxEnumId`, `Found` y `Options[]`.
+  Cada opcion incluye `Value` (valor numerico real que deben enviar los endpoints de negocio), `EnumIndex`, `Label`, `Description`, `Active`, `SortOrder` y `AxEnumsTableRefRecId`.
+  Nota: `SortOrder = 0` es valido y no significa vacio.
+  ErrorCode: VALIDATION_ERROR (422), AX_COM_ERROR/AX_SESSION_ERROR (500).
+- GET /api/crm/enums/by-id?appCode=CRM&axEnumIds=61472,61523 (Authorize + X-IND-Company)
+  Query optional: `appCode` default `CRM`, `axEnumIds` lista separada por comas.
+  Si `axEnumIds` se omite o llega vacio, devuelve todos los enums activos configurados para el aplicativo y company.
+  Response y semantica iguales a `/api/crm/enums/by-name`.
 
 ## IA Services
 - POST /api/ia/service/speech (Authorize)
@@ -230,7 +244,7 @@ Endpoints
   Response rows incluyen `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`, `MutationPolicy`, `MutationPolicyInt`, `MutationPolicyLabel` y `CanMutate`.
   `CanMutate` gobierna update/delete sobre registros del propietario visible; create sigue usando siempre el `X-IND-AxUserId` del actor y no debe crear en nombre de subordinados.
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
+  Body required: `accountNum`, `visitType` (valor numerico AX de `CRMTipoVisita`), `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
   Nota: `userId` y `createdByUserId` del body no gobiernan el actor; API usa siempre `X-IND-AxUserId`.
   Si `contactMethod` no se envia, AX recibe `0` (InPerson).
@@ -247,14 +261,14 @@ Endpoints
   AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
   Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: `accountNum`, `visitType`, `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
+  Body required: `accountNum`, `visitType` (valor numerico AX de `CRMTipoVisita`), `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`.
   Nota: `userId` del body no gobierna el actor; API usa siempre `X-IND-AxUserId`.
   AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - POST /api/crm/visits/createVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: `refRecIdActividad`, `asistenteTipo`, `asistenteId`, `contactoRecId`.
+  Body required: `refRecIdActividad`, `asistenteTipo` (valor numerico AX de `CRMCustVendVisitaAsistente`), `asistenteId`, `contactoRecId`.
   Body optional: `createdByUserId`; si se envia distinto del header, API lo ignora y usa `X-IND-AxUserId`.
   AX valida modificacion de la visita con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - DELETE /api/crm/visits/deleteVisitaAsistente (Authorize + X-IND-Company + X-IND-AxUserId)

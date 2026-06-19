@@ -6,7 +6,7 @@ namespace IND_CRM_API.Contracts.Requests
     public class UpdateActivityRequest
     {
         public string accountNum { get; set; }
-        public string visitType { get; set; }
+        public int? visitType { get; set; }
         public string userId { get; set; }
         public string description { get; set; }
         public string transDate { get; set; }

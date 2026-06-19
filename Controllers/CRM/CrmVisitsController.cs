@@ -54,8 +54,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.refRecIdActividad))
                     validationErrors.Add(new IndValidationError { Field = "refRecIdActividad", Message = "refRecIdActividad es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.asistenteTipo))
+                if (!body.asistenteTipo.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
+                else if (body.asistenteTipo.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo debe ser un valor numerico de enum AX mayor o igual que 0." });
                 if (string.IsNullOrWhiteSpace(body.asistenteId))
                     validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
             }
@@ -96,7 +98,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
-                con.Append(body.asistenteTipo?.Trim() ?? string.Empty);
+                con.Append(body.asistenteTipo.Value);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
                 con.Append(axUserId);

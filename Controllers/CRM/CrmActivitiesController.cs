@@ -88,8 +88,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.accountNum))
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum is required." });
-                if (string.IsNullOrWhiteSpace(body.visitType))
+                if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
+                else if (body.visitType.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType debe ser un valor numerico de enum AX mayor o igual que 0." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
@@ -139,7 +141,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 con.Append(company);
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
-                con.Append(body.visitType?.Trim() ?? string.Empty);
+                con.Append(body.visitType.Value);
                 con.Append(axUserId);
                 con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
@@ -296,8 +298,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.accountNum))
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.visitType))
+                if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
+                else if (body.visitType.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType debe ser un valor numerico de enum AX mayor o igual que 0." });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
@@ -330,7 +334,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(recId.ToString());
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
-                con.Append(body.visitType?.Trim() ?? string.Empty);
+                con.Append(body.visitType.Value);
                 con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(transDate.ToString("yyyyMMdd"));
