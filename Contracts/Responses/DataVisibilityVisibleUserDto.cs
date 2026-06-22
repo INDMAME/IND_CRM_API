@@ -23,7 +23,7 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Politica AX que define el alcance de update/delete sobre este propietario.</summary>
         public string MutationPolicy { get; set; }
 
-        /// <summary>Valor entero del enum AX INDMutationPolicy.</summary>
+        /// <summary>Valor entero del enum AX INDMutationPolicy. Resolver catalogo completo mediante /api/crm/enums si se necesita pintar opciones.</summary>
         public int? MutationPolicyInt { get; set; }
 
         /// <summary>Etiqueta funcional de la politica de modificacion.</summary>

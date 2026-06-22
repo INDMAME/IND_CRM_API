@@ -18,6 +18,7 @@ namespace IND_CRM_API.Controllers.CRM
         private readonly IAxaptaSessionManager _sessionManager;
         private const string ControlDataVisibilityAppCode = "CRM";
         private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
          
         public CrmVisitsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
@@ -57,7 +58,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!body.asistenteTipo.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
                 else if (body.asistenteTipo.Value < 0)
-                    validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo debe ser un valor numerico de enum AX mayor o igual que 0." });
+                    validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.asistenteId))
                     validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
             }

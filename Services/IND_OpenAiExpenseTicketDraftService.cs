@@ -54,7 +54,7 @@ namespace IND_CRM_API.Services
         private const string ReasoningEffortSettingKey = "OpenAI:ExpenseTicketReasoningEffort";
         private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
-        private static readonly HashSet<int> AllowedTypeValues = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const int DefaultGastoTypeValue = 8;
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
         private static readonly int MaxImageBytes = ReadMaxImageBytesFromConfig();
         private static readonly HttpClient _httpClient = CreateHttpClient();
@@ -939,19 +939,8 @@ namespace IND_CRM_API.Services
             return @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
 - Si un campo no se puede inferir con confianza, usa null y agrega advertencia en warnings.
-- tipo de lineas:
-  - 0: None
-  - 1: Peaje
-  - 2: Parking
-  - 3: Km
-  - 4: Desayuno
-  - 5: Comida
-  - 6: Cena
-  - 7: Hotel
-  - 8: Varios (solo si no coincide con ningun tipo anterior)
-- 14: Taxi
-- typeValue debe ser siempre un entero exacto de la lista anterior (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
-- gastoType en cabecera debe usar el mismo enum fijo (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
+- typeValue debe ser siempre el valor numerico real de CRMGastoType configurado en el catalogo de enums de CRM.
+- gastoType en cabecera debe usar el mismo enum AX numerico.
 - gastoType representa el tipo de gasto dominante del ticket.
 - Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
@@ -987,17 +976,7 @@ namespace IND_CRM_API.Services
 - Devuelve SIEMPRE TODAS las lineas detectables del ticket.
 - No agrupes, no resumas y no combines multiples conceptos en una sola linea si aparecen separados en el ticket.
 - Si el ticket muestra varios conceptos o importes parciales, devuelve una linea por cada concepto visible.
-- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando este enum fijo:
-  - 0: None
-  - 1: Peaje
-  - 2: Parking
-  - 3: Km
-  - 4: Desayuno
-  - 5: Comida
-  - 6: Cena
-  - 7: Hotel
-  - 8: Varios
-  - 14: Taxi
+- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando el valor numerico real de CRMGastoType configurado en el catalogo de enums de CRM.
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
 - ticketDate debe ser la fecha impresa del ticket y debe ir solo en cabecera, en formato DD.MM.YYYY o null.
@@ -1303,9 +1282,9 @@ namespace IND_CRM_API.Services
             if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
                 return;
 
-            var fallbackTypeValue = draft.gastoType.HasValue && AllowedTypeValues.Contains(draft.gastoType.Value)
+            var fallbackTypeValue = draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value)
                 ? draft.gastoType.Value
-                : 8;
+                : DefaultGastoTypeValue;
             var fallbackDescription = ResolveSingleLineFallbackDescription(draft, fallbackTypeValue);
             var fallbackTransDate = draft.lines?.FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?.transDate;
             if (string.IsNullOrWhiteSpace(fallbackTransDate))
@@ -1468,7 +1447,7 @@ namespace IND_CRM_API.Services
             return new CreateExpenseSheetLineRequest
             {
                 transDate = null,
-                typeValue = 8,
+                typeValue = DefaultGastoTypeValue,
                 description = NormalizeText(request?.description, "Ticket"),
                 internacional = false,
                 fileId = null,
@@ -1493,25 +1472,7 @@ namespace IND_CRM_API.Services
             if (!string.IsNullOrWhiteSpace(merchant))
                 return merchant;
 
-            switch (fallbackTypeValue)
-            {
-                case 1:
-                    return "Peaje";
-                case 2:
-                    return "Parking";
-                case 4:
-                    return "Desayuno";
-                case 5:
-                    return "Comida";
-                case 6:
-                    return "Cena";
-                case 7:
-                    return "Hotel";
-                case 14:
-                    return "Taxi";
-                default:
-                    return "Ticket";
-            }
+            return "Gasto " + fallbackTypeValue.ToString(CultureInfo.InvariantCulture);
         }
 
         private static List<string> ExtractWarnings(JToken warningsToken)
@@ -1698,20 +1659,20 @@ namespace IND_CRM_API.Services
         private static int? NormalizeTypeValue(JToken token)
         {
             if (token == null)
-                return 8;
+                return DefaultGastoTypeValue;
 
             int parsed;
             if (token.Type == JTokenType.Integer)
                 parsed = token.Value<int>();
             else if (!int.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed))
-                return 8;
+                return DefaultGastoTypeValue;
 
-            return AllowedTypeValues.Contains(parsed) ? parsed : 8;
+            return IsValidAxEnumValue(parsed) ? parsed : DefaultGastoTypeValue;
         }
 
         private static int ResolveDraftGastoType(int? headerGastoType, List<CreateExpenseSheetLineRequest> lines)
         {
-            if (headerGastoType.HasValue && AllowedTypeValues.Contains(headerGastoType.Value))
+            if (headerGastoType.HasValue && IsValidAxEnumValue(headerGastoType.Value))
                 return headerGastoType.Value;
 
             if (lines != null && lines.Count > 0)
@@ -1720,7 +1681,7 @@ namespace IND_CRM_API.Services
                 for (int i = 0; i < lines.Count; i++)
                 {
                     var typeValue = lines[i]?.typeValue;
-                    if (!typeValue.HasValue || !AllowedTypeValues.Contains(typeValue.Value))
+                    if (!typeValue.HasValue || !IsValidAxEnumValue(typeValue.Value))
                         continue;
 
                     if (!firstByType.ContainsKey(typeValue.Value))
@@ -1728,7 +1689,7 @@ namespace IND_CRM_API.Services
                 }
 
                 var dominant = lines
-                    .Where(l => l != null && l.typeValue.HasValue && AllowedTypeValues.Contains(l.typeValue.Value))
+                    .Where(l => l != null && l.typeValue.HasValue && IsValidAxEnumValue(l.typeValue.Value))
                     .GroupBy(l => l.typeValue.Value)
                     .Select(g => new
                     {
@@ -1744,7 +1705,12 @@ namespace IND_CRM_API.Services
                     return dominant.TypeValue;
             }
 
-            return 8;
+            return DefaultGastoTypeValue;
+        }
+
+        private static bool IsValidAxEnumValue(int value)
+        {
+            return value >= 0;
         }
 
         private static bool TryParseBool(JToken token, bool defaultValue = false)
@@ -1844,7 +1810,7 @@ namespace IND_CRM_API.Services
             {
                 ["description"] = ToNullableStringToken(draft?.description),
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
-                ["gastoType"] = new JValue(draft?.gastoType ?? 8),
+                ["gastoType"] = new JValue(draft?.gastoType ?? DefaultGastoTypeValue),
                 ["transDate"] = ToNullableStringToken(draft?.transDate),
                 ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
                 ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
@@ -1868,7 +1834,7 @@ namespace IND_CRM_API.Services
             return new JObject
             {
                 ["transDate"] = ToNullableStringToken(line?.transDate),
-                ["typeValue"] = new JValue(line?.typeValue ?? 8),
+                ["typeValue"] = new JValue(line?.typeValue ?? DefaultGastoTypeValue),
                 ["description"] = ToNullableStringToken(line?.description),
                 ["internacional"] = line?.internacional.HasValue == true ? new JValue(line.internacional.Value) : JValue.CreateNull(),
                 ["fileId"] = ToNullableStringToken(line?.fileId),
@@ -1966,7 +1932,7 @@ namespace IND_CRM_API.Services
                     ["gastoType"] = new JObject
                     {
                         ["type"] = new JArray("integer", "null"),
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14, null)
+                        ["minimum"] = 0
                     },
                     ["transDate"] = new JObject
                     {
@@ -2050,7 +2016,7 @@ namespace IND_CRM_API.Services
                     ["typeValue"] = new JObject
                     {
                         ["type"] = "integer",
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
+                        ["minimum"] = 0
                     },
                     ["description"] = new JObject
                     {
@@ -2113,7 +2079,7 @@ namespace IND_CRM_API.Services
                     ["gastoType"] = new JObject
                     {
                         ["type"] = "integer",
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
+                        ["minimum"] = 0
                     },
                     ["transDate"] = new JObject
                     {

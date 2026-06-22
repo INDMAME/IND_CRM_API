@@ -115,7 +115,8 @@ Endpoints
   mode 0 (default): description, currencyCode, lines[] (con lines[].price)
   mode 1: description, currencyCode (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, reimbursableExpense (0 No, 1 Yes, 2 Both), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, reimbursableExpense, lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` y `lines[].reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
@@ -128,7 +129,7 @@ Endpoints
   Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
   Nota: actualizar cabecera no propaga cambios a lineas existentes. La propagacion se ejecuta con endpoints explicitos.
-  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con `INDReimbursableExpense::Both`.
+  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.
   Notificaciones de estado: el API no envia emails directamente. `INDCRMExpenseSheetService.updateExpenseSheetHeader` en Axapta captura estado anterior/posterior y lanza el email best-effort fuera del `tts` cuando aplica. Eventos AX soportados: `ExpenseSheetApprovalRequested`, `ExpenseSheetApproved`, `ExpenseSheetRejected`, `ExpenseSheetRejectionCancelled` y `ExpenseSheetPaid`. Si emisor y destinatario resuelven al mismo usuario CRM, se omite el email. Desde 2026-06-09 el transporte AX/DLL usa exclusivamente `SendMailEx`; el parametro opcional `attachmentFilePaths` va despues de `textBody` y antes de `saveToSentItems`. Para estas notificaciones se envia vacio, porque no adjuntan ficheros.
 - POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false (Authorize + X-IND-Company + X-IND-AxUserId)
   Propaga la `currencyCode` y `exchRate` actuales de cabecera a todas las lineas existentes.
@@ -143,14 +144,15 @@ Endpoints
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
   Propaga el `reimbursableExpense` actual de cabecera a todas las lineas existentes.
-  AX bloquea la operacion si `reimbursableExpense` de cabecera es `Both` o si la hoja esta bloqueada por Voucher.
+  AX bloquea la operacion si `reimbursableExpense` de cabecera es el valor agrupador de reembolso configurado en AX o si la hoja esta bloqueada por Voucher.
   Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
-  Optional: fileId (INDFileId), internacional, projId, reimbursableExpense (0 No, 1 Yes, 2 Both), currencyCode, amountMST, exchRate
+  Optional: fileId (INDFileId), internacional, projId, reimbursableExpense, currencyCode, amountMST, exchRate
+  Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
   Nota: si `currencyCode` de linea difiere de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa.
-  Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera como `Both`.
+  Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
@@ -159,7 +161,8 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus (0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid), reimbursableExpense (0 No, 1 Yes, 2 Both), includeSubordinates (bool; true = subordinados directos del usuario de header)
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense, includeSubordinates (bool; true = subordinados directos del usuario de header)
+  Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate y reimbursableExpense
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
@@ -170,7 +173,8 @@ Endpoints
   mode 2: agrega lineas a `existingFileId`.
   Body mode 0|1: description, currencyCode, transDate (DDMMYYYY o DD.MM.YYYY), urlFile.
   Body mode 0|2: lines[] con description, qty, price (totalAmount opcional). Las lineas de ticket pueden informar `price`/`totalAmount` negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total de linea negativo.
-  Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType (0,1,2,3,4,5,6,7,8,14), ocrJson, normalizedJson, ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399).
+  Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType, ocrJson, normalizedJson, ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399).
+  Nota enums AX: `gastoType` debe enviarse como valor numerico obtenido desde `/api/crm/enums`.
 - POST /api/crm/expensesheets/tickets/quick-create (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type required: multipart/form-data.
   Body required: ticketImage (jpg/jpeg/png/webp, max 50 MB).
@@ -184,13 +188,15 @@ Endpoints
   Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate` y `ticketTime`.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
-  Body optional: searchKey (compat: `filter`), status (0 Pending, 1 Assigned), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
+  Body optional: searchKey (compat: `filter`), status, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).
+  Nota enums AX: `status` y `gastoType` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
   Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`. La fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
   Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `GastoType`.
 - POST /api/crm/expensesheets/tickets/link/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
-  Body optional: searchKey (compat: `filter`), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType (0,1,2,3,4,5,6,7,8,14), processedByAI (bool).
-  Prefiltros fijos en origen: `status = Pending` y `totalAmount != 0`.
+  Body optional: searchKey (compat: `filter`), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).
+  Nota enums AX: `gastoType` debe enviarse como valor numerico obtenido desde `/api/crm/enums`.
+  Prefiltros fijos en origen: estado pendiente interno de AX y `totalAmount != 0`.
   Nota: la fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
   Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI`, `GastoType`.
 - POST /api/crm/expensesheets/tickets/link/bulk (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -201,7 +207,7 @@ Endpoints
   - `ticketIds[]` obligatorio en `selected`
   - `filters` obligatorio en `filtered`: `searchKey` (compat: `filter`), `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`
   - `excludedIds[]` opcional en `filtered`
-  En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base `status = Pending` y `totalAmount != 0`.
+  En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base de estado pendiente interno de AX y `totalAmount != 0`.
   Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente, usando el `projId` de la hoja destino para la linea generada.
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
@@ -245,9 +251,9 @@ Endpoints
   `CanMutate` gobierna update/delete sobre registros del propietario visible; create sigue usando siempre el `X-IND-AxUserId` del actor y no debe crear en nombre de subordinados.
 - POST /api/crm/activities/create (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType` (valor numerico AX de `CRMTipoVisita`), `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
-  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
+  Body optional: `contactMethod` (valor numerico AX de `INDContactMethod`), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
   Nota: `userId` y `createdByUserId` del body no gobiernan el actor; API usa siempre `X-IND-AxUserId`.
-  Si `contactMethod` no se envia, AX recibe `0` (InPerson).
+  Si `contactMethod` no se envia, AX recibe el valor numerico por defecto historico `0`.
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
   Body optional: `accountNum`, `ownerAxUserId`.
@@ -262,7 +268,7 @@ Endpoints
   Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType` (valor numerico AX de `CRMTipoVisita`), `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
-  Body optional: `contactMethod` (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`, `userId`.
+  Body optional: `contactMethod` (valor numerico AX de `INDContactMethod`), `comentarios`, `antecedentes`, `conclusiones`, `userId`.
   Nota: `userId` del body no gobierna el actor; API usa siempre `X-IND-AxUserId`.
   AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - DELETE /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)

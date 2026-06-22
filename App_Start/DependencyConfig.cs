@@ -19,6 +19,7 @@ namespace IND_CRM_API.App_Start
             var axLogger = new FileAxLogger();
             var jwtService = new JwtService();
             var sessionManager = new AxaptaSessionManager(axLogger);
+            var crmEnumCatalogService = new CrmEnumCatalogService(sessionManager, axLogger);
             var speechService = new IND_OpenAiAudioTranscriptionService(axLogger);
             var moderationService = new IND_OpenAiModerationService(axLogger);
             var expenseTicketBlobStorageService = new ExpenseTicketBlobStorageService(axLogger);
@@ -50,6 +51,7 @@ namespace IND_CRM_API.App_Start
                 { typeof(IAxaptaSessionManager), sessionManager },
                 { typeof(IJwtService), jwtService },
                 { typeof(IAxLogger), axLogger },
+                { typeof(ICrmEnumCatalogService), crmEnumCatalogService },
                 { typeof(IND_IAudioTranscriptionService), speechService },
                 { typeof(IND_ITextModerationService), moderationService },
                 { typeof(IND_IExpenseTicketDraftService), ticketAiProcessingService },

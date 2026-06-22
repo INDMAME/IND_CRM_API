@@ -31,7 +31,7 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Tipo de visita.</summary>
         public string TipoVisita { get; set; }
 
-        /// <summary>Metodo de contacto de la visita (INDContactMethod: 0 presencial, 1 llamada, 2 reunion online).</summary>
+        /// <summary>Metodo de contacto de la visita (valor numerico AX de INDContactMethod).</summary>
         public int? ContactMethod { get; set; }
 
         /// <summary>Descripción de la actividad.</summary>

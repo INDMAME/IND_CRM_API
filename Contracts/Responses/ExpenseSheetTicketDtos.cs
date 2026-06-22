@@ -9,7 +9,9 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public string FileId { get; set; }
         public string Description { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? Status { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
@@ -53,7 +55,9 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public string FileId { get; set; }
         public string Description { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? Status { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
@@ -83,6 +87,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string TicketTime { get; set; }
         public string FileName { get; set; }
         public bool? ProcessedByAI { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? GastoType { get; set; }
         /// <summary>Functional AX owner user id returned at the end of the AX link-list row.</summary>
         public string OwnerAxUserId { get; set; }

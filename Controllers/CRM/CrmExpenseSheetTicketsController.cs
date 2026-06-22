@@ -35,8 +35,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
-        private const int TicketStatusPending = 0;
-        private const int TicketStatusAssigned = 1;
+        private const int TicketStatusValueForLinking = 0;
         private const int MaxPageSize = 50;
         private const string BulkSelectionModeSelected = "selected";
         private const string BulkSelectionModeFiltered = "filtered";
@@ -46,7 +45,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const string QuickCreateStageTicketFinalized = "ticket-finalized";
         private const string QuickCreateStageSheetLinked = "sheet-linked";
         private const string TicketNegativeTotalValidationMessage = "El total del ticket no puede ser negativo.";
-        private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
@@ -1524,7 +1523,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "status",
-                        Message = "status invalido. Valores permitidos: 0 Pending, 1 Assigned."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
@@ -1533,7 +1532,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "gastoType",
-                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
@@ -1646,7 +1645,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
-                var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
+                var mergedStatus = body.status ?? existing.Status ?? TicketStatusValueForLinking;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
                 var mergedNormalizedJson = body.normalizedJson ?? existing.NormalizedJson;
@@ -1847,7 +1846,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "gastoType",
-                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
@@ -4304,7 +4303,7 @@ namespace IND_CRM_API.Controllers.CRM
                 validationErrors.Add(new IndValidationError
                 {
                     Field = "gastoType",
-                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    Message = AxEnumNumericValidationMessage
                 });
             }
 
@@ -4367,9 +4366,9 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedFileName = (body?.fileName ?? string.Empty).Trim();
             var mergedOcrJson = body?.ocrJson ?? existing.OcrJson;
             var mergedNormalizedJson = body?.normalizedJson ?? existing.NormalizedJson;
-            var statusValue = existing.Status ?? TicketStatusPending;
+            var statusValue = existing.Status ?? TicketStatusValueForLinking;
             if (!IsValidTicketStatus(statusValue))
-                statusValue = TicketStatusPending;
+                statusValue = TicketStatusValueForLinking;
 
             if (string.IsNullOrWhiteSpace(mergedFileName))
             {
@@ -4655,7 +4654,7 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError
                 {
                     Field = "gastoType",
-                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    Message = AxEnumNumericValidationMessage
                 });
             }
 
@@ -4920,7 +4919,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var lineObject = linesArray[i] as JObject;
                 var typeValue = GetJsonIntIgnoreCase(lineObject, "typeValue");
-                if (!typeValue.HasValue || !AllowedGastoTypes.Contains(typeValue.Value))
+                if (!typeValue.HasValue || !IsValidGastoType(typeValue.Value))
                     continue;
 
                 if (!firstByType.ContainsKey(typeValue.Value))
@@ -4930,7 +4929,7 @@ namespace IND_CRM_API.Controllers.CRM
             var dominant = linesArray
                 .OfType<JObject>()
                 .Select(line => GetJsonIntIgnoreCase(line, "typeValue"))
-                .Where(typeValue => typeValue.HasValue && AllowedGastoTypes.Contains(typeValue.Value))
+                .Where(typeValue => typeValue.HasValue && IsValidGastoType(typeValue.Value))
                 .GroupBy(typeValue => typeValue.Value)
                 .Select(group => new
                 {
@@ -5208,16 +5207,16 @@ namespace IND_CRM_API.Controllers.CRM
             return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
         }
 
-        // Validates allowed values for AX INDTicketStatus.
+        // Validates generic AX enum values; active options are configured through /api/crm/enums.
         private static bool IsValidTicketStatus(int status)
         {
-            return status == TicketStatusPending || status == TicketStatusAssigned;
+            return status >= 0;
         }
 
-        // Validates allowed values for AX CRMGastoType.
+        // Validates generic AX enum values; active options are configured through /api/crm/enums.
         private static bool IsValidGastoType(int gastoType)
         {
-            return AllowedGastoTypes.Contains(gastoType);
+            return gastoType >= 0;
         }
 
         // Standard enum normalization: invalid values are treated as null.
@@ -5312,7 +5311,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(descripcion);
                 con.Append(currencyCode);
                 con.Append(totalAmount);
-                con.Append(TicketStatusPending);
+                con.Append(TicketStatusValueForLinking);
                 con.Append(transDate);
                 con.Append(comentario);
                 con.Append(urlFile);
@@ -5508,9 +5507,9 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[WARN] TryUpdateTicketFromExisting transDate fallback-to-today raw={ToLogValue(existing.TransDate)} fileId={ToLogValue(fileId)} traceId={traceId}");
             }
 
-            var statusValue = existing.Status ?? TicketStatusPending;
+            var statusValue = existing.Status ?? TicketStatusValueForLinking;
             if (!IsValidTicketStatus(statusValue))
-                statusValue = TicketStatusPending;
+                statusValue = TicketStatusValueForLinking;
 
             var con = ax.CreateContainer();
             con.Append(company);
@@ -5946,8 +5945,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (ticketDetail == null)
                 return "Ticket data is empty.";
 
-            if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusPending)
-                return "Ticket is not pending.";
+            if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusValueForLinking)
+                return "Ticket is not available for linking.";
 
             if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
                 return "Ticket total amount must be greater than zero.";
@@ -6571,37 +6570,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
-
-            var lowered = trimmed.ToLowerInvariant();
-            switch (lowered)
-            {
-                case "pending":
-                case "pendiente":
-                    return 0;
-                case "assigned":
-                case "asignado":
-                    return 1;
-                case "none":
-                    return 0;
-                case "peaje":
-                    return 1;
-                case "parking":
-                    return 2;
-                case "km":
-                    return 3;
-                case "desayuno":
-                    return 4;
-                case "comida":
-                    return 5;
-                case "cena":
-                    return 6;
-                case "hotel":
-                    return 7;
-                case "varios":
-                    return 8;
-                case "taxi":
-                    return 14;
-            }
 
             if (decimal.TryParse(NormalizeDecimalValue(trimmed), NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalParsed))
             {

@@ -1,13 +1,10 @@
-using AxaptaCOMConnector;
 using IND_CRM_API.Controllers;
 using IND_CRM_API.Contracts.Responses;
-using IND_CRM_API.Helpers;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services;
 using IND_CRM_API.Services.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Web.Http;
@@ -25,12 +22,20 @@ namespace IND_CRM_API.Controllers.CRM
     {
         private const string DefaultAppCode = "CRM";
         private const int MaxRequestedEnums = 100;
-        private readonly IAxaptaSessionManager _sessionManager;
+        private readonly ICrmEnumCatalogService _enumCatalogService;
 
         public CrmEnumsController(IAxaptaSessionManager sessionManager, IAxLogger logger)
+            : this(sessionManager, new CrmEnumCatalogService(sessionManager, logger), logger)
+        {
+        }
+
+        public CrmEnumsController(
+            IAxaptaSessionManager sessionManager,
+            ICrmEnumCatalogService enumCatalogService,
+            IAxLogger logger)
             : base(sessionManager, logger)
         {
-            _sessionManager = sessionManager;
+            _enumCatalogService = enumCatalogService ?? throw new ArgumentNullException(nameof(enumCatalogService));
         }
 
         /// <summary>
@@ -111,21 +116,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var username = GetAuthenticatedUsername();
                 Logger.Log($"[API-IN] {operationName} company={company} appCode={appCode} {requestField}={requestedEnums} user={username} traceId={traceId}");
 
-                var ax = _sessionManager.GetAxInstanceForUser(username);
-                var con = ax.CreateContainer();
-                con.Append(company);
-                con.Append(appCode);
-                con.Append(requestedEnums);
-
-                var resultObj = ax.CallStaticClassMethod("INDCRMUtilityService", axMethodName, con);
-                var root = resultObj as IAxaptaContainer;
-                if (root == null)
-                {
-                    Logger.Log($"[API-OUT] {operationName} status=500 reason=null-root traceId={traceId}", AxaptaSessionManager.LogLevel.Error);
-                    return Content(HttpStatusCode.InternalServerError, BuildError("Error al procesar la respuesta de AX.", IndErrorCodes.AxComError, traceId));
-                }
-
-                var response = MapEnumCatalog(root, company, appCode, traceId);
+                var response = string.Equals(axMethodName, "getEnumValuesById", StringComparison.Ordinal)
+                    ? _enumCatalogService.GetById(username, company, appCode, requestedEnums, traceId)
+                    : _enumCatalogService.GetByName(username, company, appCode, requestedEnums, traceId);
                 if (!response.Success)
                 {
                     Logger.Log($"[API-OUT] {operationName} status=422 total={response.Total ?? 0} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
@@ -145,80 +138,6 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        private static IndPagedResponse<CrmEnumCatalogDto> MapEnumCatalog(IAxaptaContainer root, string fallbackCompany, string fallbackAppCode, string traceId)
-        {
-            var headerWrap = AxContainerReadHelper.SafePeekContainer(root, 1);
-            var header = AxContainerReadHelper.SafePeekContainer(headerWrap, 1) ?? headerWrap;
-            var groups = AxContainerReadHelper.SafePeekContainer(root, 2);
-
-            var success = ToBool(AxContainerReadHelper.SafeString(header, 1));
-            var message = AxContainerReadHelper.SafeString(header, 2);
-            var company = AxContainerReadHelper.SafeString(header, 3);
-            var appCode = AxContainerReadHelper.SafeString(header, 4);
-            var items = new List<CrmEnumCatalogDto>();
-
-            if (string.IsNullOrWhiteSpace(company))
-                company = fallbackCompany;
-            if (string.IsNullOrWhiteSpace(appCode))
-                appCode = fallbackAppCode;
-
-            var groupCount = AxContainerReadHelper.SafeLength(groups);
-            for (var i = 1; i <= groupCount; i++)
-            {
-                var group = AxContainerReadHelper.SafePeekContainer(groups, i);
-                if (group == null)
-                    continue;
-
-                var options = AxContainerReadHelper.SafePeekContainer(group, 4);
-                var dto = new CrmEnumCatalogDto
-                {
-                    Company = company,
-                    AppCode = appCode,
-                    AxEnumName = AxContainerReadHelper.SafeString(group, 1),
-                    AxEnumId = ToNullableInt(AxContainerReadHelper.SafeString(group, 2)),
-                    Found = ToBool(AxContainerReadHelper.SafeString(group, 3)),
-                    Options = MapOptions(options)
-                };
-
-                items.Add(dto);
-            }
-
-            return new IndPagedResponse<CrmEnumCatalogDto>
-            {
-                Success = success,
-                Message = string.IsNullOrWhiteSpace(message) ? (success ? "OK" : "No se pudo resolver el catalogo de enums.") : message,
-                Total = items.Count,
-                Items = items,
-                TraceId = traceId
-            };
-        }
-
-        private static List<CrmEnumOptionDto> MapOptions(IAxaptaContainer options)
-        {
-            var result = new List<CrmEnumOptionDto>();
-            var optionCount = AxContainerReadHelper.SafeLength(options);
-
-            for (var i = 1; i <= optionCount; i++)
-            {
-                var row = AxContainerReadHelper.SafePeekContainer(options, i);
-                if (row == null)
-                    continue;
-
-                result.Add(new CrmEnumOptionDto
-                {
-                    Value = ToNullableInt(AxContainerReadHelper.SafeString(row, 1)),
-                    EnumIndex = ToNullableInt(AxContainerReadHelper.SafeString(row, 2)),
-                    Label = AxContainerReadHelper.SafeString(row, 3),
-                    Description = AxContainerReadHelper.SafeString(row, 4),
-                    Active = ToBool(AxContainerReadHelper.SafeString(row, 5)),
-                    SortOrder = ToNullableInt(AxContainerReadHelper.SafeString(row, 6)),
-                    AxEnumsTableRefRecId = ToNullableLong(AxContainerReadHelper.SafeString(row, 7))
-                });
-            }
-
-            return result;
-        }
-
         private static int CountCsvValues(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -233,37 +152,6 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return count;
-        }
-
-        private static int? ToNullableInt(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            return int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-                ? parsed
-                : (int?)null;
-        }
-
-        private static long? ToNullableLong(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            return long.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-                ? parsed
-                : (long?)null;
-        }
-
-        private static bool ToBool(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return false;
-
-            var normalized = value.Trim();
-            return normalized == "1" ||
-                   normalized.Equals("true", StringComparison.OrdinalIgnoreCase) ||
-                   normalized.Equals("yes", StringComparison.OrdinalIgnoreCase);
         }
 
         private static IndApiResponse<object> BuildError(string message, string errorCode, string traceId)

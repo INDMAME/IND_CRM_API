@@ -13,12 +13,12 @@ namespace IND_CRM_API.Contracts.Requests
         public string projId { get; set; }
 
         /// <summary>
-        /// Expense sheet status enum value from AX.
+        /// Numeric AX enum value for INDExpenseSheetStatus. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
-        /// Exchange rate mode enum value from AX.
+        /// Numeric AX enum value for exchange rate mode. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? exchangeRateMode { get; set; }
 
@@ -28,7 +28,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string estadoComentarios { get; set; }
 
         /// <summary>
-        /// Reimbursable expense enum value from AX. 0 = No, 1 = Yes, 2 = Both.
+        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? reimbursableExpense { get; set; }
     }

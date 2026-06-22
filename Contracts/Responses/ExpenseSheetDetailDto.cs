@@ -10,19 +10,19 @@ namespace IND_CRM_API.Contracts.Responses
         public string HojaGastosId { get; set; }
         public string UserId { get; set; }
         public string Description { get; set; }
-        // Expense sheet status enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExpenseSheetStatus { get; set; }
         public string CurrencyCode { get; set; }
         // Total amount in company currency returned by AX.
         public decimal? TotalAmount { get; set; }
         public decimal? ExchRate { get; set; }
-        // Exchange rate mode enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExchangeRateMode { get; set; }
         public string ProjId { get; set; }
         public string Voucher { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
-        // Reimbursable expense enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ReimbursableExpense { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
         // Display name resolved from CRMUsuarioTable for the sheet owner.
@@ -41,6 +41,7 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public string RecId { get; set; }
         public string TransDate { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? TypeValue { get; set; }
         public string Description { get; set; }
         public bool? Internacional { get; set; }
@@ -50,6 +51,7 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? ReimbursableExpense { get; set; }
         public string CurrencyCode { get; set; }
         public decimal? AmountMST { get; set; }

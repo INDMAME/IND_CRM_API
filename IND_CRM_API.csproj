@@ -242,6 +242,7 @@
     <Compile Include="Services\EcbExchangeRateProvider.cs" />
     <Compile Include="Services\EcbObservationResult.cs" />
     <Compile Include="Services\ComPlusApplicationController.cs" />
+    <Compile Include="Services\CrmEnumCatalogService.cs" />
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
@@ -263,6 +264,7 @@
     <Compile Include="Services\Interfaces\IND_IAudioTranscriptionService.cs" />
     <Compile Include="Services\Interfaces\IAiDatasetAnswerService.cs" />
     <Compile Include="Services\Interfaces\IAzureReceiptAnalyzerService.cs" />
+    <Compile Include="Services\Interfaces\ICrmEnumCatalogService.cs" />
     <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />

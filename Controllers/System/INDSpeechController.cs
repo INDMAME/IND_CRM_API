@@ -67,7 +67,7 @@ namespace IND_CRM_API.Controllers.System
             "application/octet-stream"
         };
 
-        private static readonly HashSet<int> AllowedTicketGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const int DefaultTicketGastoType = 8;
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IND_IAudioTranscriptionService _transcription;
@@ -851,7 +851,7 @@ namespace IND_CRM_API.Controllers.System
         // Resolves ticket header gastoType from draft value or dominant line type.
         private static int ResolveDraftGastoType(ExpenseSheetDraftResponse draft)
         {
-            if (draft != null && draft.gastoType.HasValue && AllowedTicketGastoTypes.Contains(draft.gastoType.Value))
+            if (draft != null && draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value))
                 return draft.gastoType.Value;
 
             if (draft?.lines != null && draft.lines.Count > 0)
@@ -860,7 +860,7 @@ namespace IND_CRM_API.Controllers.System
                 for (int i = 0; i < draft.lines.Count; i++)
                 {
                     var typeValue = draft.lines[i]?.typeValue;
-                    if (!typeValue.HasValue || !AllowedTicketGastoTypes.Contains(typeValue.Value))
+                    if (!typeValue.HasValue || !IsValidAxEnumValue(typeValue.Value))
                         continue;
 
                     if (!firstByType.ContainsKey(typeValue.Value))
@@ -868,7 +868,7 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var dominant = draft.lines
-                    .Where(l => l != null && l.typeValue.HasValue && AllowedTicketGastoTypes.Contains(l.typeValue.Value))
+                    .Where(l => l != null && l.typeValue.HasValue && IsValidAxEnumValue(l.typeValue.Value))
                     .GroupBy(l => l.typeValue.Value)
                     .Select(g => new
                     {
@@ -884,7 +884,12 @@ namespace IND_CRM_API.Controllers.System
                     return dominant.TypeValue;
             }
 
-            return 8;
+            return DefaultTicketGastoType;
+        }
+
+        private static bool IsValidAxEnumValue(int value)
+        {
+            return value >= 0;
         }
 
         // Calculates the signed line amount while preserving zero-quantity discounts.

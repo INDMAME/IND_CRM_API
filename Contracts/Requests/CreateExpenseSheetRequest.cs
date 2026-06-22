@@ -35,17 +35,17 @@ namespace IND_CRM_API.Contracts.Requests
         public string projId { get; set; }
 
         /// <summary>
-        /// Expense sheet status enum value from AX.
+        /// Numeric AX enum value for INDExpenseSheetStatus. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
-        /// Exchange rate mode enum value from AX.
+        /// Numeric AX enum value for exchange rate mode. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? exchangeRateMode { get; set; }
 
         /// <summary>
-        /// Reimbursable expense enum value from AX. 0 = No, 1 = Yes, 2 = Both.
+        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 
@@ -64,6 +64,9 @@ namespace IND_CRM_API.Contracts.Requests
         /// Transaction date in mandatory DDMMYYYY format.
         /// </summary>
         [Required] public string transDate { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for the expense type. Resolve active options through /api/crm/enums.
+        /// </summary>
         [Required] public int? typeValue { get; set; }
         [Required] public string description { get; set; }
         public bool? internacional { get; set; }
@@ -78,7 +81,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
-        /// Reimbursable expense enum value from AX. 0 = No, 1 = Yes, 2 = Both.
+        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>

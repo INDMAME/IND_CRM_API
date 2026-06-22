@@ -25,9 +25,8 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmActivitiesController : BaseCrmController
     {
         private const int MaxPageSize = 50;
-        private const int ContactMethodInPerson = 0;
-        private const int ContactMethodPhoneCall = 1;
-        private const int ContactMethodOnlineMeeting = 2;
+        private const int DefaultContactMethodValue = 0;
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
         private const string ControlDataVisibilityAppCode = "CRM";
         private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
         private readonly IAxaptaSessionManager _sessionManager;
@@ -91,11 +90,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
                 else if (body.visitType.Value < 0)
-                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType debe ser un valor numerico de enum AX mayor o igual que 0." });
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
-                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = "contactMethod debe ser 0 (InPerson), 1 (PhoneCall) o 2 (OnlineMeeting)." });
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = AxEnumNumericValidationMessage });
             }
 
             if (validationErrors.Any())
@@ -134,7 +133,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($" -> userId(header): {axUserId}");
                 Logger.Log($" -> createdByUserId(header): {axUserId}");
                 Logger.Log($" -> transDate: {body.transDate}");
-                Logger.Log($" -> contactMethod: {body.contactMethod ?? ContactMethodInPerson}");
+                Logger.Log($" -> contactMethod: {body.contactMethod ?? DefaultContactMethodValue}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -152,7 +151,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
-                con.Append(body.contactMethod ?? ContactMethodInPerson);
+                con.Append(body.contactMethod ?? DefaultContactMethodValue);
                 con.Append(ControlDataVisibilityAppCode);
                 con.Append(ControlDataVisibilityVisitsModuleCode);
 
@@ -301,11 +300,11 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
                 else if (body.visitType.Value < 0)
-                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType debe ser un valor numerico de enum AX mayor o igual que 0." });
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
                 if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
-                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = "contactMethod debe ser 0 (InPerson), 1 (PhoneCall) o 2 (OnlineMeeting)." });
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = AxEnumNumericValidationMessage });
             }
 
             if (validationErrors.Any())
@@ -341,7 +340,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
-                con.Append(body.contactMethod ?? ContactMethodInPerson);
+                con.Append(body.contactMethod ?? DefaultContactMethodValue);
                 con.Append(ControlDataVisibilityAppCode);
                 con.Append(ControlDataVisibilityVisitsModuleCode);
 
@@ -1043,12 +1042,10 @@ namespace IND_CRM_API.Controllers.CRM
                 out date);
         }
 
-        // Keeps INDContactMethod request values aligned with the AX enum contract.
+        // Keeps INDContactMethod values numeric; active options are configured through /api/crm/enums.
         private static bool IsValidContactMethod(int value)
         {
-            return value == ContactMethodInPerson ||
-                   value == ContactMethodPhoneCall ||
-                   value == ContactMethodOnlineMeeting;
+            return value >= 0;
         }
 
         private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)

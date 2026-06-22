@@ -12,9 +12,6 @@ namespace IND_CRM_API.Helpers
     /// </summary>
     public static class ExpenseSheetListQueryHelper
     {
-        private const int ExpenseSheetStatusDraft = 0;
-        private const int ExpenseSheetStatusPaid = 4;
-
         /// <summary>
         /// Converts API date formats into AX yyyyMMdd.
         /// </summary>
@@ -50,22 +47,22 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
-        /// Returns only supported AX expense sheet status values.
+        /// Returns valid numeric AX enum values; available options are exposed by the enum catalog endpoint.
         /// </summary>
         public static int? NormalizeExpenseSheetStatusOrNull(int? expenseSheetStatus)
         {
-            if (!expenseSheetStatus.HasValue || expenseSheetStatus.Value < ExpenseSheetStatusDraft || expenseSheetStatus.Value > ExpenseSheetStatusPaid)
+            if (!expenseSheetStatus.HasValue || expenseSheetStatus.Value < 0)
                 return null;
 
             return expenseSheetStatus.Value;
         }
 
         /// <summary>
-        /// Returns only supported AX reimbursable expense values.
+        /// Returns valid numeric AX enum values; available options are exposed by the enum catalog endpoint.
         /// </summary>
         public static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {
-            if (!reimbursableExpense.HasValue || reimbursableExpense.Value < 0 || reimbursableExpense.Value > 2)
+            if (!reimbursableExpense.HasValue || reimbursableExpense.Value < 0)
                 return null;
 
             return reimbursableExpense.Value;
