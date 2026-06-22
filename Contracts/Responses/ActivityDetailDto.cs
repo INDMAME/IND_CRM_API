@@ -52,6 +52,15 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Functional AX owner user for the activity.</summary>
         public string OwnerAxUserId { get; set; }
 
+        /// <summary>Compatibility alias for the AX user stored in INDCreatedByUserId.</summary>
+        public string INDCreatedByUserId { get; set; }
+
+        /// <summary>Compatibility alias for clients that read the activity creator.</summary>
+        public string CreatedByUserId { get; set; }
+
+        /// <summary>Compatibility alias for clients that still read UserId as owner.</summary>
+        public string UserId { get; set; }
+
         /// <summary>Display name for the functional activity owner.</summary>
         public string OwnerName { get; set; }
     }

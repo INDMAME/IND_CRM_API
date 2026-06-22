@@ -254,6 +254,7 @@ Endpoints
   Body optional: `contactMethod` (valor numerico AX de `INDContactMethod`), `comentarios`, `antecedentes`, `conclusiones`, `userId`, `createdByUserId`.
   Nota: `userId` y `createdByUserId` del body no gobiernan el actor; API usa siempre `X-IND-AxUserId`.
   Si `contactMethod` no se envia, AX recibe el valor numerico por defecto historico `0`.
+  Response data incluye `RecId`, `OwnerAxUserId`, `INDCreatedByUserId`, `CreatedByUserId` y `UserId`; todos los campos de owner se derivan del usuario AX del header cuando la creacion es exitosa.
 - POST /api/crm/activities/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `fromDate`, `toDate` (yyyyMMdd o yyyy-MM-dd), `page`, `pageSize`.
   Body optional: `accountNum`, `ownerAxUserId`.
@@ -262,10 +263,11 @@ Endpoints
   Response rows incluyen `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod` y `Description`.
 - GET /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
-  Response rows incluyen el detalle de visita con `ContactMethod`.
+  Response rows incluyen el detalle de visita con `ContactMethod`, `OwnerAxUserId`, `OwnerName` y alias compatibles `INDCreatedByUserId`, `CreatedByUserId`, `UserId`.
+  Nota: `OwnerAxUserId` es el propietario funcional AX canonico de la actividad.
 - GET /api/crm/activities/by-code/{code} (Authorize + X-IND-Company + X-IND-AxUserId)
   AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
-  Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`.
+  Response `Items[0]` es `ActivityDetailDto` e incluye `ContactMethod`, `OwnerAxUserId`, `OwnerName` y alias compatibles `INDCreatedByUserId`, `CreatedByUserId`, `UserId`.
 - PUT /api/crm/activities/{recId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: `accountNum`, `visitType` (valor numerico AX de `CRMTipoVisita`), `description`, `transDate` (yyyyMMdd o yyyy-MM-dd).
   Body optional: `contactMethod` (valor numerico AX de `INDContactMethod`), `comentarios`, `antecedentes`, `conclusiones`, `userId`.
