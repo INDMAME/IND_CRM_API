@@ -2635,12 +2635,14 @@ Formatversion: 1
         #    CRMUserId          ownerCrmUserId;
         #    CRMUserId          recipientCrmUserId;
         #    CRMUserId          managerCrmUserId;
+        #    container          managerCrmUserIds = conNull();
         #    CRMHojaGastosTable header;
         #    container          recipientsCon = conNull();
         #    container          recipientRow;
         #    str                recipientEmail;
         #    str                recipientName;
         #    str                recipientRole;
+        #    int                i;
         #    ;
         #
         #    companyId = INDCRMUtilityService::getCompany(_data);
@@ -2669,14 +2671,33 @@ Formatversion: 1
         #
         #        if (INDCRMExpenseSheetService::isExpenseSheetApprovalRequestEvent(eventType))
         #        {
-        #            // Solicitud de aprobacion: recibe la jefatura directa del propietario.
+        #            // Solicitud de aprobacion: reciben todas las jefaturas directas del propietario.
         #            // Tambien cubre deshacer rechazo/aprobacion cuando la hoja vuelve a InReview.
-        #            managerCrmUserId = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserId(ownerCrmUserId);
-        #            if (!managerCrmUserId)
+        #            managerCrmUserIds = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds(ownerCrmUserId);
+        #            if (conLen(managerCrmUserIds) == 0)
         #                return [INDCRMUtilityService::buildHeader(false, 'No se encontro jefatura para el propietario de la hoja.', conNull()), conNull()];
         #
-        #            recipientCrmUserId = managerCrmUserId;
-        #            recipientRole      = 'Approver';
+        #            recipientRole = 'Approver';
+        #            for (i = 1; i <= conLen(managerCrmUserIds); i++)
+        #            {
+        #                managerCrmUserId  = conPeek(managerCrmUserIds, i);
+        #                recipientCrmUserId = managerCrmUserId;
+        #
+        #                if (!recipientCrmUserId)
+        #                    continue;
+        #
+        #                if (actorCrmUserId && actorCrmUserId == recipientCrmUserId)
+        #                    continue;
+        #
+        #                recipientEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
+        #                recipientName  = INDCRMExpenseSheetService::getPersonaNameByUserId(recipientCrmUserId);
+        #
+        #                if (recipientEmail)
+        #                {
+        #                    recipientRow = [recipientEmail, recipientName, recipientRole, strFmt('%1', recipientCrmUserId)];
+        #                    recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
+        #                }
+        #            }
         #        }
         #        else
         #        {
@@ -2699,21 +2720,21 @@ Formatversion: 1
         #            {
         #                return [INDCRMUtilityService::buildHeader(false, 'EventType no soportado.', conNull()), conNull()];
         #            }
-        #        }
         #
-        #        if (!recipientCrmUserId)
-        #            return [INDCRMUtilityService::buildHeader(false, 'Usuario CRM destinatario no encontrado.', conNull()), conNull()];
+        #            if (!recipientCrmUserId)
+        #                return [INDCRMUtilityService::buildHeader(false, 'Usuario CRM destinatario no encontrado.', conNull()), conNull()];
         #
-        #        if (actorCrmUserId && actorCrmUserId == recipientCrmUserId)
-        #            return [INDCRMUtilityService::buildHeader(false, 'No se requiere email para hojas autogestionadas.', conNull()), conNull()];
+        #            if (actorCrmUserId && actorCrmUserId == recipientCrmUserId)
+        #                return [INDCRMUtilityService::buildHeader(false, 'No se requiere email para hojas autogestionadas.', conNull()), conNull()];
         #
-        #        recipientEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
-        #        recipientName  = INDCRMExpenseSheetService::getPersonaNameByUserId(recipientCrmUserId);
+        #            recipientEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
+        #            recipientName  = INDCRMExpenseSheetService::getPersonaNameByUserId(recipientCrmUserId);
         #
-        #        if (recipientEmail)
-        #        {
-        #            recipientRow = [recipientEmail, recipientName, recipientRole, strFmt('%1', recipientCrmUserId)];
-        #            recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
+        #            if (recipientEmail)
+        #            {
+        #                recipientRow = [recipientEmail, recipientName, recipientRole, strFmt('%1', recipientCrmUserId)];
+        #                recipientsCon = conIns(recipientsCon, conLen(recipientsCon) + 1, recipientRow);
+        #            }
         #        }
         #    }
         #
@@ -4307,20 +4328,55 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
-      SOURCE #resolveExpenseSheetManagerCrmUserId
-        #// Busca la jefatura directa del propietario de la hoja usando CRMUsuarioSubordinadoTable.
-        #static server CRMUserId resolveExpenseSheetManagerCrmUserId(CRMUserId _ownerCrmUserId)
+      SOURCE #resolveExpenseSheetManagerCrmUserIds
+        #// Devuelve todas las jefaturas directas del propietario de la hoja, sin duplicados.
+        #static server container resolveExpenseSheetManagerCrmUserIds(CRMUserId _ownerCrmUserId)
         #{
         #    CRMUsuarioSubordinadoTable subordinadoTable;
+        #    container                  managerCrmUserIds = conNull();
+        #    CRMUserId                  managerCrmUserId;
+        #    boolean                    alreadyAdded;
+        #    int                        i;
         #    ;
         #
         #    if (!_ownerCrmUserId)
-        #        return '';
+        #        return managerCrmUserIds;
         #
-        #    select firstonly subordinadoTable
-        #        where subordinadoTable.UserIdSubordinado == _ownerCrmUserId;
+        #    while select subordinadoTable
+        #        where subordinadoTable.UserIdSubordinado == _ownerCrmUserId
+        #    {
+        #        managerCrmUserId = subordinadoTable.UserIdJefe;
+        #        if (!managerCrmUserId || managerCrmUserId == _ownerCrmUserId)
+        #            continue;
         #
-        #    return subordinadoTable.UserIdJefe;
+        #        alreadyAdded = false;
+        #        for (i = 1; i <= conLen(managerCrmUserIds); i++)
+        #        {
+        #            if (conPeek(managerCrmUserIds, i) == managerCrmUserId)
+        #            {
+        #                alreadyAdded = true;
+        #                break;
+        #            }
+        #        }
+        #
+        #        if (!alreadyAdded)
+        #            managerCrmUserIds = conIns(managerCrmUserIds, conLen(managerCrmUserIds) + 1, managerCrmUserId);
+        #    }
+        #
+        #    return managerCrmUserIds;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #resolveExpenseSheetManagerCrmUserId
+        #// Conserva el contrato legacy devolviendo la primera jefatura directa encontrada.
+        #static server CRMUserId resolveExpenseSheetManagerCrmUserId(CRMUserId _ownerCrmUserId)
+        #{
+        #    container managerCrmUserIds;
+        #    ;
+        #
+        #    managerCrmUserIds = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds(_ownerCrmUserId);
+        #
+        #    return conLen(managerCrmUserIds) ? conPeek(managerCrmUserIds, 1) : '';
         #}
         #
       ENDSOURCE
@@ -4407,6 +4463,196 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
+      SOURCE #sendExpenseSheetNotificationToRecipient
+        #// Envia el email de hoja de gastos para un destinatario concreto y resuelve su idioma de plantilla.
+        #static server boolean sendExpenseSheetNotificationToRecipient(CRMHojaGastosTable    _expenseSheet,
+        #                                                              str                   _eventType,
+        #                                                              INDExpenseSheetStatus _fromStatus,
+        #                                                              INDExpenseSheetStatus _toStatus,
+        #                                                              str 20                _senderUserId,
+        #                                                              CRMUserId             _senderCrmUserId,
+        #                                                              str 20                _recipientUserId,
+        #                                                              CRMUserId             _recipientCrmUserId,
+        #                                                              DataAreaId            _companyId,
+        #                                                              str                   _source,
+        #                                                              str                   _correlationId,
+        #                                                              boolean               _scopeIdempotencyByRecipient = false)
+        #{
+        #    str                           fromEmail;
+        #    str                           toEmail;
+        #    str                           link;
+        #    str                           subject;
+        #    str                           message;
+        #    str                           htmlBody;
+        #    str                           textBody;
+        #    str                           idempotencyKey;
+        #    INDEmailTemplateTargetModule  targetModule;
+        #    INDEmailTemplates             emailTemplate;
+        #    LanguageId                    languageId;
+        #    str                           logoSrc;
+        #    boolean                       sentOk;
+        #    ;
+        #
+        #    if (!_senderCrmUserId || !_recipientCrmUserId)
+        #    {
+        #        warning(strFmt('No se envio email %1 para hoja %2: no se pudieron resolver usuarios CRM.', _eventType, _expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    if (_senderCrmUserId == _recipientCrmUserId)
+        #    {
+        #        info(strFmt('No se envio email %1 para hoja %2: emisor y destinatario son el mismo usuario CRM.', _eventType, _expenseSheet.HojaGastosId));
+        #        return false;
+        #    }
+        #
+        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(_senderUserId);
+        #    if (!fromEmail && _senderCrmUserId != _senderUserId)
+        #        fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(_senderCrmUserId);
+        #
+        #    toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(_recipientUserId);
+        #    if (!toEmail && _recipientCrmUserId != _recipientUserId)
+        #        toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(_recipientCrmUserId);
+        #
+        #    link = INDCRMExpenseSheetService::buildExpenseSheetWebLink(_companyId, _expenseSheet.HojaGastosId, _source);
+        #
+        #    if (!fromEmail || !toEmail || !link)
+        #    {
+        #        warning(strFmt('No se envio email %1 para hoja %2: faltan From, To o link. recipientCrmUserId=%3.',
+        #                       _eventType, _expenseSheet.HojaGastosId, _recipientCrmUserId));
+        #        return false;
+        #    }
+        #
+        #    subject = INDCRMExpenseSheetService::buildExpenseSheetNotificationSubject(_eventType, _expenseSheet.HojaGastosId);
+        #    message = INDCRMExpenseSheetService::buildExpenseSheetNotificationMessage(_eventType, _expenseSheet.HojaGastosId);
+        #    textBody = INDCRMExpenseSheetService::buildExpenseSheetFallbackTextBody(message, _expenseSheet, _eventType, link);
+        #    htmlBody = '';
+        #
+        #    targetModule = INDCRMExpenseSheetService::resolveExpenseSheetTemplateTargetModule(_eventType, _toStatus);
+        #    languageId   = INDCRMExpenseSheetService::resolveLanguageIdFromCrmUserId(_recipientCrmUserId);
+        #
+        #    if (targetModule != INDEmailTemplateTargetModule::Empty && languageId)
+        #    {
+        #        emailTemplate = INDEmailTemplates::findValid(targetModule, languageId, today());
+        #    }
+        #
+        #    if (emailTemplate.RecId)
+        #    {
+        #        logoSrc = INDCRMExpenseSheetService::buildEmailLogoSrc(emailTemplate.Logo);
+        #
+        #        subject = INDCRMExpenseSheetService::renderExpenseSheetTemplate(emailTemplate.SubjectTemplate,
+        #                                                                       _expenseSheet,
+        #                                                                       _eventType,
+        #                                                                       link,
+        #                                                                       '',
+        #                                                                       false);
+        #        if (!subject)
+        #            subject = INDCRMExpenseSheetService::buildExpenseSheetNotificationSubject(_eventType, _expenseSheet.HojaGastosId);
+        #
+        #        htmlBody = INDCRMExpenseSheetService::renderExpenseSheetTemplate(emailTemplate.HtmlTemplate,
+        #                                                                       _expenseSheet,
+        #                                                                       _eventType,
+        #                                                                       link,
+        #                                                                       logoSrc,
+        #                                                                       true);
+        #    }
+        #    else
+        #    {
+        #        warning(strFmt('No hay plantilla vigente para email %1, idioma %2 y hoja %3. Se enviara texto plano.',
+        #                       _eventType, languageId, _expenseSheet.HojaGastosId));
+        #    }
+        #
+        #    if (!_correlationId)
+        #        _correlationId = strFmt('%1-%2-%3', _expenseSheet.HojaGastosId, today(), timeNow());
+        #
+        #    if (_scopeIdempotencyByRecipient)
+        #    {
+        #        idempotencyKey = strFmt('%1:%2:%3:%4:%5:%6:%7',
+        #                                 _eventType,
+        #                                 _companyId,
+        #                                 _expenseSheet.HojaGastosId,
+        #                                 _fromStatus,
+        #                                 _toStatus,
+        #                                 _recipientCrmUserId,
+        #                                 _correlationId);
+        #    }
+        #    else
+        #    {
+        #        idempotencyKey = strFmt('%1:%2:%3:%4:%5:%6',
+        #                                 _eventType,
+        #                                 _companyId,
+        #                                 _expenseSheet.HojaGastosId,
+        #                                 _fromStatus,
+        #                                 _toStatus,
+        #                                 _correlationId);
+        #    }
+        #
+        #    try
+        #    {
+        #        info(strFmt('Email hoja gastos: intento eventType=%1 company=%2 hoja=%3 fromStatus=%4 toStatus=%5 source=%6 correlationId=%7 templateRecId=%8 htmlLength=%9 textLength=%10 recipientCrmUserId=%11.',
+        #                    _eventType,
+        #                    _companyId,
+        #                    _expenseSheet.HojaGastosId,
+        #                    _fromStatus,
+        #                    _toStatus,
+        #                    _source,
+        #                    _correlationId,
+        #                    emailTemplate.RecId,
+        #                    strLen(htmlBody),
+        #                    strLen(textBody),
+        #                    _recipientCrmUserId));
+        #
+        #        // Usa el envio extendido para marcar la notificacion con importancia alta en Outlook.
+        #        sentOk = INDCRMUtilityService::sendInternalApiMailEx(
+        #                                                            _companyId,
+        #                                                            fromEmail,
+        #                                                            '',
+        #                                                            toEmail,
+        #                                                            '',
+        #                                                            '',
+        #                                                            '',
+        #                                                            subject,
+        #                                                            htmlBody,
+        #                                                            textBody,
+        #                                                            '',
+        #                                                            false,
+        #                                                            INDInternalApiClientServer::normalizeInternalApiMailImportance(strFmt("%1", INDEmailImportance::high)),
+        #                                                            'AxaptaExpenseSheetStatus',
+        #                                                            _eventType,
+        #                                                            'ExpenseSheet',
+        #                                                            _expenseSheet.HojaGastosId,
+        #                                                            idempotencyKey,
+        #                                                            _correlationId);
+        #
+        #        if (!sentOk)
+        #            warning(strFmt('Email hoja gastos no aceptado por transporte: eventType=%1 hoja=%2 company=%3 correlationId=%4 idempotencyKey=%5 recipientCrmUserId=%6.',
+        #                           _eventType, _expenseSheet.HojaGastosId, _companyId, _correlationId, idempotencyKey, _recipientCrmUserId));
+        #        else
+        #            info(strFmt('Email hoja gastos aceptado por transporte: eventType=%1 hoja=%2 company=%3 correlationId=%4 idempotencyKey=%5 recipientCrmUserId=%6.',
+        #                        _eventType, _expenseSheet.HojaGastosId, _companyId, _correlationId, idempotencyKey, _recipientCrmUserId));
+        #
+        #        return sentOk;
+        #    }
+        #    catch (Exception::DDEerror)
+        #    {
+        #        warning(strFmt('Fallo DDE/COM de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5 recipientCrmUserId=%6.',
+        #                       _eventType, _expenseSheet.HojaGastosId, _companyId, _correlationId, idempotencyKey, _recipientCrmUserId));
+        #        return false;
+        #    }
+        #    catch (Exception::Error)
+        #    {
+        #        warning(strFmt('Fallo de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5 recipientCrmUserId=%6.',
+        #                       _eventType, _expenseSheet.HojaGastosId, _companyId, _correlationId, idempotencyKey, _recipientCrmUserId));
+        #        return false;
+        #    }
+        #    catch (Exception::Internal)
+        #    {
+        #        warning(strFmt('Fallo interno de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5 recipientCrmUserId=%6.',
+        #                       _eventType, _expenseSheet.HojaGastosId, _companyId, _correlationId, idempotencyKey, _recipientCrmUserId));
+        #        return false;
+        #    }
+        #}
+        #
+      ENDSOURCE
       SOURCE #sendExpenseSheetStatusNotification
         #// Envia el email de hoja de gastos para las transiciones soportadas. No bloquea el proceso si falla.
         #static server boolean sendExpenseSheetStatusNotification(CRMHojaGastosTable    _expenseSheet,
@@ -4425,19 +4671,10 @@ Formatversion: 1
         #    CRMUserId                     senderCrmUserId;
         #    CRMUserId                     recipientCrmUserId;
         #    CRMUserId                     managerCrmUserId;
-        #    str                           fromEmail;
-        #    str                           toEmail;
-        #    str                           link;
-        #    str                           subject;
-        #    str                           message;
-        #    str                           htmlBody;
-        #    str                           textBody;
-        #    str                           idempotencyKey;
-        #    INDEmailTemplateTargetModule  targetModule;
-        #    INDEmailTemplates             emailTemplate;
-        #    LanguageId                    languageId;
-        #    str                           logoSrc;
+        #    container                     managerCrmUserIds = conNull();
         #    boolean                       sentOk;
+        #    boolean                       anySentOk;
+        #    int                           i;
         #    ;
         #
         #    if (!_expenseSheet.RecId)
@@ -4461,15 +4698,56 @@ Formatversion: 1
         #    if (!_actorUserId)
         #        _actorUserId = curUserId();
         #
+        #    if (!_correlationId)
+        #        _correlationId = strFmt('%1-%2-%3', expenseSheet.HojaGastosId, today(), timeNow());
+        #
         #    if (INDCRMExpenseSheetService::isExpenseSheetApprovalRequestEvent(eventType))
         #    {
-        #        // Solicitud de aprobacion: emite el propietario y recibe su jefatura directa.
+        #        // Solicitud de aprobacion: emite el propietario y reciben todas sus jefaturas directas.
         #        // Tambien cubre deshacer rechazo/aprobacion cuando la hoja vuelve a InReview.
-        #        senderUserId     = expenseSheet.UserId;
-        #        managerCrmUserId = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserId(expenseSheet.UserId);
-        #        recipientUserId  = managerCrmUserId;
+        #        senderUserId    = expenseSheet.UserId;
+        #        senderCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(senderUserId);
+        #        if (!senderCrmUserId)
+        #        {
+        #            warning(strFmt('No se envio email %1 para hoja %2: no se pudo resolver usuario CRM emisor.', eventType, expenseSheet.HojaGastosId));
+        #            return false;
+        #        }
+        #
+        #        managerCrmUserIds = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds(expenseSheet.UserId);
+        #        if (conLen(managerCrmUserIds) == 0)
+        #        {
+        #            warning(strFmt('No se envio email %1 para hoja %2: no se encontro jefatura para el propietario.', eventType, expenseSheet.HojaGastosId));
+        #            return false;
+        #        }
+        #
+        #        for (i = 1; i <= conLen(managerCrmUserIds); i++)
+        #        {
+        #            managerCrmUserId  = conPeek(managerCrmUserIds, i);
+        #            recipientUserId   = managerCrmUserId;
+        #            recipientCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(recipientUserId);
+        #
+        #            sentOk = INDCRMExpenseSheetService::sendExpenseSheetNotificationToRecipient(
+        #                expenseSheet,
+        #                eventType,
+        #                _fromStatus,
+        #                _toStatus,
+        #                senderUserId,
+        #                senderCrmUserId,
+        #                recipientUserId,
+        #                recipientCrmUserId,
+        #                companyId,
+        #                _source,
+        #                _correlationId,
+        #                true);
+        #
+        #            if (sentOk)
+        #                anySentOk = true;
+        #        }
+        #
+        #        return anySentOk;
         #    }
-        #    else if (eventType == 'ExpenseSheetPaid')
+        #
+        #    if (eventType == 'ExpenseSheetPaid')
         #    {
         #        // Pago: permite informar un usuario pagador mientras se cierra el punto exacto de remesas.
         #        senderUserId    = _userPagador ? _userPagador : _actorUserId;
@@ -4485,146 +4763,19 @@ Formatversion: 1
         #    senderCrmUserId    = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(senderUserId);
         #    recipientCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(recipientUserId);
         #
-        #    if (!senderCrmUserId || !recipientCrmUserId)
-        #    {
-        #        warning(strFmt('No se envio email %1 para hoja %2: no se pudieron resolver usuarios CRM.', eventType, expenseSheet.HojaGastosId));
-        #        return false;
-        #    }
-        #
-        #    if (senderCrmUserId == recipientCrmUserId)
-        #    {
-        #        info(strFmt('No se envio email %1 para hoja %2: emisor y destinatario son el mismo usuario CRM.', eventType, expenseSheet.HojaGastosId));
-        #        return false;
-        #    }
-        #
-        #    fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(senderUserId);
-        #    if (!fromEmail && senderCrmUserId != senderUserId)
-        #        fromEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(senderCrmUserId);
-        #
-        #    toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientUserId);
-        #    if (!toEmail && recipientCrmUserId != recipientUserId)
-        #        toEmail = INDCRMExpenseSheetService::getPersonaEmailByUserId(recipientCrmUserId);
-        #
-        #    link = INDCRMExpenseSheetService::buildExpenseSheetWebLink(companyId, expenseSheet.HojaGastosId, _source);
-        #
-        #    if (!fromEmail || !toEmail || !link)
-        #    {
-        #        warning(strFmt('No se envio email %1 para hoja %2: faltan From, To o link.', eventType, expenseSheet.HojaGastosId));
-        #        return false;
-        #    }
-        #
-        #    subject = INDCRMExpenseSheetService::buildExpenseSheetNotificationSubject(eventType, expenseSheet.HojaGastosId);
-        #    message = INDCRMExpenseSheetService::buildExpenseSheetNotificationMessage(eventType, expenseSheet.HojaGastosId);
-        #    textBody = INDCRMExpenseSheetService::buildExpenseSheetFallbackTextBody(message, expenseSheet, eventType, link);
-        #    htmlBody = '';
-        #
-        #    targetModule = INDCRMExpenseSheetService::resolveExpenseSheetTemplateTargetModule(eventType, _toStatus);
-        #    languageId   = INDCRMExpenseSheetService::resolveLanguageIdFromCrmUserId(recipientCrmUserId);
-        #
-        #    if (targetModule != INDEmailTemplateTargetModule::Empty && languageId)
-        #    {
-        #        emailTemplate = INDEmailTemplates::findValid(targetModule, languageId, today());
-        #    }
-        #
-        #    if (emailTemplate.RecId)
-        #    {
-        #        logoSrc = INDCRMExpenseSheetService::buildEmailLogoSrc(emailTemplate.Logo);
-        #
-        #        subject = INDCRMExpenseSheetService::renderExpenseSheetTemplate(emailTemplate.SubjectTemplate,
-        #                                                                       expenseSheet,
-        #                                                                       eventType,
-        #                                                                       link,
-        #                                                                       '',
-        #                                                                       false);
-        #        if (!subject)
-        #            subject = INDCRMExpenseSheetService::buildExpenseSheetNotificationSubject(eventType, expenseSheet.HojaGastosId);
-        #
-        #        htmlBody = INDCRMExpenseSheetService::renderExpenseSheetTemplate(emailTemplate.HtmlTemplate,
-        #                                                                       expenseSheet,
-        #                                                                       eventType,
-        #                                                                       link,
-        #                                                                       logoSrc,
-        #                                                                       true);
-        #    }
-        #    else
-        #    {
-        #        warning(strFmt('No hay plantilla vigente para email %1, idioma %2 y hoja %3. Se enviara texto plano.', eventType, languageId, expenseSheet.HojaGastosId));
-        #    }
-        #
-        #    if (!_correlationId)
-        #        _correlationId = strFmt('%1-%2-%3', expenseSheet.HojaGastosId, today(), timeNow());
-        #
-        #    idempotencyKey = strFmt('%1:%2:%3:%4:%5:%6',
-        #                             eventType,
-        #                             companyId,
-        #                             expenseSheet.HojaGastosId,
-        #                             _fromStatus,
-        #                             _toStatus,
-        #                             _correlationId);
-        #
-        #    try
-        #    {
-        #        info(strFmt('Email hoja gastos: intento eventType=%1 company=%2 hoja=%3 fromStatus=%4 toStatus=%5 source=%6 correlationId=%7 templateRecId=%8 htmlLength=%9 textLength=%10.',
-        #                    eventType,
-        #                    companyId,
-        #                    expenseSheet.HojaGastosId,
-        #                    _fromStatus,
-        #                    _toStatus,
-        #                    _source,
-        #                    _correlationId,
-        #                    emailTemplate.RecId,
-        #                    strLen(htmlBody),
-        #                    strLen(textBody)));
-        #
-        #        // Usa el envio extendido para marcar la notificacion con importancia alta en Outlook.
-        #        sentOk = INDCRMUtilityService::sendInternalApiMailEx(
-        #                                                            companyId,
-        #                                                            fromEmail,
-        #                                                            '',
-        #                                                            toEmail,
-        #                                                            '',
-        #                                                            '',
-        #                                                            '',
-        #                                                            subject,
-        #                                                            htmlBody,
-        #                                                            textBody,
-        #                                                            '',
-        #                                                            false,
-        #                                                            INDInternalApiClientServer::normalizeInternalApiMailImportance(strFmt("%1", INDEmailImportance::high)),
-        #                                                            'AxaptaExpenseSheetStatus',
-        #                                                            eventType,
-        #                                                            'ExpenseSheet',
-        #                                                            expenseSheet.HojaGastosId,
-        #                                                            idempotencyKey,
-        #                                                            _correlationId);
-        #
-        #        if (!sentOk)
-        #            warning(strFmt('Email hoja gastos no aceptado por transporte: eventType=%1 hoja=%2 company=%3 correlationId=%4 idempotencyKey=%5.',
-        #                           eventType, expenseSheet.HojaGastosId, companyId, _correlationId, idempotencyKey));
-        #        else
-        #            info(strFmt('Email hoja gastos aceptado por transporte: eventType=%1 hoja=%2 company=%3 correlationId=%4 idempotencyKey=%5.',
-        #                        eventType, expenseSheet.HojaGastosId, companyId, _correlationId, idempotencyKey));
-        #
-        #        return sentOk;
-        #    }
-        #    catch (Exception::DDEerror)
-        #    {
-        #        warning(strFmt('Fallo DDE/COM de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5.',
-        #                       eventType, expenseSheet.HojaGastosId, companyId, _correlationId, idempotencyKey));
-        #        return false;
-        #    }
-        #    catch (Exception::Error)
-        #    {
-        #        warning(strFmt('Fallo de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5.',
-        #                       eventType, expenseSheet.HojaGastosId, companyId, _correlationId, idempotencyKey));
-        #        return false;
-        #    }
-        #    catch (Exception::Internal)
-        #    {
-        #        warning(strFmt('Fallo interno de mejor esfuerzo enviando email %1 para hoja %2. company=%3 correlationId=%4 idempotencyKey=%5.',
-        #                       eventType, expenseSheet.HojaGastosId, companyId, _correlationId, idempotencyKey));
-        #        return false;
-        #    }
+        #    return INDCRMExpenseSheetService::sendExpenseSheetNotificationToRecipient(
+        #        expenseSheet,
+        #        eventType,
+        #        _fromStatus,
+        #        _toStatus,
+        #        senderUserId,
+        #        senderCrmUserId,
+        #        recipientUserId,
+        #        recipientCrmUserId,
+        #        companyId,
+        #        _source,
+        #        _correlationId,
+        #        false);
         #}
         #
       ENDSOURCE

@@ -60,3 +60,43 @@ Resultado:
 - Repetir aprobacion y rechazo de hoja con una DLL COM registrada que exponga `SendMailEx` de 23 parametros.
 - Confirmar que, si el transporte de email devuelve `false`, el cambio de estado devuelve exito y queda warning en infolog/logs.
 - Confirmar que un error AX de negocio antes del `ttscommit` sigue devolviendo error y no queda oculto por el best-effort.
+
+## Ajuste adicional: multiples jefaturas en solicitud de aprobacion
+
+### Objetivo
+
+Permitir que una hoja enviada a `InReview` notifique por email a todas las jefaturas directas configuradas para el propietario en `CRMUsuarioSubordinadoTable`, manteniendo el idioma de plantilla de cada destinatario.
+
+### Metodos tocados
+
+- `INDCRMExpenseSheetService::getExpenseSheetNotificationRecipients`
+- `INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds`
+- `INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserId`
+- `INDCRMExpenseSheetService::sendExpenseSheetNotificationToRecipient`
+- `INDCRMExpenseSheetService::sendExpenseSheetStatusNotification`
+
+### Cambios
+
+- Se agrega `resolveExpenseSheetManagerCrmUserIds` para devolver todas las jefaturas directas del propietario, deduplicadas y sin incluir al propio usuario.
+- `resolveExpenseSheetManagerCrmUserId` queda como wrapper legacy para preservar compatibilidad con cualquier llamador singular.
+- `getExpenseSheetNotificationRecipients` devuelve una fila `Approver` por cada jefatura con email en solicitudes de aprobacion.
+- `sendExpenseSheetStatusNotification` envia la solicitud de aprobacion a cada jefatura en envios secuenciales best-effort, no en paralelo contra COM.
+- El render de plantilla e idioma se mueve a `sendExpenseSheetNotificationToRecipient`, de forma que cada jefatura usa su propio `LanguageId`.
+- La `idempotencyKey` solo incorpora `recipientCrmUserId` en solicitudes de aprobacion con posible multi-destinatario; los eventos de destinatario unico conservan el formato anterior.
+- No se registran tokens, cuerpos HTML/texto ni direcciones de email. Las trazas agregan `recipientCrmUserId` para diagnostico sin exponer el correo.
+
+### Compatibilidad
+
+- No cambia la firma publica de `sendExpenseSheetStatusNotification`.
+- No cambia el contrato del container de `getExpenseSheetNotificationRecipients`; solo puede devolver mas filas `Approver` para el mismo evento.
+- No cambia el flujo de `Approved`, `Rejected` ni `Paid` salvo reutilizar el helper comun de envio por destinatario.
+- El envio sigue ejecutandose despues del `ttscommit` y es best-effort.
+
+### Validacion pendiente en Axapta
+
+- Importar y compilar `INDCRMExpenseSheetService.xpo`.
+- Crear o localizar un subordinado con dos registros en `CRMUsuarioSubordinadoTable`.
+- Pasar una hoja de `Draft` a `InReview` y confirmar dos intentos/aceptaciones de email con distinta `idempotencyKey`.
+- Confirmar que cada jefatura recibe su template en el idioma configurado en `SysUserInfo.Language`.
+- Confirmar que ambas jefaturas ven la hoja y que cualquiera puede aprobar/rechazar si la hoja sigue en estado pendiente.
+- Confirmar que si una jefatura no tiene email, se intenta la otra y queda warning solo para la que no puede enviarse.
