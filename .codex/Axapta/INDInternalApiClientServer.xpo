@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDInternalApiClientServer descargados en Miércoles 27/05/2026
+; Navision Axapta Class: INDInternalApiClientServer descargados en Lunes 22/06/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -94,25 +94,6 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
-      SOURCE #resolveInternalApiConnection
-        #// Resuelve la configuracion de IND_INTERNAL_API usando la misma fuente que los jobs manuales.
-        #static server container resolveInternalApiConnection()
-        #{
-        #    INDDefaultParameters defaultParameters;
-        #    str                  baseUrl;
-        #    str                  clientId;
-        #    str                  clientSecret;
-        #    ;
-        #
-        #    defaultParameters = INDDefaultParameters::find();
-        #    baseUrl          = defaultParameters.InternalAPIUrlService;
-        #    clientId         = defaultParameters.APIUserId;
-        #    clientSecret     = defaultParameters.INDAPIIntServiceUser().Password;
-        #
-        #    return [baseUrl, clientId, clientSecret];
-        #}
-        #
-      ENDSOURCE
       SOURCE #normalizeInternalApiMailImportance
         #// Normaliza la importancia aceptando texto Graph o el valor numerico del enum INDEmailImportance.
         #static server str normalizeInternalApiMailImportance(str _importance)
@@ -130,6 +111,25 @@ Formatversion: 1
         #
         #    // Valor por defecto: normal. Tambien cubre 'normal', '1' y valores no reconocidos.
         #    return 'normal';
+        #}
+        #
+      ENDSOURCE
+      SOURCE #resolveInternalApiConnection
+        #// Resuelve la configuracion de IND_INTERNAL_API usando la misma fuente que los jobs manuales.
+        #static server container resolveInternalApiConnection()
+        #{
+        #    INDDefaultParameters defaultParameters;
+        #    str                  baseUrl;
+        #    str                  clientId;
+        #    str                  clientSecret;
+        #    ;
+        #
+        #    defaultParameters = INDDefaultParameters::find();
+        #    baseUrl          = defaultParameters.InternalAPIUrlService;
+        #    clientId         = defaultParameters.APIUserId;
+        #    clientSecret     = defaultParameters.INDAPIIntServiceUser().Password;
+        #
+        #    return [baseUrl, clientId, clientSecret];
         #}
         #
       ENDSOURCE
