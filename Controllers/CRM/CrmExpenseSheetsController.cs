@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Web.Http;
 using System.Web.Http.Description;
 using AxaptaCOMConnector;
@@ -755,10 +756,11 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($"[API-OUT] UpdateExpenseSheetHeader {(int)statusCode} traceId={traceId}");
             }
 
+            string actorAxUserId = null;
             try
             {
                 var username = GetAuthenticatedUsername();
-                var actorAxUserId = GetOptionalHeaderValue(ActorAxUserIdHeaderName);
+                actorAxUserId = GetOptionalHeaderValue(ActorAxUserIdHeaderName);
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
@@ -824,14 +826,7 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] UpdateExpenseSheetHeader: {ex}");
-                var response = new IndApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor.",
-                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
-                    Data = null,
-                    TraceId = traceId
-                };
+                var response = BuildUpdateHeaderExceptionResponse(ex, traceId, hojaGastosId, axUserId, actorAxUserId, body);
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, response);
             }
@@ -2146,6 +2141,154 @@ namespace IND_CRM_API.Controllers.CRM
                 .ToList();
 
             return values.Count == 0 ? "-" : string.Join("|", values);
+        }
+
+        // Builds a diagnostic response for update-header failures without exposing stack traces.
+        private static IndApiResponse<object> BuildUpdateHeaderExceptionResponse(
+            Exception ex,
+            string traceId,
+            string hojaGastosId,
+            string axUserId,
+            string actorAxUserId,
+            UpdateExpenseSheetHeaderRequest body)
+        {
+            var isComError = ex is COMException;
+            return new IndApiResponse<object>
+            {
+                Success = false,
+                Message = BuildUpdateHeaderExceptionMessage(ex, body),
+                ErrorCode = isComError ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                Errors = BuildUpdateHeaderExceptionDetails(ex, hojaGastosId, axUserId, actorAxUserId, body),
+                Data = null,
+                TraceId = traceId
+            };
+        }
+
+        // Creates field-level diagnostics that help correlate API, AX and COM logs.
+        private static List<IndValidationError> BuildUpdateHeaderExceptionDetails(
+            Exception ex,
+            string hojaGastosId,
+            string axUserId,
+            string actorAxUserId,
+            UpdateExpenseSheetHeaderRequest body)
+        {
+            var details = new List<IndValidationError>
+            {
+                new IndValidationError { Field = "ax.operation", Message = "INDCRMExpenseSheetService.updateExpenseSheetHeader" },
+                new IndValidationError { Field = "hojaGastosId", Message = ToClientDiagnosticValue(hojaGastosId) },
+                new IndValidationError { Field = "axUserId", Message = ToClientDiagnosticValue(axUserId) },
+                new IndValidationError { Field = "actorAxUserId", Message = ToClientDiagnosticValue(actorAxUserId) },
+                new IndValidationError { Field = "expenseSheetStatus", Message = body?.expenseSheetStatus.HasValue == true ? body.expenseSheetStatus.Value.ToString(CultureInfo.InvariantCulture) : "null" }
+            };
+
+            var isComError = ex is COMException;
+            if (ex != null)
+            {
+                details.Add(new IndValidationError { Field = "exception.type", Message = ex.GetType().FullName });
+                details.Add(new IndValidationError { Field = "exception.hresult", Message = FormatHResult(ex is COMException comEx ? comEx.ErrorCode : ex.HResult) });
+
+                if (isComError && !string.IsNullOrWhiteSpace(ex.Message))
+                    details.Add(new IndValidationError { Field = "exception.message", Message = ToClientDiagnosticValue(ex.Message, 500) });
+            }
+
+            if (isComError && IsLikelyExpenseSheetEmailNotificationFailure(ex, body))
+            {
+                details.Add(new IndValidationError
+                {
+                    Field = "probableCause",
+                    Message = "Posible fallo en la notificacion de email de Axapta por SendMailEx o firma COM/DLL no alineada."
+                });
+            }
+            else if (isComError && HasInvalidComParameterCount(ex))
+            {
+                details.Add(new IndValidationError
+                {
+                    Field = "probableCause",
+                    Message = "Axapta informa una llamada interna con numero de parametros invalido."
+                });
+            }
+
+            return details;
+        }
+
+        // Produces a concise client message while keeping sensitive exception data in logs.
+        private static string BuildUpdateHeaderExceptionMessage(Exception ex, UpdateExpenseSheetHeaderRequest body)
+        {
+            var action = body?.expenseSheetStatus.HasValue == true
+                ? "cambiar el estado de la hoja de gastos"
+                : "actualizar la hoja de gastos";
+
+            if (ex is COMException && IsLikelyExpenseSheetEmailNotificationFailure(ex, body))
+                return "Axapta no pudo " + action + " porque fallo la notificacion de email. Revise SendMailEx, la firma COM/DLL y la traza de API.";
+
+            if (ex is COMException && HasInvalidComParameterCount(ex))
+                return "Axapta no pudo " + action + " por una llamada COM con numero de parametros invalido. Revise la traza de API.";
+
+            if (ex is COMException)
+                return "Axapta no pudo " + action + " por un error COM. Revise la traza de API.";
+
+            return "Error interno del servidor.";
+        }
+
+        // Detects the known status-change failure where AX email notification calls SendMailEx.
+        private static bool IsLikelyExpenseSheetEmailNotificationFailure(Exception ex, UpdateExpenseSheetHeaderRequest body)
+        {
+            var text = NormalizeDiagnosticText((ex?.Message ?? string.Empty) + " " + (ex?.ToString() ?? string.Empty));
+            if (text.Contains("sendmailex") || text.Contains("sendinternalapimailex"))
+                return true;
+
+            return body?.expenseSheetStatus.HasValue == true && HasInvalidComParameterCount(text);
+        }
+
+        // Detects AX/COM messages for invalid method signatures in Spanish or English.
+        private static bool HasInvalidComParameterCount(Exception ex)
+        {
+            return HasInvalidComParameterCount(NormalizeDiagnosticText((ex?.Message ?? string.Empty) + " " + (ex?.ToString() ?? string.Empty)));
+        }
+
+        private static bool HasInvalidComParameterCount(string normalizedText)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedText))
+                return false;
+
+            return (normalizedText.Contains("numero") && normalizedText.Contains("parametro")) ||
+                   (normalizedText.Contains("invalid") && normalizedText.Contains("parameter"));
+        }
+
+        // Normalizes accents and casing so diagnostics work with localized AX messages.
+        private static string NormalizeDiagnosticText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var ch in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    builder.Append(char.ToLowerInvariant(ch));
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        // Formats HRESULT values in the same shape used by AX session logs.
+        private static string FormatHResult(int hresult)
+        {
+            return "0x" + hresult.ToString("X8", CultureInfo.InvariantCulture);
+        }
+
+        // Keeps response diagnostics compact and single-line for web consumers.
+        private static string ToClientDiagnosticValue(string value, int maxLength = 200)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "-";
+
+            var normalized = value.Trim().Replace("\r", " ").Replace("\n", " ");
+            while (normalized.Contains("  "))
+                normalized = normalized.Replace("  ", " ");
+
+            return normalized.Length <= maxLength ? normalized : normalized.Substring(0, maxLength);
         }
 
         // Converts bool to AX int (1/0).
