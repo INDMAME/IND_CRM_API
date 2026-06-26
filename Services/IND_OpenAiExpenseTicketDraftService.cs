@@ -55,6 +55,7 @@ namespace IND_CRM_API.Services
         private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
         private const int DefaultGastoTypeValue = 8;
+        private static readonly string CrmGastoTypePromptCatalog = BuildCrmGastoTypePromptCatalog();
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
         private static readonly int MaxImageBytes = ReadMaxImageBytesFromConfig();
         private static readonly HttpClient _httpClient = CreateHttpClient();
@@ -939,7 +940,7 @@ namespace IND_CRM_API.Services
             return @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
 - Si un campo no se puede inferir con confianza, usa null y agrega advertencia en warnings.
-- typeValue debe ser siempre el valor numerico real de CRMGastoType configurado en el catalogo de enums de CRM.
+- typeValue debe ser siempre el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
 - gastoType en cabecera debe usar el mismo enum AX numerico.
 - gastoType representa el tipo de gasto dominante del ticket.
 - Si no hay evidencia clara para gastoType, usa 8.
@@ -966,7 +967,7 @@ namespace IND_CRM_API.Services
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
 - Deduce la moneda y el valor monetario de la imagen, sin soporte externo.
 - Si un campo es imposible de inferir con calidad suficiente, usa null y deja una advertencia clara."
-                .Trim();
+                .Trim() + Environment.NewLine + CrmGastoTypePromptCatalog;
         }
 
         private static string BuildQuickCreatePayloadPromptText()
@@ -976,7 +977,7 @@ namespace IND_CRM_API.Services
 - Devuelve SIEMPRE TODAS las lineas detectables del ticket.
 - No agrupes, no resumas y no combines multiples conceptos en una sola linea si aparecen separados en el ticket.
 - Si el ticket muestra varios conceptos o importes parciales, devuelve una linea por cada concepto visible.
-- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando el valor numerico real de CRMGastoType configurado en el catalogo de enums de CRM.
+- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
 - ticketDate debe ser la fecha impresa del ticket y debe ir solo en cabecera, en formato DD.MM.YYYY o null.
@@ -998,7 +999,13 @@ namespace IND_CRM_API.Services
 - Omite warnings y merchant salvo que aporten valor real.
 - Si un campo de cabecera no se puede inferir con confianza, usa null.
 - No inventes lineas ni importes. Pero si una linea es visible, debes devolverla."
-                .Trim();
+                .Trim() + Environment.NewLine + CrmGastoTypePromptCatalog;
+        }
+
+        //MMS - Centraliza la tabla fija de CRMGastoType para prompts IA - 2026.06.26
+        private static string BuildCrmGastoTypePromptCatalog()
+        {
+            return "- Tabla fija CRMGastoType: 0 None, 1 Peaje, 2 Parking, 3 Km, 4 Desayuno, 5 Comida, 6 Cena, 7 Hotel, 8 Varios, 14 Taxi, 20 Gasolina, 21 AdjustmentAmount.";
         }
 
         private static string NormalizeReasoningEffort(string configuredValue)

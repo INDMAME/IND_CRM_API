@@ -27,7 +27,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string description { get; set; }
 
         /// <summary>
-        /// Header currency code. Required when mode = 0 or mode = 1.
+        /// Legacy default line currency. Header reimbursement currency is always the company local currency.
         /// </summary>
         public string currencyCode { get; set; }
 
@@ -85,7 +85,7 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>
-        /// Optional line currency code. When omitted, AX keeps the header currency behavior.
+        /// Optional line currency code. When omitted, AX uses the legacy header currency input or the local currency.
         /// </summary>
         public string currencyCode { get; set; }
         /// <summary>

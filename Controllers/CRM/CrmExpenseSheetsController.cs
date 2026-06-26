@@ -60,9 +60,10 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         /// <remarks>
         /// Conditional request body rules:
-        /// - mode 0 (default): description, currencyCode and lines are required.
-        /// - mode 1: description and currencyCode are required, lines must be null or empty.
+        /// - mode 0 (default): description and lines are required.
+        /// - mode 1: description is required, lines must be null or empty.
         /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
+        /// currencyCode/exchRate on the header are legacy defaults for new lines; AX keeps header reimbursement currency local.
         /// Optional header enums: expenseSheetStatus, exchangeRateMode and reimbursableExpense.
         /// </remarks>
         [HttpPost, Route("")]
@@ -720,8 +721,6 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.description))
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.currencyCode))
-                    validationErrors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio." });
                 if (body.expenseSheetStatus.HasValue && body.expenseSheetStatus.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = AxEnumNumericValidationMessage });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
@@ -833,16 +832,15 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Propagates current header currency and exchange rate to all existing lines.
+        /// Legacy no-op. Header currency is always local and line currencies are preserved.
         /// </summary>
         /// <remarks>
-        /// The web client must ask for user confirmation before calling this endpoint.
-        /// AX blocks the operation when the sheet already has multi-currency lines unless force=true.
+        /// Kept for backward compatibility. Frontend should remove calls to this endpoint.
         /// </remarks>
         [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/currency-defaults/propagate")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de divisa aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de divisa obsoleta; no se modifican lineas", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -1710,9 +1708,6 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.description))
                     errors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio cuando mode es 0 o 1." });
-
-                if (string.IsNullOrWhiteSpace(body.currencyCode))
-                    errors.Add(new IndValidationError { Field = "currencyCode", Message = "currencyCode es obligatorio cuando mode es 0 o 1." });
             }
 
             var hasLines = body.lines != null && body.lines.Count > 0;

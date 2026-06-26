@@ -41,4 +41,15 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         public string fileExtension { get; set; }
     }
+
+    /// <summary>
+    /// Request para ajustar el importe total de cabecera generando una linea diferencial.
+    /// </summary>
+    public class AdjustExpenseSheetTicketTotalAmountRequest
+    {
+        /// <summary>
+        /// Nuevo importe total de cabecera. La diferencia contra el total anterior puede ser positiva o negativa.
+        /// </summary>
+        public decimal? totalAmount { get; set; }
+    }
 }

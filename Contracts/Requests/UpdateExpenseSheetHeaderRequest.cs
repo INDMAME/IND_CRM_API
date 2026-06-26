@@ -8,7 +8,10 @@ namespace IND_CRM_API.Contracts.Requests
     public class UpdateExpenseSheetHeaderRequest
     {
         [Required] public string description { get; set; }
-        [Required] public string currencyCode { get; set; }
+        /// <summary>
+        /// Legacy field accepted for compatibility. AX keeps the header reimbursement currency as local currency.
+        /// </summary>
+        public string currencyCode { get; set; }
         public decimal? exchRate { get; set; }
         public string projId { get; set; }
 

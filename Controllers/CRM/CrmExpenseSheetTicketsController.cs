@@ -46,6 +46,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const string QuickCreateStageSheetLinked = "sheet-linked";
         private const string TicketNegativeTotalValidationMessage = "El total del ticket no puede ser negativo.";
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
+        private const string TicketTotalAdjustmentDescription = "AJUSTE DE IMPORTE TOTAL";
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
@@ -1762,6 +1763,130 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] UpdateExpenseSheetTicket: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+        }
+
+        /// <summary>
+        /// Ajusta el importe total de cabecera y genera una linea diferencial marcada como AdjustmentAmount.
+        /// </summary>
+        [HttpPost, Route("{fileId}/total-adjustment")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Importe total ajustado", typeof(IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult AdjustExpenseSheetTicketTotalAmount(string fileId, [FromBody] AdjustExpenseSheetTicketTotalAmountRequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(fileId))
+                validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (!body.totalAmount.HasValue)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount es obligatorio." });
+                else if (body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] AdjustExpenseSheetTicketTotalAmount {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log(
+                    $"[API-IN] AdjustExpenseSheetTicketTotalAmount fileId={fileId} totalAmount={body.totalAmount.Value.ToString(CultureInfo.InvariantCulture)} " +
+                    $"user={username} axUserId={axUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(fileId.Trim());
+                con.Append(body.totalAmount.Value);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "adjustExpenseSheetTicketTotalAmount",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
+                if (!success)
+                {
+                    var error = BuildTicketActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, error);
+                }
+
+                var data = MapTicketTotalAdjustmentResult(extras, fileId.Trim(), body.totalAmount.Value);
+
+                LogOut(HttpStatusCode.OK);
+                return Ok(new IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] AdjustExpenseSheetTicketTotalAmount: {ex}");
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
                 {
@@ -6294,6 +6419,33 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
+        //MMS - Mapea el resultado AX del ajuste atomico de importe total de ticket - 2026.06.26
+        private static ExpenseSheetTicketTotalAdjustmentResultDto MapTicketTotalAdjustmentResult(
+            List<string> extras,
+            string fallbackFileId,
+            decimal fallbackNewTotalAmount)
+        {
+            var previousTotalAmount = extras != null && extras.Count > 1 ? ToDecimal(extras[1]) : null;
+            var newTotalAmount = extras != null && extras.Count > 2 ? ToDecimal(extras[2]) : fallbackNewTotalAmount;
+            var differenceAmount = extras != null && extras.Count > 3 ? ToDecimal(extras[3]) : null;
+
+            return new ExpenseSheetTicketTotalAdjustmentResultDto
+            {
+                FileId = extras != null && extras.Count > 0 && !string.IsNullOrWhiteSpace(extras[0])
+                    ? extras[0]
+                    : fallbackFileId,
+                PreviousTotalAmount = previousTotalAmount,
+                NewTotalAmount = newTotalAmount,
+                DifferenceAmount = differenceAmount,
+                AdjustmentLineRecId = extras != null && extras.Count > 4 ? extras[4] : string.Empty,
+                AdjustmentLineCreated = extras != null && extras.Count > 5 ? ToNullableBool(extras[5]) : null,
+                AdjustmentDescription = extras != null && extras.Count > 6 && !string.IsNullOrWhiteSpace(extras[6])
+                    ? extras[6]
+                    : TicketTotalAdjustmentDescription,
+                AdjustmentAmount = extras != null && extras.Count > 7 ? ToNullableBool(extras[7]) : true
+            };
+        }
+
         // Maps ticket header extras + lines to typed detail DTO.
         private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
@@ -6339,7 +6491,10 @@ namespace IND_CRM_API.Controllers.CRM
                     Price = SafeDecimal(row, 4),
                     TotalAmount = SafeDecimal(row, 5),
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
-                    CreatedByUserId = AxContainerReadHelper.SafeString(row, 7)
+                    CreatedByUserId = AxContainerReadHelper.SafeString(row, 7),
+                    AdjustmentAmount = AxContainerReadHelper.SafeLength(row) >= 8
+                        ? ToNullableBool(AxContainerReadHelper.SafeString(row, 8))
+                        : null
                 });
             }
 

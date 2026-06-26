@@ -46,6 +46,8 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? TotalAmount { get; set; }
         public string RefRecIdTable { get; set; }
         public string CreatedByUserId { get; set; }
+        /// <summary>Indica si la linea fue generada como ajuste de importe total.</summary>
+        public bool? AdjustmentAmount { get; set; }
     }
 
     /// <summary>
@@ -149,5 +151,35 @@ namespace IND_CRM_API.Contracts.Responses
         public string DraftExtract { get; set; }
         public string TicketFinalize { get; set; }
         public string SheetLink { get; set; }
+    }
+
+    /// <summary>
+    /// Resultado de un ajuste de importe total sobre ticket.
+    /// </summary>
+    public class ExpenseSheetTicketTotalAdjustmentResultDto
+    {
+        /// <summary>Identificador funcional del ticket ajustado.</summary>
+        public string FileId { get; set; }
+
+        /// <summary>Importe total de cabecera antes del ajuste.</summary>
+        public decimal? PreviousTotalAmount { get; set; }
+
+        /// <summary>Nuevo importe total de cabecera guardado en AX.</summary>
+        public decimal? NewTotalAmount { get; set; }
+
+        /// <summary>Diferencia calculada como nuevo total menos total anterior.</summary>
+        public decimal? DifferenceAmount { get; set; }
+
+        /// <summary>RecId de la linea diferencial creada; vacio cuando no hubo diferencia.</summary>
+        public string AdjustmentLineRecId { get; set; }
+
+        /// <summary>Indica si AX creo una linea diferencial.</summary>
+        public bool? AdjustmentLineCreated { get; set; }
+
+        /// <summary>Descripcion fija usada para la linea diferencial.</summary>
+        public string AdjustmentDescription { get; set; }
+
+        /// <summary>Flag de ajuste aplicado en INDTicketInfoLine.Adjustment y expuesto como AdjustmentAmount.</summary>
+        public bool? AdjustmentAmount { get; set; }
     }
 }

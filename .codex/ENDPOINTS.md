@@ -112,10 +112,11 @@ Endpoints
   Response items: UserId (CRM), AxUserId, Name
 - POST /api/crm/expensesheets (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required by mode:
-  mode 0 (default): description, currencyCode, lines[] (con lines[].price)
-  mode 1: description, currencyCode (sin lines)
+  mode 0 (default): description, lines[] (con lines[].price)
+  mode 1: description (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, exchRate, expenseSheetStatus, exchangeRateMode, reimbursableExpense, lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense, lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Nota: la cabecera AX mantiene siempre la divisa local de reembolso y ExchRate=100; la divisa real se informa en cada linea.
   Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` y `lines[].reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
@@ -126,15 +127,14 @@ Endpoints
   Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description, currencyCode (projId optional, exchRate optional, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
+  Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
-  Nota: actualizar cabecera no propaga cambios a lineas existentes. La propagacion se ejecuta con endpoints explicitos.
-  Nota: si una linea guardada usa otra divisa, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`; si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.
+  Nota: actualizar cabecera no propaga divisa a lineas existentes. La cabecera queda siempre en divisa local de reembolso (`ExchRate=100`).
+  Nota: si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.
   Notificaciones de estado: el API no envia emails directamente. `INDCRMExpenseSheetService.updateExpenseSheetHeader` en Axapta captura estado anterior/posterior y lanza el email best-effort fuera del `tts` cuando aplica. Eventos AX soportados: `ExpenseSheetApprovalRequested`, `ExpenseSheetApproved`, `ExpenseSheetRejected`, `ExpenseSheetRejectionCancelled` y `ExpenseSheetPaid`. Si emisor y destinatario resuelven al mismo usuario CRM, se omite el email. Desde 2026-06-09 el transporte AX/DLL usa exclusivamente `SendMailEx`; el parametro opcional `attachmentFilePaths` va despues de `textBody` y antes de `saveToSentItems`. Para estas notificaciones se envia vacio, porque no adjuntan ficheros.
 - POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false (Authorize + X-IND-Company + X-IND-AxUserId)
-  Propaga la `currencyCode` y `exchRate` actuales de cabecera a todas las lineas existentes.
-  Query optional: `recalculateAmountMST` (default true), `force` (default false).
-  AX bloquea la operacion si la hoja tiene lineas multimoneda y `force=false`, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si esta bloqueada por Voucher.
+  Legacy/no-op: se conserva por compatibilidad, pero AX ya no propaga divisa de cabecera a lineas.
+  Query optional: `recalculateAmountMST` (default true, solo compatibilidad de respuesta), `force` (default false, ignorado).
   Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -151,7 +151,7 @@ Endpoints
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId, reimbursableExpense, currencyCode, amountMST, exchRate
   Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
-  Nota: si `currencyCode` de linea difiere de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa.
+  Nota: si `currencyCode` de linea no es la divisa local, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras.
   Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -186,6 +186,7 @@ Endpoints
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
   Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate` y `ticketTime`.
+  Lineas incluyen `AdjustmentAmount` cuando AX devuelve el flag `INDTicketInfoLine.Adjustment`.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).
@@ -213,6 +214,12 @@ Endpoints
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
+- POST /api/crm/expensesheets/tickets/{fileId}/total-adjustment (Authorize + X-IND-Company + X-IND-AxUserId)
+  Ajusta `INDTicketInfoTable.TotalAmount` y crea una linea diferencial en `INDTicketInfoLine` cuando cambia el importe.
+  Body required: `totalAmount` (nuevo total de cabecera, mayor o igual que 0).
+  AX calcula `differenceAmount = totalAmount nuevo - TotalAmount anterior`; la diferencia puede ser positiva, negativa o cero.
+  Si hay diferencia, la linea se crea con description fija `AJUSTE DE IMPORTE TOTAL`, `Qty = 1`, `Price = differenceAmount`, `TotalAmount = differenceAmount` y `Adjustment = Yes` en AX, expuesto como `AdjustmentAmount`.
+  Response data: `FileId`, `PreviousTotalAmount`, `NewTotalAmount`, `DifferenceAmount`, `AdjustmentLineRecId`, `AdjustmentLineCreated`, `AdjustmentDescription`, `AdjustmentAmount`.
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.
   Reglas:
