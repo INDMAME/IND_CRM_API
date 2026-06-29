@@ -70,12 +70,12 @@ Endpoints
   Response: catalogo MCP (MCP_TOOLS.json)
 
 ## CRM Enums
-- GET /api/crm/enums/by-name?appCode=CRM&axEnumNames=CRMGastoType,INDExpenseSheetStatus (Authorize + X-IND-Company)
+- GET /api/crm/enums/by-name?appCode=CRM&axEnumNames=CRMGastoType,INDExpenseSheetStatus,INDReimbursableExpense,INDReimbursableExpenseLines (Authorize + X-IND-Company)
   Query optional: `appCode` default `CRM`, `axEnumNames` lista separada por comas.
   Si `axEnumNames` se omite o llega vacio, devuelve todos los enums activos configurados para el aplicativo y company.
   Response: `IndPagedResponse<CrmEnumCatalogDto>`.
   Cada item incluye `Company`, `AppCode`, `AxEnumName`, `AxEnumId`, `Found` y `Options[]`.
-  Cada opcion incluye `Value` (valor numerico real que deben enviar los endpoints de negocio), `EnumIndex`, `Label`, `Description`, `Active`, `SortOrder` y `AxEnumsTableRefRecId`.
+  Cada opcion incluye `Value` (compatibilidad), `EnumIndex` (valor numerico AX que deben enviar los endpoints de negocio cuando exista), `Label`, `Description`, `Active`, `SortOrder` y `AxEnumsTableRefRecId`.
   Nota: `SortOrder = 0` es valido y no significa vacio.
   ErrorCode: VALIDATION_ERROR (422), AX_COM_ERROR/AX_SESSION_ERROR (500).
 - GET /api/crm/enums/by-id?appCode=CRM&axEnumIds=61472,61523 (Authorize + X-IND-Company)
@@ -115,9 +115,9 @@ Endpoints
   mode 0 (default): description, lines[] (con lines[].price)
   mode 1: description (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense, lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense, lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense (INDReimbursableExpense, default Yes), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense (INDReimbursableExpenseLines, default heredado/default Yes), lines[].currencyCode, lines[].amountMST, lines[].exchRate
   Nota: la cabecera AX mantiene siempre la divisa local de reembolso y ExchRate=100; la divisa real se informa en cada linea.
-  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` y `lines[].reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
+  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`.
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
@@ -127,7 +127,7 @@ Endpoints
   Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional)
+  Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional con enum INDReimbursableExpense)
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
   Nota: actualizar cabecera no propaga divisa a lineas existentes. La cabecera queda siempre en divisa local de reembolso (`ExchRate=100`).
   Nota: si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.
@@ -144,13 +144,14 @@ Endpoints
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
   Propaga el `reimbursableExpense` actual de cabecera a todas las lineas existentes.
+  Usar despues de modificar cabecera solo cuando el usuario confirme que desea actualizar todas las lineas.
   AX bloquea la operacion si `reimbursableExpense` de cabecera es el valor agrupador de reembolso configurado en AX o si la hoja esta bloqueada por Voucher.
   Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
-  Optional: fileId (INDFileId), internacional, projId, reimbursableExpense, currencyCode, amountMST, exchRate
-  Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
+  Optional: fileId (INDFileId), internacional, projId, reimbursableExpense (INDReimbursableExpenseLines), currencyCode, amountMST, exchRate
+  Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`; las lineas solo aceptan `INDReimbursableExpenseLines` No/Yes, no Both.
   Nota: si `currencyCode` de linea no es la divisa local, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras.
   Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
@@ -161,8 +162,8 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense, includeSubordinates (bool; true = subordinados directos del usuario de header)
-  Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense (INDReimbursableExpense), includeSubordinates (bool; true = subordinados directos del usuario de header)
+  Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`.
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate y reimbursableExpense
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 

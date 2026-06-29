@@ -41,6 +41,8 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
+        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=No, 1=Yes, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
+        private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=No, 1=Yes. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
         private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
@@ -726,12 +728,12 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = AxEnumNumericValidationMessage });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
-                if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+                if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
                 {
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "reimbursableExpense",
-                        Message = AxEnumNumericValidationMessage
+                        Message = HeaderReimbursableExpenseValidationMessage
                     });
                 }
             }
@@ -1235,12 +1237,12 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "qty", Message = "qty debe ser mayor que cero." });
                 if (!body.price.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "price", Message = "price es obligatorio." });
-                if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+                if (body.reimbursableExpense.HasValue && !IsValidLineReimbursableExpense(body.reimbursableExpense.Value))
                 {
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "reimbursableExpense",
-                        Message = AxEnumNumericValidationMessage
+                        Message = LineReimbursableExpenseValidationMessage
                     });
                 }
                 if (body.exchRate.HasValue && body.exchRate.Value <= 0m)
@@ -1698,12 +1700,12 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
             if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
                 errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
-            if (body.reimbursableExpense.HasValue && !IsValidReimbursableExpense(body.reimbursableExpense.Value))
+            if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
             {
                 errors.Add(new IndValidationError
                 {
                     Field = "reimbursableExpense",
-                    Message = AxEnumNumericValidationMessage
+                    Message = HeaderReimbursableExpenseValidationMessage
                 });
             }
 
@@ -1772,12 +1774,12 @@ namespace IND_CRM_API.Controllers.CRM
                     errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty debe ser mayor que cero." });
                 if (!line.price.HasValue || line.price.Value <= 0)
                     errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
-                if (line.reimbursableExpense.HasValue && !IsValidReimbursableExpense(line.reimbursableExpense.Value))
+                if (line.reimbursableExpense.HasValue && !IsValidLineReimbursableExpense(line.reimbursableExpense.Value))
                 {
                     errors.Add(new IndValidationError
                     {
                         Field = prefix + ".reimbursableExpense",
-                        Message = AxEnumNumericValidationMessage
+                        Message = LineReimbursableExpenseValidationMessage
                     });
                 }
                 if (line.exchRate.HasValue && line.exchRate.Value <= 0m)
@@ -1884,10 +1886,16 @@ namespace IND_CRM_API.Controllers.CRM
             return expenseSheetStatus >= 0;
         }
 
-        // Validates generic AX enum values; active options are configured through /api/crm/enums.
-        private static bool IsValidReimbursableExpense(int reimbursableExpense)
+        // Validates the header enum INDReimbursableExpense: No, Yes and Both.
+        private static bool IsValidHeaderReimbursableExpense(int reimbursableExpense)
         {
-            return reimbursableExpense >= 0;
+            return reimbursableExpense >= 0 && reimbursableExpense <= 2;
+        }
+
+        // Validates the line enum INDReimbursableExpenseLines: No and Yes only.
+        private static bool IsValidLineReimbursableExpense(int reimbursableExpense)
+        {
+            return reimbursableExpense == 0 || reimbursableExpense == 1;
         }
 
         // Validates CRMGastoType against the physical AX enum indexes used by expense lines.
@@ -1908,7 +1916,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Standard enum normalization: invalid values are treated as null.
         private static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {
-            if (!reimbursableExpense.HasValue || !IsValidReimbursableExpense(reimbursableExpense.Value))
+            if (!reimbursableExpense.HasValue || !IsValidHeaderReimbursableExpense(reimbursableExpense.Value))
                 return null;
 
             return reimbursableExpense.Value;

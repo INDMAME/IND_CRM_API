@@ -22,7 +22,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string Voucher { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
-        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
+        // Numeric AX enum value returned by AX; resolve labels through INDReimbursableExpense in /api/crm/enums/by-name.
         public int? ReimbursableExpense { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
         // Display name resolved from CRMUsuarioTable for the sheet owner.
@@ -51,7 +51,7 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
-        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through INDReimbursableExpenseLines in /api/crm/enums/by-name.</summary>
         public int? ReimbursableExpense { get; set; }
         public string CurrencyCode { get; set; }
         public decimal? AmountMST { get; set; }

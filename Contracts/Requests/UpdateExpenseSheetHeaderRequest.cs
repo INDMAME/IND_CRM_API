@@ -31,7 +31,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string estadoComentarios { get; set; }
 
         /// <summary>
-        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums.
+        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.
         /// </summary>
         public int? reimbursableExpense { get; set; }
     }

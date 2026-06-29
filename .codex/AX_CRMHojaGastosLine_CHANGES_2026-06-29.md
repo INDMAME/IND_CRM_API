@@ -5,6 +5,9 @@
 - Respetar hojas bloqueadas por `Voucher`, `Aprobado` o estado no editable.
 
 ## Cambios
+- `ReimbursableExpense` queda tipado con `INDReimbursableExpenseLines` para exponer solo `No/Yes` en lineas.
+- `initValue()` inicializa `ReimbursableExpense` en `Yes`.
+- `applyHeaderCurrencyDefaults()` e `InitFromHojaGastosTable()` heredan `No/Yes` desde cabecera y no copian el marcador `Both`.
 - Se agrego `canSyncLinkedTicket()` para centralizar la barrera de sincronizacion.
 - Se agrego `syncLinkedTicket()` para propagar `Description`, `Currency`, `Amount`, `ExchRate` y `AmountMST` hacia `INDTicketInfoTable`.
 - Si el ticket tiene una unica linea de detalle, tambien se sincronizan `Qty`, `Price` y `TotalAmount` hacia `INDTicketInfoLine`.
