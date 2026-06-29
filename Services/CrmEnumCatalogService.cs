@@ -75,10 +75,21 @@ namespace IND_CRM_API.Services
                 string.Equals(item.AxEnumName, axEnumName.Trim(), StringComparison.OrdinalIgnoreCase));
 
             return group?.Options?
-                       .Where(option => option != null && option.Active && option.Value.HasValue && option.Value.Value >= 0)
-                       .OrderBy(option => option.SortOrder ?? option.EnumIndex ?? option.Value ?? int.MaxValue)
+                       .Select(option => new
+                       {
+                           Option = option,
+                           BusinessValue = ResolveBusinessEnumValue(option)
+                       })
+                       .Where(entry => entry.Option != null && entry.Option.Active && entry.BusinessValue.HasValue && entry.BusinessValue.Value >= 0)
+                       .OrderBy(entry => entry.Option.SortOrder ?? entry.BusinessValue ?? int.MaxValue)
+                       .Select(entry => entry.Option)
                        .ToList()
                    ?? new List<CrmEnumOptionDto>();
+        }
+
+        private static int? ResolveBusinessEnumValue(CrmEnumOptionDto option)
+        {
+            return option?.EnumIndex ?? option?.Value;
         }
 
         private IndPagedResponse<CrmEnumCatalogDto> GetCatalog(

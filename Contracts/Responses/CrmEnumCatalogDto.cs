@@ -31,10 +31,10 @@ namespace IND_CRM_API.Contracts.Responses
     /// </summary>
     public class CrmEnumOptionDto
     {
-        /// <summary>Indice numerico AX que deben usar los endpoints de negocio.</summary>
+        /// <summary>Valor legado de compatibilidad. Los endpoints de negocio deben priorizar EnumIndex.</summary>
         public int? Value { get; set; }
 
-        /// <summary>Indice numerico del valor dentro del enum AX.</summary>
+        /// <summary>Indice numerico del valor dentro del enum AX que deben usar los endpoints de negocio.</summary>
         public int? EnumIndex { get; set; }
 
         /// <summary>Etiqueta efectiva visible para el usuario final.</summary>
