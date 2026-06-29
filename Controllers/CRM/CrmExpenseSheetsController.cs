@@ -41,6 +41,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
+        private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
         private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
 
@@ -1226,6 +1227,8 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
                 if (!body.typeValue.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "typeValue", Message = "typeValue es obligatorio." });
+                else if (!IsValidCrmGastoType(body.typeValue.Value))
+                    validationErrors.Add(new IndValidationError { Field = "typeValue", Message = CrmGastoTypeValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.description))
                     validationErrors.Add(new IndValidationError { Field = "description", Message = "description es obligatorio." });
                 if (!body.qty.HasValue || body.qty.Value <= 0)
@@ -1761,6 +1764,8 @@ namespace IND_CRM_API.Controllers.CRM
                     errors.Add(new IndValidationError { Field = prefix + ".transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
                 if (!line.typeValue.HasValue)
                     errors.Add(new IndValidationError { Field = prefix + ".typeValue", Message = "typeValue es obligatorio." });
+                else if (!IsValidCrmGastoType(line.typeValue.Value))
+                    errors.Add(new IndValidationError { Field = prefix + ".typeValue", Message = CrmGastoTypeValidationMessage });
                 if (string.IsNullOrWhiteSpace(line.description))
                     errors.Add(new IndValidationError { Field = prefix + ".description", Message = "description es obligatorio." });
                 if (!line.qty.HasValue || line.qty.Value <= 0)
@@ -1883,6 +1888,12 @@ namespace IND_CRM_API.Controllers.CRM
         private static bool IsValidReimbursableExpense(int reimbursableExpense)
         {
             return reimbursableExpense >= 0;
+        }
+
+        // Validates CRMGastoType against the physical AX enum indexes used by expense lines.
+        private static bool IsValidCrmGastoType(int typeValue)
+        {
+            return typeValue >= 0 && typeValue <= 20;
         }
 
         // Standard enum normalization: invalid values are treated as null.

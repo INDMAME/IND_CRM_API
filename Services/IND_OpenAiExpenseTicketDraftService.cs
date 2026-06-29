@@ -1005,7 +1005,7 @@ namespace IND_CRM_API.Services
         //MMS - Centraliza la tabla fija de CRMGastoType para prompts IA - 2026.06.26
         private static string BuildCrmGastoTypePromptCatalog()
         {
-            return "- Tabla fija CRMGastoType: 0 None, 1 Peaje, 2 Parking, 3 Km, 4 Desayuno, 5 Comida, 6 Cena, 7 Hotel, 8 Varios, 14 Taxi, 20 Gasolina, 21 AdjustmentAmount.";
+            return "- Tabla fija CRMGastoType: 0 None, 1 Peajes, 2 Parking, 3 Km, 4 Desayuno, 5 Comida, 6 Cena, 7 Hotel, 8 Varios, 9 Montaje Nacional, 10 Montaje Nacional Festivo, 11 Montaje Internacional, 12 Montaje Internacional Festivo, 13 Dia de Viaje Nacional, 14 Taxi, 15 Dia Viaje Festivo Nacional, 16 Dia Viaje Internacional, 17 Dia Viaje Festivo Internacional, 18 Horas, 19 Propinas, 20 Gasolina.";
         }
 
         private static string NormalizeReasoningEffort(string configuredValue)
@@ -1717,7 +1717,7 @@ namespace IND_CRM_API.Services
 
         private static bool IsValidAxEnumValue(int value)
         {
-            return value >= 0;
+            return value >= 0 && value <= 20;
         }
 
         private static bool TryParseBool(JToken token, bool defaultValue = false)

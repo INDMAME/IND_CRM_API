@@ -889,7 +889,7 @@ namespace IND_CRM_API.Controllers.System
 
         private static bool IsValidAxEnumValue(int value)
         {
-            return value >= 0;
+            return value >= 0 && value <= 20;
         }
 
         // Calculates the signed line amount while preserving zero-quantity discounts.

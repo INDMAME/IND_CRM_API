@@ -5341,7 +5341,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Validates generic AX enum values; active options are configured through /api/crm/enums.
         private static bool IsValidGastoType(int gastoType)
         {
-            return gastoType >= 0;
+            return gastoType >= 0 && gastoType <= 20;
         }
 
         // Standard enum normalization: invalid values are treated as null.
