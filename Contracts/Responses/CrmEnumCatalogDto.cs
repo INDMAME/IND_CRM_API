@@ -31,10 +31,10 @@ namespace IND_CRM_API.Contracts.Responses
     /// </summary>
     public class CrmEnumOptionDto
     {
-        /// <summary>Valor numerico real del enum AX que deben usar los endpoints de negocio.</summary>
+        /// <summary>Indice numerico AX que deben usar los endpoints de negocio.</summary>
         public int? Value { get; set; }
 
-        /// <summary>Indice tecnico del valor dentro del enum AX.</summary>
+        /// <summary>Indice numerico del valor dentro del enum AX.</summary>
         public int? EnumIndex { get; set; }
 
         /// <summary>Etiqueta efectiva visible para el usuario final.</summary>
