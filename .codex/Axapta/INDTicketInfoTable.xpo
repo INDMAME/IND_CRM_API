@@ -534,23 +534,10 @@ Formatversion: 1
         #{
         #    Amount  amount;
         #    INDTicketInfoLine ticketInfoLine;
-        #    container adjustmentResult;
         #    ;
         #
-        #    select firstOnly RecId from ticketInfoLine
-        #        where ticketInfoLine.FileId        == this.FileId
-        #           && ticketInfoLine.RefRecIdTable == this.RecId
-        #           && ticketInfoLine.Adjustment    == NoYes::Yes;
-        #
-        #    if (ticketInfoLine.RecId)
-        #    {
-        #        adjustmentResult = this.syncAdjustmentLineToTotal('', false);
-        #        this.normalizeCurrencyAmounts(_amountMSTChanged);
-        #        return conPeek(adjustmentResult, 2);
-        #    }
-        #
-        #    ticketInfoLine.clear();
-        #
+        #    //MMS - Ajustes CRM - 2026.06.30
+        #    // Recalculate the ticket header from its current lines; manual total adjustment is handled only by syncAdjustmentLineToTotal.
         #    select firstOnly RecId from ticketInfoLine
         #        where ticketInfoLine.FileId == this.FileId;
         #
@@ -760,11 +747,19 @@ Formatversion: 1
         #           && adjustmentLine.RefRecIdTable == this.RecId
         #           && adjustmentLine.Adjustment    == NoYes::Yes;
         #
+        #    if (!adjustmentLine.RecId)
+        #    {
+        #        //MMS - Ajustes CRM - 2026.06.30
+        #        // Repair legacy adjustment lines that were created without the ticket reference.
+        #        select firstonly forupdate adjustmentLine
+        #            where adjustmentLine.FileId     == this.FileId
+        #               && adjustmentLine.Adjustment == NoYes::Yes;
+        #    }
+        #
         #    if (!adjustmentLine.RecId && !_allowCreate)
         #    {
         #        select sum(TotalAmount) from allLine
-        #            where allLine.FileId        == this.FileId
-        #               && allLine.RefRecIdTable == this.RecId;
+        #            where allLine.FileId == this.FileId;
         #
         #        this.TotalAmount = allLine.TotalAmount;
         #        this.normalizeCurrencyAmounts(false);
@@ -773,9 +768,8 @@ Formatversion: 1
         #    }
         #
         #    select sum(TotalAmount) from regularLine
-        #        where regularLine.FileId        == this.FileId
-        #           && regularLine.RefRecIdTable == this.RecId
-        #           && regularLine.Adjustment    != NoYes::Yes;
+        #        where regularLine.FileId     == this.FileId
+        #           && regularLine.Adjustment != NoYes::Yes;
         #
         #    regularLinesTotal = regularLine.TotalAmount;
         #    adjustmentAmount  = targetTotalAmount - regularLinesTotal;
@@ -803,6 +797,7 @@ Formatversion: 1
         #    adjustmentLine.Price       = adjustmentAmount;
         #    adjustmentLine.TotalAmount = adjustmentAmount;
         #    adjustmentLine.Adjustment  = NoYes::Yes;
+        #    adjustmentLine.RefRecIdTable = this.RecId;
         #
         #    if (lineCreated)
         #        adjustmentLine.doInsert();
@@ -813,10 +808,9 @@ Formatversion: 1
         #    adjustmentLineExists  = adjustmentLineRecId ? true : false;
         #
         #    while select forupdate duplicateAdjustmentLine
-        #        where duplicateAdjustmentLine.FileId        == this.FileId
-        #           && duplicateAdjustmentLine.RefRecIdTable == this.RecId
-        #           && duplicateAdjustmentLine.Adjustment    == NoYes::Yes
-        #           && duplicateAdjustmentLine.RecId         != adjustmentLineRecId
+        #        where duplicateAdjustmentLine.FileId     == this.FileId
+        #           && duplicateAdjustmentLine.Adjustment == NoYes::Yes
+        #           && duplicateAdjustmentLine.RecId      != adjustmentLineRecId
         #    {
         #        duplicateAdjustmentLine.doDelete();
         #    }

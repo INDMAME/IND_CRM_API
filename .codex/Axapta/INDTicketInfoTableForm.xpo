@@ -101,6 +101,35 @@ FORM #INDTicketInfoTable
           #}
           #
         ENDSOURCE
+        SOURCE #write
+          #public void write()
+          #{
+          #    Amount  manualTotalAmount;
+          #    boolean manualTotalChanged;
+          #    ;
+          #
+          #    //MMS - Ajustes CRM - 2026.06.30
+          #    // Preserve manual header total edits from the form and recalculate the adjustment line after the normal save.
+          #    manualTotalChanged = INDTicketInfoTable.RecId
+          #                      && INDTicketInfoTable.TotalAmount != INDTicketInfoTable.orig().TotalAmount;
+          #    manualTotalAmount  = INDTicketInfoTable.TotalAmount;
+          #
+          #    if (manualTotalChanged && manualTotalAmount < 0)
+          #        throw error("TotalAmount no puede ser negativo.");
+          #
+          #    super();
+          #
+          #    if (manualTotalChanged)
+          #    {
+          #        INDTicketInfoTable.adjustTotalAmount(manualTotalAmount, curUserId());
+          #
+          #        INDTicketInfoTable_DS.reRead();
+          #        INDTicketInfoTable_DS.refresh();
+          #        INDTicketInfoLine_DS.executeQuery();
+          #    }
+          #}
+          #
+        ENDSOURCE
         SOURCE #active
           #public int active()
           #{
