@@ -170,10 +170,10 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Diferencia calculada como nuevo total menos total anterior.</summary>
         public decimal? DifferenceAmount { get; set; }
 
-        /// <summary>RecId de la linea diferencial creada; vacio cuando no hubo diferencia.</summary>
+        /// <summary>RecId of the differential line created or recalculated; empty when no adjustment exists.</summary>
         public string AdjustmentLineRecId { get; set; }
 
-        /// <summary>Indica si AX creo una linea diferencial.</summary>
+        /// <summary>Indicates whether AX created a new differential line.</summary>
         public bool? AdjustmentLineCreated { get; set; }
 
         /// <summary>Descripcion fija usada para la linea diferencial.</summary>

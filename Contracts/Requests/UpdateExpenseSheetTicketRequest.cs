@@ -43,7 +43,7 @@ namespace IND_CRM_API.Contracts.Requests
     }
 
     /// <summary>
-    /// Request para ajustar el importe total de cabecera generando una linea diferencial.
+    /// Request used to adjust the header total by creating or recalculating one differential line.
     /// </summary>
     public class AdjustExpenseSheetTicketTotalAmountRequest
     {

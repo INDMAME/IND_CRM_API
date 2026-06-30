@@ -1776,7 +1776,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Ajusta el importe total de cabecera y genera una linea diferencial marcada como AdjustmentAmount.
+        /// Adjusts the header total and creates or recalculates one differential AdjustmentAmount line.
         /// </summary>
         [HttpPost, Route("{fileId}/total-adjustment")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>))]

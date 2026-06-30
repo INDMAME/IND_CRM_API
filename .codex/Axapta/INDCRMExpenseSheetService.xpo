@@ -6389,6 +6389,7 @@ Formatversion: 1
         #    Amount             savedTotalAmount;
         #    Amount             differenceAmount;
         #    RecId              adjustmentLineRecId;
+        #    boolean            adjustmentLineExists;
         #    int                startLine;
         #    str                msg;
         #    ;
@@ -6439,6 +6440,7 @@ Formatversion: 1
         #            savedTotalAmount    = conPeek(adjustResult, 3);
         #            differenceAmount    = conPeek(adjustResult, 4);
         #            adjustmentLineRecId = conPeek(adjustResult, 5);
+        #            adjustmentLineExists = conPeek(adjustResult, 7);
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Importe total ajustado correctamente.',
         #                                                     [ticketHeader.FileId,
@@ -6448,7 +6450,7 @@ Formatversion: 1
         #                                                      strFmt('%1', adjustmentLineRecId),
         #                                                      lineCreated ? '1' : '0',
         #                                                      'AJUSTE DE IMPORTE TOTAL',
-        #                                                      lineCreated ? '1' : '0']);
+        #                                                      adjustmentLineExists ? '1' : '0']);
         #        }
         #    }
         #    catch (Exception::Deadlock)
