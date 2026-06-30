@@ -837,9 +837,9 @@ Formatversion: 1
         #
         #    ttsbegin;
         #
-        #    select firstOnly forUpdate gastosLine
-        #        index FileIdIdx
-        #        where gastosLine.FileId == this.FileId;
+        #    //MMS - Ajustes CRM - 2026.06.30
+        #    // Usa la busqueda canonica para no actualizar una linea de gasto equivocada cuando FileId no es unico.
+        #    gastosLine = CRMHojaGastosLine::FindByFileId(this.FileId, true);
         #
         #    if (gastosLine)
         #    {

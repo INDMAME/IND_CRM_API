@@ -1404,14 +1404,20 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #canSyncLinkedTicket
-        #//MMS - Ajustes CRM - 2026.06.29
+        #//MMS - Ajustes CRM - 2026.06.30
         #boolean canSyncLinkedTicket()
         #{
         #    CRMHojaGastosTable hojaGastosTable = this.HojaGastosTable();
+        #    CRMHojaGastosLine  linkedLine;
         #    ;
         #
-        #    // Evita sincronizar tickets desde hojas bloqueadas por aprobacion, pago o estado no editable.
+        #    // Evita sincronizar tickets desde hojas bloqueadas o desde lineas que no son la vinculacion canonica.
         #    if (!this.FileId || !hojaGastosTable)
+        #        return false;
+        #
+        #    linkedLine = CRMHojaGastosLine::FindByFileId(this.FileId);
+        #
+        #    if (!linkedLine.RecId || !this.RecId || linkedLine.RecId != this.RecId)
         #        return false;
         #
         #    if (hojaGastosTable.Voucher || hojaGastosTable.Aprobado)
@@ -2572,17 +2578,56 @@ Formatversion: 1
         #}
       ENDSOURCE
       SOURCE #FindByFileId
-        #//INDMMS_ExternalCRM - 2026.02.26
+        #//MMS - Ajustes CRM - 2026.06.30
         #Static CRMHojaGastosLine FindByFileId(INDFileId _id, boolean _forupdate = false)
         #{
         #    CRMHojaGastosLine   CRMHojaGastosLine;
+        #    CRMHojaGastosLine   ticketLineCount;
+        #    CRMHojaGastosLine   fileLineCount;
+        #    int                 ticketLines;
+        #    int                 fileLines;
         #    ;
+        #
+        #    // Devuelve una unica linea segura; si FileId es ambiguo no se sincroniza ninguna linea.
+        #    if (!_id)
+        #        return CRMHojaGastosLine;
+        #
+        #    select count(RecId) from ticketLineCount
+        #    index hint FileIdIdx
+        #    where ticketLineCount.FileId == _id
+        #       && ticketLineCount.Ticket == NoYes::Yes;
+        #
+        #    ticketLines = ticketLineCount.RecId;
+        #
+        #    if (ticketLines == 1)
+        #    {
+        #        CRMHojaGastosLine.selectForUpdate(_forupdate);
+        #
+        #        select firstonly CRMHojaGastosLine
+        #        index hint FileIdIdx
+        #        where CRMHojaGastosLine.FileId == _id
+        #           && CRMHojaGastosLine.Ticket == NoYes::Yes;
+        #
+        #        return CRMHojaGastosLine;
+        #    }
+        #
+        #    if (ticketLines > 1)
+        #        return CRMHojaGastosLine;
+        #
+        #    select count(RecId) from fileLineCount
+        #    index hint FileIdIdx
+        #    where fileLineCount.FileId == _id;
+        #
+        #    fileLines = fileLineCount.RecId;
+        #
+        #    if (fileLines != 1)
+        #        return CRMHojaGastosLine;
         #
         #    CRMHojaGastosLine.selectForUpdate(_forupdate);
         #
         #    select firstonly CRMHojaGastosLine
         #    index hint FileIdIdx
-        #    where CRMHojaGastosLine.FileId   == _id;
+        #    where CRMHojaGastosLine.FileId == _id;
         #
         #    return CRMHojaGastosLine;
         #}

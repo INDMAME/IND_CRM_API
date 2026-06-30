@@ -21,8 +21,9 @@ Ese flujo solo es correcto para el ajuste manual de cabecera expuesto por `adjus
 
 - `adjustTotalAmount()` actualiza `TotalAmount`, guarda con `doUpdate()` y llama despues a `syncHojaGastoLine()`.
 - `INDTicketInfoTable.update()` recalcula `TotalAmount`, guarda la cabecera y llama despues a `syncHojaGastoLine()`.
-- `syncHojaGastoLine()` busca `CRMHojaGastosLine` por `FileId` y, si existe y puede sincronizarse, copia `TotalAmount` hacia `CRMHojaGastosLine.Amount`, recalcula divisa y actualiza la hoja.
-- La propagacion se omite si no hay linea asociada por `FileId`, si la hoja tiene `Voucher`, esta aprobada o su estado no permite edicion.
+- `syncHojaGastoLine()` usa `CRMHojaGastosLine::FindByFileId()` para localizar una unica linea canonica asociada.
+- Si existe una linea canonica y puede sincronizarse, copia `TotalAmount` hacia `CRMHojaGastosLine.Amount`, recalcula divisa y actualiza la hoja.
+- La propagacion se omite si no hay linea asociada unica por `FileId`, si la hoja tiene `Voucher`, esta aprobada o su estado no permite edicion.
 
 ## Impacto
 
