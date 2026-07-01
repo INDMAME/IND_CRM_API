@@ -534,10 +534,24 @@ Formatversion: 1
         #{
         #    Amount  amount;
         #    INDTicketInfoLine ticketInfoLine;
+        #    container adjustmentResult;
         #    ;
         #
-        #    //MMS - Ajustes CRM - 2026.06.30
-        #    // Recalculate the ticket header from its current lines; manual total adjustment is handled only by syncAdjustmentLineToTotal.
+        #    //MMS - Ajustes CRM - 2026.07.01
+        #    // Si existe ajuste manual, conserva el total informado y recalcula solo la linea de ajuste.
+        #    select firstOnly RecId from ticketInfoLine
+        #        where ticketInfoLine.FileId     == this.FileId
+        #           && ticketInfoLine.Adjustment == NoYes::Yes;
+        #
+        #    if (ticketInfoLine.RecId)
+        #    {
+        #        adjustmentResult = this.syncAdjustmentLineToTotal('', false);
+        #        this.normalizeCurrencyAmounts(_amountMSTChanged);
+        #        return conPeek(adjustmentResult, 2);
+        #    }
+        #
+        #    ticketInfoLine.clear();
+        #
         #    select firstOnly RecId from ticketInfoLine
         #        where ticketInfoLine.FileId == this.FileId;
         #
