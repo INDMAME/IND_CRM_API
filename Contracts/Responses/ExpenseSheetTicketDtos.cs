@@ -16,6 +16,8 @@ namespace IND_CRM_API.Contracts.Responses
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
         public decimal? TotalAmount { get; set; }
+        public decimal? AmountMST { get; set; }
+        public decimal? ExchRate { get; set; }
         public string CreatedByUserId { get; set; }
         public string TransDate { get; set; }
         public string TicketDate { get; set; }

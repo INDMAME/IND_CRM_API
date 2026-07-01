@@ -12,6 +12,8 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         public int? gastoType { get; set; }
         public decimal? totalAmount { get; set; }
+        public decimal? amountMST { get; set; }
+        public decimal? exchRate { get; set; }
         /// <summary>
         /// Numeric AX enum value for the ticket status. Resolve active options through /api/crm/enums.
         /// </summary>

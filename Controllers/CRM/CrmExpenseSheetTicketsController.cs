@@ -1549,10 +1549,18 @@ namespace IND_CRM_API.Controllers.CRM
                 if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                     validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
+                if (body.amountMST.HasValue && body.amountMST.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "amountMST", Message = "amountMST no puede ser negativo." });
+
+                if (body.exchRate.HasValue && body.exchRate.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "exchRate", Message = "exchRate no puede ser negativo." });
+
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
                     !body.gastoType.HasValue &&
                     !body.totalAmount.HasValue &&
+                    !body.amountMST.HasValue &&
+                    !body.exchRate.HasValue &&
                     !body.status.HasValue &&
                     !body.processedByAI.HasValue &&
                     string.IsNullOrWhiteSpace(body.transDate) &&
@@ -1646,6 +1654,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
+                var mergedAmountMST = body.amountMST ?? existing.AmountMST;
+                var mergedExchRate = body.exchRate ?? existing.ExchRate;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusValueForLinking;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
@@ -1698,18 +1708,27 @@ namespace IND_CRM_API.Controllers.CRM
                     body.ocrJson != null ||
                     body.normalizedJson != null ||
                     !string.IsNullOrWhiteSpace(mergedTicketDate) ||
-                    mergedTicketTime.HasValue;
+                    mergedTicketTime.HasValue ||
+                    body.amountMST.HasValue ||
+                    body.exchRate.HasValue;
                 if (shouldAppendExtendedHeaderFields)
                 {
                     updateCon.Append(mergedGastoType);
                     updateCon.Append(mergedOcrJson ?? string.Empty);
                     updateCon.Append(mergedNormalizedJson ?? string.Empty);
 
-                    if (!string.IsNullOrWhiteSpace(mergedTicketDate) || mergedTicketTime.HasValue)
+                    var shouldAppendCurrencyAmounts = body.amountMST.HasValue || body.exchRate.HasValue;
+                    if (!string.IsNullOrWhiteSpace(mergedTicketDate) || mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
                         updateCon.Append(mergedTicketDate ?? string.Empty);
 
-                    if (mergedTicketTime.HasValue)
-                        updateCon.Append(mergedTicketTime.Value);
+                    if (mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
+                        updateCon.Append(mergedTicketTime ?? 0);
+
+                    if (shouldAppendCurrencyAmounts)
+                    {
+                        updateCon.Append(mergedAmountMST ?? 0m);
+                        updateCon.Append(mergedExchRate ?? 0m);
+                    }
                 }
 
                 var updateResultObj = ax.CallStaticClassMethod(
@@ -1755,7 +1774,9 @@ namespace IND_CRM_API.Controllers.CRM
                         FileId = responseFileId,
                         FileName = mergedFileName,
                         ProcessedByAI = responseProcessedByAI,
-                        GastoType = mergedGastoType
+                        GastoType = mergedGastoType,
+                        AmountMST = mergedAmountMST,
+                        ExchRate = mergedExchRate
                     },
                     TraceId = traceId
                 });
@@ -6460,6 +6481,8 @@ namespace IND_CRM_API.Controllers.CRM
                 GastoType = headerExtras.Count > 11 ? NormalizeGastoTypeOrNull(ToInt(headerExtras[11])) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
+                AmountMST = headerExtras.Count > 19 ? ToDecimal(headerExtras[19]) : null,
+                ExchRate = headerExtras.Count > 20 ? ToDecimal(headerExtras[20]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
                 TransDate = headerExtras.Count > 6 ? FormatApiDate(headerExtras[6]) : string.Empty,
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
