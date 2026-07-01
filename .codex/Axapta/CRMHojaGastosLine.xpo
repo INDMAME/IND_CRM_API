@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : CRMHojaGastosLine unloaded at Martes 30/06/2026
+; Navision Axapta Table : CRMHojaGastosLine unloaded at Miércoles 01/07/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -2310,17 +2310,17 @@ Formatversion: 1
         #        }
         #
         #        if (ticketLineCount == 1 && ticketInfoLine && ticketInfoLine.Adjustment != NoYes::Yes)
-        #        {
-        #            ticketInfoLine.Description = this.Description;
-        #            ticketInfoLine.Qty         = this.Qty;
-        #            ticketInfoLine.Price       = this.Price;
-        #            ticketInfoLine.TotalAmount = this.Amount;
+        #            {
+        #                ticketInfoLine.Description = this.Description;
+        #                ticketInfoLine.Qty         = this.Qty;
+        #                ticketInfoLine.Price       = this.Price;
+        #                ticketInfoLine.TotalAmount = this.Amount;
         #
-        #            if (!ticketInfoLine.RefRecIdTable)
-        #                ticketInfoLine.RefRecIdTable = ticketInfoTable.RecId;
+        #                if (!ticketInfoLine.RefRecIdTable)
+        #                    ticketInfoLine.RefRecIdTable = ticketInfoTable.RecId;
         #
-        #            ticketInfoLine.doUpdate();
-        #        }
+        #                ticketInfoLine.doUpdate();
+        #            }
         #        else
         #        {
         #            //MMS - Ajustes CRM - 2026.06.30
@@ -2627,10 +2627,11 @@ Formatversion: 1
         #
         #    select firstonly CRMHojaGastosLine
         #    index hint FileIdIdx
-        #    where CRMHojaGastosLine.FileId == _id;
+        #    where CRMHojaGastosLine.FileId   == _id;
         #
         #    return CRMHojaGastosLine;
         #}
+        #
       ENDSOURCE
     ENDMETHODS
   ENDTABLE

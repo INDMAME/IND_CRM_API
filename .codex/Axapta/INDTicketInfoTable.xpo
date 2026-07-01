@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : INDTicketInfoTable unloaded at Martes 30/06/2026
+; Navision Axapta Table : INDTicketInfoTable unloaded at Miércoles 01/07/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -552,7 +552,7 @@ Formatversion: 1
         #
         #    ticketInfoLine.clear();
         #
-        #    select firstOnly RecId from ticketInfoLine
+        #   select firstOnly RecId from ticketInfoLine
         #        where ticketInfoLine.FileId == this.FileId;
         #
         #    if (!ticketInfoLine.RecId && _preserveWhenNoLines)
@@ -782,8 +782,8 @@ Formatversion: 1
         #    }
         #
         #    select sum(TotalAmount) from regularLine
-        #        where regularLine.FileId     == this.FileId
-        #           && regularLine.Adjustment != NoYes::Yes;
+        #        where regularLine.FileId        == this.FileId
+        #           && regularLine.Adjustment    != NoYes::Yes;
         #
         #    regularLinesTotal = regularLine.TotalAmount;
         #    adjustmentAmount  = targetTotalAmount - regularLinesTotal;
@@ -822,9 +822,9 @@ Formatversion: 1
         #    adjustmentLineExists  = adjustmentLineRecId ? true : false;
         #
         #    while select forupdate duplicateAdjustmentLine
-        #        where duplicateAdjustmentLine.FileId     == this.FileId
-        #           && duplicateAdjustmentLine.Adjustment == NoYes::Yes
-        #           && duplicateAdjustmentLine.RecId      != adjustmentLineRecId
+        #        where duplicateAdjustmentLine.FileId        == this.FileId
+        #           && duplicateAdjustmentLine.Adjustment    == NoYes::Yes
+        #           && duplicateAdjustmentLine.RecId         != adjustmentLineRecId
         #    {
         #        duplicateAdjustmentLine.doDelete();
         #    }
