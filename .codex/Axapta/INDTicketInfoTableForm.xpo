@@ -19,6 +19,7 @@ FORM #INDTicketInfoTable
       #{
       #     Map                selectedTickets;
       #     CRMHojaGastosLine  callerHojaGastosLine;
+      #     boolean            ticketLineSyncInProgress;
       #}
     ENDSOURCE
     SOURCE #init
@@ -51,6 +52,16 @@ FORM #INDTicketInfoTable
       #    selectedTickets = new Map(Types::Integer, Types::Integer);
       #
       #    INDTicketInfoTable_DS.executeQuery();
+      #}
+    ENDSOURCE
+    SOURCE #refreshTicketAfterLineSync
+      #//MMS - Ajustes CRM - 2026.07.01
+      #void refreshTicketAfterLineSync()
+      #{
+      #    // Recarga la cabecera despues de un cambio de linea para evitar conflictos de version del datasource.
+      #    INDTicketInfoTable_DS.reRead();
+      #    INDTicketInfoTable_DS.refresh();
+      #    INDTicketInfoLine_DS.executeQuery();
       #}
     ENDSOURCE
   ENDMETHODS
@@ -108,6 +119,14 @@ FORM #INDTicketInfoTable
           #    boolean manualTotalChanged;
           #    ;
           #
+          #    //MMS - Ajustes CRM - 2026.07.01
+          #    // Evita guardar la cabecera antigua cuando el recalculo viene del datasource de lineas.
+          #    if (ticketLineSyncInProgress)
+          #    {
+          #        refreshTicketAfterLineSync();
+          #        return;
+          #    }
+          #
           #    //MMS - Ajustes CRM - 2026.06.30
           #    // Preserve manual header total edits from the form and recalculate the adjustment line after the normal save.
           #    manualTotalChanged = INDTicketInfoTable.RecId
@@ -123,9 +142,7 @@ FORM #INDTicketInfoTable
           #    {
           #        INDTicketInfoTable.adjustTotalAmount(manualTotalAmount, curUserId());
           #
-          #        INDTicketInfoTable_DS.reRead();
-          #        INDTicketInfoTable_DS.refresh();
-          #        INDTicketInfoLine_DS.executeQuery();
+          #        refreshTicketAfterLineSync();
           #    }
           #}
           #
@@ -286,6 +303,37 @@ FORM #INDTicketInfoTable
         FIELDLIST
         ENDFIELDLIST
       ENDOBJECTPOOL
+      METHODS
+        Version: 3
+        SOURCE #delete
+          #public void delete()
+          #{
+          #    ;
+          #
+          #    //MMS - Ajustes CRM - 2026.07.01
+          #    // La linea recalcula la cabecera por tabla; el formulario solo debe recargarla.
+          #    ticketLineSyncInProgress = true;
+          #    super();
+          #    refreshTicketAfterLineSync();
+          #    ticketLineSyncInProgress = false;
+          #}
+          #
+        ENDSOURCE
+        SOURCE #write
+          #public void write()
+          #{
+          #    ;
+          #
+          #    //MMS - Ajustes CRM - 2026.07.01
+          #    // La linea recalcula la cabecera por tabla; el formulario solo debe recargarla.
+          #    ticketLineSyncInProgress = true;
+          #    super();
+          #    refreshTicketAfterLineSync();
+          #    ticketLineSyncInProgress = false;
+          #}
+          #
+        ENDSOURCE
+      ENDMETHODS
     ENDDATASOURCE
     DATASOURCE
       OBJECTPOOL
