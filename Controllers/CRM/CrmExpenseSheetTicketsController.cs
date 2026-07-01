@@ -1656,6 +1656,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
                 var mergedAmountMST = body.amountMST ?? existing.AmountMST;
                 var mergedExchRate = body.exchRate ?? existing.ExchRate;
+                var hasManualTotalAmountChange =
+                    body.totalAmount.HasValue &&
+                    Math.Abs(body.totalAmount.Value - (existing.TotalAmount ?? 0m)) >= 0.005m;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusValueForLinking;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
@@ -1710,14 +1713,15 @@ namespace IND_CRM_API.Controllers.CRM
                     !string.IsNullOrWhiteSpace(mergedTicketDate) ||
                     mergedTicketTime.HasValue ||
                     body.amountMST.HasValue ||
-                    body.exchRate.HasValue;
+                    body.exchRate.HasValue ||
+                    hasManualTotalAmountChange;
                 if (shouldAppendExtendedHeaderFields)
                 {
                     updateCon.Append(mergedGastoType);
                     updateCon.Append(mergedOcrJson ?? string.Empty);
                     updateCon.Append(mergedNormalizedJson ?? string.Empty);
 
-                    var shouldAppendCurrencyAmounts = body.amountMST.HasValue || body.exchRate.HasValue;
+                    var shouldAppendCurrencyAmounts = body.amountMST.HasValue || body.exchRate.HasValue || hasManualTotalAmountChange;
                     if (!string.IsNullOrWhiteSpace(mergedTicketDate) || mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
                         updateCon.Append(mergedTicketDate ?? string.Empty);
 
@@ -1726,9 +1730,12 @@ namespace IND_CRM_API.Controllers.CRM
 
                     if (shouldAppendCurrencyAmounts)
                     {
-                        updateCon.Append(mergedAmountMST ?? 0m);
-                        updateCon.Append(mergedExchRate ?? 0m);
+                        updateCon.Append(body.amountMST.HasValue ? (object)body.amountMST.Value : "null");
+                        updateCon.Append(body.exchRate.HasValue ? (object)body.exchRate.Value : "null");
                     }
+
+                    if (hasManualTotalAmountChange)
+                        updateCon.Append(1);
                 }
 
                 var updateResultObj = ax.CallStaticClassMethod(
@@ -1761,6 +1768,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var responseProcessedByAI = updateExtras.Count > 1
                     ? (ToNullableBool(updateExtras[1]) ?? mergedProcessedByAI)
                     : mergedProcessedByAI;
+                var responseTotalAmount = updateExtras.Count > 2 ? ToDecimal(updateExtras[2]) ?? mergedTotalAmount : mergedTotalAmount;
+                var responseAmountMST = updateExtras.Count > 3 ? ToDecimal(updateExtras[3]) : mergedAmountMST;
+                var responseExchRate = updateExtras.Count > 4 ? ToDecimal(updateExtras[4]) : mergedExchRate;
 
                 LogOut(HttpStatusCode.OK);
                 return Ok(new IndApiResponse<object>
@@ -1775,8 +1785,9 @@ namespace IND_CRM_API.Controllers.CRM
                         FileName = mergedFileName,
                         ProcessedByAI = responseProcessedByAI,
                         GastoType = mergedGastoType,
-                        AmountMST = mergedAmountMST,
-                        ExchRate = mergedExchRate
+                        TotalAmount = responseTotalAmount,
+                        AmountMST = responseAmountMST,
+                        ExchRate = responseExchRate
                     },
                     TraceId = traceId
                 });
