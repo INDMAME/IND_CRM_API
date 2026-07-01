@@ -939,7 +939,9 @@ Formatversion: 1
         #    }
         #
         #    this.updateSearchKey();
-        #    this.calcTotalAmount(amountMSTChanged, true);
+        #    //MMS - Ajustes CRM - 2026.07.01
+        #    // La cabecera no actualiza lineas desde update(); los cambios de lineas y ajustes manuales tienen su propio TTS.
+        #    this.normalizeCurrencyAmounts(amountMSTChanged);
         #
         #    if (!this.validateCurrencyAmounts())
         #        throw error("Datos de divisa del ticket invalidos.");

@@ -13,6 +13,9 @@
 - `calcTotalAmount()` detecta si existe una linea con `Adjustment = Yes`.
 - Si existe, llama a `syncAdjustmentLineToTotal('', false)` para recalcular la diferencia contra el total de cabecera actual.
 - Si no existe ajuste, mantiene el comportamiento de suma normal de lineas.
+- `update()` de cabecera deja de recalcular lineas; solo normaliza importes/divisa y guarda la cabecera.
+- Los cambios de lineas siguen recalculando desde `INDTicketInfoLine.syncTicketHeader()` dentro de su propio `ttsbegin`.
+- El ajuste manual sigue recalculando desde `adjustTotalAmount()` dentro de su propio `ttsbegin`.
 
 ## Flujo esperado
 1. El usuario informa un total reembolsable manual.
