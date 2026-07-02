@@ -187,7 +187,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
-- Nota: si `currencyCode` de linea difiere de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa.
+- Nota: si `currencyCode` de linea difiere de la divisa de reembolso de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa. Si ambas divisas coinciden, editar `amountMST` no recalcula `exchRate`.
 - Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera como `Both`.
 
 ### Tool: crm_expensesheets_delete_line
@@ -274,7 +274,8 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `amountMST`, `exchRate`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
+- Nota: si el ticket vinculado esta en la misma divisa de reembolso de la hoja, editar `amountMST` conserva `exchRate`; si la divisa difiere, AX recalcula `exchRate` con `totalAmount * 100 / amountMST`.
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`

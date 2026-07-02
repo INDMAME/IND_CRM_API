@@ -79,8 +79,8 @@ Reglas funcionales:
 - `CurrencyCode` inicializa con `CompanyInfo::standardCurrency()`.
 - `ExchRate` inicializa con `100`.
 - Si cambia `TotalAmount`, `CurrencyCode` o `ExchRate`, se recalcula `AmountMST`.
-- Si cambia `AmountMST`, se recalcula `ExchRate` usando base 100.
-- Si la divisa no es local, `ExchRate` debe estar informado.
+- Si cambia `AmountMST`, desde 2026-07-02 solo se recalcula `ExchRate` cuando el ticket esta en divisa distinta a la divisa de reembolso; si coincide, se conserva `ExchRate`.
+- Si la divisa no coincide con la divisa de reembolso, debe existir `ExchRate` o `AmountMST`.
 - Al sincronizar un ticket ya vinculado a `CRMHojaGastosLine`, se propagan `Currency`, `ExchRate`, `Amount` y `AmountMST`.
 - `adjustTotalAmount` crea una linea diferencial con `INDTicketInfoLine.Adjustment = Yes`.
 

@@ -152,7 +152,7 @@ Endpoints
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId, reimbursableExpense (INDReimbursableExpenseLines), currencyCode, amountMST, exchRate
   Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`; las lineas solo aceptan `INDReimbursableExpenseLines` No/Yes, no Both.
-  Nota: si `currencyCode` de linea no es la divisa local, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras.
+  Nota: si `currencyCode` de linea no es la divisa de reembolso de la hoja, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras. Si la divisa de linea y reembolso coinciden, editar `amountMST` no recalcula `exchRate`.
   Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -214,12 +214,14 @@ Endpoints
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
+  Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, amountMST, exchRate, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
+  Nota: si el ticket vinculado esta en la misma divisa de reembolso de la hoja, editar `amountMST` conserva `exchRate`; si la divisa difiere, AX recalcula `exchRate` con `totalAmount * 100 / amountMST`.
 - POST /api/crm/expensesheets/tickets/{fileId}/total-adjustment (Authorize + X-IND-Company + X-IND-AxUserId)
   Ajusta `INDTicketInfoTable.TotalAmount` y crea una linea diferencial en `INDTicketInfoLine` cuando cambia el importe.
   Body required: `totalAmount` (nuevo total de cabecera, mayor o igual que 0).
   AX calcula `differenceAmount = totalAmount nuevo - TotalAmount anterior`; la diferencia puede ser positiva, negativa o cero.
-  Si hay diferencia, la linea se crea con description fija `AJUSTE DE IMPORTE TOTAL`, `Qty = 1`, `Price = differenceAmount`, `TotalAmount = differenceAmount` y `Adjustment = Yes` en AX, expuesto como `AdjustmentAmount`.
+  Si hay diferencia, la linea se crea o recalcula con description fija `AJUSTE DE IMPORTE TOTAL`, `Qty = 1`, `Price = differenceAmount`, `TotalAmount = differenceAmount` y `Adjustment = Yes` en AX, expuesto como `AdjustmentAmount`.
+  Si ya existia linea de ajuste y un cambio posterior deja la diferencia entre cabecera y suma de lineas normales en `0`, AX elimina la linea `Adjustment`; en ese caso `AdjustmentLineRecId` vuelve vacio/0 y `AdjustmentAmount` se devuelve como `false`.
   Response data: `FileId`, `PreviousTotalAmount`, `NewTotalAmount`, `DifferenceAmount`, `AdjustmentLineRecId`, `AdjustmentLineCreated`, `AdjustmentDescription`, `AdjustmentAmount`.
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.

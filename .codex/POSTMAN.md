@@ -61,7 +61,8 @@ Notas
   - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false`
   - `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
   - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
-- Expense Sheets admite `reimbursableExpense` en cabecera y lineas. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`.
+- Expense Sheets admite `reimbursableExpense` en cabecera y lineas. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
+- Tickets admite `amountMST` y `exchRate` en update de cabecera; si el ticket vinculado esta en la misma divisa de reembolso de la hoja, modificar `amountMST` no recalcula `exchRate`.
 - Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.
 - Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.
 - La coleccion V21 incluye CRUD completo de tickets + endpoints de archivo:

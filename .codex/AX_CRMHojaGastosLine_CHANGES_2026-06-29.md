@@ -16,5 +16,5 @@
 ## Validacion esperada
 - `Qty` o `Price` recalculan `Amount` y despues `AmountMST`.
 - `ExchRate` recalcula `AmountMST`.
-- `AmountMST` manual recalcula `ExchRate` usando la formula AX en base 100.
+- `AmountMST` manual recalcula `ExchRate` usando la formula AX en base 100 solo cuando la divisa de linea difiere de la divisa de reembolso; desde 2026-07-02, si coincide, se conserva `ExchRate`.
 - En hojas aprobadas, pagadas o no editables no se propagan cambios hacia el ticket.

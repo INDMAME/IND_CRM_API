@@ -1354,7 +1354,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_line",
-                      "description":  "Actualiza linea de hoja de gastos. Si currencyCode difiere de cabecera, enviar exchRate o amountMST. Si reimbursableExpense difiere de cabecera, AX marca cabecera como Both.",
+                      "description":  "Actualiza linea de hoja de gastos. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si reimbursableExpense difiere de cabecera, AX marca cabecera como Both.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -2205,7 +2205,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_tickets_update",
-                      "description":  "Actualiza cabecera y metadatos de ticket.",
+                      "description":  "Actualiza cabecera y metadatos de ticket. Si el ticket vinculado esta en la misma divisa de reembolso de la hoja, amountMST no recalcula exchRate; si difiere, AX recalcula exchRate con totalAmount * 100 / amountMST.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -2258,12 +2258,20 @@
                                                                                              "currencyCode":  {
                                                                                                                   "type":  "string"
                                                                                                               },
-                                                                                             "totalAmount":  {
-                                                                                                                 "type":  "number"
-                                                                                                             },
-                                                                                             "status":  {
-                                                                                                            "type":  "integer",
-                                                                                                            "minimum":  0,
+                                                                                              "totalAmount":  {
+                                                                                                                  "type":  "number"
+                                                                                                              },
+                                                                                              "amountMST":  {
+                                                                                                                "type":  "number",
+                                                                                                                "description":  "Importe de reembolso. En misma divisa de reembolso no recalcula exchRate."
+                                                                                                            },
+                                                                                              "exchRate":  {
+                                                                                                               "type":  "number",
+                                                                                                               "description":  "Tipo de cambio AX base 100. Solo se recalcula desde amountMST cuando la divisa difiere de la divisa de reembolso."
+                                                                                                           },
+                                                                                              "status":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "minimum":  0,
                                                                                                             "maximum":  1
                                                                                                         },
                                                                                              "transDate":  {
