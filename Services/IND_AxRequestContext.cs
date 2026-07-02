@@ -1,4 +1,3 @@
-using AxaptaCOMConnector;
 using System;
 using System.Threading;
 
@@ -6,7 +5,7 @@ namespace IND_CRM_API.Services
 {
     /// <summary>
     /// Request-scope context for Axapta sessions.
-    /// Stores correlation data and the per-request Axapta2Class instance.
+    /// Stores correlation data and the per-request Axapta COM session.
     /// </summary>
     public sealed class IND_AxRequestContext
     {
@@ -38,7 +37,8 @@ namespace IND_CRM_API.Services
         public string Endpoint { get; }
         public string Company { get; }
         public string Username { get; set; }
-        public Axapta2Class AxInstance { get; set; }
+        public AxaptaComSession ComSession { get; set; }
+        public IDisposable ComAccessLease { get; set; }
         public DateTime StartedUtc { get; }
     }
 }

@@ -1,10 +1,13 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 title Instalador de IND_CRM_API
 cd /d "%~dp0"
 
 REM Build the Windows service display name from the current machine environment.
 set "SERVICE_ENV=%IND_ENV%"
+set "ASPNETCORE_ENV=%ASPNETCORE_ENVIRONMENT%"
+set "AX_CONFIG=%INDCRM_AX_CONFIG_FILE%"
+set "BLOB_ENV=%AZURE_BLOB_ENVIRONMENT_SEGMENT%"
 set "SERVICE_DISPLAY_NAME=CRM API"
 if not "%SERVICE_ENV%"=="" set "SERVICE_DISPLAY_NAME=CRM API %SERVICE_ENV%"
 
@@ -23,6 +26,46 @@ set "PUBLIC_HOST=%INDCRM_PUBLIC_HOST%"
 if "%SERVICE_ENV%"=="" (
     echo ERROR: IND_ENV is not defined.
     echo Run scripts\set-indcrm-machine-all-env.ps1 -TargetEnvironment DEV/PROD -Apply first.
+    pause
+    exit /b 1
+)
+
+for %%I in ("%AX_CONFIG%") do set "AX_CONFIG_FILE=%%~nxI"
+
+if /I "%SERVICE_ENV%"=="DEV" (
+    if /I not "%ASPNETCORE_ENV%"=="Development" (
+        echo ERROR: ASPNETCORE_ENVIRONMENT must be Development for DEV. Current value: %ASPNETCORE_ENV%
+        pause
+        exit /b 1
+    )
+    if /I not "%BLOB_ENV%"=="DEV" (
+        echo ERROR: AZURE_BLOB_ENVIRONMENT_SEGMENT must be DEV. Current value: %BLOB_ENV%
+        pause
+        exit /b 1
+    )
+    if /I not "%AX_CONFIG_FILE%"=="CRM_API_AxConfig_DEV.axc" (
+        echo ERROR: INDCRM_AX_CONFIG_FILE must point to CRM_API_AxConfig_DEV.axc for DEV. Current value: %AX_CONFIG%
+        pause
+        exit /b 1
+    )
+) else if /I "%SERVICE_ENV%"=="PROD" (
+    if /I not "%ASPNETCORE_ENV%"=="Production" (
+        echo ERROR: ASPNETCORE_ENVIRONMENT must be Production for PROD. Current value: %ASPNETCORE_ENV%
+        pause
+        exit /b 1
+    )
+    if /I not "%BLOB_ENV%"=="PROD" (
+        echo ERROR: AZURE_BLOB_ENVIRONMENT_SEGMENT must be PROD. Current value: %BLOB_ENV%
+        pause
+        exit /b 1
+    )
+    if /I not "%AX_CONFIG_FILE%"=="CRM_API_AxConfig_PROD.axc" (
+        echo ERROR: INDCRM_AX_CONFIG_FILE must point to CRM_API_AxConfig_PROD.axc for PROD. Current value: %AX_CONFIG%
+        pause
+        exit /b 1
+    )
+) else (
+    echo ERROR: IND_ENV must be DEV or PROD. Current value: %SERVICE_ENV%
     pause
     exit /b 1
 )

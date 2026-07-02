@@ -23,10 +23,16 @@ namespace IND_CRM_API.Contracts.Requests
         public string currencyCode { get; set; }
 
         /// <summary>
-        /// Estado de la hoja de gastos para filtrar (enum AX INDExpenseSheetStatus).
-        /// Valores permitidos: 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// Estado de la hoja de gastos para filtrar (valor numerico AX de INDExpenseSheetStatus).
+        /// Consultar opciones activas en /api/crm/enums.
         /// </summary>
         public int? expenseSheetStatus { get; set; }
+
+        /// <summary>
+        /// Filtro de reembolso (valor numerico AX de INDReimbursableExpense).
+        /// Consultar opciones activas en /api/crm/enums.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
 
         /// <summary>
         /// Cuando es true, lista las hojas de los subordinados directos del usuario del header.

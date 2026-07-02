@@ -42,6 +42,9 @@ Before editing code:
 - Analyze the current flow and identify the exact modules, contracts, and boundaries affected.
 - Present a short plan in bullets for any non-trivial change.
 - Propose the smallest safe change that solves the request.
+- Review the plan for loose ends before coding: ownership of the trigger, sender/recipient rules, duplicated execution paths, configuration source, rollback/transaction boundary, idempotency, logging, and documentation impact.
+- When the user asks to plan or analyze an Axapta/API change, explicitly scan for loose ends and alignment gaps before editing: status transitions, owner/actor semantics, fallback behavior, template/configuration validity, related projects, and import/compile impact.
+- When multiple projects must align, explicitly state which project owns each responsibility and which companion prompts/docs must be updated.
 - If there are multiple valid approaches, present concise options with a recommendation and ask before implementing.
 - If requirements are unclear or behavior could change in different valid ways, ask a clarifying question before coding.
 - Only proceed on assumption when the assumption is low-risk, backward-compatible, and explicitly called out.
@@ -86,7 +89,10 @@ Execution:
 2. Create or update `.codex/AX_<ClassName>_CHANGES_YYYY-MM-DD.md`.
 3. Keep that file current with objective, methods touched, contract adjustments, risks, and pending API work.
 4. Implement AX first when the contract originates there, then align DTOs, mappers, endpoints, and docs.
-5. Do not close AX->API work if the temporary change log is stale or incomplete.
+5. Document every new or changed Axapta method with a simple Spanish explanation in the XPO source comments.
+6. Keep external calls such as HTTP/DLL/email outside `tts` whenever possible; they must be best-effort and must not block the committed business transaction.
+7. When touching Axapta table or form XPO code, mark each new or changed code block with `//MMS - Ajustes CRM - YYYY.MM.DD`, using the actual current date. This marker is not required for class-only work unless the user asks for it.
+8. Do not close AX->API work if the temporary change log is stale or incomplete.
 
 ## Documentation hygiene
 - Do not duplicate root `.codex` docs into new parallel files unless there is a strong reason.
@@ -153,3 +159,37 @@ Recommended order when the task needs them:
 3. Current code and actual project structure
 4. Supporting skills
 5. General best practices
+
+## Política permanente: Axapta 3.0 Business Connector COM
+
+Toda llamada a Axapta 3.0 mediante Business Connector COM debe pasar por un wrapper central del proyecto.
+
+Reglas obligatorias:
+- El proyecto debe seguir en .NET Framework 4.8, Web API 2 / OWIN self-host y x86.
+- No usar DLL COM de versiones modernas de AX contra AOS Axapta 3.0.
+- No introducir multihilo, Task.Run, Parallel.ForEach ni ejecución concurrente contra COM/BC.
+- No crear clases nuevas con prefijo “IND”; preservar nombres existentes.
+- No mantener objetos Axapta, AxaptaRecord, AxaptaObject ni AxaptaContainer vivos fuera del scope de la operación.
+- Cada operación COM debe usar try/catch/finally.
+- Si se hizo Logon/Logon2/LogonAs, ejecutar Logoff() en finally.
+- Liberar objetos AX/COM creados en la operación en orden inverso.
+- Ejecutar Dispose() si aplica.
+- Usar Marshal.ReleaseComObject o Marshal.FinalReleaseComObject solo sobre objetos COM creados y poseídos por ese scope.
+- No llamar GC.Collect() como patrón normal por request.
+- No compartir una misma instancia COM entre AOS, AXC, empresa o configuración distinta.
+- Manejar COMException 0x80041004 como posible contaminación de proceso.
+- Reiniciar COM+ con COMAdmin solo como recuperación controlada o mantenimiento, nunca por defecto en cada request concurrente.
+- Cualquier reinicio COM+ debe estar protegido por configuración, lock global y logging sin datos sensibles.
+- No modificar envelopes REST existentes ni contratos públicos salvo aprobación explícita.
+- En endpoints nuevos o modificados que cambien contrato, actualizar Swagger/OpenAPI y documentación MCP.
+
+Checklist antes de cerrar una tarea que toque Axapta COM:
+1. Todas las rutas COM pasan por wrapper central.
+2. Hay finally con Logoff.
+3. Hay liberación de objetos AX/COM intermedios.
+4. No quedan objetos COM en campos static mutables.
+5. No hay llamadas COM paralelas nuevas.
+6. Se mantiene x86.
+7. Se registran errores con traceId.
+8. No se loguean credenciales ni bodies sensibles.
+9. Pruebas de Health/System/operación CRM crítica ejecutadas o documentadas.

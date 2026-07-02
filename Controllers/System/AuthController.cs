@@ -9,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
-using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Net;
 using System.Threading;
@@ -443,35 +442,28 @@ namespace IND_CRM_API.Controllers.System
                     "axType=" + (ax == null ? "null" : ax.GetType().FullName),
                     authSw);
 
-                object resultObj = ExecuteAxWithTimeout(
-                    () =>
-                    {
-                        LogAuthTrace("entra-context", "before-create-container", traceId, correlationId, username, body.appCode, null, authSw);
-                        var con = ax.CreateContainer();
-                        LogAuthTrace("entra-context", "after-create-container", traceId, correlationId, username, body.appCode, "containerType=" + (con == null ? "null" : con.GetType().FullName), authSw);
-                        con.Append(body.entraOid?.Trim() ?? string.Empty);
-                        con.Append(body.appCode?.Trim() ?? string.Empty);
-                        LogAuthTrace("entra-context", "container-populated", traceId, correlationId, username, body.appCode, "appendCount=2", authSw);
+                LogAuthTrace("entra-context", "before-create-container", traceId, correlationId, username, body.appCode, null, authSw);
+                var con = ax.CreateContainer();
+                LogAuthTrace("entra-context", "after-create-container", traceId, correlationId, username, body.appCode, "containerType=" + (con == null ? "null" : con.GetType().FullName), authSw);
+                con.Append(body.entraOid?.Trim() ?? string.Empty);
+                con.Append(body.appCode?.Trim() ?? string.Empty);
+                LogAuthTrace("entra-context", "container-populated", traceId, correlationId, username, body.appCode, "appendCount=2", authSw);
 
-                        LogAuthTrace("entra-context", "before-login-entra-context-call", traceId, correlationId, username, body.appCode, null, authSw);
-                        var callResult = ax.CallStaticClassMethod(
-                            "INDCRMUtilityService",
-                            "loginEntraContext",
-                            con
-                        );
-                        LogAuthTrace(
-                            "entra-context",
-                            "after-login-entra-context-call",
-                            traceId,
-                            correlationId,
-                            username,
-                            body.appCode,
-                            "resultType=" + (callResult == null ? "null" : callResult.GetType().FullName),
-                            authSw);
-                        return callResult;
-                    },
+                LogAuthTrace("entra-context", "before-login-entra-context-call", traceId, correlationId, username, body.appCode, null, authSw);
+                object resultObj = ax.CallStaticClassMethod(
+                    "INDCRMUtilityService",
                     "loginEntraContext",
-                    "user=" + username + " appCode=" + (body?.appCode ?? string.Empty));
+                    con
+                );
+                LogAuthTrace(
+                    "entra-context",
+                    "after-login-entra-context-call",
+                    traceId,
+                    correlationId,
+                    username,
+                    body.appCode,
+                    "resultType=" + (resultObj == null ? "null" : resultObj.GetType().FullName),
+                    authSw);
 
                 var root = resultObj as IAxaptaContainer;
                 if (root == null)
@@ -681,64 +673,6 @@ namespace IND_CRM_API.Controllers.System
                 return value;
 
             return value.Substring(0, maxLength);
-        }
-
-        // Executes a small AX COM block under the configured timeout so auth endpoints fail fast on hangs.
-        private static T ExecuteAxWithTimeout<T>(Func<T> action, string operationName, string detail)
-        {
-            var timeoutSeconds = ReadAxCallTimeoutSeconds();
-            T result = default(T);
-            Exception error = null;
-            using (var done = new ManualResetEventSlim(false))
-            {
-                var worker = new Thread(() =>
-                {
-                    try
-                    {
-                        result = action();
-                    }
-                    catch (Exception ex)
-                    {
-                        error = ex;
-                    }
-                    finally
-                    {
-                        done.Set();
-                    }
-                });
-
-                worker.IsBackground = true;
-                TryCopyApartmentState(worker);
-                worker.Start();
-
-                if (!done.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
-                    throw new IND_AxCallTimeoutException(operationName, timeoutSeconds, detail);
-            }
-
-            if (error != null)
-                ExceptionDispatchInfo.Capture(error).Throw();
-
-            return result;
-        }
-
-        private static int ReadAxCallTimeoutSeconds()
-        {
-            var raw = AppSettingsHelper.GetSetting("Axapta.CallTimeoutSeconds", "AXAPTA_CALL_TIMEOUT_SECONDS");
-            return int.TryParse(raw, out var parsed) && parsed > 0 ? parsed : 90;
-        }
-
-        private static void TryCopyApartmentState(Thread worker)
-        {
-            try
-            {
-                var apartmentState = Thread.CurrentThread.GetApartmentState();
-                if (apartmentState == ApartmentState.STA || apartmentState == ApartmentState.MTA)
-                    worker.SetApartmentState(apartmentState);
-            }
-            catch
-            {
-                // Best effort only.
-            }
         }
 
         // Mapeo defensivo del contenedor AX a DTOs tipados.

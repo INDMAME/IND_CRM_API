@@ -1245,7 +1245,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"userId\": \"{{axUserId}}\",\n  \"createdByUserId\": \"{{axUserId}}\",\n  \"description\": \"Visita comercial desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentarios de prueba\",\n  \"antecedentes\": \"Antecedentes de prueba\",\n  \"conclusiones\": \"Conclusiones de prueba\"\n}"
+                                                                  "raw":  "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"contactMethod\": 0,\n  \"userId\": \"{{axUserId}}\",\n  \"createdByUserId\": \"{{axUserId}}\",\n  \"description\": \"Visita comercial desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentarios de prueba\",\n  \"antecedentes\": \"Antecedentes de prueba\",\n  \"conclusiones\": \"Conclusiones de prueba\"\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/activities/create",
@@ -1331,7 +1331,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"userId\": \"{{axUserId}}\",\n  \"description\": \"Actividad actualizada desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentario actualizado\",\n  \"antecedentes\": \"Antecedente actualizado\",\n  \"conclusiones\": \"Conclusion actualizada\"\n}"
+                                                                  "raw":  "{\n  \"accountNum\": \"AZ15-0002\",\n  \"visitType\": \"VISITA_COMERCIAL\",\n  \"contactMethod\": 1,\n  \"userId\": \"{{axUserId}}\",\n  \"description\": \"Actividad actualizada desde Postman\",\n  \"transDate\": \"2026-03-02\",\n  \"comentarios\": \"Comentario actualizado\",\n  \"antecedentes\": \"Antecedente actualizado\",\n  \"conclusiones\": \"Conclusion actualizada\"\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/activities/288079372",

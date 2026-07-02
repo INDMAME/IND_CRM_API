@@ -72,6 +72,8 @@ namespace IND_CRM_API.Contracts.Responses
 
         public int? ExpenseSheetStatus { get; set; }
 
+        public int? ReimbursableExpense { get; set; }
+
         public bool IncludeSubordinates { get; set; }
     }
 }

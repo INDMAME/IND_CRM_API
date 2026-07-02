@@ -8,8 +8,11 @@ namespace IND_CRM_API.Contracts.Responses
     /// </summary>
     public class ExpenseSheetDraftResponse : CreateExpenseSheetRequest
     {
+        /// <summary>Numeric AX enum value inferred for CRMGastoType; resolve labels through /api/crm/enums.</summary>
         public int? gastoType { get; set; }
         public string transDate { get; set; }
+        public string ticketDate { get; set; }
+        public string ticketTime { get; set; }
         public decimal? Confidence { get; set; }
         public List<string> Warnings { get; set; }
         public string RawCurrency { get; set; }
@@ -24,6 +27,7 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public bool Persisted { get; set; }
         public bool? ProcessedByAI { get; set; }
+        /// <summary>Numeric AX enum value persisted for CRMGastoType; resolve labels through /api/crm/enums.</summary>
         public int? GastoType { get; set; }
         public string FileId { get; set; }
         public string TicketRecId { get; set; }

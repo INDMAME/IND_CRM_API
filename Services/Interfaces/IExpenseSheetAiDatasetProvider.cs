@@ -35,6 +35,8 @@ namespace IND_CRM_API.Services.Interfaces
 
         public int? ExpenseSheetStatus { get; set; }
 
+        public int? ReimbursableExpense { get; set; }
+
         public bool IncludeSubordinates { get; set; }
     }
 }

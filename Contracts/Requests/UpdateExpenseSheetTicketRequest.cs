@@ -7,14 +7,30 @@ namespace IND_CRM_API.Contracts.Requests
     {
         public string description { get; set; }
         public string currencyCode { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for CRMGastoType. Resolve active options through /api/crm/enums.
+        /// </summary>
         public int? gastoType { get; set; }
         public decimal? totalAmount { get; set; }
+        public decimal? amountMST { get; set; }
+        public decimal? exchRate { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for the ticket status. Resolve active options through /api/crm/enums.
+        /// </summary>
         public int? status { get; set; }
 
         /// <summary>
         /// Ticket date in mandatory DDMMYYYY format.
         /// </summary>
         public string transDate { get; set; }
+        /// <summary>
+        /// Receipt date stored in INDTicketInfoTable. Accepts DDMMYYYY or DD.MM.YYYY.
+        /// </summary>
+        public string ticketDate { get; set; }
+        /// <summary>
+        /// Receipt time stored in INDTicketInfoTable. Accepts HH:mm or HH:mm:ss.
+        /// </summary>
+        public string ticketTime { get; set; }
         public string comentario { get; set; }
         public string urlFile { get; set; }
         public string fileName { get; set; }
@@ -26,5 +42,16 @@ namespace IND_CRM_API.Contracts.Requests
         /// Extension para generar fileName final en formato estandar.
         /// </summary>
         public string fileExtension { get; set; }
+    }
+
+    /// <summary>
+    /// Request used to adjust the header total by creating or recalculating one differential line.
+    /// </summary>
+    public class AdjustExpenseSheetTicketTotalAmountRequest
+    {
+        /// <summary>
+        /// Nuevo importe total de cabecera. La diferencia contra el total anterior puede ser positiva o negativa.
+        /// </summary>
+        public decimal? totalAmount { get; set; }
     }
 }
