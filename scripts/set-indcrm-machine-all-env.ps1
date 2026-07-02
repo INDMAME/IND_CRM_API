@@ -15,15 +15,16 @@ function Get-EnvironmentDefaults {
     switch ($EnvironmentName) {
         "DEV" {
             return @{
-                AspNetCoreEnvironment = "Production"
+                AspNetCoreEnvironment = "Development"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
                 BaseUrl = "https://dev.insertec.biz:2083/"
                 PublicHost = "dev.insertec.biz"
-                PublicIp = "212.142.143.182"
+                PublicIp = "192.168.0.148"
                 PublicPort = "2083"
                 WebBaseUrl = "https://dev.insertec.biz:2053/"
                 WebPublicHost = "dev.insertec.biz"
                 WebPublicPort = "2053"
+                InternalApiBaseUrl = "https://dev.service.insertec.eu:2087/"
                 PfxPath = "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
                 BlobSegment = "DEV"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -45,6 +46,7 @@ function Get-EnvironmentDefaults {
                 WebBaseUrl = "https://crm.insertec.biz:7702/"
                 WebPublicHost = "crm.insertec.biz"
                 WebPublicPort = "7702"
+                InternalApiBaseUrl = "https://prod.service.insertec.eu:2096/"
                 PfxPath = "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx"
                 BlobSegment = "PROD"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -189,6 +191,12 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_HOST" -Category "Web" -DefaultValue $defaults.WebPublicHost
         New-InteractiveSetting -Name "INDCRM_WEB_PUBLIC_PORT" -Category "Web" -DefaultValue $defaults.WebPublicPort
         New-InteractiveSetting -Name "IND_E2E_BASE_URL" -Category "Web" -DefaultValue $defaults.WebBaseUrl
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_BASE_URL" -Category "InternalApi" -DefaultValue $defaults.InternalApiBaseUrl -Required $false
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_CLIENT_ID" -Category "InternalApi" -Required $false
+        New-InteractiveSetting -Name "INDCRM_INTERNAL_API_CLIENT_SECRET" -Category "InternalApi" -Secret $true -Required $false
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_ENABLED" -Category "ExpenseNotifications" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_BEST_EFFORT" -Category "ExpenseNotifications" -DefaultValue "true"
+        New-InteractiveSetting -Name "INDCRM_EXPENSE_NOTIFY_TRANSITIONS" -Category "ExpenseNotifications" -DefaultValue "ExpenseSheetApprovalRequested,ExpenseSheetApproved"
         New-InteractiveSetting -Name "INDCRM_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.ServiceUser
         New-InteractiveSetting -Name "INDCRM_HTTP_SERVICE_USER" -Category "Ops" -DefaultValue $defaults.HttpServiceUser
 
@@ -481,6 +489,58 @@ function Set-MachineEnvSetting {
     Write-Host ("Set machine variable {0}" -f $Name)
 }
 
+function Get-ResolvedSettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$ResolvedSettings,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $setting = $ResolvedSettings | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if ($null -eq $setting) {
+        return $null
+    }
+
+    return $setting.Value
+}
+
+function Assert-ResolvedSettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [AllowNull()]
+        [string]$Actual,
+        [Parameter(Mandatory = $true)]
+        [string]$Expected
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Actual) -or
+        -not [string]::Equals($Actual.Trim(), $Expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ("{0} must be {1}. Current value: {2}" -f $Name, $Expected, $(if ([string]::IsNullOrWhiteSpace($Actual)) { "<empty>" } else { $Actual }))
+    }
+}
+
+function Assert-ResolvedEnvironmentSettings {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$ResolvedSettings,
+        [Parameter(Mandatory = $true)]
+        [string]$EnvironmentName
+    )
+
+    $expectedAspNetCoreEnvironment = if ($EnvironmentName -eq "DEV") { "Development" } else { "Production" }
+    $expectedAxConfigFileName = if ($EnvironmentName -eq "DEV") { "CRM_API_AxConfig_DEV.axc" } else { "CRM_API_AxConfig_PROD.axc" }
+
+    Assert-ResolvedSettingValue -Name "IND_ENV" -Actual (Get-ResolvedSettingValue -ResolvedSettings $ResolvedSettings -Name "IND_ENV") -Expected $EnvironmentName
+    Assert-ResolvedSettingValue -Name "ASPNETCORE_ENVIRONMENT" -Actual (Get-ResolvedSettingValue -ResolvedSettings $ResolvedSettings -Name "ASPNETCORE_ENVIRONMENT") -Expected $expectedAspNetCoreEnvironment
+    Assert-ResolvedSettingValue -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT" -Actual (Get-ResolvedSettingValue -ResolvedSettings $ResolvedSettings -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT") -Expected $EnvironmentName
+
+    $axConfigFile = Get-ResolvedSettingValue -ResolvedSettings $ResolvedSettings -Name "INDCRM_AX_CONFIG_FILE"
+    $actualAxConfigFileName = if ([string]::IsNullOrWhiteSpace($axConfigFile)) { $null } else { [System.IO.Path]::GetFileName($axConfigFile.Trim()) }
+    Assert-ResolvedSettingValue -Name "INDCRM_AX_CONFIG_FILE" -Actual $actualAxConfigFileName -Expected $expectedAxConfigFileName
+}
+
 $settings = Get-AllSettings -EnvironmentName $TargetEnvironment
 
 if (-not $Apply) {
@@ -509,6 +569,7 @@ Write-Host ("Applying full machine environment values for {0}" -f $TargetEnviron
 Write-Host "Press Enter to keep the current value or use the environment default when available."
 Write-Host ""
 
+$resolvedSettings = @()
 foreach ($setting in $settings) {
     $value = if ($setting.Secret) {
         Read-SecretValue -Setting $setting
@@ -517,7 +578,16 @@ foreach ($setting in $settings) {
         Read-PlainValue -Setting $setting
     }
 
-    Set-MachineEnvSetting -Name $setting.Name -Value $value
+    $resolvedSettings += [pscustomobject]@{
+        Name = $setting.Name
+        Value = $value
+    }
+}
+
+Assert-ResolvedEnvironmentSettings -ResolvedSettings $resolvedSettings -EnvironmentName $TargetEnvironment
+
+foreach ($resolvedSetting in $resolvedSettings) {
+    Set-MachineEnvSetting -Name $resolvedSetting.Name -Value $resolvedSetting.Value
 }
 
 Write-Host ""

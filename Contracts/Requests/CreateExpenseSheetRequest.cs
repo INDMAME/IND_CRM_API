@@ -27,7 +27,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string description { get; set; }
 
         /// <summary>
-        /// Header currency code. Required when mode = 0 or mode = 1.
+        /// Legacy default line currency. Header reimbursement currency is always the company local currency.
         /// </summary>
         public string currencyCode { get; set; }
 
@@ -35,14 +35,19 @@ namespace IND_CRM_API.Contracts.Requests
         public string projId { get; set; }
 
         /// <summary>
-        /// Expense sheet status enum value from AX.
+        /// Numeric AX enum value for INDExpenseSheetStatus. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
-        /// Exchange rate mode enum value from AX.
+        /// Numeric AX enum value for exchange rate mode. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? exchangeRateMode { get; set; }
+
+        /// <summary>
+        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
 
         /// <summary>
         /// Lines payload. Required with at least one line in mode = 0 and mode = 2. Must be null or empty in mode = 1.
@@ -59,6 +64,9 @@ namespace IND_CRM_API.Contracts.Requests
         /// Transaction date in mandatory DDMMYYYY format.
         /// </summary>
         [Required] public string transDate { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for the expense type. Resolve active options through /api/crm/enums.
+        /// </summary>
         [Required] public int? typeValue { get; set; }
         [Required] public string description { get; set; }
         public bool? internacional { get; set; }
@@ -72,5 +80,21 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for INDReimbursableExpenseLines. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.
+        /// </summary>
+        public int? reimbursableExpense { get; set; }
+        /// <summary>
+        /// Optional line currency code. When omitted, AX uses the legacy header currency input or the local currency.
+        /// </summary>
+        public string currencyCode { get; set; }
+        /// <summary>
+        /// Optional line amount in company currency.
+        /// </summary>
+        public decimal? amountMST { get; set; }
+        /// <summary>
+        /// Optional line exchange rate.
+        /// </summary>
+        public decimal? exchRate { get; set; }
     }
 }

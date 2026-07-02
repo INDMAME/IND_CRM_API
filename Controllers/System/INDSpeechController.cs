@@ -67,7 +67,7 @@ namespace IND_CRM_API.Controllers.System
             "application/octet-stream"
         };
 
-        private static readonly HashSet<int> AllowedTicketGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const int DefaultTicketGastoType = 8;
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IND_IAudioTranscriptionService _transcription;
@@ -584,7 +584,14 @@ namespace IND_CRM_API.Controllers.System
                         var qty = line.qty ?? 0m;
                         var price = line.price ?? 0m;
                         var description = (line.description ?? string.Empty).Trim();
-                        if (qty <= 0m || price <= 0m || string.IsNullOrWhiteSpace(description))
+                        var lineRequest = new ExpenseSheetTicketLineRequest
+                        {
+                            description = description,
+                            qty = qty,
+                            price = price
+                        };
+                        var lineTotal = CalculateTicketLineTotal(lineRequest);
+                        if (!IsValidTicketLineAmount(lineRequest) || string.IsNullOrWhiteSpace(description))
                             continue;
 
                         validLines.Add(new ExpenseSheetTicketLineRequest
@@ -592,7 +599,7 @@ namespace IND_CRM_API.Controllers.System
                             description = description,
                             qty = qty,
                             price = price,
-                            totalAmount = qty * price
+                            totalAmount = lineTotal
                         });
                     }
                 }
@@ -611,7 +618,17 @@ namespace IND_CRM_API.Controllers.System
 
                 var comentarioValue = string.IsNullOrWhiteSpace(draft.Merchant) ? "Ticket IA" : draft.Merchant.Trim();
                 var transDateValue = ResolveDraftTransDate(draft);
+                var ticketDateValue = ResolveDraftTicketDate(draft, transDateValue);
+                var ticketTimeValue = ResolveDraftTicketTime(draft);
                 var totalAmountValue = CalculateTicketLinesTotal(validLines);
+                if (totalAmountValue < 0m)
+                {
+                    errorMessage = "El total del ticket no puede ser negativo.";
+                    errorCode = IndErrorCodes.ValidationError;
+                    errorStatus = (HttpStatusCode)422;
+                    return false;
+                }
+
                 var gastoTypeValue = ResolveDraftGastoType(draft);
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
                 _logger.Log(
@@ -633,6 +650,9 @@ namespace IND_CRM_API.Controllers.System
                 headerCon.Append(gastoTypeValue);
                 headerCon.Append(ocrJson ?? string.Empty);
                 headerCon.Append(normalizedJson ?? string.Empty);
+                headerCon.Append(ticketDateValue);
+                if (ticketTimeValue.HasValue)
+                    headerCon.Append(ticketTimeValue.Value);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -705,6 +725,9 @@ namespace IND_CRM_API.Controllers.System
                     updateCon.Append(gastoTypeValue);
                     updateCon.Append(ocrJson ?? string.Empty);
                     updateCon.Append(normalizedJson ?? string.Empty);
+                    updateCon.Append(ticketDateValue);
+                    if (ticketTimeValue.HasValue)
+                        updateCon.Append(ticketTimeValue.Value);
 
                     var updateObj = ax.CallStaticClassMethod(
                         "INDCRMExpenseSheetService",
@@ -800,10 +823,35 @@ namespace IND_CRM_API.Controllers.System
             return DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         }
 
+        // Resolves the ticket document date, using transDate only as compatibility fallback.
+        private static string ResolveDraftTicketDate(ExpenseSheetDraftResponse draft, string fallbackTransDateYmd)
+        {
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.ticketDate))
+            {
+                if (TryNormalizeYmdDate(draft.ticketDate, out var normalizedTicketDate))
+                    return normalizedTicketDate;
+            }
+
+            return string.IsNullOrWhiteSpace(fallbackTransDateYmd)
+                ? DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture)
+                : fallbackTransDateYmd;
+        }
+
+        // Converts the AI ticket time to AX seconds since midnight when present.
+        private static int? ResolveDraftTicketTime(ExpenseSheetDraftResponse draft)
+        {
+            if (draft == null || string.IsNullOrWhiteSpace(draft.ticketTime))
+                return null;
+
+            return TryNormalizeTicketTimeToAxSeconds(draft.ticketTime, out var seconds)
+                ? (int?)seconds
+                : null;
+        }
+
         // Resolves ticket header gastoType from draft value or dominant line type.
         private static int ResolveDraftGastoType(ExpenseSheetDraftResponse draft)
         {
-            if (draft != null && draft.gastoType.HasValue && AllowedTicketGastoTypes.Contains(draft.gastoType.Value))
+            if (draft != null && draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value))
                 return draft.gastoType.Value;
 
             if (draft?.lines != null && draft.lines.Count > 0)
@@ -812,7 +860,7 @@ namespace IND_CRM_API.Controllers.System
                 for (int i = 0; i < draft.lines.Count; i++)
                 {
                     var typeValue = draft.lines[i]?.typeValue;
-                    if (!typeValue.HasValue || !AllowedTicketGastoTypes.Contains(typeValue.Value))
+                    if (!typeValue.HasValue || !IsValidAxEnumValue(typeValue.Value))
                         continue;
 
                     if (!firstByType.ContainsKey(typeValue.Value))
@@ -820,7 +868,7 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var dominant = draft.lines
-                    .Where(l => l != null && l.typeValue.HasValue && AllowedTicketGastoTypes.Contains(l.typeValue.Value))
+                    .Where(l => l != null && l.typeValue.HasValue && IsValidAxEnumValue(l.typeValue.Value))
                     .GroupBy(l => l.typeValue.Value)
                     .Select(g => new
                     {
@@ -836,7 +884,47 @@ namespace IND_CRM_API.Controllers.System
                     return dominant.TypeValue;
             }
 
-            return 8;
+            return DefaultTicketGastoType;
+        }
+
+        private static bool IsValidAxEnumValue(int value)
+        {
+            return value >= 0 && value <= 20;
+        }
+
+        // Calculates the signed line amount while preserving zero-quantity discounts.
+        private static decimal CalculateTicketLineTotal(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null)
+                return 0m;
+
+            if (line.totalAmount.HasValue)
+                return line.totalAmount.Value;
+
+            var qty = line.qty ?? 0m;
+            var price = line.price ?? 0m;
+            if (!line.price.HasValue)
+                return 0m;
+
+            if (qty == 0m && price < 0m)
+                return price;
+
+            return qty * price;
+        }
+
+        // Allows qty 0 only when the signed line total represents a discount.
+        private static bool IsValidTicketLineAmount(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null || !line.qty.HasValue || !line.price.HasValue)
+                return false;
+
+            if (line.qty.Value < 0m || line.price.Value == 0m)
+                return false;
+
+            if (line.qty.Value > 0m)
+                return true;
+
+            return CalculateTicketLineTotal(line) < 0m;
         }
 
         // Total de lineas de ticket.
@@ -851,16 +939,10 @@ namespace IND_CRM_API.Controllers.System
                 if (line == null)
                     continue;
 
-                var qty = line.qty ?? 0m;
-                var price = line.price ?? 0m;
-                if (qty <= 0m || price <= 0m)
+                if (!IsValidTicketLineAmount(line))
                     continue;
 
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
-
-                total += lineTotal;
+                total += CalculateTicketLineTotal(line);
             }
 
             return total;
@@ -919,6 +1001,36 @@ namespace IND_CRM_API.Controllers.System
 
             normalized = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             return true;
+        }
+
+        // Validates accepted ticket time formats and converts to AX seconds since midnight.
+        private static bool TryNormalizeTicketTimeToAxSeconds(string input, out int seconds)
+        {
+            seconds = 0;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawSeconds) &&
+                rawSeconds >= 0 &&
+                rawSeconds <= 86399)
+            {
+                seconds = rawSeconds;
+                return true;
+            }
+
+            if (!DateTime.TryParseExact(
+                    trimmed,
+                    new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var parsed))
+            {
+                return false;
+            }
+
+            seconds = (int)parsed.TimeOfDay.TotalSeconds;
+            return seconds >= 0 && seconds <= 86399;
         }
 
         // Lee header AX [success, message, extras...] y container de lineas opcional.

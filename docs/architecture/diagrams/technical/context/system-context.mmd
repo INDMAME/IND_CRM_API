@@ -1,0 +1,25 @@
+flowchart LR
+  User["CRM user"]
+  Browser["Browser<br/>Razor pages and React islands"]
+  WebApp["IND_CRM_APP<br/>ASP.NET Core MVC + Razor<br/>React TypeScript"]
+  Entra["Microsoft Entra ID<br/>OIDC login and claims"]
+  Api["IND_CRM_API<br/>Web API 2, .NET Framework 4.8<br/>OWIN self-host, x86"]
+  Guard["API guard layer<br/>JWT, company, AX user, context token"]
+  Bc["Business Connector COM<br/>request-scoped Axapta session"]
+  Ax["Axapta 3.0<br/>AOT CRM service classes"]
+  Blob["Azure Blob Storage<br/>ticket files and previews"]
+  Ocr["Azure Document Intelligence<br/>receipt extraction"]
+  Ai["OpenAI services<br/>speech, normalization, Q&A"]
+  Fx["Exchange rate providers<br/>currency rates"]
+
+  User --> Browser
+  Browser --> WebApp
+  WebApp --> Entra
+  WebApp --> Api
+  Api --> Guard
+  Guard --> Bc
+  Bc --> Ax
+  Api --> Blob
+  Api --> Ocr
+  Api --> Ai
+  Api --> Fx

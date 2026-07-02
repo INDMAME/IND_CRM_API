@@ -15,15 +15,16 @@ function Get-EnvironmentDefaults {
     switch ($EnvironmentName) {
         "DEV" {
             return @{
-                AspNetCoreEnvironment = "Production"
+                AspNetCoreEnvironment = "Development"
                 AxConfigFile = "C:\INDAxaptaConfigAPI\CRM_API_AxConfig_DEV.axc"
                 BaseUrl = "https://dev.insertec.biz:2083/"
                 PublicHost = "dev.insertec.biz"
-                PublicIp = "192.168.0.146"
+                PublicIp = "192.168.0.148"
                 PublicPort = "2083"
                 WebBaseUrl = "https://dev.insertec.biz:2053/"
                 WebPublicHost = "dev.insertec.biz"
                 WebPublicPort = "2053"
+                InternalApiBaseUrl = "https://dev.service.insertec.eu:2087/"
                 PfxPath = "C:\INDAxaptaConfigAPI\dev.insertec.biz\dominio.pfx"
                 BlobSegment = "DEV"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -45,6 +46,7 @@ function Get-EnvironmentDefaults {
                 WebBaseUrl = "https://crm.insertec.biz:7702/"
                 WebPublicHost = "crm.insertec.biz"
                 WebPublicPort = "7702"
+                InternalApiBaseUrl = "https://prod.service.insertec.eu:2096/"
                 PfxPath = "C:\INDAxaptaConfigAPI\crm.insertec.biz\dominio.pfx"
                 BlobSegment = "PROD"
                 ServiceUser = "INSERTEC\API_AXUSER"
@@ -150,6 +152,58 @@ function Set-MachineEnvSetting {
     Write-Host ("Set machine variable {0}" -f $Setting.Name)
 }
 
+function Get-SettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Settings,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $setting = $Settings | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if ($null -eq $setting) {
+        return $null
+    }
+
+    return $setting.Value
+}
+
+function Assert-SettingValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [AllowNull()]
+        [string]$Actual,
+        [Parameter(Mandatory = $true)]
+        [string]$Expected
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Actual) -or
+        -not [string]::Equals($Actual.Trim(), $Expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ("{0} must be {1}. Current value: {2}" -f $Name, $Expected, $(if ([string]::IsNullOrWhiteSpace($Actual)) { "<empty>" } else { $Actual }))
+    }
+}
+
+function Assert-EnvironmentSettings {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Settings,
+        [Parameter(Mandatory = $true)]
+        [string]$EnvironmentName
+    )
+
+    $expectedAspNetCoreEnvironment = if ($EnvironmentName -eq "DEV") { "Development" } else { "Production" }
+    $expectedAxConfigFileName = if ($EnvironmentName -eq "DEV") { "CRM_API_AxConfig_DEV.axc" } else { "CRM_API_AxConfig_PROD.axc" }
+
+    Assert-SettingValue -Name "IND_ENV" -Actual (Get-SettingValue -Settings $Settings -Name "IND_ENV") -Expected $EnvironmentName
+    Assert-SettingValue -Name "ASPNETCORE_ENVIRONMENT" -Actual (Get-SettingValue -Settings $Settings -Name "ASPNETCORE_ENVIRONMENT") -Expected $expectedAspNetCoreEnvironment
+    Assert-SettingValue -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT" -Actual (Get-SettingValue -Settings $Settings -Name "AZURE_BLOB_ENVIRONMENT_SEGMENT") -Expected $EnvironmentName
+
+    $axConfigFile = Get-SettingValue -Settings $Settings -Name "INDCRM_AX_CONFIG_FILE"
+    $actualAxConfigFileName = if ([string]::IsNullOrWhiteSpace($axConfigFile)) { $null } else { [System.IO.Path]::GetFileName($axConfigFile.Trim()) }
+    Assert-SettingValue -Name "INDCRM_AX_CONFIG_FILE" -Actual $actualAxConfigFileName -Expected $expectedAxConfigFileName
+}
+
 $defaults = Get-EnvironmentDefaults -EnvironmentName $TargetEnvironment
 
 $settings = @(
@@ -175,6 +229,12 @@ $settings = @(
     New-EnvSetting -Name "INDCRM_WEB_PUBLIC_HOST" -Value $defaults.WebPublicHost -Category "Web"
     New-EnvSetting -Name "INDCRM_WEB_PUBLIC_PORT" -Value $defaults.WebPublicPort -Category "Web"
     New-EnvSetting -Name "IND_E2E_BASE_URL" -Value $defaults.WebBaseUrl -Category "Web"
+    New-EnvSetting -Name "INDCRM_INTERNAL_API_BASE_URL" -Value $defaults.InternalApiBaseUrl -Category "InternalApi"
+    New-EnvSetting -Name "INDCRM_INTERNAL_API_CLIENT_ID" -Value "<SET_ME_INTERNAL_API_CLIENT_ID>" -Category "InternalApi"
+    New-EnvSetting -Name "INDCRM_INTERNAL_API_CLIENT_SECRET" -Value "<SET_ME_INTERNAL_API_CLIENT_SECRET>" -Secret $true -Category "InternalApi"
+    New-EnvSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_ENABLED" -Value "false" -Category "ExpenseNotifications"
+    New-EnvSetting -Name "INDCRM_EXPENSE_NOTIFICATIONS_BEST_EFFORT" -Value "true" -Category "ExpenseNotifications"
+    New-EnvSetting -Name "INDCRM_EXPENSE_NOTIFY_TRANSITIONS" -Value "ExpenseSheetApprovalRequested,ExpenseSheetApproved" -Category "ExpenseNotifications"
     New-EnvSetting -Name "CRM_TENANT_ID" -Value "<SET_ME_CRM_TENANT_ID>" -Category "WebAuth"
     New-EnvSetting -Name "CRM_CLIENT_ID" -Value "<SET_ME_CRM_CLIENT_ID>" -Category "WebAuth"
     New-EnvSetting -Name "CRM_CLIENT_SECRET" -Value "<SET_ME_CRM_CLIENT_SECRET>" -Secret $true -Category "WebAuth"
@@ -244,6 +304,8 @@ $settings = @(
     New-EnvSetting -Name "EXCHANGE_RATE_OPEN_ER_API_TIMEOUT_SECONDS" -Value "5" -Category "ExchangeRate"
     New-EnvSetting -Name "COMPANY_ACCESS_CACHE_MINUTES" -Value "20" -Category "Cache"
 )
+
+Assert-EnvironmentSettings -Settings $settings -EnvironmentName $TargetEnvironment
 
 Write-Host ""
 Write-Host ("IND CRM machine environment bootstrap for {0}" -f $TargetEnvironment)

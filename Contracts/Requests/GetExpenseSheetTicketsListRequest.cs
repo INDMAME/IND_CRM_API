@@ -9,6 +9,9 @@ namespace IND_CRM_API.Contracts.Requests
         public int pageSize { get; set; }
         public string searchKey { get; set; }
         public string filter { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for the ticket status. Resolve active options through /api/crm/enums.
+        /// </summary>
         public int? status { get; set; }
 
         /// <summary>
@@ -21,6 +24,9 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         public string createdDateTo { get; set; }
         public string currencyCode { get; set; }
+        /// <summary>
+        /// Numeric AX enum value for CRMGastoType. Resolve active options through /api/crm/enums.
+        /// </summary>
         public int? gastoType { get; set; }
         public bool? processedByAI { get; set; }
     }

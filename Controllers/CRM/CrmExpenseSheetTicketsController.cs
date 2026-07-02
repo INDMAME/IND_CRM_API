@@ -35,8 +35,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
-        private const int TicketStatusPending = 0;
-        private const int TicketStatusAssigned = 1;
+        private const int TicketStatusValueForLinking = 0;
         private const int MaxPageSize = 50;
         private const string BulkSelectionModeSelected = "selected";
         private const string BulkSelectionModeFiltered = "filtered";
@@ -45,7 +44,9 @@ namespace IND_CRM_API.Controllers.CRM
         private const string QuickCreateStageDraftExtracted = "draft-extracted";
         private const string QuickCreateStageTicketFinalized = "ticket-finalized";
         private const string QuickCreateStageSheetLinked = "sheet-linked";
-        private static readonly HashSet<int> AllowedGastoTypes = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const string TicketNegativeTotalValidationMessage = "El total del ticket no puede ser negativo.";
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
+        private const string TicketTotalAdjustmentDescription = "AJUSTE DE IMPORTE TOTAL";
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
@@ -192,6 +193,10 @@ namespace IND_CRM_API.Controllers.CRM
                 var normalizedTransDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
                     : NormalizeApiDateToAxYmd(body.transDate);
+                var normalizedTicketDate = modeValue == ModeAddLinesToExisting
+                    ? string.Empty
+                    : NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, normalizedTransDate);
+                var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
 
                 Logger.Log(
                     $"[API-IN] CreateExpenseSheetTicket mode={modeValue} existingFileId={body.existingFileId} lines={body.lines?.Count ?? 0} " +
@@ -216,16 +221,23 @@ namespace IND_CRM_API.Controllers.CRM
                     headerCon.Append(body.comentario?.Trim() ?? string.Empty);
                     headerCon.Append(body.urlFile?.Trim() ?? string.Empty);
                     headerCon.Append(provisionalFileName);
-                    var hasExtendedDocuRefJson = body.ocrJson != null || body.normalizedJson != null;
-                    if (body.gastoType.HasValue || hasExtendedDocuRefJson)
+                    var hasExtendedHeaderFields =
+                        body.gastoType.HasValue ||
+                        body.ocrJson != null ||
+                        body.normalizedJson != null ||
+                        !string.IsNullOrWhiteSpace(normalizedTicketDate) ||
+                        normalizedTicketTime.HasValue;
+                    if (hasExtendedHeaderFields)
                     {
                         headerCon.Append(body.gastoType ?? 0);
+                        headerCon.Append(body.ocrJson ?? string.Empty);
+                        headerCon.Append(body.normalizedJson ?? string.Empty);
 
-                        if (hasExtendedDocuRefJson)
-                        {
-                            headerCon.Append(body.ocrJson ?? string.Empty);
-                            headerCon.Append(body.normalizedJson ?? string.Empty);
-                        }
+                        if (!string.IsNullOrWhiteSpace(normalizedTicketDate) || normalizedTicketTime.HasValue)
+                            headerCon.Append(normalizedTicketDate ?? string.Empty);
+
+                        if (normalizedTicketTime.HasValue)
+                            headerCon.Append(normalizedTicketTime.Value);
                     }
                 }
                 rootCon.Append(headerCon);
@@ -239,8 +251,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.description?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        if (line.totalAmount.HasValue)
-                            lineCon.Append(line.totalAmount.Value);
+                        lineCon.Append(CalculateTicketLineTotal(line));
                         linesCon.Append(lineCon);
                     }
                 }
@@ -351,6 +362,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Servicio IA no disponible", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
         {
@@ -369,6 +381,8 @@ namespace IND_CRM_API.Controllers.CRM
             long? draftMs = null;
             long? finalizeMs = null;
             long? linkMs = null;
+            AxaptaComSession ax = null;
+            string username = null;
 
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
@@ -410,6 +424,36 @@ namespace IND_CRM_API.Controllers.CRM
                     $"hojaGastosId={ToLogValue(resultData.HojaGastosId)} message={ToLogValue(message)}");
             }
 
+            void RollbackQuickCreateIfNeeded(string failedStage, string reason)
+            {
+                resultData.FailedStage = failedStage;
+                if (string.IsNullOrWhiteSpace(resultData.FileId))
+                    return;
+
+                if (resultData.RollbackAttempted == true)
+                    return;
+
+                if (ax == null)
+                {
+                    resultData.RollbackAttempted = false;
+                    resultData.RollbackSucceeded = false;
+                    resultData.RollbackMessage = "Rollback no ejecutado: no hay sesion AX disponible.";
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=skipped failedStage={ToLogValue(failedStage)} reason=no-ax-session fileId={ToLogValue(resultData.FileId)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                    return;
+                }
+
+                TryRollbackQuickCreatePartialTicket(
+                    ax,
+                    company,
+                    axUserId,
+                    resultData,
+                    failedStage,
+                    reason,
+                    traceId);
+            }
+
             try
             {
                 var readFormStageTraceId = Guid.NewGuid().ToString("N");
@@ -435,7 +479,7 @@ namespace IND_CRM_API.Controllers.CRM
                     readFormMs,
                     $"multipart-ok fileName={quickCreateForm.OriginalFileName} imageBytes={quickCreateForm.ImageBytes?.Length ?? 0}");
 
-                var username = GetAuthenticatedUsername();
+                username = GetAuthenticatedUsername();
                 var createStepTraceId = Guid.NewGuid().ToString("N");
                 resultData.StepTraceIds.TicketCreate = createStepTraceId;
                 resultData.HojaGastosId = string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId)
@@ -465,7 +509,7 @@ namespace IND_CRM_API.Controllers.CRM
                     lines = null
                 };
 
-                var ax = _sessionManager.GetAxInstanceForUser(username);
+                ax = _sessionManager.GetAxInstanceForUser(username);
                 var createSw = DiagnosticsStopwatch.StartNew();
                 if (!TryCreateQuickCreateProvisionalTicket(
                         ax,
@@ -521,6 +565,7 @@ namespace IND_CRM_API.Controllers.CRM
                         "deny",
                         uploadMs,
                         uploadMessage);
+                    RollbackQuickCreateIfNeeded("file-upload", uploadMessage);
                     LogOut(uploadStatus);
                     return Content(uploadStatus, BuildQuickCreateErrorResponse(
                         traceId,
@@ -570,6 +615,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.Message);
                     LogOut((HttpStatusCode)429);
                     return BuildQuickCreateTooManyRequests(
                         traceId,
@@ -583,6 +629,7 @@ namespace IND_CRM_API.Controllers.CRM
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.UserMessage);
                     Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft external service={ex.ServiceName} summary={ex.ProviderSummary} traceId={traceId}");
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.UserMessage);
                     LogOut(ex.StatusCode);
                     return Content(ex.StatusCode, BuildQuickCreateErrorResponse(
                         traceId,
@@ -595,6 +642,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, "Timeout o cancelacion.");
+                    RollbackQuickCreateIfNeeded("draft-extract", "Timeout o cancelacion.");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -608,6 +656,7 @@ namespace IND_CRM_API.Controllers.CRM
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.Message);
                     Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft: {ex}");
+                    RollbackQuickCreateIfNeeded("draft-extract", ex.Message);
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -621,6 +670,7 @@ namespace IND_CRM_API.Controllers.CRM
 
                 if (draft == null)
                 {
+                    RollbackQuickCreateIfNeeded("draft-extract", "No se pudo generar el borrador desde el ticket.");
                     LogOut(HttpStatusCode.InternalServerError);
                     return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                         traceId,
@@ -666,6 +716,9 @@ namespace IND_CRM_API.Controllers.CRM
                                 "deny",
                                 finalizeMs,
                                 headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.");
+                            RollbackQuickCreateIfNeeded(
+                                "ticket-finalize-header-only",
+                                headerApplyError?.Message ?? "No se pudo guardar la cabecera extraida del ticket.");
                             LogOut(headerApplyStatus);
                             return Content(headerApplyStatus, BuildQuickCreateErrorResponse(
                                 traceId,
@@ -696,6 +749,7 @@ namespace IND_CRM_API.Controllers.CRM
                         });
                     }
 
+                    RollbackQuickCreateIfNeeded("draft-validation", "Error de validacion.");
                     LogOut((HttpStatusCode)422);
                     return Content((HttpStatusCode)422, BuildQuickCreateErrorResponse(
                         traceId,
@@ -726,6 +780,9 @@ namespace IND_CRM_API.Controllers.CRM
                         finalizeStepTraceId,
                         "deny",
                         finalizeMs,
+                        applyError?.Message ?? "No se pudo finalizar el ticket.");
+                    RollbackQuickCreateIfNeeded(
+                        "ticket-finalize",
                         applyError?.Message ?? "No se pudo finalizar el ticket.");
                     LogOut(applyStatus);
                     return Content(applyStatus, BuildQuickCreateErrorResponse(
@@ -760,6 +817,7 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         linkMs = linkSw.ElapsedMilliseconds;
                         LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkedTicketMessage);
+                        RollbackQuickCreateIfNeeded("sheet-link", linkedTicketMessage);
                         LogOut(linkedTicketStatus);
                         return Content(linkedTicketStatus, BuildQuickCreateErrorResponse(
                             traceId,
@@ -783,6 +841,7 @@ namespace IND_CRM_API.Controllers.CRM
                         linkMs = linkSw.ElapsedMilliseconds;
                         LogQuickCreateStage("sheet-link", linkStepTraceId, "deny", linkMs, linkMessage);
                         var linkError = BuildExpenseSheetActionError(linkMessage, traceId, out _);
+                        RollbackQuickCreateIfNeeded("sheet-link", linkMessage);
                         LogOut(linkStatus);
                         return Content(linkStatus, BuildQuickCreateErrorResponse(
                             traceId,
@@ -813,6 +872,7 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket: {ex}");
+                RollbackQuickCreateIfNeeded("quick-create-unhandled", ex.Message);
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, BuildQuickCreateErrorResponse(
                     traceId,
@@ -1365,7 +1425,7 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, null, out var linkMessage, out var linkStatus))
+                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, out var linkMessage, out var linkStatus))
                     {
                         if (IsTicketAlreadyLinkedMessage(linkMessage))
                         {
@@ -1464,7 +1524,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "status",
-                        Message = "status invalido. Valores permitidos: 0 Pending, 1 Assigned."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
@@ -1473,20 +1533,39 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "gastoType",
-                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
+                if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+                if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
+                if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+
+                if (body.amountMST.HasValue && body.amountMST.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "amountMST", Message = "amountMST no puede ser negativo." });
+
+                if (body.exchRate.HasValue && body.exchRate.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "exchRate", Message = "exchRate no puede ser negativo." });
+
                 if (string.IsNullOrWhiteSpace(body.description) &&
                     string.IsNullOrWhiteSpace(body.currencyCode) &&
                     !body.gastoType.HasValue &&
                     !body.totalAmount.HasValue &&
+                    !body.amountMST.HasValue &&
+                    !body.exchRate.HasValue &&
                     !body.status.HasValue &&
                     !body.processedByAI.HasValue &&
                     string.IsNullOrWhiteSpace(body.transDate) &&
+                    string.IsNullOrWhiteSpace(body.ticketDate) &&
+                    string.IsNullOrWhiteSpace(body.ticketTime) &&
                     body.comentario == null &&
                     body.urlFile == null &&
                     body.ocrJson == null &&
@@ -1575,7 +1654,12 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
-                var mergedStatus = body.status ?? existing.Status ?? TicketStatusPending;
+                var mergedAmountMST = body.amountMST ?? existing.AmountMST;
+                var mergedExchRate = body.exchRate ?? existing.ExchRate;
+                var hasManualTotalAmountChange =
+                    body.totalAmount.HasValue &&
+                    Math.Abs(body.totalAmount.Value - (existing.TotalAmount ?? 0m)) >= 0.005m;
+                var mergedStatus = body.status ?? existing.Status ?? TicketStatusValueForLinking;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
                 var mergedNormalizedJson = body.normalizedJson ?? existing.NormalizedJson;
@@ -1586,6 +1670,11 @@ namespace IND_CRM_API.Controllers.CRM
                     Logger.Log(
                         $"[WARN] UpdateExpenseSheetTicket transDate fallback-to-today raw={ToLogValue(mergedTransDateRaw)} fileId={ToLogValue(fileId)} traceId={traceId}");
                 }
+                var mergedTicketDateRaw = body.ticketDate ?? existing.TicketDate ?? existing.TransDate;
+                var mergedTicketDate = NormalizeTicketDateToAxYmdOrFallback(mergedTicketDateRaw, mergedTransDate);
+                var mergedTicketTime = !string.IsNullOrWhiteSpace(body.ticketTime)
+                    ? NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime)
+                    : NormalizeOptionalTicketTimeToAxSeconds(existing.TicketTime);
                 var mergedComentario = (body.comentario ?? existing.Comentario ?? string.Empty).Trim();
                 var mergedUrlFile = (body.urlFile ?? existing.UrlFile ?? string.Empty).Trim();
                 var mergedFileName = (body.fileName ?? string.Empty).Trim();
@@ -1617,16 +1706,36 @@ namespace IND_CRM_API.Controllers.CRM
                 updateCon.Append(mergedFileName);
                 updateCon.Append(mergedProcessedByAI ? 1 : 0);
 
-                var shouldAppendExtendedDocuRefJson = body.gastoType.HasValue || body.ocrJson != null || body.normalizedJson != null;
-                if (shouldAppendExtendedDocuRefJson)
+                var shouldAppendExtendedHeaderFields =
+                    body.gastoType.HasValue ||
+                    body.ocrJson != null ||
+                    body.normalizedJson != null ||
+                    !string.IsNullOrWhiteSpace(mergedTicketDate) ||
+                    mergedTicketTime.HasValue ||
+                    body.amountMST.HasValue ||
+                    body.exchRate.HasValue ||
+                    hasManualTotalAmountChange;
+                if (shouldAppendExtendedHeaderFields)
                 {
                     updateCon.Append(mergedGastoType);
+                    updateCon.Append(mergedOcrJson ?? string.Empty);
+                    updateCon.Append(mergedNormalizedJson ?? string.Empty);
 
-                    if (body.ocrJson != null || body.normalizedJson != null)
+                    var shouldAppendCurrencyAmounts = body.amountMST.HasValue || body.exchRate.HasValue || hasManualTotalAmountChange;
+                    if (!string.IsNullOrWhiteSpace(mergedTicketDate) || mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
+                        updateCon.Append(mergedTicketDate ?? string.Empty);
+
+                    if (mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
+                        updateCon.Append(mergedTicketTime ?? 0);
+
+                    if (shouldAppendCurrencyAmounts)
                     {
-                        updateCon.Append(mergedOcrJson ?? string.Empty);
-                        updateCon.Append(mergedNormalizedJson ?? string.Empty);
+                        updateCon.Append(body.amountMST.HasValue ? (object)body.amountMST.Value : "null");
+                        updateCon.Append(body.exchRate.HasValue ? (object)body.exchRate.Value : "null");
                     }
+
+                    if (hasManualTotalAmountChange)
+                        updateCon.Append(1);
                 }
 
                 var updateResultObj = ax.CallStaticClassMethod(
@@ -1659,6 +1768,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var responseProcessedByAI = updateExtras.Count > 1
                     ? (ToNullableBool(updateExtras[1]) ?? mergedProcessedByAI)
                     : mergedProcessedByAI;
+                var responseTotalAmount = updateExtras.Count > 2 ? ToDecimal(updateExtras[2]) ?? mergedTotalAmount : mergedTotalAmount;
+                var responseAmountMST = updateExtras.Count > 3 ? ToDecimal(updateExtras[3]) : mergedAmountMST;
+                var responseExchRate = updateExtras.Count > 4 ? ToDecimal(updateExtras[4]) : mergedExchRate;
 
                 LogOut(HttpStatusCode.OK);
                 return Ok(new IndApiResponse<object>
@@ -1672,7 +1784,10 @@ namespace IND_CRM_API.Controllers.CRM
                         FileId = responseFileId,
                         FileName = mergedFileName,
                         ProcessedByAI = responseProcessedByAI,
-                        GastoType = mergedGastoType
+                        GastoType = mergedGastoType,
+                        TotalAmount = responseTotalAmount,
+                        AmountMST = responseAmountMST,
+                        ExchRate = responseExchRate
                     },
                     TraceId = traceId
                 });
@@ -1680,6 +1795,130 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 Logger.Log($"[ERROR] UpdateExpenseSheetTicket: {ex}");
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+        }
+
+        /// <summary>
+        /// Adjusts the header total and creates or recalculates one differential AdjustmentAmount line.
+        /// </summary>
+        [HttpPost, Route("{fileId}/total-adjustment")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Importe total ajustado", typeof(IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult AdjustExpenseSheetTicketTotalAmount(string fileId, [FromBody] AdjustExpenseSheetTicketTotalAmountRequest body)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (string.IsNullOrWhiteSpace(fileId))
+                validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
+
+            if (body == null)
+            {
+                validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+            }
+            else
+            {
+                if (!body.totalAmount.HasValue)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount es obligatorio." });
+                else if (body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] AdjustExpenseSheetTicketTotalAmount {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                Logger.Log(
+                    $"[API-IN] AdjustExpenseSheetTicketTotalAmount fileId={fileId} totalAmount={body.totalAmount.Value.ToString(CultureInfo.InvariantCulture)} " +
+                    $"user={username} axUserId={axUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(axUserId);
+                con.Append(fileId.Trim());
+                con.Append(body.totalAmount.Value);
+
+                var resultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "adjustExpenseSheetTicketTotalAmount",
+                    con
+                );
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _))
+                {
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
+                if (!success)
+                {
+                    var error = BuildTicketActionError(message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, error);
+                }
+
+                var data = MapTicketTotalAdjustmentResult(extras, fileId.Trim(), body.totalAmount.Value);
+
+                LogOut(HttpStatusCode.OK);
+                return Ok(new IndApiResponse<ExpenseSheetTicketTotalAdjustmentResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message) ? "OK" : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] AdjustExpenseSheetTicketTotalAmount: {ex}");
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, new IndApiResponse<object>
                 {
@@ -1750,15 +1989,21 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
-                if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
-                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+                if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+                if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                    validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
+                if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                    validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
                 if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
                 {
                     validationErrors.Add(new IndValidationError
                     {
                         Field = "gastoType",
-                        Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                        Message = AxEnumNumericValidationMessage
                     });
                 }
 
@@ -1769,6 +2014,7 @@ namespace IND_CRM_API.Controllers.CRM
                 else
                 {
                     ValidateTicketLines(body.lines, validationErrors);
+                    ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", validationErrors);
                 }
             }
 
@@ -1808,9 +2054,9 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
                 var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
-                var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
-                    ? body.totalAmount.Value
-                    : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+                var mergedTotalAmount = body.lines != null && body.lines.Count > 0
+                    ? linesTotalAmount
+                    : (body.totalAmount ?? existing.TotalAmount ?? 0m);
                 var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
                 var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
                 if (usedTransDateFallback)
@@ -1887,6 +2133,10 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(mergedGastoType);
                 headerCon.Append(mergedOcrJson ?? string.Empty);
                 headerCon.Append(mergedNormalizedJson ?? string.Empty);
+                headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
+                var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
+                if (mergedTicketTime.HasValue)
+                    headerCon.Append(mergedTicketTime.Value);
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -1894,9 +2144,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     var qty = line.qty ?? 0m;
                     var price = line.price ?? 0m;
-                    var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                        ? line.totalAmount.Value
-                        : qty * price;
+                    var lineTotal = CalculateTicketLineTotal(line);
 
                     var lineCon = ax.CreateContainer();
                     lineCon.Append(line.description?.Trim() ?? string.Empty);
@@ -2510,7 +2758,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
                 if (body.totalAmount.HasValue)
-                    con.Append(body.totalAmount.Value);
+                    con.Append(CalculateTicketLineTotal(body));
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2634,7 +2882,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
                 if (body.totalAmount.HasValue)
-                    con.Append(body.totalAmount.Value);
+                    con.Append(CalculateTicketLineTotal(body));
 
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -3145,6 +3393,11 @@ namespace IND_CRM_API.Controllers.CRM
                 imageBytes.Length,
                 "Multipart leido correctamente.");
 
+            // Prefer the standard CRM ProjId field while keeping the previous projectId alias.
+            var projectId = (await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false) ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(projectId))
+                projectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim();
+
             return new QuickCreateFormReadResult
             {
                 Success = true,
@@ -3157,7 +3410,7 @@ namespace IND_CRM_API.Controllers.CRM
                 Description = await ReadFormFieldAsync(provider, "description").ConfigureAwait(false),
                 Comentario = await ReadFormFieldAsync(provider, "comentario").ConfigureAwait(false),
                 ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
-                ProjectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim()
+                ProjectId = projectId
             };
         }
 
@@ -3204,6 +3457,121 @@ namespace IND_CRM_API.Controllers.CRM
                 return "multipart-buffering";
 
             return "multipart-read-failed";
+        }
+
+        // Compensates a failed quick-create by deleting the uploaded blob and the provisional AX ticket.
+        private bool TryRollbackQuickCreatePartialTicket(
+            AxaptaComSession ax,
+            string company,
+            string axUserId,
+            ExpenseSheetTicketQuickCreateResultDto data,
+            string failedStage,
+            string reason,
+            string traceId)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.FileId))
+                return true;
+
+            data.RollbackAttempted = true;
+            data.RollbackSucceeded = false;
+
+            var fileId = data.FileId.Trim();
+            var rollbackMessages = new List<string>();
+            var blobDeleteFailed = false;
+            var blobDeleteAttempted = false;
+            var blobDeleted = false;
+            var ticketDeleted = false;
+
+            Logger.Log(
+                $"[QUICKCREATE-ROLLBACK] stage=begin failedStage={ToLogValue(failedStage)} completedStage={ToLogValue(data.CompletedStage)} fileId={ToLogValue(fileId)} reason={ToLogValue(reason)} traceId={traceId}");
+
+            var rollbackUrl = (data.UrlFile ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(rollbackUrl) &&
+                !rollbackUrl.StartsWith("pending://", StringComparison.OrdinalIgnoreCase))
+            {
+                blobDeleteAttempted = true;
+                try
+                {
+                    blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(rollbackUrl);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=allow deleted={blobDeleted} fileId={ToLogValue(fileId)} traceId={traceId}");
+                }
+                catch (Exception ex)
+                {
+                    blobDeleteFailed = true;
+                    rollbackMessages.Add("blob-delete failed");
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+            }
+            else
+            {
+                Logger.Log(
+                    $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=skipped fileId={ToLogValue(fileId)} traceId={traceId}");
+            }
+
+            try
+            {
+                var deleteCon = ax.CreateContainer();
+                deleteCon.Append(company);
+                deleteCon.Append(axUserId);
+                deleteCon.Append(fileId);
+
+                var deleteResultObj = ax.CallStaticClassMethod(
+                    "INDCRMExpenseSheetService",
+                    "deleteExpenseSheetTicket",
+                    deleteCon);
+
+                if (!TryReadHeader(deleteResultObj as IAxaptaContainer, out var deleteSuccess, out var deleteMessage, out _, out _))
+                {
+                    rollbackMessages.Add("ticket-delete response parse failed");
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny reason=parse-response fileId={ToLogValue(fileId)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+                else if (deleteSuccess)
+                {
+                    ticketDeleted = true;
+                    if (!string.IsNullOrWhiteSpace(deleteMessage))
+                        rollbackMessages.Add(deleteMessage);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=allow fileId={ToLogValue(fileId)} message={ToLogValue(deleteMessage)} traceId={traceId}");
+                }
+                else
+                {
+                    rollbackMessages.Add(string.IsNullOrWhiteSpace(deleteMessage)
+                        ? "ticket-delete failed"
+                        : deleteMessage);
+                    Logger.Log(
+                        $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny fileId={ToLogValue(fileId)} message={ToLogValue(deleteMessage)} traceId={traceId}",
+                        AxaptaSessionManager.LogLevel.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                rollbackMessages.Add("ticket-delete exception");
+                Logger.Log(
+                    $"[QUICKCREATE-ROLLBACK] stage=ticket-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+            }
+
+            var rollbackSucceeded = !blobDeleteFailed && ticketDeleted;
+            var blobSummary = blobDeleteAttempted
+                ? "blobDeleted=" + blobDeleted.ToString()
+                : "blobDeleted=skipped";
+            var ticketSummary = "ticketDeleted=" + ticketDeleted.ToString();
+            var detailMessage = string.Join("; ", rollbackMessages.Where(x => !string.IsNullOrWhiteSpace(x)));
+            data.RollbackSucceeded = rollbackSucceeded;
+            data.RollbackMessage = string.IsNullOrWhiteSpace(detailMessage)
+                ? blobSummary + "; " + ticketSummary
+                : blobSummary + "; " + ticketSummary + "; " + detailMessage;
+
+            Logger.Log(
+                $"[QUICKCREATE-ROLLBACK] stage=complete result={(rollbackSucceeded ? "allow" : "deny")} fileId={ToLogValue(fileId)} {blobSummary} {ticketSummary} failedStage={ToLogValue(failedStage)} traceId={traceId}",
+                rollbackSucceeded ? AxaptaSessionManager.LogLevel.Info : AxaptaSessionManager.LogLevel.Warning);
+
+            return rollbackSucceeded;
         }
 
         // Builds the standard quick-create error envelope, preserving partial data when available.
@@ -3296,7 +3664,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Creates the provisional ticket using the existing createExpenseSheetTicket AX contract.
         private bool TryCreateQuickCreateProvisionalTicket(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             CreateExpenseSheetTicketRequest body,
@@ -3317,6 +3685,10 @@ namespace IND_CRM_API.Controllers.CRM
                 var normalizedTransDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
                     : NormalizeApiDateToAxYmd(body?.transDate);
+                var normalizedTicketDate = modeValue == ModeAddLinesToExisting
+                    ? string.Empty
+                    : NormalizeTicketDateToAxYmdOrFallback(body?.ticketDate, normalizedTransDate);
+                var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body?.ticketTime);
 
                 var rootCon = ax.CreateContainer();
                 rootCon.Append(company);
@@ -3330,16 +3702,24 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(body?.comentario?.Trim() ?? string.Empty);
                 headerCon.Append(body?.urlFile?.Trim() ?? string.Empty);
                 headerCon.Append(provisionalFileName);
-                var hasExtendedDocuRefJson = body?.ocrJson != null || body?.normalizedJson != null;
-                if (body?.gastoType.HasValue == true || hasExtendedDocuRefJson)
+                var hasExtendedHeaderFields =
+                    body?.gastoType.HasValue == true ||
+                    body?.ocrJson != null ||
+                    body?.normalizedJson != null ||
+                    !string.IsNullOrWhiteSpace(normalizedTicketDate) ||
+                    normalizedTicketTime.HasValue;
+                if (hasExtendedHeaderFields)
                 {
                     headerCon.Append(body?.gastoType ?? 0);
 
-                    if (hasExtendedDocuRefJson)
-                    {
-                        headerCon.Append(body?.ocrJson ?? string.Empty);
-                        headerCon.Append(body?.normalizedJson ?? string.Empty);
-                    }
+                    headerCon.Append(body?.ocrJson ?? string.Empty);
+                    headerCon.Append(body?.normalizedJson ?? string.Empty);
+
+                    if (!string.IsNullOrWhiteSpace(normalizedTicketDate) || normalizedTicketTime.HasValue)
+                        headerCon.Append(normalizedTicketDate ?? string.Empty);
+
+                    if (normalizedTicketTime.HasValue)
+                        headerCon.Append(normalizedTicketTime.Value);
                 }
                 rootCon.Append(headerCon);
 
@@ -3352,8 +3732,7 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.description?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        if (line.totalAmount.HasValue)
-                            lineCon.Append(line.totalAmount.Value);
+                        lineCon.Append(CalculateTicketLineTotal(line));
                         linesCon.Append(lineCon);
                     }
                 }
@@ -3444,7 +3823,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Uploads the ticket image and syncs the final blob URL into AX.
         private bool TryUploadQuickCreateTicketFile(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             byte[] imageBytes,
@@ -3692,8 +4071,10 @@ namespace IND_CRM_API.Controllers.CRM
                 description = string.IsNullOrWhiteSpace(draft?.description) ? fallbackDescription : draft.description.Trim(),
                 currencyCode = currencyCode,
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
-                totalAmount = linesTotal > 0m ? (decimal?)linesTotal : null,
+                totalAmount = validLines.Count > 0 ? (decimal?)linesTotal : null,
                 transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
+                ticketDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
+                ticketTime = NormalizeQuickCreateDraftTicketTime(draft?.ticketTime),
                 comentario = comentario,
                 urlFile = (urlFile ?? string.Empty).Trim(),
                 fileName = (fileName ?? string.Empty).Trim(),
@@ -3702,7 +4083,7 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
-        // Normalizes IA draft lines into ticket line payloads with positive qty/price only.
+        // Normalizes IA draft lines into ticket line payloads allowing signed discount prices.
         private static List<ExpenseSheetTicketLineRequest> MapQuickCreateDraftLines(IEnumerable<CreateExpenseSheetLineRequest> lines)
         {
             var mapped = new List<ExpenseSheetTicketLineRequest>();
@@ -3717,7 +4098,14 @@ namespace IND_CRM_API.Controllers.CRM
                 var description = (line.description ?? string.Empty).Trim();
                 var qty = line.qty ?? 0m;
                 var price = line.price ?? 0m;
-                if (string.IsNullOrWhiteSpace(description) || qty <= 0m || price <= 0m)
+                var lineRequest = new ExpenseSheetTicketLineRequest
+                {
+                    description = description,
+                    qty = qty,
+                    price = price
+                };
+                var lineTotal = CalculateTicketLineTotal(lineRequest);
+                if (string.IsNullOrWhiteSpace(description) || !IsValidTicketLineAmount(lineRequest))
                     continue;
 
                 mapped.Add(new ExpenseSheetTicketLineRequest
@@ -3725,7 +4113,7 @@ namespace IND_CRM_API.Controllers.CRM
                     description = description,
                     qty = qty,
                     price = price,
-                    totalAmount = qty * price
+                    totalAmount = lineTotal
                 });
             }
 
@@ -3736,8 +4124,24 @@ namespace IND_CRM_API.Controllers.CRM
         private static QuickCreateTransDateResolution ResolveQuickCreateDraftTransDate(ExpenseSheetDraftResponse draft)
         {
             var rawCandidates = new List<string>();
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.ticketDate))
+                rawCandidates.Add(draft.ticketDate.Trim());
             if (draft != null && !string.IsNullOrWhiteSpace(draft.transDate))
                 rawCandidates.Add(draft.transDate.Trim());
+
+            foreach (var rawHeaderDate in rawCandidates)
+            {
+                if (TryNormalizeQuickCreateDraftDateToAxYmd(rawHeaderDate, out var normalized, out var reason))
+                {
+                    return new QuickCreateTransDateResolution
+                    {
+                        RawTransDate = rawHeaderDate,
+                        NormalizedTransDateYmd = normalized,
+                        UsedFallback = false,
+                        Reason = reason
+                    };
+                }
+            }
 
             if (draft?.lines != null)
             {
@@ -3771,6 +4175,15 @@ namespace IND_CRM_API.Controllers.CRM
                     ? "fallback-today-no-date-detected"
                     : "fallback-today-invalid-or-unreasonable-date"
             };
+        }
+
+        // Keeps quick-create ticketTime in the public CRUD format when the AI extracted it.
+        private static string NormalizeQuickCreateDraftTicketTime(string input)
+        {
+            if (!TryNormalizeTicketTimeToAxSeconds(input, out var seconds))
+                return null;
+
+            return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
         }
 
         // Tries exact formats first and then OCR-safe compact heuristics for quick-create dates.
@@ -4033,15 +4446,21 @@ namespace IND_CRM_API.Controllers.CRM
             if (!string.IsNullOrWhiteSpace(body.transDate) && !TryNormalizeApiDateToAxYmd(body.transDate, out _))
                 validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser DDMMYYYY o DD.MM.YYYY." });
 
-            if (body.totalAmount.HasValue && body.totalAmount.Value <= 0m)
-                validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = "totalAmount debe ser mayor que cero cuando se envia." });
+            if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                validationErrors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+            if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                validationErrors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
+
+            if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
             if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
             {
                 validationErrors.Add(new IndValidationError
                 {
                     Field = "gastoType",
-                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    Message = AxEnumNumericValidationMessage
                 });
             }
 
@@ -4052,6 +4471,7 @@ namespace IND_CRM_API.Controllers.CRM
             else
             {
                 ValidateTicketLines(body.lines, validationErrors);
+                ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", validationErrors);
             }
         }
 
@@ -4067,7 +4487,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Updates ticket header and DocuRef data without replacing lines when quick-create cannot build valid detail rows.
         private bool TryApplyQuickCreateDraftHeaderCore(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -4087,7 +4507,7 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedDescription = (body?.description ?? existing.Description ?? string.Empty).Trim();
             var mergedCurrencyCode = (body?.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
             var mergedGastoType = body?.gastoType ?? existing.GastoType ?? 0;
-            var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value > 0m
+            var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value >= 0m
                 ? body.totalAmount.Value
                 : (existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body?.transDate) ? existing.TransDate : body.transDate;
@@ -4103,9 +4523,9 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedFileName = (body?.fileName ?? string.Empty).Trim();
             var mergedOcrJson = body?.ocrJson ?? existing.OcrJson;
             var mergedNormalizedJson = body?.normalizedJson ?? existing.NormalizedJson;
-            var statusValue = existing.Status ?? TicketStatusPending;
+            var statusValue = existing.Status ?? TicketStatusValueForLinking;
             if (!IsValidTicketStatus(statusValue))
-                statusValue = TicketStatusPending;
+                statusValue = TicketStatusValueForLinking;
 
             if (string.IsNullOrWhiteSpace(mergedFileName))
             {
@@ -4206,7 +4626,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Executes the existing AX atomic replace flow used by UpdateExpenseSheetTicketFromIA.
         private bool TryApplyTicketFromIACore(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -4227,9 +4647,9 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
             var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
             var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
-            var mergedTotalAmount = body.totalAmount.HasValue && body.totalAmount.Value > 0m
-                ? body.totalAmount.Value
-                : (linesTotalAmount > 0m ? linesTotalAmount : (existing.TotalAmount ?? 0m));
+            var mergedTotalAmount = body.lines != null && body.lines.Count > 0
+                ? linesTotalAmount
+                : (body.totalAmount ?? existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
             var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
                 ? normalizedTransDate
@@ -4302,6 +4722,10 @@ namespace IND_CRM_API.Controllers.CRM
             headerCon.Append(mergedGastoType);
             headerCon.Append(mergedOcrJson ?? string.Empty);
             headerCon.Append(mergedNormalizedJson ?? string.Empty);
+            headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
+            var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
+            if (mergedTicketTime.HasValue)
+                headerCon.Append(mergedTicketTime.Value);
             rootCon.Append(headerCon);
 
             var linesCon = ax.CreateContainer();
@@ -4309,9 +4733,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var qty = line.qty ?? 0m;
                 var price = line.price ?? 0m;
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
+                var lineTotal = CalculateTicketLineTotal(line);
 
                 var lineCon = ax.CreateContainer();
                 lineCon.Append(line.description?.Trim() ?? string.Empty);
@@ -4389,9 +4811,18 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError
                 {
                     Field = "gastoType",
-                    Message = "gastoType invalido. Valores permitidos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 14."
+                    Message = AxEnumNumericValidationMessage
                 });
             }
+
+            if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
+                errors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
+
+            if (!string.IsNullOrWhiteSpace(body.ticketDate) && !TryNormalizeApiDateToAxYmd(body.ticketDate, out _))
+                errors.Add(new IndValidationError { Field = "ticketDate", Message = "ticketDate debe ser DDMMYYYY o DD.MM.YYYY." });
+
+            if (!string.IsNullOrWhiteSpace(body.ticketTime) && !TryNormalizeTicketTimeToAxSeconds(body.ticketTime, out _))
+                errors.Add(new IndValidationError { Field = "ticketTime", Message = "ticketTime debe ser HH:mm o HH:mm:ss." });
 
             if (mode == ModeCreateHeaderAndLines || mode == ModeCreateHeaderOnly)
             {
@@ -4417,6 +4848,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }
 
                 ValidateTicketLines(body.lines, errors);
+                ValidateTicketTotalIsNotNegative(body.lines, "totalAmount", errors);
                 return;
             }
 
@@ -4460,11 +4892,15 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(body.description))
                 errors.Add(new IndValidationError { Field = prefix + ".description", Message = "description es obligatorio." });
 
-            if (!body.qty.HasValue || body.qty.Value <= 0)
-                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty debe ser mayor que cero." });
+            if (!body.qty.HasValue)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty es obligatorio." });
+            else if (body.qty.Value < 0m)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty no puede ser negativo." });
+            else if (body.qty.Value == 0m && CalculateTicketLineTotal(body) >= 0m)
+                errors.Add(new IndValidationError { Field = prefix + ".qty", Message = "qty cero solo se permite en descuentos con total negativo." });
 
-            if (!body.price.HasValue || body.price.Value <= 0)
-                errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price debe ser mayor que cero." });
+            if (!body.price.HasValue || body.price.Value == 0)
+                errors.Add(new IndValidationError { Field = prefix + ".price", Message = "price no puede ser cero." });
         }
 
         // Builds the IA update request and applies compatibility mapping when body comes wrapped in { Success, Message, Data }.
@@ -4526,6 +4962,8 @@ namespace IND_CRM_API.Controllers.CRM
                 request.gastoType.HasValue ||
                 request.totalAmount.HasValue ||
                 !string.IsNullOrWhiteSpace(request.transDate) ||
+                !string.IsNullOrWhiteSpace(request.ticketDate) ||
+                !string.IsNullOrWhiteSpace(request.ticketTime) ||
                 !string.IsNullOrWhiteSpace(request.comentario) ||
                 !string.IsNullOrWhiteSpace(request.urlFile) ||
                 !string.IsNullOrWhiteSpace(request.fileName) ||
@@ -4551,6 +4989,8 @@ namespace IND_CRM_API.Controllers.CRM
                 gastoType = GetJsonIntIgnoreCase(dataObject, "gastoType"),
                 totalAmount = GetJsonDecimalIgnoreCase(dataObject, "totalAmount"),
                 transDate = GetJsonStringIgnoreCase(dataObject, "transDate"),
+                ticketDate = GetJsonStringIgnoreCase(dataObject, "ticketDate"),
+                ticketTime = GetJsonStringIgnoreCase(dataObject, "ticketTime"),
                 comentario = GetJsonStringIgnoreCase(dataObject, "comentario"),
                 urlFile = GetJsonStringIgnoreCase(dataObject, "urlFile"),
                 fileName = GetJsonStringIgnoreCase(dataObject, "fileName"),
@@ -4563,6 +5003,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(mapped.comentario))
                 mapped.comentario = GetJsonStringIgnoreCase(dataObject, "merchant");
 
+            if (string.IsNullOrWhiteSpace(mapped.ticketDate))
+                mapped.ticketDate = mapped.transDate;
+
             var linesArray = GetJsonArrayIgnoreCase(dataObject, "lines");
             if (linesArray != null)
             {
@@ -4571,7 +5014,8 @@ namespace IND_CRM_API.Controllers.CRM
                     var lineDescription = GetJsonStringIgnoreCase(lineToken, "description");
                     var lineQty = GetJsonDecimalIgnoreCase(lineToken, "qty");
                     var linePrice = GetJsonDecimalIgnoreCase(lineToken, "price");
-                    var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount");
+                    var lineTotal = GetJsonDecimalIgnoreCase(lineToken, "totalAmount")
+                                    ?? GetJsonDecimalIgnoreCase(lineToken, "lineTotal");
                     if (!lineTotal.HasValue && lineQty.HasValue && linePrice.HasValue)
                         lineTotal = lineQty.Value * linePrice.Value;
 
@@ -4598,7 +5042,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (!mapped.gastoType.HasValue)
                 mapped.gastoType = ResolveGastoTypeFromDraftLines(linesArray);
 
-            if (!mapped.totalAmount.HasValue || mapped.totalAmount.Value <= 0m)
+            if (!mapped.totalAmount.HasValue)
                 mapped.totalAmount = CalculateTicketLinesTotal(mapped.lines);
 
             var ticketCreation = GetJsonObjectIgnoreCase(dataObject, "ticketCreation");
@@ -4632,7 +5076,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var lineObject = linesArray[i] as JObject;
                 var typeValue = GetJsonIntIgnoreCase(lineObject, "typeValue");
-                if (!typeValue.HasValue || !AllowedGastoTypes.Contains(typeValue.Value))
+                if (!typeValue.HasValue || !IsValidGastoType(typeValue.Value))
                     continue;
 
                 if (!firstByType.ContainsKey(typeValue.Value))
@@ -4642,7 +5086,7 @@ namespace IND_CRM_API.Controllers.CRM
             var dominant = linesArray
                 .OfType<JObject>()
                 .Select(line => GetJsonIntIgnoreCase(line, "typeValue"))
-                .Where(typeValue => typeValue.HasValue && AllowedGastoTypes.Contains(typeValue.Value))
+                .Where(typeValue => typeValue.HasValue && IsValidGastoType(typeValue.Value))
                 .GroupBy(typeValue => typeValue.Value)
                 .Select(group => new
                 {
@@ -4751,6 +5195,21 @@ namespace IND_CRM_API.Controllers.CRM
             return TryNormalizeApiDateToAxYmd(input, out var normalized) ? normalized : string.Empty;
         }
 
+        // Normalizes optional ticketDate, falling back to an already normalized AX date.
+        private static string NormalizeTicketDateToAxYmdOrFallback(string input, string fallbackYmd)
+        {
+            if (TryNormalizeApiDateToAxYmd(input, out var normalized))
+                return normalized;
+
+            return fallbackYmd ?? string.Empty;
+        }
+
+        // Converts optional ticketTime to AX time seconds.
+        private static int? NormalizeOptionalTicketTimeToAxSeconds(string input)
+        {
+            return TryNormalizeTicketTimeToAxSeconds(input, out var seconds) ? (int?)seconds : null;
+        }
+
         // Validates accepted API date formats (DDMMYYYY / DD.MM.YYYY) and converts to AX format.
         private static bool TryNormalizeApiDateToAxYmd(string input, out string normalized)
         {
@@ -4804,6 +5263,36 @@ namespace IND_CRM_API.Controllers.CRM
                 out normalized);
         }
 
+        // Validates accepted ticket time formats and converts to AX seconds since midnight.
+        private static bool TryNormalizeTicketTimeToAxSeconds(string input, out int seconds)
+        {
+            seconds = 0;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            var trimmed = input.Trim();
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawSeconds) &&
+                rawSeconds >= 0 &&
+                rawSeconds <= 86399)
+            {
+                seconds = rawSeconds;
+                return true;
+            }
+
+            if (!DateTime.TryParseExact(
+                    trimmed,
+                    new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var parsed))
+            {
+                return false;
+            }
+
+            seconds = (int)parsed.TimeOfDay.TotalSeconds;
+            return seconds >= 0 && seconds <= 86399;
+        }
+
         // Uses today when an internal compatibility date cannot be normalized safely for AX.
         private static string NormalizeAnyDateToAxYmdOrToday(string input, out bool usedFallback)
         {
@@ -4850,16 +5339,41 @@ namespace IND_CRM_API.Controllers.CRM
             return date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }
 
-        // Validates allowed values for AX INDTicketStatus.
-        private static bool IsValidTicketStatus(int status)
+        // Formats optional ticketDate values without inventing a date when AX returns blank/default.
+        private static string FormatOptionalApiDate(string input)
         {
-            return status == TicketStatusPending || status == TicketStatusAssigned;
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            var trimmed = input.Trim();
+            if (trimmed == "0")
+                return string.Empty;
+
+            return TryNormalizeAnyDateToAxYmd(trimmed, out var normalizedYmd) &&
+                   DateTime.TryParseExact(normalizedYmd, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                ? date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture)
+                : string.Empty;
         }
 
-        // Validates allowed values for AX CRMGastoType.
+        // Formats AX time seconds or API time strings as HH:mm:ss.
+        private static string FormatApiTime(string input)
+        {
+            if (!TryNormalizeTicketTimeToAxSeconds(input, out var seconds))
+                return string.Empty;
+
+            return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+        }
+
+        // Validates generic AX enum values; active options are configured through /api/crm/enums.
+        private static bool IsValidTicketStatus(int status)
+        {
+            return status >= 0;
+        }
+
+        // Validates generic AX enum values; active options are configured through /api/crm/enums.
         private static bool IsValidGastoType(int gastoType)
         {
-            return AllowedGastoTypes.Contains(gastoType);
+            return gastoType >= 0 && gastoType <= 20;
         }
 
         // Standard enum normalization: invalid values are treated as null.
@@ -4921,7 +5435,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Finalizes filename by calling AX updateExpenseSheetTicket with full stable values.
         private bool TryFinalizeTicketFileName(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -4954,7 +5468,7 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(descripcion);
                 con.Append(currencyCode);
                 con.Append(totalAmount);
-                con.Append(TicketStatusPending);
+                con.Append(TicketStatusValueForLinking);
                 con.Append(transDate);
                 con.Append(comentario);
                 con.Append(urlFile);
@@ -4990,7 +5504,49 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Calculates total amount from ticket lines using qty*price or provided totalAmount.
+        // Validates that signed ticket line totals do not produce a negative ticket total.
+        private static void ValidateTicketTotalIsNotNegative(List<ExpenseSheetTicketLineRequest> lines, string field, List<IndValidationError> errors)
+        {
+            if (CalculateTicketLinesTotal(lines) < 0m)
+                errors.Add(new IndValidationError { Field = field, Message = TicketNegativeTotalValidationMessage });
+        }
+
+        // Calculates one ticket line amount using a signed totalAmount when provided.
+        private static decimal CalculateTicketLineTotal(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null)
+                return 0m;
+
+            if (line.totalAmount.HasValue)
+                return line.totalAmount.Value;
+
+            var qty = line.qty ?? 0m;
+            var price = line.price ?? 0m;
+            if (!line.price.HasValue)
+                return 0m;
+
+            if (qty == 0m && price < 0m)
+                return price;
+
+            return qty * price;
+        }
+
+        // Allows qty=0 only when the signed ticket line total represents a discount.
+        private static bool IsValidTicketLineAmount(ExpenseSheetTicketLineRequest line)
+        {
+            if (line == null || !line.qty.HasValue || !line.price.HasValue)
+                return false;
+
+            if (line.qty.Value < 0m || line.price.Value == 0m)
+                return false;
+
+            if (line.qty.Value > 0m)
+                return true;
+
+            return CalculateTicketLineTotal(line) < 0m;
+        }
+
+        // Calculates total amount from ticket lines using signed qty*price or provided totalAmount.
         private static decimal CalculateTicketLinesTotal(List<ExpenseSheetTicketLineRequest> lines)
         {
             if (lines == null || lines.Count == 0)
@@ -4999,19 +5555,7 @@ namespace IND_CRM_API.Controllers.CRM
             decimal total = 0m;
             foreach (var line in lines)
             {
-                if (line == null)
-                    continue;
-
-                var qty = line.qty ?? 0m;
-                var price = line.price ?? 0m;
-                if (qty <= 0m || price <= 0m)
-                    continue;
-
-                var lineTotal = line.totalAmount.HasValue && line.totalAmount.Value > 0m
-                    ? line.totalAmount.Value
-                    : qty * price;
-
-                total += lineTotal;
+                total += CalculateTicketLineTotal(line);
             }
 
             return total;
@@ -5019,7 +5563,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Obtiene detalle de ticket desde AX validando ownership por company y axUserId.
         private bool TryGetTicketDetailFromAx(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5083,7 +5627,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Actualiza cabecera ticket en AX reutilizando valores existentes y sobreescribiendo URL/nombre de archivo.
         private bool TryUpdateTicketFromExisting(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5120,9 +5664,9 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[WARN] TryUpdateTicketFromExisting transDate fallback-to-today raw={ToLogValue(existing.TransDate)} fileId={ToLogValue(fileId)} traceId={traceId}");
             }
 
-            var statusValue = existing.Status ?? TicketStatusPending;
+            var statusValue = existing.Status ?? TicketStatusValueForLinking;
             if (!IsValidTicketStatus(statusValue))
-                statusValue = TicketStatusPending;
+                statusValue = TicketStatusValueForLinking;
 
             var con = ax.CreateContainer();
             con.Append(company);
@@ -5250,6 +5794,7 @@ namespace IND_CRM_API.Controllers.CRM
         private sealed class ExpenseSheetTargetInfo
         {
             public string Voucher { get; set; }
+            public string ProjId { get; set; }
         }
 
         // Validates shared paging and date filters for ticket list endpoints.
@@ -5448,7 +5993,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Resolves the final candidate ids for bulk-link, either from explicit selection or from server-side filters.
         private static bool TryResolveBulkLinkTicketIds(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             BulkLinkExpenseSheetTicketsRequest body,
@@ -5515,7 +6060,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Builds the AX container used by the ticket-link list query.
         private static IAxaptaContainer BuildExpenseSheetTicketLinkListRequestContainer(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string searchKeyValue,
@@ -5557,8 +6102,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (ticketDetail == null)
                 return "Ticket data is empty.";
 
-            if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusPending)
-                return "Ticket is not pending.";
+            if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusValueForLinking)
+                return "Ticket is not available for linking.";
 
             if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
                 return "Ticket total amount must be greater than zero.";
@@ -5598,7 +6143,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Loads target expense sheet data needed by the bulk-link flow.
         private static bool TryGetExpenseSheetTargetInfo(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string expenseSheetId,
@@ -5650,7 +6195,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Loads a ticket detail from AX for bulk-link validation.
         private static bool TryGetExpenseSheetTicketDetail(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string fileId,
@@ -5702,7 +6247,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         // Links one ticket into an existing expense sheet by reusing AX createExpenseSheet mode 2.
         private static bool TryLinkTicketToExpenseSheet(
-            Axapta2Class ax,
+            AxaptaComSession ax,
             string company,
             string axUserId,
             string expenseSheetId,
@@ -5719,6 +6264,15 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 status = (HttpStatusCode)422;
                 message = "Ticket data is empty.";
+                return false;
+            }
+
+            if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
+            {
+                status = (HttpStatusCode)422;
+                message = ticketDetail.TotalAmount.HasValue && ticketDetail.TotalAmount.Value < 0m
+                    ? TicketNegativeTotalValidationMessage
+                    : "Ticket total amount must be greater than zero.";
                 return false;
             }
 
@@ -5897,6 +6451,33 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
+        //MMS - Mapea el resultado AX del ajuste atomico de importe total de ticket - 2026.06.26
+        private static ExpenseSheetTicketTotalAdjustmentResultDto MapTicketTotalAdjustmentResult(
+            List<string> extras,
+            string fallbackFileId,
+            decimal fallbackNewTotalAmount)
+        {
+            var previousTotalAmount = extras != null && extras.Count > 1 ? ToDecimal(extras[1]) : null;
+            var newTotalAmount = extras != null && extras.Count > 2 ? ToDecimal(extras[2]) : fallbackNewTotalAmount;
+            var differenceAmount = extras != null && extras.Count > 3 ? ToDecimal(extras[3]) : null;
+
+            return new ExpenseSheetTicketTotalAdjustmentResultDto
+            {
+                FileId = extras != null && extras.Count > 0 && !string.IsNullOrWhiteSpace(extras[0])
+                    ? extras[0]
+                    : fallbackFileId,
+                PreviousTotalAmount = previousTotalAmount,
+                NewTotalAmount = newTotalAmount,
+                DifferenceAmount = differenceAmount,
+                AdjustmentLineRecId = extras != null && extras.Count > 4 ? extras[4] : string.Empty,
+                AdjustmentLineCreated = extras != null && extras.Count > 5 ? ToNullableBool(extras[5]) : null,
+                AdjustmentDescription = extras != null && extras.Count > 6 && !string.IsNullOrWhiteSpace(extras[6])
+                    ? extras[6]
+                    : TicketTotalAdjustmentDescription,
+                AdjustmentAmount = extras != null && extras.Count > 7 ? ToNullableBool(extras[7]) : true
+            };
+        }
+
         // Maps ticket header extras + lines to typed detail DTO.
         private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
@@ -5911,6 +6492,8 @@ namespace IND_CRM_API.Controllers.CRM
                 GastoType = headerExtras.Count > 11 ? NormalizeGastoTypeOrNull(ToInt(headerExtras[11])) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
                 TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
+                AmountMST = headerExtras.Count > 19 ? ToDecimal(headerExtras[19]) : null,
+                ExchRate = headerExtras.Count > 20 ? ToDecimal(headerExtras[20]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
                 TransDate = headerExtras.Count > 6 ? FormatApiDate(headerExtras[6]) : string.Empty,
                 Comentario = headerExtras.Count > 7 ? headerExtras[7] : string.Empty,
@@ -5920,6 +6503,10 @@ namespace IND_CRM_API.Controllers.CRM
                 HojaGastosIdDisplay = headerExtras.Count > 12 ? headerExtras[12] : string.Empty,
                 OcrJson = headerExtras.Count > 13 ? headerExtras[13] : null,
                 NormalizedJson = headerExtras.Count > 14 ? headerExtras[14] : null,
+                TicketDate = headerExtras.Count > 15 ? FormatOptionalApiDate(headerExtras[15]) : string.Empty,
+                TicketTime = headerExtras.Count > 16 ? FormatApiTime(headerExtras[16]) : string.Empty,
+                OwnerAxUserId = headerExtras.Count > 17 ? headerExtras[17] : string.Empty,
+                OwnerName = headerExtras.Count > 18 ? headerExtras[18] : string.Empty,
                 Lines = new List<ExpenseSheetTicketLineDto>()
             };
 
@@ -5938,7 +6525,10 @@ namespace IND_CRM_API.Controllers.CRM
                     Price = SafeDecimal(row, 4),
                     TotalAmount = SafeDecimal(row, 5),
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
-                    CreatedByUserId = AxContainerReadHelper.SafeString(row, 7)
+                    CreatedByUserId = AxContainerReadHelper.SafeString(row, 7),
+                    AdjustmentAmount = AxContainerReadHelper.SafeLength(row) >= 8
+                        ? ToNullableBool(AxContainerReadHelper.SafeString(row, 8))
+                        : null
                 });
             }
 
@@ -5987,7 +6577,19 @@ namespace IND_CRM_API.Controllers.CRM
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7)),
                     FileName = AxContainerReadHelper.SafeString(row, 8),
-                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9)))
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9))),
+                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 10
+                        ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 10))
+                        : string.Empty,
+                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 11
+                        ? FormatApiTime(AxContainerReadHelper.SafeString(row, 11))
+                        : string.Empty,
+                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 12
+                        ? AxContainerReadHelper.SafeString(row, 12)
+                        : string.Empty,
+                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 13
+                        ? AxContainerReadHelper.SafeString(row, 13)
+                        : string.Empty
                 });
             }
 
@@ -6059,7 +6661,19 @@ namespace IND_CRM_API.Controllers.CRM
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 5)),
                     FileName = AxContainerReadHelper.SafeString(row, 6),
                     ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 7)),
-                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8)))
+                    GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8))),
+                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 9
+                        ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 9))
+                        : string.Empty,
+                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 10
+                        ? FormatApiTime(AxContainerReadHelper.SafeString(row, 10))
+                        : string.Empty,
+                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 11
+                        ? AxContainerReadHelper.SafeString(row, 11)
+                        : string.Empty,
+                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 12
+                        ? AxContainerReadHelper.SafeString(row, 12)
+                        : string.Empty
                 });
             }
 
@@ -6077,6 +6691,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras.Count >= 12)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                targetInfo.ProjId = headerExtras[9];
                 return targetInfo;
             }
 
@@ -6085,10 +6700,12 @@ namespace IND_CRM_API.Controllers.CRM
                 if (IsLikelyDateValue(headerExtras[10]))
                 {
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                    targetInfo.ProjId = headerExtras[8];
                 }
                 else
                 {
                     targetInfo.Voucher = NormalizeVoucher(headerExtras[10]);
+                    targetInfo.ProjId = headerExtras[9];
                 }
 
                 return targetInfo;
@@ -6097,18 +6714,21 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras.Count == 10)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[9]);
+                targetInfo.ProjId = headerExtras[8];
                 return targetInfo;
             }
 
             if (headerExtras.Count == 8)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[7]);
+                targetInfo.ProjId = headerExtras[6];
                 return targetInfo;
             }
 
             if (headerExtras.Count == 7)
             {
                 targetInfo.Voucher = NormalizeVoucher(headerExtras[6]);
+                targetInfo.ProjId = headerExtras[5];
                 return targetInfo;
             }
 
@@ -6139,37 +6759,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
-
-            var lowered = trimmed.ToLowerInvariant();
-            switch (lowered)
-            {
-                case "pending":
-                case "pendiente":
-                    return 0;
-                case "assigned":
-                case "asignado":
-                    return 1;
-                case "none":
-                    return 0;
-                case "peaje":
-                    return 1;
-                case "parking":
-                    return 2;
-                case "km":
-                    return 3;
-                case "desayuno":
-                    return 4;
-                case "comida":
-                    return 5;
-                case "cena":
-                    return 6;
-                case "hotel":
-                    return 7;
-                case "varios":
-                    return 8;
-                case "taxi":
-                    return 14;
-            }
 
             if (decimal.TryParse(NormalizeDecimalValue(trimmed), NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalParsed))
             {

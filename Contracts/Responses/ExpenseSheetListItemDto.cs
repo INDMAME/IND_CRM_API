@@ -7,7 +7,7 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public string HojaGastosId { get; set; }
         public string Description { get; set; }
-        // Expense sheet status enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExpenseSheetStatus { get; set; }
         public string UserId { get; set; }
         // Display name resolved from CRM user/person tables.
@@ -18,9 +18,16 @@ namespace IND_CRM_API.Contracts.Responses
         // Total amount in company currency returned by AX.
         public decimal? TotalAmount { get; set; }
         public decimal? ExchRate { get; set; }
-        // Exchange rate mode enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExchangeRateMode { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
+        public int? ReimbursableExpense { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX row.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional owner returned at the end of the AX row.</summary>
+        public string OwnerName { get; set; }
     }
 }

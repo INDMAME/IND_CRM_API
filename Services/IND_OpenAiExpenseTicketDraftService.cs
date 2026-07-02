@@ -33,9 +33,9 @@ namespace IND_CRM_API.Services
         private const string DefaultQuickCreateImageDetail = "auto";
         private const string DefaultServiceTier = "priority";
         private const string DefaultProfileTag = "ticket-fast-v1";
-        private const string DefaultPromptCacheKey = "expense-ticket-draft-v2";
+        private const string DefaultPromptCacheKey = "expense-ticket-draft-v4";
         private const string DefaultQuickCreateProfileTag = "ticket-quick-create-v1";
-        private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v1";
+        private const string DefaultQuickCreatePromptCacheKey = "expense-ticket-quick-create-v3";
         private const string DefaultReasoningEffort = "low";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseTicketModel";
@@ -54,7 +54,8 @@ namespace IND_CRM_API.Services
         private const string ReasoningEffortSettingKey = "OpenAI:ExpenseTicketReasoningEffort";
         private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
-        private static readonly HashSet<int> AllowedTypeValues = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 14 };
+        private const int DefaultGastoTypeValue = 8;
+        private static readonly string CrmGastoTypePromptCatalog = BuildCrmGastoTypePromptCatalog();
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
         private static readonly int MaxImageBytes = ReadMaxImageBytesFromConfig();
         private static readonly HttpClient _httpClient = CreateHttpClient();
@@ -128,7 +129,6 @@ namespace IND_CRM_API.Services
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var attempt = 0;
             var retriedWithoutServiceTier = false;
-            var retriedWithExpandedOutput = false;
 
             try
             {
@@ -196,10 +196,8 @@ namespace IND_CRM_API.Services
                     if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
                     {
                         var metrics = TryReadResponseMetrics(responseBody);
-                        if (!retriedWithExpandedOutput &&
-                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        if (TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
                         {
-                            retriedWithExpandedOutput = true;
                             _logger.Log(
                                 $"[OPENAI] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
                                 AxaptaSessionManager.LogLevel.Warning);
@@ -297,7 +295,6 @@ namespace IND_CRM_API.Services
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var attempt = 0;
             var retriedWithoutServiceTier = false;
-            var retriedWithExpandedOutput = false;
 
             try
             {
@@ -365,10 +362,8 @@ namespace IND_CRM_API.Services
                     if (string.Equals(incompleteReason, "max_output_tokens", StringComparison.OrdinalIgnoreCase))
                     {
                         var metrics = TryReadResponseMetrics(responseBody);
-                        if (!retriedWithExpandedOutput &&
-                            TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
+                        if (TryBuildExpandedRequestOptions(requestOptions, out var expandedRequestOptions))
                         {
-                            retriedWithExpandedOutput = true;
                             _logger.Log(
                                 $"[OPENAI-NORMALIZE] Draft truncado por max_output_tokens attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} outputTokens={ToMetricText(metrics.OutputTokens)} retryMaxOut={expandedRequestOptions.MaxOutputTokens}",
                                 AxaptaSessionManager.LogLevel.Warning);
@@ -932,6 +927,7 @@ namespace IND_CRM_API.Services
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
+- El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fecha, hora y moneda.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
@@ -944,32 +940,25 @@ namespace IND_CRM_API.Services
             return @"Eres un extractor para construir un borrador de hoja de gasto y lineas con este esquema.
 - Responde SOLO JSON valido, sin markdown.
 - Si un campo no se puede inferir con confianza, usa null y agrega advertencia en warnings.
-- tipo de lineas:
-  - 0: None
-  - 1: Peaje
-  - 2: Parking
-  - 3: Km
-  - 4: Desayuno
-  - 5: Comida
-  - 6: Cena
-  - 7: Hotel
-  - 8: Varios (solo si no coincide con ningun tipo anterior)
-- 14: Taxi
-- typeValue debe ser siempre un entero exacto de la lista anterior (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
-- gastoType en cabecera debe usar el mismo enum fijo (0, 1, 2, 3, 4, 5, 6, 7, 8, 14).
+- typeValue debe ser siempre el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
+- gastoType en cabecera debe usar el mismo enum AX numerico.
 - gastoType representa el tipo de gasto dominante del ticket.
 - Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
-- qty debe ser la cantidad real de la linea (admite decimales) y nunca 0.
+- qty debe ser la cantidad real de la linea (admite decimales). Solo puede ser 0 cuando la linea sea un descuento con lineTotal negativo visible.
 - price debe representar el precio unitario de la linea.
 - lineTotal debe representar el total bruto de la linea (qty * price) cuando sea visible.
-- Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty.
+- Si la linea es un descuento, devuelve price y lineTotal en negativo.
+- Si detectas lineTotal y qty > 0, asegura coherencia: price = lineTotal / qty, incluso cuando lineTotal sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON (ej: 3.50, 12.00).
 - No uses separadores de miles en los numeros del JSON.
 - Si solo detectas un importe unico para la linea y qty=1, usa ese valor como price y lineTotal.
-- transDate en formato DD.MM.YYYY o null si no se puede inferir.
+- ticketDate debe ser la fecha impresa del ticket, en formato DD.MM.YYYY o null si no se puede inferir.
+- ticketTime debe ser la hora impresa del ticket, en formato HH:mm:ss de 24 horas o null si no se puede inferir.
+- transDate de cabecera debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
+- transDate de cada linea debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
 - fileId debe ser null en todas las lineas (se asigna despues en backend).
-- qty por defecto 1 salvo evidencia fuerte.
+- qty por defecto 1 salvo evidencia fuerte; no uses 0 salvo descuentos visibles con total negativo.
 - internacional true solo si hay evidencia de gasto internacional.
 - description corto y util para una linea de gasto.
 - currencyCode en cabecera debe ir siempre en ISO-4217 uppercase si existe evidencia suficiente.
@@ -978,7 +967,7 @@ namespace IND_CRM_API.Services
 - metadata adicionales: confidence, warnings, rawCurrency y merchant.
 - Deduce la moneda y el valor monetario de la imagen, sin soporte externo.
 - Si un campo es imposible de inferir con calidad suficiente, usa null y deja una advertencia clara."
-                .Trim();
+                .Trim() + Environment.NewLine + CrmGastoTypePromptCatalog;
         }
 
         private static string BuildQuickCreatePayloadPromptText()
@@ -988,25 +977,18 @@ namespace IND_CRM_API.Services
 - Devuelve SIEMPRE TODAS las lineas detectables del ticket.
 - No agrupes, no resumas y no combines multiples conceptos en una sola linea si aparecen separados en el ticket.
 - Si el ticket muestra varios conceptos o importes parciales, devuelve una linea por cada concepto visible.
-- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando este enum fijo:
-  - 0: None
-  - 1: Peaje
-  - 2: Parking
-  - 3: Km
-  - 4: Desayuno
-  - 5: Comida
-  - 6: Cena
-  - 7: Hotel
-  - 8: Varios
-  - 14: Taxi
+- gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
-- transDate debe ir solo en cabecera, en formato DD.MM.YYYY o null.
+- ticketDate debe ser la fecha impresa del ticket y debe ir solo en cabecera, en formato DD.MM.YYYY o null.
+- ticketTime debe ser la hora impresa del ticket y debe ir solo en cabecera, en formato HH:mm:ss de 24 horas o null.
+- transDate debe ir solo en cabecera y debe usar la misma fecha que ticketDate por compatibilidad; si no hay fecha confiable, usa null.
 - No incluyas transDate por linea.
 - Incluye lineTotal solo si aporta algo distinto de qty*price.
 - Si qty no es visible, usa 1.
-- price debe ser el precio unitario.
-- Si hay total visible de linea y qty > 0, asegura coherencia: price = total / qty.
+- Solo usa qty 0 cuando la linea sea un descuento con lineTotal negativo visible.
+- price debe ser el precio unitario, negativo cuando la linea sea un descuento.
+- Si hay total visible de linea y qty > 0, asegura coherencia: price = total / qty, incluso cuando total sea negativo.
 - Usa punto como separador decimal en todos los numeros del JSON.
 - No uses separadores de miles en los numeros del JSON.
 - description debe ser corta y util para la linea.
@@ -1017,7 +999,13 @@ namespace IND_CRM_API.Services
 - Omite warnings y merchant salvo que aporten valor real.
 - Si un campo de cabecera no se puede inferir con confianza, usa null.
 - No inventes lineas ni importes. Pero si una linea es visible, debes devolverla."
-                .Trim();
+                .Trim() + Environment.NewLine + CrmGastoTypePromptCatalog;
+        }
+
+        //MMS - Centraliza la tabla fija de CRMGastoType para prompts IA - 2026.06.26
+        private static string BuildCrmGastoTypePromptCatalog()
+        {
+            return "- Tabla fija CRMGastoType: 0 None, 1 Peajes, 2 Parking, 3 Km, 4 Desayuno, 5 Comida, 6 Cena, 7 Hotel, 8 Varios, 9 Montaje Nacional, 10 Montaje Nacional Festivo, 11 Montaje Internacional, 12 Montaje Internacional Festivo, 13 Dia de Viaje Nacional, 14 Taxi, 15 Dia Viaje Festivo Nacional, 16 Dia Viaje Internacional, 17 Dia Viaje Festivo Internacional, 18 Horas, 19 Propinas, 20 Gasolina.";
         }
 
         private static string NormalizeReasoningEffort(string configuredValue)
@@ -1206,6 +1194,8 @@ namespace IND_CRM_API.Services
             var currencyCode = CurrencyCodeHelper.ResolveToIso4217(
                 root["currencyCode"]?.ToString(),
                 rawCurrency);
+            var normalizedTicketDate = NormalizeDate(root["ticketDate"]?.ToString());
+            var normalizedTransDate = NormalizeDate(root["transDate"]?.ToString()) ?? normalizedTicketDate;
 
             var request = new ExpenseSheetDraftResponse
             {
@@ -1214,7 +1204,9 @@ namespace IND_CRM_API.Services
                 description = NormalizeText(root["description"]?.ToString(), "Ticket"),
                 currencyCode = string.IsNullOrWhiteSpace(currencyCode) ? null : currencyCode,
                 gastoType = NormalizeTypeValue(root["gastoType"]),
-                transDate = NormalizeDate(root["transDate"]?.ToString()),
+                transDate = normalizedTransDate,
+                ticketDate = normalizedTicketDate ?? normalizedTransDate,
+                ticketTime = NormalizeTime(root["ticketTime"]?.ToString()),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -1297,9 +1289,9 @@ namespace IND_CRM_API.Services
             if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
                 return;
 
-            var fallbackTypeValue = draft.gastoType.HasValue && AllowedTypeValues.Contains(draft.gastoType.Value)
+            var fallbackTypeValue = draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value)
                 ? draft.gastoType.Value
-                : 8;
+                : DefaultGastoTypeValue;
             var fallbackDescription = ResolveSingleLineFallbackDescription(draft, fallbackTypeValue);
             var fallbackTransDate = draft.lines?.FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?.transDate;
             if (string.IsNullOrWhiteSpace(fallbackTransDate))
@@ -1399,17 +1391,24 @@ namespace IND_CRM_API.Services
                 warnings = EnsureWarnings(warnings, "No se pudo inferir fecha de gasto. Se deja transDate null.");
 
             var qtyParsed = TryParseDecimal(lineToken["qty"]);
-            var qty = qtyParsed.HasValue && qtyParsed.Value > 0m ? qtyParsed.Value : 1m;
-            if (!qtyParsed.HasValue || qtyParsed.Value <= 0m)
-                warnings = EnsureWarnings(warnings, "No se detecto qty valida. Se uso qty=1 por defecto.");
-
             var price = TryParseDecimal(lineToken["price"]);
             var lineTotal = TryParseDecimal(lineToken["lineTotal"]);
+            var isZeroQtyDiscount = qtyParsed.HasValue &&
+                                    qtyParsed.Value == 0m &&
+                                    ((lineTotal.HasValue && lineTotal.Value < 0m) || (price.HasValue && price.Value < 0m));
+            var qty = qtyParsed.HasValue && (qtyParsed.Value > 0m || isZeroQtyDiscount) ? qtyParsed.Value : 1m;
+            if (!qtyParsed.HasValue || qtyParsed.Value < 0m || (qtyParsed.Value == 0m && !isZeroQtyDiscount))
+                warnings = EnsureWarnings(warnings, "No se detecto qty valida. Se uso qty=1 por defecto.");
 
             if (!price.HasValue && lineTotal.HasValue && qty > 0m)
             {
                 price = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
                 warnings = EnsureWarnings(warnings, "price se calculo desde lineTotal/qty por falta de precio unitario explicito.");
+            }
+            else if (!price.HasValue && lineTotal.HasValue && qty == 0m && lineTotal.Value < 0m)
+            {
+                price = lineTotal.Value;
+                warnings = EnsureWarnings(warnings, "price se calculo desde lineTotal para descuento con qty=0.");
             }
 
             if (price.HasValue && lineTotal.HasValue && qty > 0m)
@@ -1418,12 +1417,17 @@ namespace IND_CRM_API.Services
                 if (Math.Abs(expectedTotal - lineTotal.Value) > 0.02m)
                 {
                     var normalizedPrice = Math.Round(lineTotal.Value / qty, 4, MidpointRounding.AwayFromZero);
-                    if (normalizedPrice > 0m)
+                    if (normalizedPrice != 0m)
                     {
                         price = normalizedPrice;
                         warnings = EnsureWarnings(warnings, "Se ajusto price para mantener coherencia con qty y lineTotal detectado.");
                     }
                 }
+            }
+            else if (price.HasValue && lineTotal.HasValue && qty == 0m && lineTotal.Value < 0m && price.Value != lineTotal.Value)
+            {
+                price = lineTotal.Value;
+                warnings = EnsureWarnings(warnings, "Se ajusto price para mantener descuento con qty=0 y lineTotal negativo.");
             }
 
             if (!price.HasValue)
@@ -1450,7 +1454,7 @@ namespace IND_CRM_API.Services
             return new CreateExpenseSheetLineRequest
             {
                 transDate = null,
-                typeValue = 8,
+                typeValue = DefaultGastoTypeValue,
                 description = NormalizeText(request?.description, "Ticket"),
                 internacional = false,
                 fileId = null,
@@ -1475,25 +1479,7 @@ namespace IND_CRM_API.Services
             if (!string.IsNullOrWhiteSpace(merchant))
                 return merchant;
 
-            switch (fallbackTypeValue)
-            {
-                case 1:
-                    return "Peaje";
-                case 2:
-                    return "Parking";
-                case 4:
-                    return "Desayuno";
-                case 5:
-                    return "Comida";
-                case 6:
-                    return "Cena";
-                case 7:
-                    return "Hotel";
-                case 14:
-                    return "Taxi";
-                default:
-                    return "Ticket";
-            }
+            return "Gasto " + fallbackTypeValue.ToString(CultureInfo.InvariantCulture);
         }
 
         private static List<string> ExtractWarnings(JToken warningsToken)
@@ -1680,20 +1666,20 @@ namespace IND_CRM_API.Services
         private static int? NormalizeTypeValue(JToken token)
         {
             if (token == null)
-                return 8;
+                return DefaultGastoTypeValue;
 
             int parsed;
             if (token.Type == JTokenType.Integer)
                 parsed = token.Value<int>();
             else if (!int.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed))
-                return 8;
+                return DefaultGastoTypeValue;
 
-            return AllowedTypeValues.Contains(parsed) ? parsed : 8;
+            return IsValidAxEnumValue(parsed) ? parsed : DefaultGastoTypeValue;
         }
 
         private static int ResolveDraftGastoType(int? headerGastoType, List<CreateExpenseSheetLineRequest> lines)
         {
-            if (headerGastoType.HasValue && AllowedTypeValues.Contains(headerGastoType.Value))
+            if (headerGastoType.HasValue && IsValidAxEnumValue(headerGastoType.Value))
                 return headerGastoType.Value;
 
             if (lines != null && lines.Count > 0)
@@ -1702,7 +1688,7 @@ namespace IND_CRM_API.Services
                 for (int i = 0; i < lines.Count; i++)
                 {
                     var typeValue = lines[i]?.typeValue;
-                    if (!typeValue.HasValue || !AllowedTypeValues.Contains(typeValue.Value))
+                    if (!typeValue.HasValue || !IsValidAxEnumValue(typeValue.Value))
                         continue;
 
                     if (!firstByType.ContainsKey(typeValue.Value))
@@ -1710,7 +1696,7 @@ namespace IND_CRM_API.Services
                 }
 
                 var dominant = lines
-                    .Where(l => l != null && l.typeValue.HasValue && AllowedTypeValues.Contains(l.typeValue.Value))
+                    .Where(l => l != null && l.typeValue.HasValue && IsValidAxEnumValue(l.typeValue.Value))
                     .GroupBy(l => l.typeValue.Value)
                     .Select(g => new
                     {
@@ -1726,7 +1712,12 @@ namespace IND_CRM_API.Services
                     return dominant.TypeValue;
             }
 
-            return 8;
+            return DefaultGastoTypeValue;
+        }
+
+        private static bool IsValidAxEnumValue(int value)
+        {
+            return value >= 0 && value <= 20;
         }
 
         private static bool TryParseBool(JToken token, bool defaultValue = false)
@@ -1766,6 +1757,22 @@ namespace IND_CRM_API.Services
             return null;
         }
 
+        private static string NormalizeTime(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var trimmed = value.Trim();
+            var acceptedFormats = new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss" };
+            if (DateTime.TryParseExact(trimmed, acceptedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                return parsed.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+            if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var any))
+                return any.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+            return null;
+        }
+
         private static string BuildNormalizedDraftJson(ExpenseSheetDraftResponse draft, ExpenseTicketDraftProfile profile)
         {
             var root = profile == ExpenseTicketDraftProfile.QuickCreate
@@ -1787,6 +1794,9 @@ namespace IND_CRM_API.Services
                 ["description"] = ToNullableStringToken(draft?.description),
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
                 ["gastoType"] = ToNullableIntToken(draft?.gastoType),
+                ["transDate"] = ToNullableStringToken(draft?.transDate),
+                ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
+                ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
                 ["exchRate"] = ToNullableDecimalToken(draft?.exchRate),
                 ["projId"] = ToNullableStringToken(draft?.projId),
                 ["confidence"] = ToNullableDecimalToken(draft?.Confidence),
@@ -1807,8 +1817,10 @@ namespace IND_CRM_API.Services
             {
                 ["description"] = ToNullableStringToken(draft?.description),
                 ["currencyCode"] = ToNullableStringToken(draft?.currencyCode),
-                ["gastoType"] = new JValue(draft?.gastoType ?? 8),
+                ["gastoType"] = new JValue(draft?.gastoType ?? DefaultGastoTypeValue),
                 ["transDate"] = ToNullableStringToken(draft?.transDate),
+                ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
+                ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
                 ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
                 ["merchant"] = ToNullableStringToken(draft?.Merchant),
                 ["lines"] = lines
@@ -1817,29 +1829,43 @@ namespace IND_CRM_API.Services
 
         private static JObject BuildFullNormalizedLineToken(CreateExpenseSheetLineRequest line)
         {
-            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
             var price = line?.price;
-            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+            var qty = line?.qty.HasValue == true &&
+                      (line.qty.Value > 0m || (line.qty.Value == 0m && price.HasValue && price.Value < 0m))
+                ? line.qty.Value
+                : 1m;
+            var lineTotal = price.HasValue
+                ? (qty == 0m && price.Value < 0m ? price.Value : qty * price.Value)
+                : (decimal?)null;
 
             return new JObject
             {
                 ["transDate"] = ToNullableStringToken(line?.transDate),
-                ["typeValue"] = new JValue(line?.typeValue ?? 8),
+                ["typeValue"] = new JValue(line?.typeValue ?? DefaultGastoTypeValue),
                 ["description"] = ToNullableStringToken(line?.description),
                 ["internacional"] = line?.internacional.HasValue == true ? new JValue(line.internacional.Value) : JValue.CreateNull(),
                 ["fileId"] = ToNullableStringToken(line?.fileId),
                 ["qty"] = new JValue(qty),
                 ["price"] = ToNullableDecimalToken(price),
                 ["lineTotal"] = ToNullableDecimalToken(lineTotal),
-                ["projId"] = ToNullableStringToken(line?.projId)
+                ["projId"] = ToNullableStringToken(line?.projId),
+                ["reimbursableExpense"] = ToNullableIntToken(line?.reimbursableExpense),
+                ["currencyCode"] = ToNullableStringToken(line?.currencyCode),
+                ["amountMST"] = ToNullableDecimalToken(line?.amountMST),
+                ["exchRate"] = ToNullableDecimalToken(line?.exchRate)
             };
         }
 
         private static JObject BuildQuickCreateNormalizedLineToken(CreateExpenseSheetLineRequest line)
         {
-            var qty = line?.qty.HasValue == true && line.qty.Value > 0m ? line.qty.Value : 1m;
             var price = line?.price;
-            var lineTotal = price.HasValue ? qty * price.Value : (decimal?)null;
+            var qty = line?.qty.HasValue == true &&
+                      (line.qty.Value > 0m || (line.qty.Value == 0m && price.HasValue && price.Value < 0m))
+                ? line.qty.Value
+                : 1m;
+            var lineTotal = price.HasValue
+                ? (qty == 0m && price.Value < 0m ? price.Value : qty * price.Value)
+                : (decimal?)null;
 
             return new JObject
             {
@@ -1913,7 +1939,19 @@ namespace IND_CRM_API.Services
                     ["gastoType"] = new JObject
                     {
                         ["type"] = new JArray("integer", "null"),
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14, null)
+                        ["minimum"] = 0
+                    },
+                    ["transDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketTime"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
                     },
                     ["exchRate"] = new JObject
                     {
@@ -1957,6 +1995,9 @@ namespace IND_CRM_API.Services
                     "description",
                     "currencyCode",
                     "gastoType",
+                    "transDate",
+                    "ticketDate",
+                    "ticketTime",
                     "exchRate",
                     "projId",
                     "confidence",
@@ -1982,7 +2023,7 @@ namespace IND_CRM_API.Services
                     ["typeValue"] = new JObject
                     {
                         ["type"] = "integer",
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
+                        ["minimum"] = 0
                     },
                     ["description"] = new JObject
                     {
@@ -2045,9 +2086,17 @@ namespace IND_CRM_API.Services
                     ["gastoType"] = new JObject
                     {
                         ["type"] = "integer",
-                        ["enum"] = new JArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 14)
+                        ["minimum"] = 0
                     },
                     ["transDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketDate"] = new JObject
+                    {
+                        ["type"] = new JArray("string", "null")
+                    },
+                    ["ticketTime"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
                     },
@@ -2071,6 +2120,8 @@ namespace IND_CRM_API.Services
                     "currencyCode",
                     "gastoType",
                     "transDate",
+                    "ticketDate",
+                    "ticketTime",
                     "rawCurrency",
                     "merchant",
                     "lines")

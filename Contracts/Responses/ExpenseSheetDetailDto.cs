@@ -10,19 +10,28 @@ namespace IND_CRM_API.Contracts.Responses
         public string HojaGastosId { get; set; }
         public string UserId { get; set; }
         public string Description { get; set; }
-        // Expense sheet status enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExpenseSheetStatus { get; set; }
         public string CurrencyCode { get; set; }
         // Total amount in company currency returned by AX.
         public decimal? TotalAmount { get; set; }
         public decimal? ExchRate { get; set; }
-        // Exchange rate mode enum value returned by AX.
+        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExchangeRateMode { get; set; }
         public string ProjId { get; set; }
         public string Voucher { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
+        // Numeric AX enum value returned by AX; resolve labels through INDReimbursableExpense in /api/crm/enums/by-name.
+        public int? ReimbursableExpense { get; set; }
         public List<ExpenseSheetLineDto> Lines { get; set; }
+        // Display name resolved from CRMUsuarioTable for the sheet owner.
+        public string UserName { get; set; }
+        /// <summary>Functional AX owner user id returned at the end of the AX header contract.</summary>
+        public string OwnerAxUserId { get; set; }
+
+        /// <summary>Display name for the functional owner returned at the end of the AX header contract.</summary>
+        public string OwnerName { get; set; }
     }
 
     /// <summary>
@@ -32,6 +41,7 @@ namespace IND_CRM_API.Contracts.Responses
     {
         public string RecId { get; set; }
         public string TransDate { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.</summary>
         public int? TypeValue { get; set; }
         public string Description { get; set; }
         public bool? Internacional { get; set; }
@@ -41,5 +51,10 @@ namespace IND_CRM_API.Contracts.Responses
         public decimal? Qty { get; set; }
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
+        /// <summary>Numeric AX enum value returned by AX; resolve labels through INDReimbursableExpenseLines in /api/crm/enums/by-name.</summary>
+        public int? ReimbursableExpense { get; set; }
+        public string CurrencyCode { get; set; }
+        public decimal? AmountMST { get; set; }
+        public decimal? ExchRate { get; set; }
     }
 }

@@ -15,12 +15,16 @@ namespace IND_CRM_API.Services
     public sealed class IND_AxSessionGuard
     {
         private const int DefaultCallTimeoutSeconds = 90;
+        private const int BusinessConnectorSystemChangedHResult = unchecked((int)0x80041004);
+        private static readonly SemaphoreSlim ComAccessSemaphore = new SemaphoreSlim(1, 1);
         private readonly IAxLogger _logger;
         private readonly string _configPath;
         private readonly string _defaultUser;
         private readonly string _defaultPass;
         private readonly bool _allowDefaultCredentials;
         private readonly int _callTimeoutSeconds;
+        private readonly AxaptaComOptions _options;
+        private readonly ComPlusApplicationController _comPlusController;
         private readonly object _timeoutStateLock = new object();
         private DateTime _axUnavailableUntilUtc = DateTime.MinValue;
 
@@ -32,6 +36,31 @@ namespace IND_CRM_API.Services
             _defaultPass = defaultPass;
             _allowDefaultCredentials = allowDefaultCredentials;
             _callTimeoutSeconds = ReadCallTimeoutSeconds();
+            _options = AxaptaComOptions.FromConfiguration();
+            _comPlusController = new ComPlusApplicationController(_logger);
+        }
+
+        /// <summary>Current Business Connector safety options.</summary>
+        public AxaptaComOptions Options => _options;
+
+        /// <summary>
+        /// Acquires the process-wide Business Connector gate when serialization is enabled.
+        /// </summary>
+        public IDisposable EnterComAccess(IND_AxRequestContext ctx, string reason)
+        {
+            if (!_options.SerializeComAccess)
+                return NoopDisposable.Instance;
+
+            Log("com-gate", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "wait");
+            ComAccessSemaphore.Wait();
+            Log("com-gate", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "acquired");
+            return new ComAccessLease(this, ctx, reason);
+        }
+
+        private void ReleaseComAccess(IND_AxRequestContext ctx, string reason)
+        {
+            ComAccessSemaphore.Release();
+            Log("com-gate", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "released");
         }
 
         // Logs on to Axapta and returns a live COM instance.
@@ -65,7 +94,7 @@ namespace IND_CRM_API.Services
                         }
                         catch
                         {
-                            SafeReleaseCom(innerAx);
+                            SafeLogoffAndDispose(innerAx, ctx, "logon-failed");
                             throw;
                         }
                     },
@@ -80,7 +109,7 @@ namespace IND_CRM_API.Services
             catch (Exception ex)
             {
                 sw.Stop();
-                SafeReleaseCom(ax);
+                SafeLogoffAndDispose(ax, ctx, "logon-failed");
                 Log("logon", ctx, AxaptaSessionManager.LogLevel.Error, "logon-failed", stage: "exception", durationMs: (int)sw.ElapsedMilliseconds, ex: ex);
                 throw;
             }
@@ -99,9 +128,11 @@ namespace IND_CRM_API.Services
             }
 
             Axapta2Class ax = null;
+            IDisposable comAccessLease = null;
             var sw = Stopwatch.StartNew();
             try
             {
+                comAccessLease = EnterComAccess(ctx, "smoke-test");
                 Log("smoke-test", ctx, AxaptaSessionManager.LogLevel.Info, null, stage: "begin", detail: "createdContext=" + createdContext);
                 Log("smoke-test", ctx, AxaptaSessionManager.LogLevel.Info, null, stage: "before-ensure-logged-on", detail: "username=" + username, durationMs: (int)sw.ElapsedMilliseconds);
                 ax = EnsureLoggedOn(username, password, ctx);
@@ -139,13 +170,20 @@ namespace IND_CRM_API.Services
                 if (ax != null)
                     SafeLogoffAndDispose(ax, ctx, "smoke-test");
 
+                comAccessLease?.Dispose();
+
                 if (createdContext)
                     IND_AxRequestContext.Clear();
             }
         }
 
         // Executes an action and retries once on session errors.
-        public T ExecuteWithRetryOnSessionErrors<T>(Func<T> action, Func<T> retryAction, IND_AxRequestContext ctx, string actionName)
+        public T ExecuteWithRetryOnSessionErrors<T>(
+            Func<T> action,
+            Func<T> retryAction,
+            IND_AxRequestContext ctx,
+            string actionName,
+            Func<Exception, bool> recoverBeforeRetry = null)
         {
             try
             {
@@ -156,10 +194,22 @@ namespace IND_CRM_API.Services
             }
             catch (Exception ex)
             {
-                if (!IsSessionError(ex))
+                var isSystemChanged = IsBusinessConnectorSystemChanged(ex);
+                if (!isSystemChanged && !IsSessionError(ex))
                 {
                     Log("call", ctx, AxaptaSessionManager.LogLevel.Error, actionName, stage: "non-session-exception", ex: ex);
                     throw;
+                }
+
+                if (isSystemChanged)
+                {
+                    Log("call", ctx, AxaptaSessionManager.LogLevel.Error, actionName, stage: "business-connector-system-changed", ex: ex);
+                    var recovered = recoverBeforeRetry != null && recoverBeforeRetry(ex);
+                    if (!recovered)
+                    {
+                        Log("call", ctx, AxaptaSessionManager.LogLevel.Error, actionName, stage: "recovery-not-available", ex: ex);
+                        throw;
+                    }
                 }
 
                 Log("call", ctx, AxaptaSessionManager.LogLevel.Warning, "session-error", stage: "primary-failed-retrying", retries: 1, ex: ex);
@@ -207,12 +257,38 @@ namespace IND_CRM_API.Services
             }
 
             if (error != null)
+            {
+                LogComFailure(error, ctx, operationName, detail);
                 ExceptionDispatchInfo.Capture(error).Throw();
+            }
 
             return result;
         }
 
-        // Safe logoff and COM release.
+        /// <summary>
+        /// Releases tracked AX objects, logs off, and releases the owned Axapta COM session.
+        /// </summary>
+        public void SafeLogoffAndDispose(AxaptaComSession session, IND_AxRequestContext ctx, string reason)
+        {
+            if (session == null)
+                return;
+
+            try
+            {
+                session.ReleaseTrackedObjects(reason);
+            }
+            catch (Exception ex)
+            {
+                Log("release", ctx, AxaptaSessionManager.LogLevel.Warning, reason, stage: "tracked-release-exception", ex: ex);
+            }
+
+            var ax = session.DetachRawAxapta();
+            SafeLogoffAndDispose(ax, ctx, reason);
+        }
+
+        /// <summary>
+        /// Logs off and releases an owned raw Axapta COM instance.
+        /// </summary>
         public void SafeLogoffAndDispose(Axapta2Class ax, IND_AxRequestContext ctx, string reason)
         {
             if (ax == null)
@@ -236,9 +312,105 @@ namespace IND_CRM_API.Services
                     sw.Stop();
 
                 Log("logoff", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "before-release-com", durationMs: (int)sw.ElapsedMilliseconds);
-                var releaseCalls = SafeReleaseCom(ax);
-                Log("logoff", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "after-release-com", detail: "releaseCalls=" + releaseCalls, durationMs: (int)sw.ElapsedMilliseconds);
+                SafeDisposeObject(ax, ctx, reason, "axapta-session");
+                try
+                {
+                    var releaseCalls = SafeReleaseCom(ax);
+                    Log("logoff", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "after-release-com", detail: "releaseCalls=" + releaseCalls, durationMs: (int)sw.ElapsedMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    Log("logoff", ctx, AxaptaSessionManager.LogLevel.Warning, reason, stage: "release-com-warning", ex: ex);
+                }
             }
+        }
+
+        /// <summary>
+        /// Disposes and releases an owned AX/COM object without hiding the original functional error.
+        /// </summary>
+        public int SafeReleaseAxObject(object axObject, IND_AxRequestContext ctx, string reason, string objectName)
+        {
+            if (axObject == null)
+                return 0;
+
+            SafeDisposeObject(axObject, ctx, reason, objectName);
+
+            try
+            {
+                if (!Marshal.IsComObject(axObject))
+                    return 0;
+
+                var releaseCalls = Marshal.FinalReleaseComObject(axObject);
+                Log("release", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "released-owned-object", detail: objectName + " releaseCalls=" + releaseCalls);
+                return releaseCalls;
+            }
+            catch (Exception ex)
+            {
+                Log("release", ctx, AxaptaSessionManager.LogLevel.Warning, reason, stage: "release-owned-object-warning", detail: objectName, ex: ex);
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Logs that an AX/COM object is now owned by the current session scope.
+        /// </summary>
+        public void LogTrackedAxObject(IND_AxRequestContext ctx, string reason, object axObject)
+        {
+            var typeName = axObject == null ? "null" : axObject.GetType().FullName;
+            Log("track", ctx, AxaptaSessionManager.LogLevel.Info, reason, stage: "owned-object", detail: "type=" + typeName);
+        }
+
+        /// <summary>
+        /// Restarts COM+ for a Business Connector system-change failure when recovery is enabled.
+        /// </summary>
+        public bool TryRecoverBusinessConnector(IND_AxRequestContext ctx, Exception ex, string operationName, string detail)
+        {
+            if (!_options.RestartComPlusOnSystemChanged)
+                return false;
+
+            var hresult = GetHResult(ex);
+            Log(
+                "recovery",
+                ctx,
+                AxaptaSessionManager.LogLevel.Warning,
+                operationName,
+                stage: "restart-complus-begin",
+                detail: "hresult=" + FormatHResult(hresult) + " app=" + _options.ComPlusApplicationName + " " + (detail ?? string.Empty),
+                ex: ex);
+
+            return _comPlusController.RestartApplication(_options.ComPlusApplicationName, ctx, hresult, operationName);
+        }
+
+        /// <summary>
+        /// Shuts down COM+ after a call only when the explicit maintenance switch is enabled.
+        /// </summary>
+        public void TryShutdownComPlusAfterCall(IND_AxRequestContext ctx, string reason)
+        {
+            if (!_options.ShutdownComPlusAfterCall)
+                return;
+
+            _comPlusController.ShutdownApplication(_options.ComPlusApplicationName, ctx, reason);
+        }
+
+        /// <summary>
+        /// Detects the Business Connector connected-to-another-system failure pattern.
+        /// </summary>
+        public bool IsBusinessConnectorSystemChanged(Exception ex)
+        {
+            if (ex == null)
+                return false;
+
+            if (ex is COMException comEx && comEx.ErrorCode == BusinessConnectorSystemChangedHResult)
+                return true;
+
+            var typeName = ex.GetType().FullName ?? string.Empty;
+            if (typeName.IndexOf("LogonSystemChangedException", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            var msg = (ex.Message ?? string.Empty).ToLowerInvariant();
+            return msg.Contains("connected to another system") ||
+                   msg.Contains("conectado a otro sistema") ||
+                   msg.Contains("business connector ya conectado");
         }
 
         // Heuristic to detect session-related failures.
@@ -304,6 +476,61 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
                 return value;
             return value.Substring(0, maxLength);
+        }
+
+        private void SafeDisposeObject(object obj, IND_AxRequestContext ctx, string reason, string objectName)
+        {
+            try
+            {
+                var disposable = obj as IDisposable;
+                disposable?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Log("release", ctx, AxaptaSessionManager.LogLevel.Warning, reason, stage: "dispose-warning", detail: objectName, ex: ex);
+            }
+        }
+
+        private void LogComFailure(Exception error, IND_AxRequestContext ctx, string operationName, string detail)
+        {
+            if (error == null)
+                return;
+
+            if (IsBusinessConnectorSystemChanged(error))
+            {
+                Log(
+                    "call",
+                    ctx,
+                    AxaptaSessionManager.LogLevel.Error,
+                    operationName,
+                    stage: "business-connector-system-changed",
+                    detail: "hresult=" + FormatHResult(GetHResult(error)) + " possibleProcessContamination=true " + (detail ?? string.Empty),
+                    ex: error);
+                return;
+            }
+
+            if (error is COMException)
+            {
+                Log(
+                    "call",
+                    ctx,
+                    AxaptaSessionManager.LogLevel.Error,
+                    operationName,
+                    stage: "com-exception",
+                    detail: "hresult=" + FormatHResult(GetHResult(error)) + " " + (detail ?? string.Empty),
+                    ex: error);
+            }
+        }
+
+        private static int GetHResult(Exception ex)
+        {
+            var comEx = ex as COMException;
+            return comEx?.ErrorCode ?? ex?.HResult ?? 0;
+        }
+
+        private static string FormatHResult(int hresult)
+        {
+            return "0x" + unchecked((uint)hresult).ToString("X8");
         }
 
         // Releases COM references until fully released.
@@ -379,6 +606,43 @@ namespace IND_CRM_API.Services
             catch
             {
                 // Best effort only. Timeout protection still works without forcing the apartment state.
+            }
+        }
+
+        private sealed class ComAccessLease : IDisposable
+        {
+            private readonly IND_AxSessionGuard _owner;
+            private readonly IND_AxRequestContext _ctx;
+            private readonly string _reason;
+            private bool _disposed;
+
+            public ComAccessLease(IND_AxSessionGuard owner, IND_AxRequestContext ctx, string reason)
+            {
+                _owner = owner;
+                _ctx = ctx;
+                _reason = reason;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+
+                _disposed = true;
+                _owner.ReleaseComAccess(_ctx, _reason);
+            }
+        }
+
+        private sealed class NoopDisposable : IDisposable
+        {
+            public static readonly NoopDisposable Instance = new NoopDisposable();
+
+            private NoopDisposable()
+            {
+            }
+
+            public void Dispose()
+            {
             }
         }
     }

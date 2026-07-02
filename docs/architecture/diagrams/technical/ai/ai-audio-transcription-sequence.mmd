@@ -1,0 +1,40 @@
+sequenceDiagram
+  autonumber
+  participant Ui as React/Razor AI UI
+  participant Proxy as MVC proxy or API client
+  participant Limit as OpenAI rate limit handler
+  participant Api as INDSpeechController
+  participant Speech as Audio transcription service
+  participant Mod as Text moderation service
+  participant OpenAI as OpenAI APIs
+
+  Ui->>Proxy: POST /api/ia/service/speech<br/>multipart audioFile + languageId
+  Proxy->>Limit: Forward authenticated request
+  Limit->>Limit: Check per-user rate window<br/>and one active AI request
+
+  alt Rate or concurrency limit exceeded
+    Limit-->>Proxy: 429 IndApiResponse<br/>AI_RATE_LIMIT_EXCEEDED or AI_CONCURRENCY_LIMIT_EXCEEDED
+    Proxy-->>Ui: Surface retry message
+  else Request allowed
+    Limit->>Api: Continue to controller
+    Api->>Api: Validate multipart/form-data
+    Api->>Api: Validate languageId, audioFile,<br/>extension, content type, 25 MB max
+    Api->>Api: Resolve temperature and prompt/context<br/>or configured default prompt
+    Api->>Speech: TranscribeAsync(audio stream,<br/>fileName, language, temperature, prompt)
+    Speech->>OpenAI: Audio transcription request<br/>server-side key, model, response_format json
+    OpenAI-->>Speech: JSON with transcript text
+    Speech-->>Api: Transcript string only
+    Api->>Mod: ModerateAsync(transcript)
+    Mod->>OpenAI: Moderation request<br/>server-side key and moderation model
+    OpenAI-->>Mod: Moderation result
+
+    alt Transcript flagged
+      Mod-->>Api: flagged=true + categories
+      Api-->>Proxy: 422 IndApiResponse<br/>VALIDATION_ERROR
+      Proxy-->>Ui: Reject transcript
+    else Transcript accepted
+      Mod-->>Api: flagged=false
+      Api-->>Proxy: 200 IndPagedResponse(string)<br/>Items[0] = transcript + traceId
+      Proxy-->>Ui: Transcript text
+    end
+  end

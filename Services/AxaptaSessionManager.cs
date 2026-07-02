@@ -91,11 +91,23 @@ namespace IND_CRM_API.Services
             if (ctx == null)
                 return;
 
-            LogSessionTrace("end-request-scope", ctx.Username, ctx, "hasAxInstance=" + (ctx.AxInstance != null));
-            if (ctx.AxInstance != null)
-                _sessionGuard.SafeLogoffAndDispose(ctx.AxInstance, ctx, "request-end");
+            LogSessionTrace("end-request-scope", ctx.Username, ctx, "hasComSession=" + (ctx.ComSession != null));
+            try
+            {
+                var hadComSession = ctx.ComSession != null;
+                if (hadComSession)
+                    _sessionGuard.SafeLogoffAndDispose(ctx.ComSession, ctx, "request-end");
 
-            IND_AxRequestContext.Clear();
+                if (hadComSession)
+                    _sessionGuard.TryShutdownComPlusAfterCall(ctx, "request-end");
+            }
+            finally
+            {
+                ctx.ComSession = null;
+                ctx.ComAccessLease?.Dispose();
+                ctx.ComAccessLease = null;
+                IND_AxRequestContext.Clear();
+            }
         }
 
         // ---------------------------------------------------------
@@ -252,7 +264,7 @@ namespace IND_CRM_API.Services
         // AX INSTANCE (PER REQUEST)
         // ---------------------------------------------------------
         // Returns per-request Axapta instance (creates on demand).
-        public Axapta2Class GetAxInstanceForUser(string username)
+        public AxaptaComSession GetAxInstanceForUser(string username)
         {
             if (string.IsNullOrWhiteSpace(username))
                 throw new Exception("Usuario no valido.");
@@ -270,10 +282,18 @@ namespace IND_CRM_API.Services
 
             ctx.Username = username;
 
-            if (ctx.AxInstance != null)
+            if (ctx.ComSession != null)
             {
-                LogSessionTrace("get-ax-instance-reuse-existing", username, ctx, "hasAxInstance=true");
-                return ctx.AxInstance;
+                if (!ctx.ComSession.Matches(username, _configPath, ctx.Company))
+                {
+                    LogSessionTrace("get-ax-instance-incompatible-existing-session", username, ctx, "existingUser=" + ctx.ComSession.Username + " existingCompany=" + ctx.ComSession.Company, LogLevel.Warning);
+                    ResetRequestSession("incompatible-session");
+                }
+                else
+                {
+                    LogSessionTrace("get-ax-instance-reuse-existing", username, ctx, "hasComSession=true");
+                    return ctx.ComSession;
+                }
             }
 
             var resolvedPassword = ResolvePassword(username, null, out var source);
@@ -287,10 +307,35 @@ namespace IND_CRM_API.Services
                 throw new Exception("No hay credenciales disponibles para Axapta.");
 
             LogSessionTrace("get-ax-instance-before-ensure-logged-on", username, ctx, "passwordSource=" + source);
-            ctx.AxInstance = _sessionGuard.EnsureLoggedOn(username, resolvedPassword, ctx);
-            LogSessionTrace("get-ax-instance-after-ensure-logged-on", username, ctx, "passwordSource=" + source + " axInstanceCreated=" + (ctx.AxInstance != null));
-            Log($"[AX-SESSION] Session created user={username} source={source}.", LogLevel.Info);
-            return ctx.AxInstance;
+            Axapta2Class axInstance = null;
+            try
+            {
+                if (ctx.ComAccessLease == null)
+                    ctx.ComAccessLease = _sessionGuard.EnterComAccess(ctx, "request-session");
+
+                axInstance = _sessionGuard.EnsureLoggedOn(username, resolvedPassword, ctx);
+                ctx.ComSession = new AxaptaComSession(axInstance, _sessionGuard, ctx, username, _configPath, ctx.Company);
+                axInstance = null;
+                LogSessionTrace("get-ax-instance-after-ensure-logged-on", username, ctx, "passwordSource=" + source + " axSessionCreated=" + (ctx.ComSession != null));
+                Log($"[AX-SESSION] Session created user={username} source={source}.", LogLevel.Info);
+                return ctx.ComSession;
+            }
+            catch
+            {
+                if (ctx.ComSession != null)
+                {
+                    _sessionGuard.SafeLogoffAndDispose(ctx.ComSession, ctx, "logon-failed");
+                    ctx.ComSession = null;
+                }
+                else if (axInstance != null)
+                {
+                    _sessionGuard.SafeLogoffAndDispose(axInstance, ctx, "logon-failed");
+                }
+
+                ctx.ComAccessLease?.Dispose();
+                ctx.ComAccessLease = null;
+                throw;
+            }
         }
 
         // ---------------------------------------------------------
@@ -321,7 +366,8 @@ namespace IND_CRM_API.Services
                     return InvokeAxMethod(ax, className, methodName, args);
                 },
                 ctx,
-                className + "." + methodName
+                className + "." + methodName,
+                ex => RecoverBusinessConnectorBeforeRetry(ex, ctx, className + "." + methodName)
             );
         }
 
@@ -350,12 +396,13 @@ namespace IND_CRM_API.Services
                     return container;
                 },
                 ctx,
-                className + "." + methodName
+                className + "." + methodName,
+                ex => RecoverBusinessConnectorBeforeRetry(ex, ctx, className + "." + methodName)
             );
         }
 
         // Low-level COM invocation helper.
-        private object InvokeAxMethod(Axapta2Class ax, string className, string methodName, object args)
+        private object InvokeAxMethod(AxaptaComSession ax, string className, string methodName, object args)
         {
             if (ax == null)
                 throw new Exception("Instancia Axapta no valida.");
@@ -367,22 +414,13 @@ namespace IND_CRM_API.Services
 
             try
             {
-                var operationName = className + "." + methodName;
-                var detail = "class=" + className + " method=" + methodName + " args=" + argsDescription;
-                var result = _sessionGuard.ExecuteComCall(
-                    () =>
-                    {
-                        if (args == null)
-                            return ax.CallStaticClassMethod(className, methodName);
-
-                        if (args is object[] arr)
-                            return ax.CallStaticClassMethod(className, methodName, arr);
-
-                        return ax.CallStaticClassMethod(className, methodName, new object[] { args });
-                    },
-                    ctx,
-                    operationName,
-                    detail);
+                object result;
+                if (args == null)
+                    result = ax.CallStaticClassMethod(className, methodName);
+                else if (args is object[] arr)
+                    result = ax.CallStaticClassMethod(className, methodName, arr);
+                else
+                    result = ax.CallStaticClassMethod(className, methodName, new object[] { args });
 
                 LogSessionTrace(
                     "invoke-ax-method-after-call",
@@ -406,16 +444,34 @@ namespace IND_CRM_API.Services
             }
         }
 
+        private bool RecoverBusinessConnectorBeforeRetry(Exception ex, IND_AxRequestContext ctx, string operationName)
+        {
+            var activeContext = ctx ?? IND_AxRequestContext.Current;
+            ResetRequestSession("retry-system-changed");
+            using (_sessionGuard.EnterComAccess(activeContext, "business-connector-recovery"))
+            {
+                return _sessionGuard.TryRecoverBusinessConnector(activeContext, ex, operationName, "before single retry");
+            }
+        }
+
         // Disposes the current request session so it can be recreated on retry.
         private void ResetRequestSession(string reason)
         {
             var ctx = IND_AxRequestContext.Current;
-            if (ctx == null || ctx.AxInstance == null)
+            if (ctx == null || ctx.ComSession == null)
                 return;
 
             LogSessionTrace("reset-request-session", ctx.Username, ctx, "reason=" + reason, LogLevel.Warning);
-            _sessionGuard.SafeLogoffAndDispose(ctx.AxInstance, ctx, reason);
-            ctx.AxInstance = null;
+            try
+            {
+                _sessionGuard.SafeLogoffAndDispose(ctx.ComSession, ctx, reason);
+            }
+            finally
+            {
+                ctx.ComSession = null;
+                ctx.ComAccessLease?.Dispose();
+                ctx.ComAccessLease = null;
+            }
         }
 
         // Emits detailed session traces to correlate auth stages with Axapta COM activity.

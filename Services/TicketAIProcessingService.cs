@@ -151,5 +151,6 @@ namespace IND_CRM_API.Services
         {
             return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
         }
+
     }
 }

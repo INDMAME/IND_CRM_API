@@ -16,6 +16,9 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmVisitsController : BaseCrmController
     {
         private readonly IAxaptaSessionManager _sessionManager;
+        private const string ControlDataVisibilityAppCode = "CRM";
+        private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
          
         public CrmVisitsController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
         {
@@ -52,8 +55,10 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.refRecIdActividad))
                     validationErrors.Add(new IndValidationError { Field = "refRecIdActividad", Message = "refRecIdActividad es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.asistenteTipo))
+                if (!body.asistenteTipo.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = "asistenteTipo es obligatorio." });
+                else if (body.asistenteTipo.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "asistenteTipo", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.asistenteId))
                     validationErrors.Add(new IndValidationError { Field = "asistenteId", Message = "asistenteId es obligatorio." });
             }
@@ -94,10 +99,12 @@ namespace IND_CRM_API.Controllers.CRM
 
                 con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
-                con.Append(body.asistenteTipo?.Trim() ?? string.Empty);
+                con.Append(body.asistenteTipo.Value);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
                 con.Append(body.contactoRecId?.Trim() ?? string.Empty);
                 con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 Logger.Log("[CONTAINER] Enviado a AX (CreateVisitaAsistente):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -207,6 +214,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.ValidationError);
+            if (userError != null)
+                return userError;
+
             if (body == null)
             {
                 validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
@@ -237,7 +248,7 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 var username = GetAuthenticatedUsername();
 
-                Logger.Log($"[API-IN] DeleteVisitaAsistente llamado por {username} refRecIdActividad={body.refRecIdActividad} asistenteId={body.asistenteId}");
+                Logger.Log($"[API-IN] DeleteVisitaAsistente llamado por {username} axUserId={axUserId} refRecIdActividad={body.refRecIdActividad} asistenteId={body.asistenteId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -245,6 +256,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(body.refRecIdActividad?.Trim() ?? string.Empty);
                 con.Append(body.asistenteId?.Trim() ?? string.Empty);
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",

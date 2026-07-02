@@ -112,6 +112,7 @@ namespace IND_CRM_API.Controllers.System
                 " sourceKey=" + _datasetProvider.SourceKey +
                 " sourceMode=" + (usesInlineSourceJson ? "inline-json" : "server-query") +
                 " billedMode=" + options.BilledMode.ToString(CultureInfo.InvariantCulture) +
+                " reimbursableExpense=" + (options.ReimbursableExpense.HasValue ? options.ReimbursableExpense.Value.ToString(CultureInfo.InvariantCulture) : "null") +
                 " includeSubordinates=" + options.IncludeSubordinates +
                 " traceId=" + traceId,
                 AxaptaSessionManager.LogLevel.Info);
@@ -284,6 +285,7 @@ namespace IND_CRM_API.Controllers.System
                 ProjId = listRequest?.projId?.Trim() ?? string.Empty,
                 CurrencyCode = listRequest?.currencyCode?.Trim() ?? string.Empty,
                 ExpenseSheetStatus = ExpenseSheetListQueryHelper.NormalizeExpenseSheetStatusOrNull(listRequest?.expenseSheetStatus),
+                ReimbursableExpense = ExpenseSheetListQueryHelper.NormalizeReimbursableExpenseOrNull(listRequest?.reimbursableExpense),
                 IncludeSubordinates = listRequest?.includeSubordinates ?? false
             };
         }
@@ -299,6 +301,7 @@ namespace IND_CRM_API.Controllers.System
                 ProjId = options.ProjId,
                 CurrencyCode = options.CurrencyCode,
                 ExpenseSheetStatus = options.ExpenseSheetStatus,
+                ReimbursableExpense = options.ReimbursableExpense,
                 IncludeSubordinates = options.IncludeSubordinates
             };
         }

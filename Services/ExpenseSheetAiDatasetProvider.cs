@@ -40,6 +40,7 @@ namespace IND_CRM_API.Services
                 effectiveOptions.ProjId,
                 effectiveOptions.CurrencyCode,
                 effectiveOptions.ExpenseSheetStatus,
+                effectiveOptions.ReimbursableExpense,
                 effectiveOptions.IncludeSubordinates);
 
             _logger.Log(
@@ -86,6 +87,7 @@ namespace IND_CRM_API.Services
                 totalAmount = item.TotalAmount,
                 exchRate = item.ExchRate,
                 exchangeRateMode = item.ExchangeRateMode,
+                reimbursableExpense = item.ReimbursableExpense,
                 createdDate = item.CreatedDate
             };
 

@@ -17,6 +17,9 @@ set "TARGET_ENV=PROD"
 set "HOST=crm.insertec.biz"
 set "PORT=7776"
 set "SERVICE_USER=%INDCRM_HTTP_SERVICE_USER%"
+set "ASPNETCORE_ENV=%ASPNETCORE_ENVIRONMENT%"
+set "AX_CONFIG=%INDCRM_AX_CONFIG_FILE%"
+set "BLOB_ENV=%AZURE_BLOB_ENVIRONMENT_SEGMENT%"
 set "APP_ID={ABCBA743-3E22-4006-B8D1-4D7EA6B4F4ED}"
 set "PFX_PATH_ENV_VAR=INDCRM_PROD_PFX_PATH"
 set "PFX_PATH_SOURCE=default path"
@@ -37,6 +40,7 @@ if not "%~2"=="" set "PFX_PASSWORD=%~2"
 
 call :RequireAdmin || goto :fail
 call :RequireExpectedEnvironment || goto :fail
+call :RequireEnvironmentAlignment || goto :fail
 call :RequireExpectedHostConfiguration || goto :fail
 call :RequireServiceUser || goto :fail
 call :RequirePfxPath || goto :fail
@@ -97,6 +101,25 @@ if "%IND_ENV%"=="" (
 
 if /I not "%IND_ENV%"=="%TARGET_ENV%" (
     echo ERROR: IND_ENV is "%IND_ENV%". This script only supports %TARGET_ENV%.
+    exit /b 1
+)
+exit /b 0
+
+:RequireEnvironmentAlignment
+for %%I in ("%AX_CONFIG%") do set "AX_CONFIG_FILE=%%~nxI"
+
+if /I not "%ASPNETCORE_ENV%"=="Production" (
+    echo ERROR: ASPNETCORE_ENVIRONMENT must be Production for PROD. Current value: %ASPNETCORE_ENV%
+    exit /b 1
+)
+
+if /I not "%BLOB_ENV%"=="PROD" (
+    echo ERROR: AZURE_BLOB_ENVIRONMENT_SEGMENT must be PROD. Current value: %BLOB_ENV%
+    exit /b 1
+)
+
+if /I not "%AX_CONFIG_FILE%"=="CRM_API_AxConfig_PROD.axc" (
+    echo ERROR: INDCRM_AX_CONFIG_FILE must point to CRM_API_AxConfig_PROD.axc for PROD. Current value: %AX_CONFIG%
     exit /b 1
 )
 exit /b 0

@@ -1,0 +1,53 @@
+sequenceDiagram
+  autonumber
+  participant User as Usuario
+  participant Screen as Pantalla de gastos
+  participant System as Sistema CRM<br/>(aplicacion que coordina)
+  participant Check as Validacion<br/>(comprueba permisos y datos)
+  participant Ax as Axapta<br/>(sistema donde se guardan datos)
+  participant Files as Archivos<br/>(imagenes o adjuntos)
+
+  Note over User,Ax: Consultar hojas de gasto
+    User->>Screen: Busca hojas con filtros<br/>(fechas, estado, pagina)
+    Screen->>System: Pide la lista de hojas
+    System->>Check: Comprueba usuario, empresa<br/>y permisos
+    Check->>Ax: Consulta hojas de gasto
+    Ax-->>System: Devuelve resultados
+    System-->>Screen: Lista paginada<br/>(resultados en paginas)
+    Screen-->>User: Muestra las hojas encontradas
+
+    User->>Screen: Abre una hoja concreta
+    Screen->>System: Pide el detalle de la hoja
+    System->>Check: Comprueba el contexto<br/>(empresa y usuario activos)
+    Check->>Ax: Consulta cabecera y lineas
+    Ax-->>System: Devuelve el detalle
+    System-->>Screen: Detalle de la hoja
+    Screen-->>User: Muestra la hoja completa
+
+  Note over User,Ax: Crear o cambiar hojas de gasto
+    User->>Screen: Crea una hoja nueva
+    Screen->>System: Envia datos de cabecera y lineas
+    System->>Check: Comprueba permisos y datos obligatorios
+    Check->>Ax: Guarda la nueva hoja
+    Ax-->>System: Resultado de guardado
+    System-->>Screen: Confirmacion o aviso de error
+    Screen-->>User: Muestra el resultado
+
+    User->>Screen: Cambia la cabecera<br/>(descripcion, moneda, proyecto)
+    Screen->>System: Envia cambios de cabecera
+    System->>Ax: Actualiza la cabecera
+    Ax-->>System: Resultado de actualizacion
+    System-->>Screen: Confirmacion o aviso de error
+
+    User->>Screen: Cambia o borra una linea
+    Screen->>System: Envia cambio de linea
+    System->>Ax: Actualiza o borra la linea
+    Ax-->>System: Resultado de la linea
+    System-->>Screen: Confirmacion o aviso de error
+
+  opt Borrar hoja con archivos relacionados
+    User->>Screen: Solicita borrar la hoja
+    Screen->>Files: Borra adjuntos relacionados si aplica
+    Screen->>System: Pide borrar o actualizar datos
+    Note over Screen,Files: Este recorrido exacto esta pendiente de validar.
+  end

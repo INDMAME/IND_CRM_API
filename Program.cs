@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Configuration;
+using System.IO;
 using Topshelf;
 using Microsoft.Owin.Hosting;
 using System.Diagnostics;
@@ -77,6 +78,8 @@ namespace IND_CRM_API
             private static string ResolveBaseUrl()
             {
                 var environmentName = AppSettingsHelper.GetSetting("Deployment:EnvironmentName", "IND_ENV");
+                ValidateDeploymentEnvironmentSettings(environmentName);
+
                 var configuredBaseUrl = AppSettingsHelper.GetSetting("BaseUrl", "INDCRM_BASE_URL");
                 if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
                 {
@@ -136,6 +139,56 @@ namespace IND_CRM_API
                 {
                     throw new ConfigurationErrorsException(
                         $"INDCRM_BASE_URL port '{baseUri.Port}' does not match INDCRM_PUBLIC_PORT '{publicPort}'.");
+                }
+            }
+
+            /// <summary>
+            /// Validates that deployment-only settings stay aligned with IND_ENV.
+            /// </summary>
+            private static void ValidateDeploymentEnvironmentSettings(string environmentName)
+            {
+                if (!IsPublicDeploymentEnvironment(environmentName))
+                    return;
+
+                var normalizedEnvironment = environmentName.Trim().ToUpperInvariant();
+                var expectedAspNetCoreEnvironment = string.Equals(normalizedEnvironment, "DEV", StringComparison.OrdinalIgnoreCase)
+                    ? "Development"
+                    : "Production";
+                var expectedAxConfigFileName = string.Equals(normalizedEnvironment, "DEV", StringComparison.OrdinalIgnoreCase)
+                    ? "CRM_API_AxConfig_DEV.axc"
+                    : "CRM_API_AxConfig_PROD.axc";
+
+                ValidateSettingEquals(
+                    "ASPNETCORE_ENVIRONMENT",
+                    AppSettingsHelper.GetMachineEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+                    expectedAspNetCoreEnvironment);
+
+                ValidateSettingEquals(
+                    "AZURE_BLOB_ENVIRONMENT_SEGMENT",
+                    AppSettingsHelper.GetSetting("AzureBlob:EnvironmentSegment", "AZURE_BLOB_ENVIRONMENT_SEGMENT"),
+                    normalizedEnvironment);
+
+                var axConfigFile = AppSettingsHelper.GetSetting("AxConfigFile", "INDCRM_AX_CONFIG_FILE");
+                var actualAxConfigFileName = string.IsNullOrWhiteSpace(axConfigFile)
+                    ? null
+                    : Path.GetFileName(axConfigFile.Trim());
+
+                ValidateSettingEquals(
+                    "INDCRM_AX_CONFIG_FILE",
+                    actualAxConfigFileName,
+                    expectedAxConfigFileName);
+            }
+
+            /// <summary>
+            /// Throws a clear startup error when an environment value is misaligned.
+            /// </summary>
+            private static void ValidateSettingEquals(string name, string actual, string expected)
+            {
+                if (string.IsNullOrWhiteSpace(actual) ||
+                    !string.Equals(actual.Trim(), expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ConfigurationErrorsException(
+                        $"{name} must be {expected} for the configured IND_ENV. Current value: {DisplayValue(actual)}.");
                 }
             }
 

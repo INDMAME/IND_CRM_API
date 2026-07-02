@@ -35,6 +35,9 @@ certificados/
 # Postman local scratch files
 .codex/Postman/**/*.local.json
 
+# Local shared Codex skills
+.codex/skills/architecture-flow-docs/
+
 # Local machine scripts and secret helpers
 scripts/local/
 scripts/*.local.ps1

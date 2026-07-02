@@ -1,0 +1,32 @@
+flowchart TB
+  Browser["Browser"]
+  Razor["Razor MVC pages<br/>server-rendered CRM views"]
+  React["React TypeScript islands<br/>expense and ticket UI"]
+  Proxy["MVC same-origin proxy routes<br/>/api/crm/... and /api/auth/..."]
+  MvcSvc["MVC services<br/>token, context, blob preview"]
+  Client["ICrmApiClient / ApiClientService<br/>HttpClient wrapper"]
+  Headers["Outbound headers<br/>Authorization: Bearer token<br/>X-IND-Company<br/>X-IND-AxUserId<br/>X-IND-EntraOid<br/>X-IND-Context-Version<br/>X-IND-Permissions-Revision<br/>X-IND-Context-Token<br/>X-Correlation-Id"]
+  Api["IND_CRM_API controllers<br/>Web API 2"]
+  Guard["Base CRM guards<br/>auth, company, AX user, context"]
+  AxSession["AxaptaSessionManager<br/>Business Connector COM"]
+  Aot["Axapta AOT services<br/>INDCRMUtilityService<br/>INDCRMVisitsService<br/>INDCRMExpenseSheetService"]
+  External["External service adapters<br/>Blob, OCR, OpenAI, exchange rates"]
+  Response["Standard envelopes<br/>IndApiResponse of T<br/>IndPagedResponse of T<br/>traceId and errors"]
+
+  Browser --> Razor
+  Browser --> React
+  Razor --> MvcSvc
+  React --> Proxy
+  Proxy --> MvcSvc
+  MvcSvc --> Client
+  Client --> Headers
+  Headers --> Api
+  Api --> Guard
+  Guard --> AxSession
+  AxSession --> Aot
+  Api --> External
+  Aot --> Response
+  External --> Response
+  Response --> Client
+  Client --> MvcSvc
+  MvcSvc --> Browser

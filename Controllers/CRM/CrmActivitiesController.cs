@@ -25,6 +25,10 @@ namespace IND_CRM_API.Controllers.CRM
     public class CrmActivitiesController : BaseCrmController
     {
         private const int MaxPageSize = 50;
+        private const int DefaultContactMethodValue = 0;
+        private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
+        private const string ControlDataVisibilityAppCode = "CRM";
+        private const string ControlDataVisibilityVisitsModuleCode = "VISITAS_GESTION";
         private readonly IAxaptaSessionManager _sessionManager;
  
         public CrmActivitiesController(IAxaptaSessionManager sessionManager, IAxLogger logger) : base(sessionManager, logger)
@@ -38,6 +42,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string fromDate { get; set; }
             public string toDate { get; set; }
             public string accountNum { get; set; }
+            public string ownerAxUserId { get; set; }
             public int? page { get; set; }
             public int? pageSize { get; set; }
         }
@@ -82,10 +87,14 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.accountNum))
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum is required." });
-                if (string.IsNullOrWhiteSpace(body.visitType))
+                if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType is required." });
+                else if (body.visitType.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = AxEnumNumericValidationMessage });
             }
 
             if (validationErrors.Any())
@@ -124,13 +133,14 @@ namespace IND_CRM_API.Controllers.CRM
                 Logger.Log($" -> userId(header): {axUserId}");
                 Logger.Log($" -> createdByUserId(header): {axUserId}");
                 Logger.Log($" -> transDate: {body.transDate}");
+                Logger.Log($" -> contactMethod: {body.contactMethod ?? DefaultContactMethodValue}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
 
                 con.Append(company);
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
-                con.Append(body.visitType?.Trim() ?? string.Empty);
+                con.Append(body.visitType.Value);
                 con.Append(axUserId);
                 con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
@@ -141,6 +151,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
+                con.Append(body.contactMethod ?? DefaultContactMethodValue);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 Logger.Log("Container enviado a AX (CreateActivity):");
                 for (int i = 1; i <= con.Length(); i++)
@@ -189,6 +202,7 @@ namespace IND_CRM_API.Controllers.CRM
                     string.Equals(result, "1", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
 
+                var createdRecId = ExtractCreatedActivityRecId(message);
                 Logger.Log($"[API-OUT] Resultado CreateActivity: {result} - {message}");
 
                 var okResponse = new IndApiResponse<object>
@@ -196,9 +210,25 @@ namespace IND_CRM_API.Controllers.CRM
                     Success = successFlag,
                     Message = successFlag ? (string.IsNullOrWhiteSpace(message) ? "OK" : message) : (string.IsNullOrWhiteSpace(message) ? "No se pudo crear la actividad." : message),
                     ErrorCode = null,
-                    Data = successFlag ? new { Result = result, Message = message } : null,
+                    Data = successFlag ? new
+                    {
+                        Result = result,
+                        Message = message,
+                        RecId = createdRecId,
+                        OwnerAxUserId = axUserId,
+                        INDCreatedByUserId = axUserId,
+                        CreatedByUserId = axUserId,
+                        UserId = axUserId
+                    } : null,
                     TraceId = traceId
                 };
+
+                if (successFlag)
+                {
+                    Logger.Log(
+                        $"[API-DIAG] CreateActivity recId={LogValue(createdRecId)} company={LogValue(company)} " +
+                        $"axUserId={LogValue(axUserId)} ownerAxUserId={LogValue(axUserId)} ownerSource=X-IND-AxUserId traceId={traceId}");
+                }
 
                 if (successFlag)
                     return Content(HttpStatusCode.Created, okResponse);
@@ -284,10 +314,14 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 if (string.IsNullOrWhiteSpace(body.accountNum))
                     validationErrors.Add(new IndValidationError { Field = "accountNum", Message = "accountNum es obligatorio." });
-                if (string.IsNullOrWhiteSpace(body.visitType))
+                if (!body.visitType.HasValue)
                     validationErrors.Add(new IndValidationError { Field = "visitType", Message = "visitType es obligatorio." });
+                else if (body.visitType.Value < 0)
+                    validationErrors.Add(new IndValidationError { Field = "visitType", Message = AxEnumNumericValidationMessage });
                 if (string.IsNullOrWhiteSpace(body.transDate) || !TryParseAxDate(body.transDate, out transDate))
                     validationErrors.Add(new IndValidationError { Field = "transDate", Message = "transDate debe ser yyyyMMdd o yyyy-MM-dd." });
+                if (body.contactMethod.HasValue && !IsValidContactMethod(body.contactMethod.Value))
+                    validationErrors.Add(new IndValidationError { Field = "contactMethod", Message = AxEnumNumericValidationMessage });
             }
 
             if (validationErrors.Any())
@@ -316,13 +350,16 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(recId.ToString());
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
-                con.Append(body.visitType?.Trim() ?? string.Empty);
+                con.Append(body.visitType.Value);
                 con.Append(axUserId);
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(transDate.ToString("yyyyMMdd"));
                 con.Append(body.comentarios ?? string.Empty);
                 con.Append(body.antecedentes ?? string.Empty);
                 con.Append(body.conclusiones ?? string.Empty);
+                con.Append(body.contactMethod ?? DefaultContactMethodValue);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -426,6 +463,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (recId == 0)
             {
                 var validationResponse = new IndApiResponse<object>
@@ -450,6 +491,9 @@ namespace IND_CRM_API.Controllers.CRM
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
                 con.Append(company);
                 con.Append(recId.ToString());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -539,11 +583,11 @@ namespace IND_CRM_API.Controllers.CRM
         /// </remarks>
         /// <param name="recId">Identificador de la actividad (RecId).</param>
         [HttpGet, Route("{recId}")]
-        [ResponseType(typeof(IndPagedResponse<object>))]
+        [ResponseType(typeof(IndPagedResponse<ActivityDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Actividades" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndPagedResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Actividad encontrada", typeof(IndPagedResponse<ActivityDetailDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
-        [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Actividad no encontrada", typeof(IndApiResponse<ActivityDetailDto>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult GetActivityByRecId(long recId)
         {
@@ -553,6 +597,10 @@ namespace IND_CRM_API.Controllers.CRM
             var company = RequireCompanyOrReturn422(out var companyError, traceId);
             if (companyError != null)
                 return companyError;
+
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
 
             if (recId == 0)
             {
@@ -572,19 +620,29 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetActivityByRecId recId={recId} llamado por {username}");
+                Logger.Log($"[API-IN] GetActivityByRecId recId={recId} user={username} axUserId={axUserId} company={company}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 // Convertir recId a cadena para evitar problemas de marshalling de Int64 en COM
                 con.Append(company);
                 con.Append(recId.ToString());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
                     "getActivityByRecIdContainer",
                     con
                 );
+
+                var preSerialized = TryUnwrapSerializedActivityResponse(resultObj, traceId, "GetActivityByRecId");
+                if (preSerialized != null)
+                {
+                    LogActivityOwnerDiagnostics("GetActivityByRecId", recId.ToString(), company, axUserId, preSerialized.Items?.FirstOrDefault(), traceId);
+                    return Ok(preSerialized);
+                }
 
                 var root = resultObj as AxaptaCOMConnector.IAxaptaContainer;
                 if (root == null || root.Length() == 0)
@@ -601,17 +659,14 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.NotFound, notFound);
                 }
 
-                // Convertir el contenedor a arreglo legible
-                var data = Helpers.AxContainerHelper.ToArray(root);
-
-                var okResponse = new IndPagedResponse<object>
+                var dto = MapActivityDetail(root);
+                if (dto == null)
                 {
-                    Success = true,
-                    Message = "OK",
-                    Items = (data ?? Array.Empty<object>()).ToList(),
-                    TraceId = traceId
-                };
-                return Ok(okResponse);
+                    return Content(HttpStatusCode.NotFound, BuildActivityNotFound(traceId));
+                }
+
+                LogActivityOwnerDiagnostics("GetActivityByRecId", recId.ToString(), company, axUserId, dto, traceId);
+                return Ok(BuildActivityOk(dto, traceId));
             }
             catch (Exception ex)
             {
@@ -663,6 +718,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
+            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmActivityMissingFields);
+            if (userError != null)
+                return userError;
+
             if (string.IsNullOrWhiteSpace(code))
             {
                 var validationResponse = new IndApiResponse<ActivityDetailDto>
@@ -681,12 +740,15 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetActivityByCode code={code} llamado por {username}");
+                Logger.Log($"[API-IN] GetActivityByCode code={code} user={username} axUserId={axUserId} company={company}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
                 con.Append(code.Trim());
+                con.Append(axUserId);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
@@ -695,9 +757,10 @@ namespace IND_CRM_API.Controllers.CRM
                 );
 
                 // AX puede devolver un JSON ya serializado; lo deserializamos para evitar doble parse en el cliente.
-                var preSerialized = TryUnwrapSerializedActivityResponse(resultObj, traceId);
+                var preSerialized = TryUnwrapSerializedActivityResponse(resultObj, traceId, "GetActivityByCode");
                 if (preSerialized != null)
                 {
+                    LogActivityOwnerDiagnostics("GetActivityByCode", code, company, axUserId, preSerialized.Items?.FirstOrDefault(), traceId);
                     return Ok(preSerialized);
                 }
 
@@ -713,6 +776,7 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(HttpStatusCode.NotFound, BuildActivityNotFound(traceId));
                 }
 
+                LogActivityOwnerDiagnostics("GetActivityByCode", dto.RecId, company, axUserId, dto, traceId);
                 return Ok(BuildActivityOk(dto, traceId));
             }
             catch (Exception ex)
@@ -746,6 +810,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         private IndPagedResponse<ActivityDetailDto> BuildActivityOk(ActivityDetailDto dto, string traceId)
         {
+            FillActivityOwnerAliases(dto);
+
             return new IndPagedResponse<ActivityDetailDto>
             {
                 Success = true,
@@ -774,7 +840,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Deserializa un envelope JSON que venga como texto para evitar que el cliente tenga que deserializar dos veces.
         /// </summary>
-        private IndPagedResponse<ActivityDetailDto> TryUnwrapSerializedActivityResponse(object rawResult, string traceId)
+        private IndPagedResponse<ActivityDetailDto> TryUnwrapSerializedActivityResponse(object rawResult, string traceId, string operationName)
         {
             try
             {
@@ -783,7 +849,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var parsed = DeserializeActivityEnvelope(rawString, traceId);
                     if (parsed != null)
                     {
-                        Logger.Log("[INFO] GetActivityByCode: respuesta JSON pre-serializada recibida, se deserializa antes de retornar.");
+                        Logger.Log($"[INFO] {operationName}: respuesta JSON pre-serializada recibida, se deserializa antes de retornar.");
                         return parsed;
                     }
                 }
@@ -797,7 +863,7 @@ namespace IND_CRM_API.Controllers.CRM
                         var parsed = DeserializeActivityEnvelope(inner, traceId);
                         if (parsed != null)
                         {
-                            Logger.Log("[INFO] GetActivityByCode: envelope deserializado desde contenedor de un solo elemento.");
+                            Logger.Log($"[INFO] {operationName}: envelope deserializado desde contenedor de un solo elemento.");
                             return parsed;
                         }
                     }
@@ -833,6 +899,7 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         paged.Items = new List<ActivityDetailDto> { dtoFromData };
                     }
+                    NormalizeActivityItems(paged.Items);
                     if (string.IsNullOrWhiteSpace(paged.TraceId))
                         paged.TraceId = traceId;
                     return paged;
@@ -848,6 +915,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var envelope = JsonConvert.DeserializeObject<IndApiResponse<ActivityDetailDto>>(rawJson);
                 if (envelope != null && envelope.Success && envelope.Data != null)
                 {
+                    FillActivityOwnerAliases(envelope.Data);
                     if (string.IsNullOrWhiteSpace(envelope.TraceId))
                         envelope.TraceId = traceId;
                     return BuildActivityOk(envelope.Data, envelope.TraceId);
@@ -863,6 +931,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var dto = JsonConvert.DeserializeObject<ActivityDetailDto>(rawJson);
                 if (dto != null)
                 {
+                    FillActivityOwnerAliases(dto);
                     return BuildActivityOk(dto, traceId);
                 }
             }
@@ -887,6 +956,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var envelope = JsonConvert.DeserializeObject<IndApiResponse<ActivityDetailDto>>(raw);
                 if (envelope != null && envelope.Data != null)
                 {
+                    FillActivityOwnerAliases(envelope.Data);
                     dto = envelope.Data;
                     return true;
                 }
@@ -924,6 +994,36 @@ namespace IND_CRM_API.Controllers.CRM
                 }
             }
 
+            AxaptaCOMConnector.IAxaptaContainer SafeContainer(AxaptaCOMConnector.IAxaptaContainer c, int index)
+            {
+                try
+                {
+                    return c.Peek(index) as AxaptaCOMConnector.IAxaptaContainer;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            int? SafeNullableInt(AxaptaCOMConnector.IAxaptaContainer c, int index)
+            {
+                var value = SafeString(c, index);
+                return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                    ? parsed
+                    : (int?)null;
+            }
+
+            var legacyAsistentesCon = SafeContainer(row, 13);
+            var currentAsistentesCon = SafeContainer(row, 14);
+            var hasContactMethod = row.Length() >= 14 && (currentAsistentesCon != null || legacyAsistentesCon == null);
+            var descriptionIndex = hasContactMethod ? 10 : 9;
+            var asistentesIndex = hasContactMethod ? 14 : 13;
+            var ownerAxUserIdIndex = asistentesIndex + 1;
+            var ownerNameIndex = asistentesIndex + 2;
+
+            var ownerAxUserId = row.Length() >= ownerAxUserIdIndex ? SafeString(row, ownerAxUserIdIndex) : string.Empty;
+
             var dto = new ActivityDetailDto
             {
                 ActividadId = SafeString(row, 1),
@@ -934,14 +1034,20 @@ namespace IND_CRM_API.Controllers.CRM
                 Country = SafeString(row, 6),
                 ActividadType = SafeString(row, 7),
                 TipoVisita = SafeString(row, 8),
-                Description = SafeString(row, 9),
-                Comentarios = SafeString(row, 10),
-                Antecedentes = SafeString(row, 11),
-                Conclusiones = SafeString(row, 12),
+                ContactMethod = hasContactMethod ? SafeNullableInt(row, 9) : null,
+                Description = SafeString(row, descriptionIndex),
+                Comentarios = SafeString(row, descriptionIndex + 1),
+                Antecedentes = SafeString(row, descriptionIndex + 2),
+                Conclusiones = SafeString(row, descriptionIndex + 3),
+                OwnerAxUserId = ownerAxUserId,
+                INDCreatedByUserId = ownerAxUserId,
+                CreatedByUserId = ownerAxUserId,
+                UserId = ownerAxUserId,
+                OwnerName = row.Length() >= ownerNameIndex ? SafeString(row, ownerNameIndex) : string.Empty,
                 Asistentes = new List<ActivityAssistantDto>()
             };
 
-            var asistentesCon = row.Length() >= 13 ? row.Peek(13) as AxaptaCOMConnector.IAxaptaContainer : null;
+            var asistentesCon = hasContactMethod ? currentAsistentesCon : legacyAsistentesCon;
             if (asistentesCon != null)
             {
                 try
@@ -971,6 +1077,83 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
+        /// Keeps legacy owner aliases aligned with the canonical AX owner field.
+        /// </summary>
+        private static void FillActivityOwnerAliases(ActivityDetailDto dto)
+        {
+            if (dto == null)
+                return;
+
+            var ownerAxUserId = FirstNonEmpty(dto.OwnerAxUserId, dto.INDCreatedByUserId, dto.CreatedByUserId, dto.UserId);
+            if (string.IsNullOrWhiteSpace(ownerAxUserId))
+                return;
+
+            dto.OwnerAxUserId = ownerAxUserId;
+            dto.INDCreatedByUserId = ownerAxUserId;
+            dto.CreatedByUserId = ownerAxUserId;
+            dto.UserId = ownerAxUserId;
+        }
+
+        /// <summary>
+        /// Normalizes owner aliases for every activity item returned by AX.
+        /// </summary>
+        private static void NormalizeActivityItems(IEnumerable<ActivityDetailDto> items)
+        {
+            if (items == null)
+                return;
+
+            foreach (var item in items)
+            {
+                FillActivityOwnerAliases(item);
+            }
+        }
+
+        /// <summary>
+        /// Extracts the created activity RecId from the current AX action message.
+        /// </summary>
+        private static string ExtractCreatedActivityRecId(string message)
+        {
+            var value = (message ?? string.Empty).Trim();
+            return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
+                ? value
+                : string.Empty;
+        }
+
+        /// <summary>
+        /// Writes a compact owner diagnostic line for activity detail reads.
+        /// </summary>
+        private void LogActivityOwnerDiagnostics(string operationName, string recId, string company, string axUserId, ActivityDetailDto dto, string traceId)
+        {
+            var ownerAxUserId = dto?.OwnerAxUserId ?? string.Empty;
+            var ownerSource = string.IsNullOrWhiteSpace(ownerAxUserId)
+                ? "AX:empty"
+                : "AX:getActivityOwnerAxUserId";
+
+            Logger.Log(
+                $"[API-DIAG] {operationName} recId={LogValue(recId)} company={LogValue(company)} " +
+                $"axUserId={LogValue(axUserId)} ownerAxUserId={LogValue(ownerAxUserId)} ownerSource={ownerSource} traceId={traceId}");
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            if (values == null)
+                return string.Empty;
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+
+            return string.Empty;
+        }
+
+        private static string LogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+        }
+
+        /// <summary>
         /// Parses dates in yyyyMMdd or yyyy-MM-dd deterministically.
         /// </summary>
         private static bool TryParseAxDate(string value, out DateTime date)
@@ -982,6 +1165,12 @@ namespace IND_CRM_API.Controllers.CRM
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out date);
+        }
+
+        // Keeps INDContactMethod values numeric; active options are configured through /api/crm/enums.
+        private static bool IsValidContactMethod(int value)
+        {
+            return value >= 0;
         }
 
         private IHttpActionResult BuildActivitiesListResponse(GetActivitiesRequest body, int page, int pageSize)
@@ -1045,6 +1234,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(fromDate.ToString("yyyyMMdd"));
                 con.Append(toDate.ToString("yyyyMMdd"));
                 con.Append(body.accountNum?.Trim() ?? string.Empty);
+                con.Append(ControlDataVisibilityAppCode);
+                con.Append(ControlDataVisibilityVisitsModuleCode);
+                con.Append(body.ownerAxUserId?.Trim() ?? string.Empty);
 
                 resultObj = ax.CallStaticClassMethod(
                     "INDCRMVisitsService",
