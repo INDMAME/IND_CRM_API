@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Miércoles 01/07/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Lunes 06/07/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -2785,7 +2785,7 @@ Formatversion: 1
         #        return [INDCRMUtilityService::buildHeader(false, 'CompanyId es obligatorio.', conNull()), conNull()];
         #
         #    if (conLen(_data) < 4)
-        #        return [INDCRMUtilityService::buildHeader(false, 'Input container invalido. Se esperan CompanyId, HojaGastosId, EventType y ActorAxUserId.', conNull()), conNull()];
+        #        return [INDCRMUtilityService::buildHeader(false, 'Input container inválido. Se esperan CompanyId, HojaGastosId, EventType y ActorAxUserId.', conNull()), conNull()];
         #
         #    hojaId        = conPeek(_data, 2);
         #    eventType     = conPeek(_data, 3);
@@ -2810,7 +2810,7 @@ Formatversion: 1
         #            // Tambien cubre deshacer rechazo/aprobacion cuando la hoja vuelve a InReview.
         #            managerCrmUserIds = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds(ownerCrmUserId);
         #            if (conLen(managerCrmUserIds) == 0)
-        #                return [INDCRMUtilityService::buildHeader(false, 'No se encontro jefatura para el propietario de la hoja.', conNull()), conNull()];
+        #                return [INDCRMUtilityService::buildHeader(false, 'No se encontró jefatura para el propietario de la hoja, verificar CRMUsuarioSubordinadoTable.', conNull()), conNull()];
         #
         #            recipientRole      = 'Approver';
         #            for (i = 1; i <= conLen(managerCrmUserIds); i++)
@@ -4845,14 +4845,14 @@ Formatversion: 1
         #        senderCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(senderUserId);
         #        if (!senderCrmUserId)
         #        {
-        #            warning(strFmt('No se envio email %1 para hoja %2: no se pudo resolver usuario CRM emisor.', eventType, expenseSheet.HojaGastosId));
+        #            warning(strFmt('No se envió email %1 para hoja %2: no se pudo resolver usuario CRM emisor.', eventType, expenseSheet.HojaGastosId));
         #            return false;
         #        }
         #
         #        managerCrmUserIds = INDCRMExpenseSheetService::resolveExpenseSheetManagerCrmUserIds(expenseSheet.UserId);
         #        if (conLen(managerCrmUserIds) == 0)
         #        {
-        #            warning(strFmt('No se envio email %1 para hoja %2: no se encontro jefatura para el propietario.', eventType, expenseSheet.HojaGastosId));
+        #            warning(strFmt('No se envió email %1 para hoja %2: no se encontró jefatura para el propietario, verificar CRMUsuarioSubordinadoTable.', eventType, expenseSheet.HojaGastosId));
         #            return false;
         #        }
         #

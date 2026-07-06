@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : INDTicketInfoTable unloaded at Miércoles 01/07/2026
+; Navision Axapta Table : INDTicketInfoTable unloaded at Lunes 06/07/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -649,31 +649,6 @@ Formatversion: 1
         #    return docuRef;
         #}
       ENDSOURCE
-      SOURCE #reimbursementCurrencyCode
-        #//MMS - Ajustes CRM - 2026.07.02
-        #CurrencyCode reimbursementCurrencyCode()
-        #{
-        #    CRMHojaGastosLine  gastosLine;
-        #    CRMHojaGastosTable hojaGastosTable;
-        #    ;
-        #
-        #    // Resuelve la divisa de reembolso desde la linea de gasto vinculada; fallback a divisa estandar de empresa.
-        #    if (this.FileId)
-        #    {
-        #        gastosLine = CRMHojaGastosLine::FindByFileId(this.FileId);
-        #
-        #        if (gastosLine && gastosLine.HojaGastosId)
-        #        {
-        #            hojaGastosTable = gastosLine.HojaGastosTable();
-        #
-        #            if (hojaGastosTable && hojaGastosTable.CurrencyCode)
-        #                return hojaGastosTable.CurrencyCode;
-        #        }
-        #    }
-        #
-        #    return CompanyInfo::standardCurrency();
-        #}
-      ENDSOURCE
       SOURCE #existHojaGastosId
         #boolean existHojaGastosId()
         #{
@@ -716,6 +691,9 @@ Formatversion: 1
         #    if (!this.validateCurrencyAmounts())
         #        throw error("Datos de divisa del ticket invalidos.");
         #
+        #    if(this.CurrencyCode)
+        #        this.CurrencyCode = CompanyInfo::standardCurrency();
+        #
         #    super();
         #
         #    //INDMMS_ExternalCRM - 2026.03.25
@@ -738,8 +716,19 @@ Formatversion: 1
         #    {
         #        //MMS - Ajustes CRM - 2026.06.26
         #        case FieldNum(INDTicketInfoTable, TotalAmount),
-        #             FieldNum(INDTicketInfoTable, CurrencyCode),
         #             FieldNum(INDTicketInfoTable, ExchRate):
+        #            this.normalizeCurrencyAmounts(false);
+        #            break;
+        #
+        #        case FieldNum(INDTicketInfoTable, CurrencyCode):
+        #            //MMS - Ajustes CRM - 2026.07.06
+        #            // Al cambiar divisa, evita derivar el tipo desde un AmountMST calculado con la divisa anterior.
+        #            if (this.CurrencyCode != this.orig().CurrencyCode)
+        #            {
+        #                this.ExchRate  = this.CurrencyCode == CompanyInfo::standardCurrency() ? 100 : 0;
+        #                this.AmountMST = 0;
+        #            }
+        #
         #            this.normalizeCurrencyAmounts(false);
         #            break;
         #
@@ -775,6 +764,31 @@ Formatversion: 1
         #    this.AmountMST = this.ticketAmountMST();
         #}
         #
+      ENDSOURCE
+      SOURCE #reimbursementCurrencyCode
+        #//MMS - Ajustes CRM - 2026.07.02
+        #CurrencyCode reimbursementCurrencyCode()
+        #{
+        #    CRMHojaGastosLine  gastosLine;
+        #    CRMHojaGastosTable hojaGastosTable;
+        #    ;
+        #
+        #    // Resuelve la divisa de reembolso desde la linea de gasto vinculada; fallback a divisa estandar de empresa.
+        #    if (this.FileId)
+        #    {
+        #        gastosLine = CRMHojaGastosLine::FindByFileId(this.FileId);
+        #
+        #        if (gastosLine && gastosLine.HojaGastosId)
+        #        {
+        #            hojaGastosTable = gastosLine.HojaGastosTable();
+        #
+        #            if (hojaGastosTable && hojaGastosTable.CurrencyCode)
+        #                return hojaGastosTable.CurrencyCode;
+        #        }
+        #    }
+        #
+        #    return CompanyInfo::standardCurrency();
+        #}
       ENDSOURCE
       SOURCE #syncAdjustmentLineToTotal
         #//MMS - Recalculates a single ticket adjustment line - 2026.06.30
@@ -1000,8 +1014,11 @@ Formatversion: 1
         #
         #    if (this.CurrencyCode != this.orig().CurrencyCode && this.ExchRate == this.orig().ExchRate)
         #    {
-        #        this.ExchRate = 0;
-        #        amountMSTChanged = this.AmountMST != 0 && this.orig().AmountMST != this.AmountMST;
+        #        //MMS - Ajustes CRM - 2026.07.06
+        #        // El cambio de divisa no debe interpretar el AmountMST recalculado como importe manual.
+        #        this.ExchRate  = this.CurrencyCode == CompanyInfo::standardCurrency() ? 100 : 0;
+        #        this.AmountMST = 0;
+        #        amountMSTChanged = false;
         #    }
         #
         #    this.updateSearchKey();
