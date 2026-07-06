@@ -3,12 +3,15 @@
 Colecciones
 - DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
 - DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V06.postman_collection.json`
+- PROD activa: `.codex/postman/PROD/IND_CRM_API V31.postman_collection.json`
+- PROD copia raiz actual: `.codex/postman/IND_CRM_API V31.postman_collection.json`
 - Prompt frontend visitas/jerarquia: `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
 Ambiente (variables sugeridas)
 - `baseUrl` = `https://dev.insertec.biz:2083`
+- `baseUrl` PROD = `https://crm.insertec.biz:7776`
 - `tokenId` = token JWT vigente
 - `companyId` = compania obtenida desde Entra Context
 - `defaultCompanyId` = compania por defecto devuelta por Entra Context
@@ -46,6 +49,7 @@ Ambiente (variables sugeridas)
 
 Notas
 - La linea `PROD` conserva intacto el historico existente; la linea `DEV` arranca en `V01` basada en la `V30` mas reciente.
+- `PROD V31` se basa en la coleccion activa `DEV V06`, ajusta `baseUrl` a `https://crm.insertec.biz:7776` y conserva los headers automaticos de contexto Entra.
 - Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
 - Endpoints CRM usan `X-IND-Company: {{companyId}}`.
 - Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
