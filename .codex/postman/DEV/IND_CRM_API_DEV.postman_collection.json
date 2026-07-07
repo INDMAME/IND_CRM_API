@@ -2127,7 +2127,7 @@
                                                                                                 "list"
                                                                                             ]
                                                                                },
-                                                                       "description":  "Lista generica de tickets. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, Status, ProcessedByAI, CurrencyCode, TotalAmount, TransDate, FileName y GastoType."
+                                                                       "description":  "Lista generica de tickets. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, Status, ProcessedByAI, CurrencyCode, TotalAmount, TotalAmountCurrency, TotalAmountMST, TransDate, FileName y GastoType. TotalAmount es alias legacy de TotalAmountCurrency."
                                                                    },
                                                        "response":  [
 
@@ -2173,7 +2173,7 @@
                                                                                                 "list"
                                                                                             ]
                                                                                },
-                                                                       "description":  "Lista especifica para vinculacion. Sale prefiltrada por status Pending y totalAmount distinto de cero. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, CurrencyCode, TotalAmount, TransDate, FileName, ProcessedByAI y GastoType."
+                                                                       "description":  "Lista especifica para vinculacion. Sale prefiltrada por status Pending y totalAmount distinto de cero. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, CurrencyCode, TotalAmount, TotalAmountCurrency, TotalAmountMST, TransDate, FileName, ProcessedByAI y GastoType. TotalAmount es alias legacy de TotalAmountCurrency."
                                                                    },
                                                        "response":  [
 

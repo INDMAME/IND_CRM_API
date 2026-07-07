@@ -122,9 +122,11 @@ Endpoints
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense
+  Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense, totalAmountCurrency, totalAmountMST
+  Nota totales: `totalAmountCurrency` es el total en la divisa de la hoja/documento; `totalAmountMST` es el importe reembolsable MST calculado por `CRMHojaGastosTable.TotalAmountMST()`. `totalAmount` se mantiene como alias legacy de `totalAmountCurrency`.
   Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja (`userId`). Se agrega al contrato de detalle como campo adicional compatible con clientes anteriores.
-  Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate
+  Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate, totalAmountCurrency, totalAmountMST
+  Nota lineas: `totalAmountCurrency` es alias de `amount`; `totalAmountMST` es alias de `amountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional con enum INDReimbursableExpense)
@@ -164,7 +166,8 @@ Endpoints
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense (INDReimbursableExpense), includeSubordinates (bool; true = subordinados directos del usuario de header)
   Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`.
-  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate y reimbursableExpense
+  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate, reimbursableExpense, totalAmountCurrency y totalAmountMST
+  Nota totales: `totalAmountCurrency` es el total en divisa; `totalAmountMST` es el importe reembolsable MST. `totalAmount` se mantiene como alias legacy de `totalAmountCurrency`.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
 ## Expense Sheet Tickets
@@ -176,31 +179,35 @@ Endpoints
   Body mode 0|2: lines[] con description, qty, price (totalAmount opcional). Las lineas de ticket pueden informar `price`/`totalAmount` negativos; `qty` no puede ser negativo y `qty = 0` solo se acepta con total de linea negativo.
   Optional: totalAmount, comentario, fileExtension, existingFileId, gastoType, ocrJson, normalizedJson, ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399).
   Nota enums AX: `gastoType` debe enviarse como valor numerico obtenido desde `/api/crm/enums`.
+  Response data incluye `TotalAmountCurrency` y `TotalAmountMST` cuando AX devuelve los extras de cabecera. `TotalAmount` se mantiene como alias legacy de `TotalAmountCurrency`.
 - POST /api/crm/expensesheets/tickets/quick-create (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type required: multipart/form-data.
   Body required: ticketImage (jpg/jpeg/png/webp, max 50 MB).
   Body optional: currencyCode, description, comentario, existingHojaGastosId, projId (legacy alias: projectId).
   Flujo: crea ticket provisional, sube archivo, extrae draft IA, finaliza ticket y opcionalmente lo vincula a una hoja de gastos existente.
-  Response data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds.{TicketCreate,FileUpload,DraftExtract,TicketFinalize,SheetLink}`.
+  Response data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `TotalAmountCurrency`, `TotalAmountMST`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds.{TicketCreate,FileUpload,DraftExtract,TicketFinalize,SheetLink}`.
   En errores tras crear `FileId`, el endpoint intenta rollback interno del blob y del ticket AX; el error original se conserva y el resultado del rollback viaja en los campos `Rollback*`.
   Errores relevantes: 422 validacion, 429 rate limit IA, 503 servicio IA no disponible, 500 error interno.
 - GET /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Devuelve cabecera + lineas del ticket.
-  Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate` y `ticketTime`.
+  Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate`, `ticketTime`, `totalAmountCurrency` y `totalAmountMST`.
+  Nota totales: `totalAmountCurrency` viene de `INDTicketInfoTable.TotalAmount`; `totalAmountMST` viene de `INDTicketInfoTable.AmountMST`. `totalAmount` y `amountMST` se mantienen como aliases legacy.
   Lineas incluyen `AdjustmentAmount` cuando AX devuelve el flag `INDTicketInfoLine.Adjustment`.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).
   Nota enums AX: `status` y `gastoType` deben enviarse como valores numericos obtenidos desde `/api/crm/enums`.
   Nota: `createdDateFrom/createdDateTo` son opcionales; si ambos llegan, se valida `from <= to`. La fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
-  Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `GastoType`.
+  Response items: `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `GastoType`.
+  Nota: `TotalAmount` se mantiene como alias legacy de `TotalAmountCurrency`.
 - POST /api/crm/expensesheets/tickets/link/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).
   Nota enums AX: `gastoType` debe enviarse como valor numerico obtenido desde `/api/crm/enums`.
   Prefiltros fijos en origen: estado pendiente interno de AX y `totalAmount != 0`.
   Nota: la fecha de referencia de filtros y respuesta es `ticketHeader.createdDate`.
-  Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI`, `GastoType`.
+  Response items: `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI`, `GastoType`.
+  Nota: `TotalAmount` se mantiene como alias legacy de `TotalAmountCurrency`.
 - POST /api/crm/expensesheets/tickets/link/bulk (Authorize + X-IND-Company + X-IND-AxUserId)
   Body legacy soportado: `expenseSheetId`, `ticketIds[]` (equivale a `selectionMode = selected`).
   Body ampliado:
@@ -216,13 +223,14 @@ Endpoints
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, amountMST, exchRate, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
   Nota: si el ticket vinculado esta en la misma divisa de reembolso de la hoja, editar `amountMST` conserva `exchRate`; si la divisa difiere, AX recalcula `exchRate` con `totalAmount * 100 / amountMST`.
+  Response data incluye `TotalAmount`, `TotalAmountCurrency`, `AmountMST`, `TotalAmountMST` y `ExchRate`; `TotalAmount`/`AmountMST` quedan como aliases legacy.
 - POST /api/crm/expensesheets/tickets/{fileId}/total-adjustment (Authorize + X-IND-Company + X-IND-AxUserId)
   Ajusta `INDTicketInfoTable.TotalAmount` y crea una linea diferencial en `INDTicketInfoLine` cuando cambia el importe.
   Body required: `totalAmount` (nuevo total de cabecera, mayor o igual que 0).
   AX calcula `differenceAmount = totalAmount nuevo - TotalAmount anterior`; la diferencia puede ser positiva, negativa o cero.
   Si hay diferencia, la linea se crea o recalcula con description fija `AJUSTE DE IMPORTE TOTAL`, `Qty = 1`, `Price = differenceAmount`, `TotalAmount = differenceAmount` y `Adjustment = Yes` en AX, expuesto como `AdjustmentAmount`.
   Si ya existia linea de ajuste y un cambio posterior deja la diferencia entre cabecera y suma de lineas normales en `0`, AX elimina la linea `Adjustment`; en ese caso `AdjustmentLineRecId` vuelve vacio/0 y `AdjustmentAmount` se devuelve como `false`.
-  Response data: `FileId`, `PreviousTotalAmount`, `NewTotalAmount`, `DifferenceAmount`, `AdjustmentLineRecId`, `AdjustmentLineCreated`, `AdjustmentDescription`, `AdjustmentAmount`.
+  Response data: `FileId`, `PreviousTotalAmount`, `NewTotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `DifferenceAmount`, `AdjustmentLineRecId`, `AdjustmentLineCreated`, `AdjustmentDescription`, `AdjustmentAmount`.
 - POST /api/crm/expensesheets/tickets/{fileId}/ia (Authorize + X-IND-Company + X-IND-AxUserId)
   Reemplaza cabecera + lineas del ticket con datos de IA.
   Reglas:
@@ -231,6 +239,7 @@ Endpoints
   - Usa metodo AX atomico `updateExpenseSheetTicketFromIA`.
   - Compatibilidad de entrada: si llega envelope tipo `expensefromticket` (`{ Success, Message, Data, TraceId }`), el backend adapta automaticamente `Data` al contrato esperado.
   Body: `description`, `currencyCode`, `gastoType` (opcional), `totalAmount` (opcional), `transDate` (DDMMYYYY o DD.MM.YYYY), `ticketDate` (DDMMYYYY o DD.MM.YYYY, opcional), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399, opcional), `comentario` (opcional), `urlFile`, `fileName` (opcional), `ocrJson` (opcional), `normalizedJson` (opcional), `fileExtension` (opcional), `lines[]`. Las lineas pueden llevar importes negativos como descuento; si `qty = 0`, el total de linea debe ser negativo.
+  Response data incluye `TotalAmount`, `TotalAmountCurrency` y `TotalAmountMST`; `TotalAmount` se mantiene como alias legacy de `TotalAmountCurrency`.
 - POST /api/crm/expensesheets/tickets/{fileId}/file?extension=jpg (Authorize + X-IND-Company + X-IND-AxUserId)
   Content-Type: multipart/form-data (primer archivo del payload).
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.
@@ -244,13 +253,16 @@ Endpoints
 - POST /api/crm/expensesheets/tickets/{fileId}/lines (Authorize + X-IND-Company + X-IND-AxUserId)
   Crea una linea granular en `INDTicketInfoLine`.
   Body: `description`, `qty`, `price`, `totalAmount` opcional.
+  Response data incluye el total recalculado de cabecera como `TotalAmount`, `TotalAmountCurrency` y `TotalAmountMST`.
 - PUT /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza una linea granular de `INDTicketInfoLine`.
   Body: `description`, `qty`, `price`, `totalAmount` opcional.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
+  Response data incluye el total recalculado de cabecera como `TotalAmount`, `TotalAmountCurrency` y `TotalAmountMST`.
 - DELETE /api/crm/expensesheets/tickets/{fileId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina una linea granular de `INDTicketInfoLine`.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas temporales.
+  Response data incluye el total recalculado de cabecera como `TotalAmount`, `TotalAmountCurrency` y `TotalAmountMST`.
 
 ## Activities / Visits
 - GET /api/crm/data-visibility/visible-users?appCode=CRM&moduleCode=VISITAS_GESTION&includeCrmUserId=true (Authorize + X-IND-Company + X-IND-AxUserId)

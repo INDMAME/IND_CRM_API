@@ -290,6 +290,8 @@ namespace IND_CRM_API.Controllers.CRM
 
                 var fileId = extras.Count > 0 ? extras[0] : string.Empty;
                 var ticketRecId = extras.Count > 1 ? extras[1] : string.Empty;
+                var responseTotalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : null;
+                var responseTotalAmountMST = extras.Count > 3 ? ToDecimal(extras[3]) : null;
                 var lineRecIds = MapRecIdList(linesOut);
 
                 var finalFileName = modeValue == ModeAddLinesToExisting ? string.Empty : provisionalFileName;
@@ -329,7 +331,10 @@ namespace IND_CRM_API.Controllers.CRM
                         TicketRecId = ticketRecId,
                         LineRecIds = lineRecIds,
                         FileName = finalFileName,
-                        FileNameFinalized = fileNameFinalized
+                        FileNameFinalized = fileNameFinalized,
+                        TotalAmount = responseTotalAmountCurrency,
+                        TotalAmountCurrency = responseTotalAmountCurrency,
+                        TotalAmountMST = responseTotalAmountMST
                     },
                     TraceId = traceId
                 };
@@ -730,6 +735,8 @@ namespace IND_CRM_API.Controllers.CRM
 
                         resultData.FileName = string.IsNullOrWhiteSpace(headerApplyResult.FileName) ? resultData.FileName : headerApplyResult.FileName;
                         resultData.ProcessedByAI = headerApplyResult.ProcessedByAI ?? false;
+                        resultData.TotalAmountCurrency = headerApplyResult.TotalAmountCurrency ?? headerApplyResult.TotalAmount;
+                        resultData.TotalAmountMST = headerApplyResult.TotalAmountMST;
                         if (!string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId))
                             resultData.HojaGastosId = null;
 
@@ -797,6 +804,8 @@ namespace IND_CRM_API.Controllers.CRM
 
                 resultData.FileName = string.IsNullOrWhiteSpace(applyResult.FileName) ? resultData.FileName : applyResult.FileName;
                 resultData.ProcessedByAI = applyResult.ProcessedByAI;
+                resultData.TotalAmountCurrency = applyResult.TotalAmountCurrency ?? applyResult.TotalAmount;
+                resultData.TotalAmountMST = applyResult.TotalAmountMST;
                 resultData.CompletedStage = QuickCreateStageTicketFinalized;
 
                 if (!string.IsNullOrWhiteSpace(quickCreateForm.ExistingHojaGastosId))
@@ -1653,12 +1662,12 @@ namespace IND_CRM_API.Controllers.CRM
                 var mergedDescription = (body.description ?? existing.Description ?? string.Empty).Trim();
                 var mergedCurrencyCode = (body.currencyCode ?? existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
                 var mergedGastoType = body.gastoType ?? existing.GastoType ?? 0;
-                var mergedTotalAmount = body.totalAmount ?? existing.TotalAmount ?? 0m;
-                var mergedAmountMST = body.amountMST ?? existing.AmountMST;
+                var mergedTotalAmount = body.totalAmount ?? existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m;
+                var mergedAmountMST = body.amountMST ?? existing.TotalAmountMST ?? existing.AmountMST;
                 var mergedExchRate = body.exchRate ?? existing.ExchRate;
                 var hasManualTotalAmountChange =
                     body.totalAmount.HasValue &&
-                    Math.Abs(body.totalAmount.Value - (existing.TotalAmount ?? 0m)) >= 0.005m;
+                    Math.Abs(body.totalAmount.Value - (existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m)) >= 0.005m;
                 var mergedStatus = body.status ?? existing.Status ?? TicketStatusValueForLinking;
                 var mergedProcessedByAI = body.processedByAI ?? existing.ProcessedByAI ?? false;
                 var mergedOcrJson = body.ocrJson ?? existing.OcrJson;
@@ -1768,8 +1777,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var responseProcessedByAI = updateExtras.Count > 1
                     ? (ToNullableBool(updateExtras[1]) ?? mergedProcessedByAI)
                     : mergedProcessedByAI;
-                var responseTotalAmount = updateExtras.Count > 2 ? ToDecimal(updateExtras[2]) ?? mergedTotalAmount : mergedTotalAmount;
-                var responseAmountMST = updateExtras.Count > 3 ? ToDecimal(updateExtras[3]) : mergedAmountMST;
+                var responseTotalAmountCurrency = updateExtras.Count > 2 ? ToDecimal(updateExtras[2]) ?? mergedTotalAmount : mergedTotalAmount;
+                var responseTotalAmountMST = updateExtras.Count > 3 ? ToDecimal(updateExtras[3]) : mergedAmountMST;
                 var responseExchRate = updateExtras.Count > 4 ? ToDecimal(updateExtras[4]) : mergedExchRate;
 
                 LogOut(HttpStatusCode.OK);
@@ -1785,8 +1794,10 @@ namespace IND_CRM_API.Controllers.CRM
                         FileName = mergedFileName,
                         ProcessedByAI = responseProcessedByAI,
                         GastoType = mergedGastoType,
-                        TotalAmount = responseTotalAmount,
-                        AmountMST = responseAmountMST,
+                        TotalAmount = responseTotalAmountCurrency,
+                        TotalAmountCurrency = responseTotalAmountCurrency,
+                        AmountMST = responseTotalAmountMST,
+                        TotalAmountMST = responseTotalAmountMST,
                         ExchRate = responseExchRate
                     },
                     TraceId = traceId
@@ -2056,7 +2067,7 @@ namespace IND_CRM_API.Controllers.CRM
                 var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
                 var mergedTotalAmount = body.lines != null && body.lines.Count > 0
                     ? linesTotalAmount
-                    : (body.totalAmount ?? existing.TotalAmount ?? 0m);
+                    : (body.totalAmount ?? existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m);
                 var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
                 var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
                 if (usedTransDateFallback)
@@ -2181,11 +2192,15 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(status, error);
                 }
 
+                var responseTotalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount;
+                var responseTotalAmountMST = extras.Count > 4 ? ToDecimal(extras[4]) : null;
                 var responseData = new
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     TicketRecId = extras.Count > 1 ? extras[1] : string.Empty,
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount,
+                    TotalAmount = responseTotalAmountCurrency,
+                    TotalAmountCurrency = responseTotalAmountCurrency,
+                    TotalAmountMST = responseTotalAmountMST,
                     ProcessedByAI = extras.Count > 3 ? (ToNullableBool(extras[3]) ?? true) : true,
                     GastoType = mergedGastoType,
                     FileName = mergedFileName,
@@ -2786,11 +2801,15 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(status, error);
                 }
 
+                var totalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : null;
+                var totalAmountMST = extras.Count > 3 ? ToDecimal(extras[3]) : null;
                 var data = new
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : string.Empty,
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
+                    TotalAmountMST = totalAmountMST
                 };
 
                 LogOut(HttpStatusCode.Created);
@@ -2910,11 +2929,15 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(status, error);
                 }
 
+                var totalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : null;
+                var totalAmountMST = extras.Count > 3 ? ToDecimal(extras[3]) : null;
                 var data = new
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : lineRecId.ToString(CultureInfo.InvariantCulture),
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
+                    TotalAmountMST = totalAmountMST
                 };
 
                 LogOut(HttpStatusCode.OK);
@@ -3027,11 +3050,15 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(status, error);
                 }
 
+                var totalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : null;
+                var totalAmountMST = extras.Count > 3 ? ToDecimal(extras[3]) : null;
                 var data = new
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                     LineRecId = extras.Count > 1 ? extras[1] : lineRecId.ToString(CultureInfo.InvariantCulture),
-                    TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : null
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
+                    TotalAmountMST = totalAmountMST
                 };
 
                 LogOut(HttpStatusCode.OK);
@@ -3102,6 +3129,8 @@ namespace IND_CRM_API.Controllers.CRM
             public string FileId { get; set; }
             public string TicketRecId { get; set; }
             public decimal? TotalAmount { get; set; }
+            public decimal? TotalAmountCurrency { get; set; }
+            public decimal? TotalAmountMST { get; set; }
             public bool? ProcessedByAI { get; set; }
             public int? GastoType { get; set; }
             public string FileName { get; set; }
@@ -4509,7 +4538,7 @@ namespace IND_CRM_API.Controllers.CRM
             var mergedGastoType = body?.gastoType ?? existing.GastoType ?? 0;
             var mergedTotalAmount = body?.totalAmount.HasValue == true && body.totalAmount.Value >= 0m
                 ? body.totalAmount.Value
-                : (existing.TotalAmount ?? 0m);
+                : (existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body?.transDate) ? existing.TransDate : body.transDate;
             var mergedTransDate = NormalizeAnyDateToAxYmdOrToday(mergedTransDateRaw, out var usedTransDateFallback);
             if (usedTransDateFallback)
@@ -4597,10 +4626,14 @@ namespace IND_CRM_API.Controllers.CRM
                     return false;
                 }
 
+                var totalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount;
+                var totalAmountMST = extras.Count > 3 ? ToDecimal(extras[3]) : null;
                 result = new TicketIaApplyResult
                 {
                     FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
-                    TotalAmount = mergedTotalAmount,
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
+                    TotalAmountMST = totalAmountMST,
                     ProcessedByAI = extras.Count > 1 ? (ToNullableBool(extras[1]) ?? false) : false,
                     GastoType = mergedGastoType,
                     FileName = mergedFileName,
@@ -4649,7 +4682,7 @@ namespace IND_CRM_API.Controllers.CRM
             var linesTotalAmount = CalculateTicketLinesTotal(body.lines);
             var mergedTotalAmount = body.lines != null && body.lines.Count > 0
                 ? linesTotalAmount
-                : (body.totalAmount ?? existing.TotalAmount ?? 0m);
+                : (body.totalAmount ?? existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m);
             var mergedTransDateRaw = string.IsNullOrWhiteSpace(body.transDate) ? existing.TransDate : body.transDate;
             var mergedTransDate = TryNormalizeAnyDateToAxYmd(mergedTransDateRaw, out var normalizedTransDate)
                 ? normalizedTransDate
@@ -4769,11 +4802,15 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
+            var responseTotalAmountCurrency = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount;
+            var responseTotalAmountMST = extras.Count > 4 ? ToDecimal(extras[4]) : null;
             result = new TicketIaApplyResult
             {
                 FileId = extras.Count > 0 ? extras[0] : fileId.Trim(),
                 TicketRecId = extras.Count > 1 ? extras[1] : string.Empty,
-                TotalAmount = extras.Count > 2 ? ToDecimal(extras[2]) : mergedTotalAmount,
+                TotalAmount = responseTotalAmountCurrency,
+                TotalAmountCurrency = responseTotalAmountCurrency,
+                TotalAmountMST = responseTotalAmountMST,
                 ProcessedByAI = extras.Count > 3 ? (ToNullableBool(extras[3]) ?? true) : true,
                 GastoType = mergedGastoType,
                 FileName = mergedFileName,
@@ -5674,7 +5711,7 @@ namespace IND_CRM_API.Controllers.CRM
             con.Append(fileId);
             con.Append((existing.Description ?? string.Empty).Trim());
             con.Append((existing.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant());
-            con.Append(existing.TotalAmount ?? 0m);
+            con.Append(existing.TotalAmountCurrency ?? existing.TotalAmount ?? 0m);
             con.Append(statusValue);
             con.Append(normalizedTransDate);
             con.Append((existing.Comentario ?? string.Empty).Trim());
@@ -6105,7 +6142,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusValueForLinking)
                 return "Ticket is not available for linking.";
 
-            if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
+            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
+            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
                 return "Ticket total amount must be greater than zero.";
 
             if (!ticketDetail.GastoType.HasValue || !IsValidGastoType(ticketDetail.GastoType.Value))
@@ -6267,10 +6305,11 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
-            if (!ticketDetail.TotalAmount.HasValue || ticketDetail.TotalAmount.Value <= 0m)
+            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
+            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
             {
                 status = (HttpStatusCode)422;
-                message = ticketDetail.TotalAmount.HasValue && ticketDetail.TotalAmount.Value < 0m
+                message = totalAmountCurrency.HasValue && totalAmountCurrency.Value < 0m
                     ? TicketNegativeTotalValidationMessage
                     : "Ticket total amount must be greater than zero.";
                 return false;
@@ -6293,7 +6332,7 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append(ToAxBool(false));
             lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
             lineCon.Append(1m);
-            lineCon.Append(ticketDetail.TotalAmount ?? 0m);
+            lineCon.Append(totalAmountCurrency ?? 0m);
             lineCon.Append((projectId ?? string.Empty).Trim());
             linesCon.Append(lineCon);
             rootCon.Append(linesCon);
@@ -6460,6 +6499,7 @@ namespace IND_CRM_API.Controllers.CRM
             var previousTotalAmount = extras != null && extras.Count > 1 ? ToDecimal(extras[1]) : null;
             var newTotalAmount = extras != null && extras.Count > 2 ? ToDecimal(extras[2]) : fallbackNewTotalAmount;
             var differenceAmount = extras != null && extras.Count > 3 ? ToDecimal(extras[3]) : null;
+            var totalAmountMST = extras != null && extras.Count > 8 ? ToDecimal(extras[8]) : null;
 
             return new ExpenseSheetTicketTotalAdjustmentResultDto
             {
@@ -6468,6 +6508,8 @@ namespace IND_CRM_API.Controllers.CRM
                     : fallbackFileId,
                 PreviousTotalAmount = previousTotalAmount,
                 NewTotalAmount = newTotalAmount,
+                TotalAmountCurrency = newTotalAmount,
+                TotalAmountMST = totalAmountMST,
                 DifferenceAmount = differenceAmount,
                 AdjustmentLineRecId = extras != null && extras.Count > 4 ? extras[4] : string.Empty,
                 AdjustmentLineCreated = extras != null && extras.Count > 5 ? ToNullableBool(extras[5]) : null,
@@ -6484,6 +6526,9 @@ namespace IND_CRM_API.Controllers.CRM
             if (headerExtras == null || headerExtras.Count < 6)
                 return null;
 
+            var totalAmountCurrency = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null;
+            var totalAmountMST = headerExtras.Count > 19 ? ToDecimal(headerExtras[19]) : null;
+
             var detail = new ExpenseSheetTicketDetailDto
             {
                 FileId = headerExtras.Count > 0 ? headerExtras[0] : string.Empty,
@@ -6491,8 +6536,10 @@ namespace IND_CRM_API.Controllers.CRM
                 Status = headerExtras.Count > 2 ? NormalizeTicketStatusOrNull(ToInt(headerExtras[2])) : null,
                 GastoType = headerExtras.Count > 11 ? NormalizeGastoTypeOrNull(ToInt(headerExtras[11])) : null,
                 CurrencyCode = headerExtras.Count > 3 ? headerExtras[3] : string.Empty,
-                TotalAmount = headerExtras.Count > 4 ? ToDecimal(headerExtras[4]) : null,
-                AmountMST = headerExtras.Count > 19 ? ToDecimal(headerExtras[19]) : null,
+                TotalAmount = totalAmountCurrency,
+                TotalAmountCurrency = totalAmountCurrency,
+                AmountMST = totalAmountMST,
+                TotalAmountMST = totalAmountMST,
                 ExchRate = headerExtras.Count > 20 ? ToDecimal(headerExtras[20]) : null,
                 CreatedByUserId = headerExtras.Count > 5 ? headerExtras[5] : string.Empty,
                 TransDate = headerExtras.Count > 6 ? FormatApiDate(headerExtras[6]) : string.Empty,
@@ -6564,9 +6611,11 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 9)
+                var rowLen = AxContainerReadHelper.SafeLength(row);
+                if (row == null || rowLen < 9)
                     continue;
 
+                var totalAmountCurrency = ToDecimal(AxContainerReadHelper.SafeString(row, 6));
                 items.Add(new ExpenseSheetTicketListItemDto
                 {
                     FileId = AxContainerReadHelper.SafeString(row, 1),
@@ -6574,22 +6623,24 @@ namespace IND_CRM_API.Controllers.CRM
                     Status = NormalizeTicketStatusOrNull(ToInt(AxContainerReadHelper.SafeString(row, 3))),
                     ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 4)),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 5),
-                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7)),
                     FileName = AxContainerReadHelper.SafeString(row, 8),
                     GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9))),
-                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 10
+                    TicketDate = rowLen >= 10
                         ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 10))
                         : string.Empty,
-                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 11
+                    TicketTime = rowLen >= 11
                         ? FormatApiTime(AxContainerReadHelper.SafeString(row, 11))
                         : string.Empty,
-                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 12
+                    OwnerAxUserId = rowLen >= 12
                         ? AxContainerReadHelper.SafeString(row, 12)
                         : string.Empty,
-                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 13
+                    OwnerName = rowLen >= 13
                         ? AxContainerReadHelper.SafeString(row, 13)
-                        : string.Empty
+                        : string.Empty,
+                    TotalAmountMST = rowLen >= 14 ? ToDecimal(AxContainerReadHelper.SafeString(row, 14)) : null
                 });
             }
 
@@ -6649,31 +6700,35 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = start; i <= end; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 8)
+                var rowLen = AxContainerReadHelper.SafeLength(row);
+                if (row == null || rowLen < 8)
                     continue;
 
+                var totalAmountCurrency = ToDecimal(AxContainerReadHelper.SafeString(row, 4));
                 items.Add(new ExpenseSheetTicketLinkListItemDto
                 {
                     FileId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 3),
-                    TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 4)),
+                    TotalAmount = totalAmountCurrency,
+                    TotalAmountCurrency = totalAmountCurrency,
                     TransDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 5)),
                     FileName = AxContainerReadHelper.SafeString(row, 6),
                     ProcessedByAI = ToNullableBool(AxContainerReadHelper.SafeString(row, 7)),
                     GastoType = NormalizeGastoTypeOrNull(ToInt(AxContainerReadHelper.SafeString(row, 8))),
-                    TicketDate = AxContainerReadHelper.SafeLength(row) >= 9
+                    TicketDate = rowLen >= 9
                         ? FormatOptionalApiDate(AxContainerReadHelper.SafeString(row, 9))
                         : string.Empty,
-                    TicketTime = AxContainerReadHelper.SafeLength(row) >= 10
+                    TicketTime = rowLen >= 10
                         ? FormatApiTime(AxContainerReadHelper.SafeString(row, 10))
                         : string.Empty,
-                    OwnerAxUserId = AxContainerReadHelper.SafeLength(row) >= 11
+                    OwnerAxUserId = rowLen >= 11
                         ? AxContainerReadHelper.SafeString(row, 11)
                         : string.Empty,
-                    OwnerName = AxContainerReadHelper.SafeLength(row) >= 12
+                    OwnerName = rowLen >= 12
                         ? AxContainerReadHelper.SafeString(row, 12)
-                        : string.Empty
+                        : string.Empty,
+                    TotalAmountMST = rowLen >= 13 ? ToDecimal(AxContainerReadHelper.SafeString(row, 13)) : null
                 });
             }
 

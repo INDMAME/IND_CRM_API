@@ -85,6 +85,8 @@ namespace IND_CRM_API.Services
                 projId = item.ProjId,
                 currencyCode = item.CurrencyCode,
                 totalAmount = item.TotalAmount,
+                totalAmountCurrency = item.TotalAmountCurrency,
+                totalAmountMST = item.TotalAmountMST,
                 exchRate = item.ExchRate,
                 exchangeRateMode = item.ExchangeRateMode,
                 reimbursableExpense = item.ReimbursableExpense,
