@@ -6,6 +6,7 @@ Colecciones
 - PROD activa: `.codex/postman/PROD/IND_CRM_API V31.postman_collection.json`
 - PROD copia raiz actual: `.codex/postman/IND_CRM_API V31.postman_collection.json`
 - Prompt frontend visitas/jerarquia: `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`
+- Prompt frontend totales hojas/tickets: `.codex/postman/DEV/CRM_EXPENSE_TOTALS_FRONTEND_PROMPT.md`
 - Historial PROD: `.codex/Postman/PROD/`
 - Historial soporte PROD: `Notes/PROD/`
 
@@ -77,12 +78,12 @@ Notas
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
   - `GET /api/crm/expensesheets/tickets/{fileId}` retorna tambien `ocrJson` y `normalizedJson`.
-  - `POST /api/crm/expensesheets/tickets/list` devuelve solo `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName` y `GastoType`.
+  - `POST /api/crm/expensesheets/tickets/list` devuelve `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName` y `GastoType`. `TotalAmount` queda como alias legacy de `TotalAmountCurrency`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `ocrJson` y `normalizedJson` como payload opcional de OCR/normalizacion.
   - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`) y la fecha de referencia es `ticketHeader.createdDate`.
   - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
-  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`.
+  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`. `TotalAmount` queda como alias legacy de `TotalAmountCurrency`.
   - `POST /api/crm/expensesheets/tickets/link/bulk` mantiene compatibilidad con `expenseSheetId` + `ticketIds[]` y ahora soporta `selectionMode=selected|filtered`, `filters` y `excludedIds`, reutilizando `createExpenseSheet` en modo `2` y devolviendo resultado parcial con `linked`, `skipped` y `failed`.
   - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
   - `POST /api/crm/expensesheets/tickets/quick-create` acepta `multipart/form-data` con `ticketImage` y campos opcionales `currencyCode`, `description`, `comentario`, `existingHojaGastosId` y `projId` (`projectId` sigue como alias legacy); devuelve `completedStage` y `stepTraceIds` para trazar cada etapa.
@@ -112,3 +113,4 @@ Notas
   - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.
   - La consola de Postman muestra `actorAxUserId` junto con el evento esperado.
 - DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.
+- DEV actual incorpora `TotalAmountCurrency` y `TotalAmountMST` en cabeceras de hojas de gastos, listados de hojas, cabeceras de tickets, listados de tickets y respuestas de mutacion que devuelven totales recalculados. `TotalAmount` y `AmountMST` se mantienen como aliases legacy donde ya existian.

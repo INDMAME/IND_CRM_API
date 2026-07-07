@@ -2497,13 +2497,12 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName
-            // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense
-            // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
-            // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
-            // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
-            // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
-            // Previous (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ProjId [8]Voucher
+            // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
+            // Current (16): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName
+            // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName
+            // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
+            // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
+            // Previous (8): [1]HojaGastosId [2]Description [3]UserId [4]CurrencyCode [5]TotalAmountCurrency [6]ExchRate [7]ProjId [8]Voucher
             // Legacy (7): [1]HojaGastosId [2]UserId [3]Description [4]CurrencyCode [5]ExchRate [6]ProjId [7]Voucher
             var detail = new ExpenseSheetDetailDto
             {
@@ -2608,6 +2607,9 @@ namespace IND_CRM_API.Controllers.CRM
                 detail.UserName = string.Empty;
             }
 
+            detail.TotalAmountCurrency = detail.TotalAmount;
+            detail.TotalAmountMST = headerExtras.Count >= 17 ? ToDecimal(headerExtras[16]) : null;
+
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)
             {
@@ -2621,6 +2623,8 @@ namespace IND_CRM_API.Controllers.CRM
                 // Previous shape (9): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId
                 var hasPriceColumn = rowLen >= 10;
                 var hasReimbursableColumns = rowLen >= 14;
+                var lineAmountCurrency = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8);
+                var lineAmountMST = hasReimbursableColumns ? SafeDecimal(row, 13) : null;
                 var line = new ExpenseSheetLineDto
                 {
                     RecId = AxContainerReadHelper.SafeString(row, 1),
@@ -2631,12 +2635,14 @@ namespace IND_CRM_API.Controllers.CRM
                     FileId = AxContainerReadHelper.SafeString(row, 6),
                     Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
                     Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
-                    Amount = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8),
+                    Amount = lineAmountCurrency,
                     ProjId = hasPriceColumn ? AxContainerReadHelper.SafeString(row, 10) : AxContainerReadHelper.SafeString(row, 9),
                     ReimbursableExpense = hasReimbursableColumns ? SafeInt(row, 11) : null,
                     CurrencyCode = hasReimbursableColumns ? AxContainerReadHelper.SafeString(row, 12) : null,
-                    AmountMST = hasReimbursableColumns ? SafeDecimal(row, 13) : null,
-                    ExchRate = hasReimbursableColumns ? SafeDecimal(row, 14) : null
+                    AmountMST = lineAmountMST,
+                    ExchRate = hasReimbursableColumns ? SafeDecimal(row, 14) : null,
+                    TotalAmountCurrency = lineAmountCurrency,
+                    TotalAmountMST = lineAmountMST
                 };
 
                 detail.Lines.Add(line);
@@ -2679,14 +2685,12 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
-                // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountMST [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense
-                // Current (13): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountMST [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate
-                // Current (12): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate
-                // Current (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountMST [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher
-                // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
-                // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountMST [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
-                // Current (9): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]CurrencyCode [5]TotalAmountMST [6]ExchRate [7]ExchangeRateMode [8]ProjId [9]Voucher
-                // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountMST [7]CreatedDate
+                // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
+                // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense
+                // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
+                // Previous (10): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher
+                // Current (9): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]CurrencyCode [5]TotalAmountCurrency [6]ExchRate [7]ExchangeRateMode [8]ProjId [9]Voucher
+                // Previous (7): [1]HojaGastosId [2]Description [3]Voucher [4]ProjId [5]CurrencyCode [6]TotalAmountCurrency [7]CreatedDate
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
                 if (rowLen >= 14)
                 {
@@ -2702,12 +2706,14 @@ namespace IND_CRM_API.Controllers.CRM
                         ProjId = AxContainerReadHelper.SafeString(row, 11),
                         CurrencyCode = AxContainerReadHelper.SafeString(row, 7),
                         TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                        TotalAmountCurrency = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
                         CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
                         ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
                         OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
-                        OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty
+                        OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty,
+                        TotalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null
                     });
                     continue;
                 }
@@ -2878,6 +2884,12 @@ namespace IND_CRM_API.Controllers.CRM
                     ExchangeRateMode = null,
                     CreatedDate = FormatApiDate(amountAndDate.CreatedDate)
                 });
+            }
+
+            foreach (var item in items)
+            {
+                if (item != null && !item.TotalAmountCurrency.HasValue)
+                    item.TotalAmountCurrency = item.TotalAmount;
             }
 
             return items;

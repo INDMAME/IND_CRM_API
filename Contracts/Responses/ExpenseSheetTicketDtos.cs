@@ -15,8 +15,14 @@ namespace IND_CRM_API.Contracts.Responses
         public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
+        /// <summary>Legacy alias for TotalAmountCurrency kept for existing clients.</summary>
         public decimal? TotalAmount { get; set; }
+        /// <summary>Total amount in the ticket currency returned by AX.</summary>
+        public decimal? TotalAmountCurrency { get; set; }
+        /// <summary>Legacy alias for TotalAmountMST kept for existing clients.</summary>
         public decimal? AmountMST { get; set; }
+        /// <summary>Total reimbursable amount in MST returned by AX.</summary>
+        public decimal? TotalAmountMST { get; set; }
         public decimal? ExchRate { get; set; }
         public string CreatedByUserId { get; set; }
         public string TransDate { get; set; }
@@ -65,7 +71,10 @@ namespace IND_CRM_API.Contracts.Responses
         public int? GastoType { get; set; }
         public bool? ProcessedByAI { get; set; }
         public string CurrencyCode { get; set; }
+        /// <summary>Legacy alias for TotalAmountCurrency kept for existing clients.</summary>
         public decimal? TotalAmount { get; set; }
+        /// <summary>Total amount in the ticket currency returned by AX.</summary>
+        public decimal? TotalAmountCurrency { get; set; }
         public string TransDate { get; set; }
         public string TicketDate { get; set; }
         public string TicketTime { get; set; }
@@ -75,6 +84,8 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Display name for the functional ticket owner.</summary>
         public string OwnerName { get; set; }
+        /// <summary>Total reimbursable amount in MST, appended at the end of the AX row.</summary>
+        public decimal? TotalAmountMST { get; set; }
     }
 
     /// <summary>
@@ -85,7 +96,10 @@ namespace IND_CRM_API.Contracts.Responses
         public string FileId { get; set; }
         public string Description { get; set; }
         public string CurrencyCode { get; set; }
+        /// <summary>Legacy alias for TotalAmountCurrency kept for existing clients.</summary>
         public decimal? TotalAmount { get; set; }
+        /// <summary>Total amount in the ticket currency returned by AX.</summary>
+        public decimal? TotalAmountCurrency { get; set; }
         public string TransDate { get; set; }
         public string TicketDate { get; set; }
         public string TicketTime { get; set; }
@@ -98,6 +112,8 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Display name for the functional ticket owner.</summary>
         public string OwnerName { get; set; }
+        /// <summary>Total reimbursable amount in MST, appended at the end of the AX row.</summary>
+        public decimal? TotalAmountMST { get; set; }
     }
 
     /// <summary>
@@ -135,6 +151,8 @@ namespace IND_CRM_API.Contracts.Responses
         public bool? ProcessedByAI { get; set; }
         public bool LinkedToSheet { get; set; }
         public string HojaGastosId { get; set; }
+        public decimal? TotalAmountCurrency { get; set; }
+        public decimal? TotalAmountMST { get; set; }
         public string CompletedStage { get; set; }
         public string FailedStage { get; set; }
         public bool? RollbackAttempted { get; set; }
@@ -168,6 +186,12 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Nuevo importe total de cabecera guardado en AX.</summary>
         public decimal? NewTotalAmount { get; set; }
+
+        /// <summary>Nuevo importe total de cabecera en la divisa del ticket.</summary>
+        public decimal? TotalAmountCurrency { get; set; }
+
+        /// <summary>Importe reembolsable MST de la cabecera tras el ajuste.</summary>
+        public decimal? TotalAmountMST { get; set; }
 
         /// <summary>Diferencia calculada como nuevo total menos total anterior.</summary>
         public decimal? DifferenceAmount { get; set; }

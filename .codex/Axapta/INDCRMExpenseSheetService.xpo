@@ -92,6 +92,7 @@ Formatversion: 1
         #                return INDCRMUtilityService::buildHeader(false, 'Ticket no encontrado.', conNull());
         #
         #            adjustResult = ticketHeader.adjustTotalAmount(newTotalAmount, axUserId);
+        #            ticketHeader = INDTicketInfoTable::findByFileId(ticketHeader.FileId);
         #
         #            lineCreated         = conPeek(adjustResult, 1);
         #            previousTotalAmount = conPeek(adjustResult, 2);
@@ -108,7 +109,8 @@ Formatversion: 1
         #                                                      strFmt('%1', adjustmentLineRecId),
         #                                                      lineCreated ? '1' : '0',
         #                                                      'AJUSTE DE IMPORTE TOTAL',
-        #                                                      adjustmentLineExists ? '1' : '0']);
+        #                                                      adjustmentLineExists ? '1' : '0',
+        #                                                      strFmt('%1', ticketHeader.AmountMST)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -236,13 +238,15 @@ Formatversion: 1
         #static server container buildExpenseSheetListRow(CRMHojaGastosTable _hoja)
         #{
         #    int       expenseSheetStatus, exchangeRateMode, reimbursableExpense;
-        #    Amount    monto;
+        #    Amount    totalAmountCurrency;
+        #    Amount    totalAmountMST;
         #    str       ownerAxUserId;
         #    str       ownerName;
         #    container conItem;
         #    ;
         #
-        #    monto               = _hoja.TotalAmount();
+        #    totalAmountCurrency = _hoja.TotalAmount();
+        #    totalAmountMST      = _hoja.TotalAmountMST();
         #    exchangeRateMode    = any2int(_hoja.ExchangeRateMode);
         #    expenseSheetStatus  = any2int(_hoja.ExpenseSheetStatus);
         #    reimbursableExpense = any2int(_hoja.ReimbursableExpense);
@@ -259,7 +263,7 @@ Formatversion: 1
         #                 strFmt("%1", _hoja.UserId),
         #                 strFmt("%1", INDPersonaTable::findByCRM(CRMUsuarioTable::Find(_hoja.UserId).RecId).Name),
         #                 strFmt("%1", Currency::find(_hoja.CurrencyCode).CurrencyCodeISO),
-        #                 strFmt("%1", monto),
+        #                 strFmt("%1", totalAmountCurrency),
         #                 strFmt("%1", _hoja.ExchRate),
         #                 strFmt("%1", exchangeRateMode),
         #                 strFmt("%1", _hoja.ProjId),
@@ -267,7 +271,8 @@ Formatversion: 1
         #                 strFmt("%1", date2Str(_hoja.CreatedDate, 123, 2,2,2,2,4)),
         #                 strFmt("%1", reimbursableExpense),
         #                 strFmt("%1", ownerAxUserId),
-        #                 strFmt("%1", ownerName)
+        #                 strFmt("%1", ownerName),
+        #                 strFmt("%1", totalAmountMST)
         #              ]];
         #
         #    return conItem;
@@ -368,16 +373,20 @@ Formatversion: 1
         #{
         #    int processedByAIInt;
         #    int gastoTypeInt;
+        #    Amount totalAmountCurrency;
+        #    Amount totalAmountMST;
         #    ;
         #
         #    processedByAIInt = any2int(_ticketHeader.ProcessedByAI);
         #    gastoTypeInt     = any2int(_ticketHeader.GastoType);
+        #    totalAmountCurrency = _ticketHeader.TotalAmount;
+        #    totalAmountMST      = _ticketHeader.AmountMST;
         #
         #    return [
         #            strFmt('%1', _ticketHeader.FileId),
         #            strFmt('%1', _ticketHeader.Description),
         #            strFmt("%1", Currency::find(_ticketHeader.CurrencyCode).CurrencyCodeISO),
-        #            strFmt('%1', _ticketHeader.TotalAmount),
+        #            strFmt('%1', totalAmountCurrency),
         #            strFmt('%1', date2Str(_docuRef.INDTransDate, 123, 2,2,2,2,4)),
         #            strFmt('%1', _docuRef.INDFilename),
         #            strFmt('%1', processedByAIInt),
@@ -385,7 +394,8 @@ Formatversion: 1
         #            strFmt('%1', date2Str(_ticketHeader.TicketDate, 123, 2,2,2,2,4)),
         #            strFmt('%1', _ticketHeader.TicketTime),
         #            strFmt('%1', _ticketHeader.CreatedByUserId),
-        #            strFmt('%1', INDCRMExpenseSheetService::getPersonaNameByUserId(_ticketHeader.CreatedByUserId))
+        #            strFmt('%1', INDCRMExpenseSheetService::getPersonaNameByUserId(_ticketHeader.CreatedByUserId)),
+        #            strFmt('%1', totalAmountMST)
         #           ];
         #}
         #
@@ -398,11 +408,15 @@ Formatversion: 1
         #    int ticketStatusInt;
         #    int processedByAIInt;
         #    int gastoTypeInt;
+        #    Amount totalAmountCurrency;
+        #    Amount totalAmountMST;
         #    ;
         #
         #    ticketStatusInt  = any2int(_ticketHeader.Status);
         #    processedByAIInt = any2int(_ticketHeader.ProcessedByAI);
         #    gastoTypeInt     = any2int(_ticketHeader.GastoType);
+        #    totalAmountCurrency = _ticketHeader.TotalAmount;
+        #    totalAmountMST      = _ticketHeader.AmountMST;
         #
         #    return [
         #            strFmt('%1', _ticketHeader.FileId),
@@ -410,14 +424,15 @@ Formatversion: 1
         #            strFmt('%1', ticketStatusInt),
         #            strFmt('%1', processedByAIInt),
         #            strFmt("%1", Currency::find(_ticketHeader.CurrencyCode).CurrencyCodeISO),
-        #            strFmt('%1', _ticketHeader.TotalAmount),
+        #            strFmt('%1', totalAmountCurrency),
         #            strFmt('%1', date2Str(_docuRef.INDTransDate, 123, 2,2,2,2,4)),
         #            strFmt('%1', _docuRef.INDFilename),
         #            strFmt('%1', gastoTypeInt),
         #            strFmt('%1', date2Str(_ticketHeader.TicketDate, 123, 2,2,2,2,4)),
         #            strFmt('%1', _ticketHeader.TicketTime),
         #            strFmt('%1', _ticketHeader.CreatedByUserId),
-        #            strFmt('%1', INDCRMExpenseSheetService::getPersonaNameByUserId(_ticketHeader.CreatedByUserId))
+        #            strFmt('%1', INDCRMExpenseSheetService::getPersonaNameByUserId(_ticketHeader.CreatedByUserId)),
+        #            strFmt('%1', totalAmountMST)
         #           ];
         #}
         #
@@ -1535,7 +1550,7 @@ Formatversion: 1
         #            else
         #                message = 'Ticket creado correctamente.';
         #
-        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId)]), linesOut];
+        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]), linesOut];
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -1915,7 +1930,7 @@ Formatversion: 1
         #            else
         #                message = 'Ticket creado correctamente.';
         #
-        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId)]), linesOut];
+        #            return [INDCRMUtilityService::buildHeader(true, message, [ticketHeader.FileId, strFmt('%1', ticketHeader.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]), linesOut];
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -2085,7 +2100,7 @@ Formatversion: 1
         #            ttscommit;
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket creada correctamente.',
-        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -2367,7 +2382,7 @@ Formatversion: 1
         #                ttscommit;
         #
         #                return INDCRMUtilityService::buildHeader(true, 'Linea de ticket eliminada correctamente.',
-        #                                                         [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                         [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]);
         #            }
         #
         #            /*select firstonly expenseLine
@@ -2523,7 +2538,7 @@ Formatversion: 1
         #            ttscommit;
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket eliminada correctamente.',
-        #                                                     [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                     [ticketHeader.FileId, strFmt('%1', lineRecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
@@ -2608,6 +2623,8 @@ Formatversion: 1
         #    str                 ownerName;
         #    CRMHojaGastosLine   line;
         #    Amount              monto;
+        #    Amount              totalAmountCurrency;
+        #    Amount              totalAmountMST;
         #    Price               price;
         #    container           headerOut;
         #    container           linesOut = conNull();
@@ -2686,7 +2703,8 @@ Formatversion: 1
         #                                                    strFmt('sheetStatus=%1', debugSheetStatus)
         #                                                   ]), conNull()];
         #
-        #        monto               = header.TotalAmount();
+        #        totalAmountCurrency = header.TotalAmount();
+        #        totalAmountMST      = header.TotalAmountMST();
         #        exchangeRateMode    = any2int(header.ExchangeRateMode);
         #        expenseSheetStatus  = any2int(header.ExpenseSheetStatus);
         #        reimbursableExpense = any2int(header.ReimbursableExpense);
@@ -2707,7 +2725,7 @@ Formatversion: 1
         #                                                      strFmt("%1", header.EstadoComentarios),
         #                                                      strFmt("%1", header.UserId),
         #                                                      strFmt("%1", Currency::find(header.CurrencyCode).CurrencyCodeISO),
-        #                                                      strFmt("%1", monto),
+        #                                                      strFmt("%1", totalAmountCurrency),
         #                                                      strFmt("%1", header.ExchRate),
         #                                                      strFmt("%1", exchangeRateMode),
         #                                                      strFmt("%1", header.ProjId),
@@ -2716,7 +2734,8 @@ Formatversion: 1
         #                                                      strFmt("%1", reimbursableExpense),
         #                                                      strFmt("%1", ownerUser.Name),
         #                                                      strFmt("%1", ownerAxUserId),
-        #                                                      strFmt("%1", ownerName)
+        #                                                      strFmt("%1", ownerName),
+        #                                                      strFmt("%1", totalAmountMST)
         #                                                     ]);
         #
         #        while select line
@@ -6234,7 +6253,8 @@ Formatversion: 1
         #                                                     [ticketHeader.FileId,
         #                                                      strFmt('%1', ticketHeader.RecId),
         #                                                      strFmt('%1', ticketHeader.TotalAmount),
-        #                                                      strFmt('%1', outputProcessedByAI)]),
+        #                                                      strFmt('%1', outputProcessedByAI),
+        #                                                      strFmt('%1', ticketHeader.AmountMST)]),
         #                    linesOut];
         #        }
         #    }
@@ -6413,7 +6433,7 @@ Formatversion: 1
         #            ttscommit;
         #
         #            return INDCRMUtilityService::buildHeader(true, 'Linea de ticket actualizada correctamente.',
-        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount)]);
+        #                                                     [ticketHeader.FileId, strFmt('%1', ticketLine.RecId), strFmt('%1', ticketHeader.TotalAmount), strFmt('%1', ticketHeader.AmountMST)]);
         #        }
         #    }
         #    catch (Exception::Deadlock)
