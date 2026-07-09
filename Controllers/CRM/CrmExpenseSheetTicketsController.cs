@@ -47,6 +47,9 @@ namespace IND_CRM_API.Controllers.CRM
         private const string TicketNegativeTotalValidationMessage = "El total del ticket no puede ser negativo.";
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
         private const string TicketTotalAdjustmentDescription = "AJUSTE DE IMPORTE TOTAL";
+        private const decimal QuickCreateInsertFallbackAmount = 1m;
+        private const string QuickCreateInsertFallbackDescription = "Ticket";
+        private const string ExpenseSheetLocalCurrencyCode = "EUR";
 
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
@@ -844,6 +847,7 @@ namespace IND_CRM_API.Controllers.CRM
                             linkedTicketDetail,
                             traceId,
                             quickCreateForm.ProjectId,
+                            true,
                             out var linkMessage,
                             out var linkStatus))
                     {
@@ -1434,7 +1438,7 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, out var linkMessage, out var linkStatus))
+                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, false, out var linkMessage, out var linkStatus))
                     {
                         if (IsTicketAlreadyLinkedMessage(linkMessage))
                         {
@@ -3156,6 +3160,7 @@ namespace IND_CRM_API.Controllers.CRM
             public List<IndValidationError> ValidationErrors { get; set; }
             public int SourceLineCount { get; set; }
             public int ValidLineCount { get; set; }
+            public bool UsedInsertFallback { get; set; }
         }
 
         // Reads and validates the multipart contract for the quick-create flow.
@@ -4038,13 +4043,15 @@ namespace IND_CRM_API.Controllers.CRM
                 fallbackDescription,
                 fallbackCurrencyCode,
                 fallbackComentario,
-                out var transDateResolution);
+                out var transDateResolution,
+                out var usedInsertFallback);
             if (result.UpdateRequest != null)
             {
                 result.UpdateRequest.ocrJson = processingResult?.OcrJson;
                 result.UpdateRequest.normalizedJson = processingResult?.NormalizedJson;
             }
             result.TransDateResolution = transDateResolution;
+            result.UsedInsertFallback = usedInsertFallback;
             result.ValidLineCount = result.UpdateRequest?.lines?.Count ?? 0;
 
             ValidateUpdateTicketFromIABody(result.UpdateRequest, result.ValidationErrors);
@@ -4056,7 +4063,7 @@ namespace IND_CRM_API.Controllers.CRM
         {
             var request = attempt?.UpdateRequest;
             Logger.Log(
-                $"[QUICKCREATE-DRAFT-RESULT] stage={ToLogValue(stage)} profile={ToLogValue(attempt?.ProfileUsed.ToString())} sourceLines={(attempt?.SourceLineCount ?? 0)} validLines={(attempt?.ValidLineCount ?? 0)} validationErrors={(attempt?.ValidationErrors?.Count ?? 0)} ocrJsonChars={ToLogLength(request?.ocrJson)} normalizedJsonChars={ToLogLength(request?.normalizedJson)} traceId={traceId}");
+                $"[QUICKCREATE-DRAFT-RESULT] stage={ToLogValue(stage)} profile={ToLogValue(attempt?.ProfileUsed.ToString())} sourceLines={(attempt?.SourceLineCount ?? 0)} validLines={(attempt?.ValidLineCount ?? 0)} insertFallback={(attempt?.UsedInsertFallback ?? false)} validationErrors={(attempt?.ValidationErrors?.Count ?? 0)} ocrJsonChars={ToLogLength(request?.ocrJson)} normalizedJsonChars={ToLogLength(request?.normalizedJson)} traceId={traceId}");
         }
 
         // Logs the JSON payload state before sending the final IA update to AX.
@@ -4081,9 +4088,17 @@ namespace IND_CRM_API.Controllers.CRM
             string fallbackDescription,
             string fallbackCurrencyCode,
             string fallbackComentario,
-            out QuickCreateTransDateResolution transDateResolution)
+            out QuickCreateTransDateResolution transDateResolution,
+            out bool usedInsertFallback)
         {
-            var validLines = MapQuickCreateDraftLines(draft?.lines);
+            var fallbackLineDescription = ResolveQuickCreateFallbackLineDescription(draft, fallbackDescription);
+            var validLines = MapQuickCreateDraftLines(draft?.lines, fallbackLineDescription, out usedInsertFallback);
+            if (validLines.Count == 0)
+            {
+                validLines.Add(BuildQuickCreateInsertFallbackLine(fallbackLineDescription));
+                usedInsertFallback = true;
+            }
+
             var linesTotal = CalculateTicketLinesTotal(validLines);
             var currencyCode = NormalizeDraftCurrencyCode(draft?.currencyCode, draft?.RawCurrency);
             if (string.IsNullOrWhiteSpace(currencyCode))
@@ -4112,10 +4127,14 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
-        // Normalizes IA draft lines into ticket line payloads allowing signed discount prices.
-        private static List<ExpenseSheetTicketLineRequest> MapQuickCreateDraftLines(IEnumerable<CreateExpenseSheetLineRequest> lines)
+        // Normalizes IA draft lines into insertable ticket line payloads allowing signed discount prices.
+        private static List<ExpenseSheetTicketLineRequest> MapQuickCreateDraftLines(
+            IEnumerable<CreateExpenseSheetLineRequest> lines,
+            string fallbackDescription,
+            out bool usedInsertFallback)
         {
             var mapped = new List<ExpenseSheetTicketLineRequest>();
+            usedInsertFallback = false;
             if (lines == null)
                 return mapped;
 
@@ -4125,28 +4144,72 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 var description = (line.description ?? string.Empty).Trim();
-                var qty = line.qty ?? 0m;
-                var price = line.price ?? 0m;
+                if (string.IsNullOrWhiteSpace(description))
+                {
+                    description = fallbackDescription;
+                    usedInsertFallback = true;
+                }
+
+                var isDiscountLine = line.qty.HasValue && line.qty.Value == 0m && line.price.HasValue && line.price.Value < 0m;
+                var qty = line.qty ?? QuickCreateInsertFallbackAmount;
+                if (!isDiscountLine && qty <= 0m)
+                {
+                    qty = QuickCreateInsertFallbackAmount;
+                    usedInsertFallback = true;
+                }
+                else if (!line.qty.HasValue)
+                {
+                    usedInsertFallback = true;
+                }
+
+                var price = line.price ?? QuickCreateInsertFallbackAmount;
+                if (!line.price.HasValue || (!isDiscountLine && price == 0m))
+                {
+                    price = QuickCreateInsertFallbackAmount;
+                    usedInsertFallback = true;
+                }
+
                 var lineRequest = new ExpenseSheetTicketLineRequest
                 {
                     description = description,
                     qty = qty,
                     price = price
                 };
-                var lineTotal = CalculateTicketLineTotal(lineRequest);
-                if (string.IsNullOrWhiteSpace(description) || !IsValidTicketLineAmount(lineRequest))
+                if (!IsValidTicketLineAmount(lineRequest))
                     continue;
 
-                mapped.Add(new ExpenseSheetTicketLineRequest
-                {
-                    description = description,
-                    qty = qty,
-                    price = price,
-                    totalAmount = lineTotal
-                });
+                lineRequest.totalAmount = CalculateTicketLineTotal(lineRequest);
+                mapped.Add(lineRequest);
             }
 
             return mapped;
+        }
+
+        // Builds a minimal quick-create line when OCR/AI cannot infer any insertable amount.
+        private static ExpenseSheetTicketLineRequest BuildQuickCreateInsertFallbackLine(string description)
+        {
+            return new ExpenseSheetTicketLineRequest
+            {
+                description = string.IsNullOrWhiteSpace(description) ? QuickCreateInsertFallbackDescription : description.Trim(),
+                qty = QuickCreateInsertFallbackAmount,
+                price = QuickCreateInsertFallbackAmount,
+                totalAmount = QuickCreateInsertFallbackAmount
+            };
+        }
+
+        // Resolves a stable fallback description for synthetic quick-create lines.
+        private static string ResolveQuickCreateFallbackLineDescription(ExpenseSheetDraftResponse draft, string fallbackDescription)
+        {
+            if (!string.IsNullOrWhiteSpace(fallbackDescription))
+                return fallbackDescription.Trim();
+
+            if (!string.IsNullOrWhiteSpace(draft?.description))
+                return draft.description.Trim();
+
+            if (!string.IsNullOrWhiteSpace(draft?.Merchant))
+                return draft.Merchant.Trim();
+
+            return QuickCreateInsertFallbackDescription;
         }
 
         // Resolves a safe quick-create date from OCR, using robust parsing and fallback to today.
@@ -6292,6 +6355,7 @@ namespace IND_CRM_API.Controllers.CRM
             ExpenseSheetTicketDetailDto ticketDetail,
             string traceId,
             string projectId,
+            bool fallbackMissingCurrencyValues,
             out string message,
             out HttpStatusCode status)
         {
@@ -6334,6 +6398,7 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append(1m);
             lineCon.Append(totalAmountCurrency ?? 0m);
             lineCon.Append((projectId ?? string.Empty).Trim());
+            AppendLinkedTicketLineCurrencyFields(lineCon, ticketDetail, fallbackMissingCurrencyValues);
             linesCon.Append(lineCon);
             rootCon.Append(linesCon);
 
@@ -6393,6 +6458,43 @@ namespace IND_CRM_API.Controllers.CRM
                 extras.Add(AxContainerReadHelper.SafeString(rowCon, i));
 
             return true;
+        }
+
+        // Appends non-EUR currency fields when linking a ticket into an expense sheet line.
+        private static void AppendLinkedTicketLineCurrencyFields(
+            IAxaptaContainer lineCon,
+            ExpenseSheetTicketDetailDto ticketDetail,
+            bool fallbackMissingCurrencyValues)
+        {
+            if (lineCon == null || ticketDetail == null)
+                return;
+
+            var currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(currencyCode) ||
+                string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!fallbackMissingCurrencyValues)
+                return;
+
+            var amountMST = NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST) ?? QuickCreateInsertFallbackAmount;
+            var exchRate = NormalizePositiveCurrencyValue(ticketDetail.ExchRate) ?? QuickCreateInsertFallbackAmount;
+
+            const string noOptionalValueToken = "null";
+            lineCon.Append(noOptionalValueToken);
+            lineCon.Append(currencyCode);
+            lineCon.Append(amountMST);
+            lineCon.Append(exchRate);
+        }
+
+        // Returns only positive currency values because AX rejects empty or zero conversion data.
+        private static decimal? NormalizePositiveCurrencyValue(decimal? value)
+        {
+            return value.HasValue && value.Value > 0m
+                ? value.Value
+                : (decimal?)null;
         }
 
         // Builds a standard error response for ticket actions.
