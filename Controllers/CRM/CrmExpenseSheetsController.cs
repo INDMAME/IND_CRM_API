@@ -47,6 +47,12 @@ namespace IND_CRM_API.Controllers.CRM
         private const int MaxPageSize = 50;
         private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
 
+        private sealed class ExpenseSheetListRow
+        {
+            public ExpenseSheetListItemDto Item { get; set; }
+            public DateTime? CreatedDateSortValue { get; set; }
+        }
+
         private readonly IAxaptaSessionManager _sessionManager;
 
         /// <summary>
@@ -1517,8 +1523,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// Filtro opcional por estado: expenseSheetStatus (valor numerico AX de INDExpenseSheetStatus).
         /// Filtro opcional por reembolso: reimbursableExpense (valor numerico AX de INDReimbursableExpense).
-        /// Filtro opcional includeSubordinates: cuando es true lista hojas de subordinados directos del usuario del header.
-        /// Response items include estadoComentarios, userName and reimbursableExpense.
+        /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
+        /// Filtro opcional includeSubordinates: cuando es true lista hojas propias y de subordinados directos del usuario del header.
+        /// Response items include estadoComentarios, userName, reimbursableExpense, totalAmountCurrency and totalAmountMST.
         /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
@@ -2656,28 +2663,26 @@ namespace IND_CRM_API.Controllers.CRM
         {
             message = string.Empty;
             total = 0;
-            var items = new List<ExpenseSheetListItemDto>();
+            var rows = new List<ExpenseSheetListRow>();
 
             if (root == null || AxContainerReadHelper.SafeLength(root) == 0)
-                return items;
+                return new List<ExpenseSheetListItemDto>();
 
             if (AxContainerReadHelper.IsSinDatos(root, out message))
-                return items;
+                return new List<ExpenseSheetListItemDto>();
 
             total = AxContainerReadHelper.SafeLength(root);
             if (total <= 0)
-                return items;
+                return new List<ExpenseSheetListItemDto>();
 
             var skipLong = ((long)page - 1L) * pageSize;
             if (skipLong < 0L)
                 skipLong = 0L;
 
             if (skipLong >= total)
-                return items;
+                return new List<ExpenseSheetListItemDto>();
 
-            var start = (int)skipLong + 1;
-            var end = Math.Min(total, start + pageSize - 1);
-            for (int i = start; i <= end; i++)
+            for (int i = 1; i <= total; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(root, i);
                 var rowLen = AxContainerReadHelper.SafeLength(row);
@@ -2694,7 +2699,8 @@ namespace IND_CRM_API.Controllers.CRM
                 // Legacy (5/6): [1]HojaGastosId [2]Description [3]ProjId [4]CurrencyCode [5]Amount|Date [6]Date|Amount
                 if (rowLen >= 14)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    var rawCreatedDate = AxContainerReadHelper.SafeString(row, 13);
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2709,18 +2715,19 @@ namespace IND_CRM_API.Controllers.CRM
                         TotalAmountCurrency = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
-                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
+                        CreatedDate = FormatApiDate(rawCreatedDate),
                         ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
                         OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
                         OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty,
                         TotalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null
-                    });
+                    }, rawCreatedDate));
                     continue;
                 }
 
                 if (rowLen >= 13)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    var rawCreatedDate = AxContainerReadHelper.SafeString(row, 13);
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2734,14 +2741,15 @@ namespace IND_CRM_API.Controllers.CRM
                         TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
-                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13))
-                    });
+                        CreatedDate = FormatApiDate(rawCreatedDate)
+                    }, rawCreatedDate));
                     continue;
                 }
 
                 if (rowLen == 12)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    var rawCreatedDate = AxContainerReadHelper.SafeString(row, 12);
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2755,8 +2763,8 @@ namespace IND_CRM_API.Controllers.CRM
                         TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 9)),
-                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 12))
-                    });
+                        CreatedDate = FormatApiDate(rawCreatedDate)
+                    }, rawCreatedDate));
                     continue;
                 }
 
@@ -2765,7 +2773,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var column11 = AxContainerReadHelper.SafeString(row, 11);
                     if (IsLikelyDateValue(column11))
                     {
-                        items.Add(new ExpenseSheetListItemDto
+                        rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                         {
                             HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                             Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2780,11 +2788,11 @@ namespace IND_CRM_API.Controllers.CRM
                             ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
                             ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
                             CreatedDate = FormatApiDate(column11)
-                        });
+                        }, column11));
                         continue;
                     }
 
-                    items.Add(new ExpenseSheetListItemDto
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2799,13 +2807,13 @@ namespace IND_CRM_API.Controllers.CRM
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 9)),
                         CreatedDate = null
-                    });
+                    }, string.Empty));
                     continue;
                 }
 
                 if (rowLen == 10)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2820,13 +2828,13 @@ namespace IND_CRM_API.Controllers.CRM
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 7)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 8)),
                         CreatedDate = null
-                    });
+                    }, string.Empty));
                     continue;
                 }
 
                 if (rowLen == 9)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2841,13 +2849,14 @@ namespace IND_CRM_API.Controllers.CRM
                         ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 7)),
                         CreatedDate = null
-                    });
+                    }, string.Empty));
                     continue;
                 }
 
                 if (rowLen >= 7)
                 {
-                    items.Add(new ExpenseSheetListItemDto
+                    var rawCreatedDate = AxContainerReadHelper.SafeString(row, 7);
+                    rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                         Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2861,14 +2870,14 @@ namespace IND_CRM_API.Controllers.CRM
                         TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 6)),
                         ExchRate = null,
                         ExchangeRateMode = null,
-                        CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 7))
-                    });
+                        CreatedDate = FormatApiDate(rawCreatedDate)
+                    }, rawCreatedDate));
                     continue;
                 }
 
                 var amountAndDate = ResolveAmountAndDate(row, rowLen);
 
-                items.Add(new ExpenseSheetListItemDto
+                rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                 {
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
                     Description = AxContainerReadHelper.SafeString(row, 2),
@@ -2883,16 +2892,57 @@ namespace IND_CRM_API.Controllers.CRM
                     ExchRate = null,
                     ExchangeRateMode = null,
                     CreatedDate = FormatApiDate(amountAndDate.CreatedDate)
-                });
+                }, amountAndDate.CreatedDate));
             }
 
-            foreach (var item in items)
+            foreach (var row in rows)
             {
+                var item = row?.Item;
                 if (item != null && !item.TotalAmountCurrency.HasValue)
                     item.TotalAmountCurrency = item.TotalAmount;
             }
 
-            return items;
+            return OrderExpenseSheetListRows(rows)
+                .Skip((int)skipLong)
+                .Take(pageSize)
+                .Select(row => row.Item)
+                .ToList();
+        }
+
+        // Orders all mapped rows before pagination so page 1 contains the newest real sheet dates.
+        private static IEnumerable<ExpenseSheetListRow> OrderExpenseSheetListRows(IEnumerable<ExpenseSheetListRow> rows)
+        {
+            return rows
+                .Where(row => row != null && row.Item != null)
+                .OrderByDescending(row => row.CreatedDateSortValue.HasValue)
+                .ThenByDescending(row => row.CreatedDateSortValue.GetValueOrDefault(DateTime.MinValue))
+                .ThenByDescending(row => row.Item.HojaGastosId ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static ExpenseSheetListRow CreateExpenseSheetListRow(ExpenseSheetListItemDto item, string rawCreatedDate)
+        {
+            return new ExpenseSheetListRow
+            {
+                Item = item,
+                CreatedDateSortValue = TryParseExpenseSheetListSortDate(rawCreatedDate, out var createdDate)
+                    ? (DateTime?)createdDate
+                    : null
+            };
+        }
+
+        // Sorting must not reuse FormatApiDate because that method falls back to today for display compatibility.
+        private static bool TryParseExpenseSheetListSortDate(string rawCreatedDate, out DateTime createdDate)
+        {
+            createdDate = default(DateTime);
+            if (!TryNormalizeAnyDateToAxYmd(rawCreatedDate, out var normalizedYmd))
+                return false;
+
+            return DateTime.TryParseExact(
+                normalizedYmd,
+                "yyyyMMdd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out createdDate);
         }
 
         // Resuelve de forma defensiva el monto total y la fecha cuando AX cambia el orden de columnas.

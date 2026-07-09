@@ -130,7 +130,8 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `internacional`, `fileId`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
+  - `reimbursableExpense`: enum AX `INDReimbursableExpense` (`0 No`, `1 Yes`, `2 Both`).
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -142,21 +143,52 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta (header) incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`
+- Respuesta (header) incluye: `userId`, `userName`, `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `reimbursableExpense`
+- Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja.
+- Respuesta (lineas) incluye: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `exchRate`
 - Nota de routing: `hojaGastosId` excluye el literal `tickets` para evitar colision con `/api/crm/expensesheets/tickets`.
 
 ### Tool: crm_expensesheets_update_header
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional)
+- Body: `description`, `currencyCode`, `projId` (opcional), `exchRate` (opcional), `expenseSheetStatus` (opcional), `exchangeRateMode` (opcional), `estadoComentarios` (opcional), `reimbursableExpense` (opcional)
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
+- Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
+- Nota: si una linea guardada difiere en divisa, proyecto o gasto reembolsable, AX marca la cabecera con `INDDefaultParameters.CRMCurrencyVarios`, `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`.
+
+### Tool: crm_expensesheets_propagate_currency_defaults
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Query: `recalculateAmountMST` opcional, default `true`; `force` opcional, default `false`
+- Propaga `currencyCode` y `exchRate` de cabecera a lineas existentes y recalcula `amountMST` si corresponde.
+- AX bloquea si la hoja ya tiene lineas multimoneda y `force=false`, si `currencyCode` de cabecera es `INDDefaultParameters.CRMCurrencyVarios` o si tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
+
+### Tool: crm_expensesheets_propagate_project_default
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Propaga `projId` de cabecera a `projId` y `projIdHornos` de lineas existentes y rehace la asignacion de proyecto.
+- AX bloquea si `projId` de cabecera es `PurchParameters.INDProjIdVarious`, si falta `projId` o si la hoja tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
+
+### Tool: crm_expensesheets_propagate_reimbursable_expense
+- HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Propaga `reimbursableExpense` de cabecera a lineas existentes.
+- AX bloquea si `reimbursableExpense` de cabecera es `Both` o si la hoja tiene Voucher.
+- Routing: `hojaGastosId` excluye el literal `tickets`.
 
 ### Tool: crm_expensesheets_update_line
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional)
+- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
+- Nota: si `currencyCode` de linea difiere de la divisa de reembolso de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa. Si ambas divisas coinciden, editar `amountMST` no recalcula `exchRate`.
+- Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera como `Both`.
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -171,8 +203,9 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `includeSubordinates` (bool opcional; `true` = subordinados directos del usuario de header)
-- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`.
+- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `includeSubordinates` (bool opcional; `true` = usuario de header + subordinados directos)
+- Body tambien acepta `reimbursableExpense` (opcional, valor numerico AX de `INDReimbursableExpense`).
+- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`, `reimbursableExpense`, `totalAmountCurrency` y `totalAmountMST`.
 
 ## Expense Sheet Tickets
 
@@ -193,7 +226,7 @@ Endpoints
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: multipart/form-data`
 - Body multipart:
   - Requerido: `ticketImage` (jpg/jpeg/png/webp, max 50 MB)
-  - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projectId`
+  - Opcional: `currencyCode`, `description`, `comentario`, `existingHojaGastosId`, `projId` (alias legacy: `projectId`)
 - Flujo: crea ticket provisional, sube archivo, ejecuta OCR + normalizacion IA, finaliza ticket y opcionalmente lo vincula a una hoja existente.
 - En errores tras crear `FileId`, intenta rollback interno del blob y del ticket AX.
 - Respuesta data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds`
@@ -235,14 +268,15 @@ Endpoints
     - Opcional: `selectionMode` (`selected` por defecto, `filtered`)
     - En `selected`: `ticketIds[]` obligatorio
     - En `filtered`: `filters` obligatorio (`searchKey`, `filter`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`) y `excludedIds[]` opcional
-    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2` y soporta resultado parcial.
+    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2`, usa el `projId` de la hoja destino para la linea generada y soporta resultado parcial.
   - Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 
 ### Tool: crm_expensesheets_tickets_update
 - HTTP: PUT `/api/crm/expensesheets/tickets/{fileId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
+- Body opcional: `description`, `currencyCode`, `gastoType`, `totalAmount`, `amountMST`, `exchRate`, `status` (0|1), `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketDate` (`DDMMYYYY` o `DD.MM.YYYY`), `ticketTime` (HH:mm, HH:mm:ss o segundos 0..86399), `comentario`, `urlFile`, `fileName`, `fileExtension`, `processedByAI`, `ocrJson`, `normalizedJson`
+- Nota: si el ticket vinculado esta en la misma divisa de reembolso de la hoja, editar `amountMST` conserva `exchRate`; si la divisa difiere, AX recalcula `exchRate` con `totalAmount * 100 / amountMST`.
 
 ### Tool: crm_expensesheets_tickets_apply_ia
 - HTTP: POST `/api/crm/expensesheets/tickets/{fileId}/ia`
@@ -295,6 +329,16 @@ Endpoints
 
 ## Activities / Visits
 
+### Endpoint: crm_data_visibility_visible_users
+- HTTP: GET `/api/crm/data-visibility/visible-users`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Query: `appCode` opcional (default `CRM`), `moduleCode` opcional (default `VISITAS_GESTION`), `asOfDate` opcional (`yyyyMMdd` o `yyyy-MM-dd`), `includeCrmUserId` opcional (default `true`)
+- Uso: lista usuarios AX visibles para el usuario actual con `INDControlDataVisibility`.
+- Nota: personas visibles sin `INDPersonaTable.UserId` no se devuelven. No usa la jerarquia legacy de Hojas de gastos.
+- Respuesta: rows con `Alias`, `AxUserId`, `CrmUserId`, `Name`, `Source`, `MutationPolicy`, `MutationPolicyInt`, `MutationPolicyLabel`, `CanMutate`
+- `CanMutate` aplica a update/delete sobre registros del propietario visible. La creacion de visitas no se hace en nombre de subordinados.
+
 ### Endpoint: crm_activities_create
 - HTTP: POST `/api/crm/activities/create`
 - Auth: Bearer token
@@ -305,13 +349,22 @@ Endpoints
 - HTTP: POST `/api/crm/activities/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `fromDate`, `toDate`, `accountNum` opcional, `page`, `pageSize`
+- Body: `fromDate`, `toDate`, `accountNum` opcional, `ownerAxUserId` opcional, `page`, `pageSize`
+- Visibilidad: AX filtra por el set visible de `CRM / VISITAS_GESTION`; si `ownerAxUserId` se envia, solo reduce el resultado a ese usuario visible.
 - Respuesta: rows con `ActividadId`, `RecId`, `Name`, `AccountNum`, `TransDate`, `ActividadType`, `TipoVisita`, `ContactMethod`, `Description`
+
+### Endpoint: crm_activities_get_by_recid
+- HTTP: GET `/api/crm/activities/{recId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+- Respuesta: `ActivityDetailDto` dentro de `Items[0]`, incluyendo `ContactMethod`
 
 ### Endpoint: crm_activities_get_by_code
 - HTTP: GET `/api/crm/activities/by-code/{code}`
 - Auth: Bearer token
-- Headers: `Authorization`, `X-IND-Company`
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida lectura con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 - Respuesta: `ActivityDetailDto` dentro de `Items[0]`, incluyendo `ContactMethod`
 
 ### Endpoint: crm_activities_update
@@ -319,6 +372,27 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `accountNum`, `visitType`, `description`, `transDate`, `contactMethod` opcional (`0` InPerson, `1` PhoneCall, `2` OnlineMeeting), `comentarios`, `antecedentes`, `conclusiones`
+- Visibilidad: AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_activities_delete
+- HTTP: DELETE `/api/crm/activities/{recId}`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
+- Visibilidad: AX valida modificacion con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_visits_create_assistant
+- HTTP: POST `/api/crm/visits/createVisitaAsistente`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `refRecIdActividad`, `asistenteTipo`, `asistenteId`, `contactoRecId`
+- Visibilidad: AX valida modificacion de la actividad padre con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
+
+### Endpoint: crm_visits_delete_assistant
+- HTTP: DELETE `/api/crm/visits/deleteVisitaAsistente`
+- Auth: Bearer token
+- Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
+- Body: `refRecIdActividad`, `asistenteId`
+- Visibilidad: AX valida modificacion de la actividad padre con `INDControlDataVisibility` para `CRM / VISITAS_GESTION`.
 
 ## Projects
 

@@ -34,7 +34,7 @@ Endpoints
   Headers: Authorization
 - POST /api/auth/entra/context (Authorize)
   Body: { "entraOid": "GUID", "appCode": "APP" }
-  Response context fields include: ContextToken, ContextVersion, PermissionsRevision, ContextIssuedUtc, ContextExpiresUtc, Header.DefaultCurrencyCode, Companies[].CurrencyCode, Companies[].AllowSelfManagement, Companies[].CrmUserId
+  Response context fields include: ContextToken, ContextVersion, PermissionsRevision, ContextIssuedUtc, ContextExpiresUtc, Header.DefaultCurrencyCode, Header.UserName, Companies[].CurrencyCode, Companies[].AllowSelfManagement, Companies[].CrmUserId
 
 ## Health
 - GET /api/health/ping (AllowAnonymous)
@@ -164,10 +164,11 @@ Endpoints
   Nota: si deleteMode no es LineOnly, lineRecId puede ser 0.
 - POST /api/crm/expensesheets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize
-  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense (INDReimbursableExpense), includeSubordinates (bool; true = subordinados directos del usuario de header)
+  Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense (INDReimbursableExpense), includeSubordinates (bool; true = usuario de header + subordinados directos)
   Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`.
   Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate, reimbursableExpense, totalAmountCurrency y totalAmountMST
   Nota totales: `totalAmountCurrency` es el total en divisa; `totalAmountMST` es el importe reembolsable MST. `totalAmount` se mantiene como alias legacy de `totalAmountCurrency`.
+  Orden: createdDate descendente, HojaGastosId descendente como desempate; filas sin createdDate valida al final.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 
 ## Expense Sheet Tickets

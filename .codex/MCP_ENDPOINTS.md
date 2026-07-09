@@ -203,8 +203,9 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/list`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `reimbursableExpense` (opcional), `includeSubordinates` (bool opcional; `true` = subordinados directos del usuario de header)
-- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`, `reimbursableExpense`.
+- Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `includeSubordinates` (bool opcional; `true` = usuario de header + subordinados directos)
+- Body tambien acepta `reimbursableExpense` (opcional, valor numerico AX de `INDReimbursableExpense`).
+- Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`, `reimbursableExpense`, `totalAmountCurrency` y `totalAmountMST`.
 
 ## Expense Sheet Tickets
 

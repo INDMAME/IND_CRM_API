@@ -48,6 +48,8 @@ namespace IND_CRM_API.Contracts.Responses
         public bool AppActive { get; set; }
         public string DefaultCompany { get; set; }
         public string DefaultCurrencyCode { get; set; }
+        /// <summary>Display name of the current user resolved from AX.</summary>
+        public string UserName { get; set; }
     }
 
     /// <summary>

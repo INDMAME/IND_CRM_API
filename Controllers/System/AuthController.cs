@@ -697,7 +697,8 @@ namespace IND_CRM_API.Controllers.System
                 UserActive = false,
                 AppActive = false,
                 DefaultCompany = string.Empty,
-                DefaultCurrencyCode = string.Empty
+                DefaultCurrencyCode = string.Empty,
+                UserName = string.Empty
             };
 
             if (SafeLength(headerRow) >= 6)
@@ -710,6 +711,10 @@ namespace IND_CRM_API.Controllers.System
                 // Nuevo contrato AX: Header[7] = DefaultCurrencyCode.
                 if (SafeLength(headerRow) >= 7)
                     header.DefaultCurrencyCode = SafeString(headerRow, 7);
+
+                // Nuevo contrato AX: Header[8] = UserName.
+                if (SafeLength(headerRow) >= 8)
+                    header.UserName = SafeString(headerRow, 8);
             }
 
             if (string.IsNullOrWhiteSpace(header.Message))
