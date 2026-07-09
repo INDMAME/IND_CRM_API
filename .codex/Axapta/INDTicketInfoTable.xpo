@@ -1012,7 +1012,9 @@ Formatversion: 1
         #
         #    amountMSTChanged = this.AmountMST != 0 && this.orig().AmountMST != this.AmountMST; //MMS - Preserva reembolso informado - 2026.07.01
         #
-        #    if (this.CurrencyCode != this.orig().CurrencyCode && this.ExchRate == this.orig().ExchRate)
+        #    //MMS - Ajustes CRM - 2026.07.09
+        #    // Si el caller informa AmountMST junto al cambio de divisa, se conserva como importe manual.
+        #    if (this.CurrencyCode != this.orig().CurrencyCode && this.ExchRate == this.orig().ExchRate && !amountMSTChanged)
         #    {
         #        //MMS - Ajustes CRM - 2026.07.06
         #        // El cambio de divisa no debe interpretar el AmountMST recalculado como importe manual.

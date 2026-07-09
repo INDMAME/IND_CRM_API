@@ -5926,7 +5926,7 @@ Formatversion: 1
         #//  - Marks ticket as ProcessedByAI = 1.
         #// Input:
         #//  - _data[1] = CompanyId
-        #//  - _data[2] = headerIn = [axUserId, fileId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional), ticketDate(optional), ticketTime(optional)]
+        #//  - _data[2] = headerIn = [axUserId, fileId, descr, currencyCode, totalAmount, transDateStr, comentario, urlFile, fileName, gastoType(optional), ocrJson(optional), normalizedJson(optional), ticketDate(optional), ticketTime(optional), amountMST(optional), exchRate(optional)]
         #//  - _data[3] = linesIn  = container of lines [lineDescr, qty, price, lineTotal(optional)]
         #// Output:
         #//  - [header, linesOutRecIds]
@@ -5955,6 +5955,10 @@ Formatversion: 1
         #    str                ticketDateStr;
         #    date               ticketDate;
         #    int                ticketTime;
+        #    real               amountMST;
+        #    real               exchRate;
+        #    str 32             amountMSTRaw;
+        #    str 32             exchRateRaw;
         #
         #    str                lineDescr;
         #    real               qty;
@@ -5968,6 +5972,8 @@ Formatversion: 1
         #    boolean            hasNormalizedJson;
         #    boolean            hasTicketDate;
         #    boolean            hasTicketTime;
+        #    boolean            hasAmountMST;
+        #    boolean            hasExchRate;
         #
         #    int                i;
         #    int                lineCount;
@@ -6044,6 +6050,26 @@ Formatversion: 1
         #        hasTicketTime = true;
         #    }
         #
+        #    if (conLen(headerIn) >= 15)
+        #    {
+        #        amountMSTRaw = strLwr(strLRTrim(strFmt('%1', conPeek(headerIn, 15))));
+        #        if (amountMSTRaw && amountMSTRaw != 'null')
+        #        {
+        #            amountMST = conPeek(headerIn, 15);
+        #            hasAmountMST = true;
+        #        }
+        #    }
+        #
+        #    if (conLen(headerIn) >= 16)
+        #    {
+        #        exchRateRaw = strLwr(strLRTrim(strFmt('%1', conPeek(headerIn, 16))));
+        #        if (exchRateRaw && exchRateRaw != 'null')
+        #        {
+        #            exchRate = conPeek(headerIn, 16);
+        #            hasExchRate = true;
+        #        }
+        #    }
+        #
         #    hasTotalAmount = true;
         #
         #    if (!axUserId)
@@ -6082,6 +6108,12 @@ Formatversion: 1
         #    {
         #        return [INDCRMUtilityService::buildHeader(false, strFmt('TicketTime invalido: %1 (segundos 0..86399).', ticketTime), conNull()), conNull()];
         #    }
+        #
+        #    if (hasAmountMST && amountMST < 0)
+        #        return [INDCRMUtilityService::buildHeader(false, strFmt('AmountMST invalido: %1.', amountMST), conNull()), conNull()];
+        #
+        #    if (hasExchRate && exchRate < 0)
+        #        return [INDCRMUtilityService::buildHeader(false, strFmt('ExchRate invalido: %1.', exchRate), conNull()), conNull()];
         #
         #    lineCount = conLen(linesIn);
         #    if (lineCount <= 0)
@@ -6249,6 +6281,14 @@ Formatversion: 1
         #                ticketHeader.TotalAmount = totalAmount;
         #            else
         #                ticketHeader.TotalAmount = linesTotalAmount;
+        #
+        #            if (hasAmountMST)
+        #                ticketHeader.AmountMST = amountMST;
+        #
+        #            if (hasExchRate)
+        #                ticketHeader.ExchRate = exchRate;
+        #            else if (hasAmountMST)
+        #                ticketHeader.ExchRate = ticketHeader.calcExchRateFromAmountMST();
         #
         #            msg = INDCRMExpenseSheetService::validateTicketDateTimeForApi(ticketHeader, startLine);
         #            if (msg)

@@ -49,3 +49,10 @@ Fix `getExpenseSheetsList(container _data)` so `includeSubordinates = true` retu
   - `includeSubordinates = true` and `X-IND-AxUserId = MAME`: MAME sheets plus direct subordinate sheets.
   - A self-reference or duplicate subordinate row does not duplicate current-user sheets.
 - Real AX runtime validation still requires importing the updated XPO into Axapta.
+
+## IA Ticket Currency Fix
+- Objective: make `updateExpenseSheetTicketFromIA(container _data)` accept the same reimbursement currency values that the API already sends for foreign-currency IA tickets.
+- Root cause: the API sent `amountMST` and `exchRate` after `ticketTime`, but AX only read header fields through `ticketTime`, so `INDTicketInfoTable.update()` validated the ticket as foreign currency with no reimbursement amount and no exchange rate.
+- Contract adjustment: `headerIn[15] = amountMST` and `headerIn[16] = exchRate` are now optional. Existing callers that send only the previous 14 fields remain compatible.
+- Implementation: the method parses `"null"`/empty values the same way as `updateExpenseSheetTicket`, rejects negative values, applies `AmountMST`/`ExchRate` after the final IA total is known, and delegates normalization to `INDTicketInfoTable.update()`.
+- Runtime note: import and compile both `INDCRMExpenseSheetService` and `INDTicketInfoTable` before retesting the failed quick-create flow.
