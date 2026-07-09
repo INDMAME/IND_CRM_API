@@ -122,8 +122,9 @@ Endpoints
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, reimbursableExpense, totalAmountCurrency, totalAmountMST
+  Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, axCreatedDate, reimbursableExpense, totalAmountCurrency, totalAmountMST
   Nota totales: `totalAmountCurrency` es el total en la divisa de la hoja/documento; `totalAmountMST` es el importe reembolsable MST calculado por `CRMHojaGastosTable.TotalAmountMST()`. `totalAmount` se mantiene como alias legacy de `totalAmountCurrency`.
+  Nota AX: `axCreatedDate` expone la fecha final adicional devuelta por el contrato AX y se normaliza a `DD.MM.YYYY`; actualmente refleja la misma fecha de creacion que `createdDate`.
   Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja (`userId`). Se agrega al contrato de detalle como campo adicional compatible con clientes anteriores.
   Response line fields include: price, qty, amount, projId, reimbursableExpense, currencyCode, amountMST, exchRate, totalAmountCurrency, totalAmountMST
   Nota lineas: `totalAmountCurrency` es alias de `amount`; `totalAmountMST` es alias de `amountMST`.
@@ -166,8 +167,9 @@ Endpoints
   Body required: page, pageSize
   Body optional: filter, billedMode, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), projId, currencyCode, expenseSheetStatus, reimbursableExpense (INDReimbursableExpense), includeSubordinates (bool; true = usuario de header + subordinados directos)
   Nota enums AX: `expenseSheetStatus` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`.
-  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate, reimbursableExpense, totalAmountCurrency y totalAmountMST
+  Response list fields include: expenseSheetStatus, estadoComentarios, exchangeRateMode, userId, userName, exchRate, createdDate, axCreatedDate, reimbursableExpense, totalAmountCurrency y totalAmountMST
   Nota totales: `totalAmountCurrency` es el total en divisa; `totalAmountMST` es el importe reembolsable MST. `totalAmount` se mantiene como alias legacy de `totalAmountCurrency`.
+  Nota AX: `axCreatedDate` expone la fecha final adicional devuelta por el contrato AX y se normaliza a `DD.MM.YYYY`; actualmente refleja la misma fecha de creacion que `createdDate`.
   Orden: createdDate descendente, HojaGastosId descendente como desempate; filas sin createdDate valida al final.
   billedMode: 0=no facturado, 1=facturado, 2=ambos (default 0).
 

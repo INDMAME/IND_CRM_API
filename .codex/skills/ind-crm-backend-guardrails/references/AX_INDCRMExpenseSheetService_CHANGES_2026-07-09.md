@@ -21,6 +21,8 @@ Fix `getExpenseSheetsList(container _data)` so `includeSubordinates = true` retu
   - direct subordinate `UserIdSubordinado` values for that `crmUserId`;
   - duplicate protection through `conFind`.
 - The list query keeps the existing filters and `CreatedDate DESC` ordering, then appends only rows whose `hoja.UserId` is in `visibleUserIds`.
+- Removed the `exists join CRMUsuarioSubordinadoTable` from the `includeSubordinates = true` list query because `conFind(visibleUserIds, hoja.UserId)` is the contract owner for the final visibility decision.
+- The latest AX export appends a final created-date column after `TotalAmountMST` in `buildExpenseSheetListRow` and `getExpenseSheet`; the API exposes it as `axCreatedDate`.
 
 ## Preserved Filters
 - `filter` / `INDSearchKey`
@@ -33,7 +35,8 @@ Fix `getExpenseSheetsList(container _data)` so `includeSubordinates = true` retu
 
 ## API Documentation Update
 - `includeSubordinates = true` now means "header user + direct subordinates".
-- Route, verb, headers, request body shape, response envelope, and response item fields are unchanged.
+- `axCreatedDate` is documented for expense sheet detail headers and list items.
+- Route, verb, headers, request body shape, and response envelope are unchanged.
 
 ## Routing Review
 - No route template or HTTP verb changed.

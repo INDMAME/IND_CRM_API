@@ -34,5 +34,8 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Total reimbursable amount in MST, appended at the end of the AX row.</summary>
         public decimal? TotalAmountMST { get; set; }
+
+        /// <summary>Additional AX-created date appended at the end of the AX row.</summary>
+        public string AxCreatedDate { get; set; }
     }
 }
