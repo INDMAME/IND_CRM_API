@@ -1066,6 +1066,10 @@
                                                                                                                                       1,
                                                                                                                                       2
                                                                                                                                   ]
+                                                                                                                     },
+                                                                                             "includeSubordinates":  {
+                                                                                                                         "type":  "boolean",
+                                                                                                                         "description":  "When true, returns the header user plus direct subordinate expense sheets."
                                                                                                                      }
                                                                                          },
                                                                           "required":  [
@@ -1749,7 +1753,8 @@
                                                         "projId":  "PROJ-001",
                                                         "currencyCode":  "USD",
                                                         "expenseSheetStatus":  1,
-                                                        "reimbursableExpense":  2
+                                                        "reimbursableExpense":  2,
+                                                        "includeSubordinates":  true
                                                     }
                                        }
                                    ]

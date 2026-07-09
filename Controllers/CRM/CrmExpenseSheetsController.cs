@@ -2504,6 +2504,7 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
+            // Current (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
             // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
             // Current (16): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName
             // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName
@@ -2616,6 +2617,7 @@ namespace IND_CRM_API.Controllers.CRM
 
             detail.TotalAmountCurrency = detail.TotalAmount;
             detail.TotalAmountMST = headerExtras.Count >= 17 ? ToDecimal(headerExtras[16]) : null;
+            detail.AxCreatedDate = headerExtras.Count >= 18 ? FormatApiDate(headerExtras[17]) : null;
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)
@@ -2690,6 +2692,7 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
+                // Current (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
                 // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
                 // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense
                 // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
@@ -2719,7 +2722,8 @@ namespace IND_CRM_API.Controllers.CRM
                         ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
                         OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
                         OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty,
-                        TotalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null
+                        TotalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null,
+                        AxCreatedDate = rowLen >= 18 ? FormatApiDate(AxContainerReadHelper.SafeString(row, 18)) : null
                     }, rawCreatedDate));
                     continue;
                 }

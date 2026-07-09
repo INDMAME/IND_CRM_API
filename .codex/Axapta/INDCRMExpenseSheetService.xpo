@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Lunes 06/07/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 09/07/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -272,7 +272,8 @@ Formatversion: 1
         #                 strFmt("%1", reimbursableExpense),
         #                 strFmt("%1", ownerAxUserId),
         #                 strFmt("%1", ownerName),
-        #                 strFmt("%1", totalAmountMST)
+        #                 strFmt("%1", totalAmountMST),
+        #                 strFmt("%1", date2Str(_hoja.CreatedDate, 123, 2,2,2,2,4))
         #              ]];
         #
         #    return conItem;
@@ -2735,7 +2736,8 @@ Formatversion: 1
         #                                                      strFmt("%1", ownerUser.Name),
         #                                                      strFmt("%1", ownerAxUserId),
         #                                                      strFmt("%1", ownerName),
-        #                                                      strFmt("%1", totalAmountMST)
+        #                                                      strFmt("%1", totalAmountMST),
+        #                                                      strFmt("%1", date2Str(header.CreatedDate, 123, 2,2,2,2,4))
         #                                                     ]);
         #
         #        while select line

@@ -36,6 +36,9 @@ namespace IND_CRM_API.Contracts.Responses
         public string OwnerName { get; set; }
         /// <summary>Total reimbursable amount in MST, appended at the end of the AX header contract.</summary>
         public decimal? TotalAmountMST { get; set; }
+
+        /// <summary>Additional AX-created date appended at the end of the AX header contract.</summary>
+        public string AxCreatedDate { get; set; }
     }
 
     /// <summary>
