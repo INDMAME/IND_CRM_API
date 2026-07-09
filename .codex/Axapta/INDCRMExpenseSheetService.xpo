@@ -2923,7 +2923,7 @@ Formatversion: 1
         #
         #    CRMHojaGastosTable   hoja;
         #    CRMUsuarioSubordinadoTable subordinadoTable;
-        #    container            conResult;
+        #    container            conResult, visibleUserIds;
         #
         #    _company = INDCRMUtilityService::getCompany(_data);
         #    if (!_company)
@@ -3067,6 +3067,20 @@ Formatversion: 1
         #        }
         #        else
         #        {
+        #            // Include the current user plus direct subordinates.
+        #            visibleUserIds = [crmUserId];
+        #
+        #            while select subordinadoTable
+        #                where subordinadoTable.UserIdJefe == crmUserId
+        #            {
+        #                if (subordinadoTable.UserIdSubordinado
+        #                    && subordinadoTable.UserIdSubordinado != crmUserId
+        #                    && conFind(visibleUserIds, subordinadoTable.UserIdSubordinado) == 0)
+        #                {
+        #                    visibleUserIds += [subordinadoTable.UserIdSubordinado];
+        #                }
+        #            }
+        #
         #            while select hoja
         #             index hint INDSearchKeyIdx
         #               order by createdDate DESC
@@ -3103,10 +3117,10 @@ Formatversion: 1
         #
         #                       // Reembolsable opcional
         #                   && ( !hasReimbursableExpenseFilter || hoja.ReimbursableExpense == reimbursableExpenseFilter )
-        #             exists join subordinadoTable
-        #                where subordinadoTable.UserIdJefe == crmUserId
-        #                   && subordinadoTable.UserIdSubordinado == hoja.UserId
         #            {
+        #                if (conFind(visibleUserIds, hoja.UserId) == 0)
+        #                    continue;
+        #
         #                conResult += INDCRMExpenseSheetService::buildExpenseSheetListRow(hoja);
         #            }
         #        }
