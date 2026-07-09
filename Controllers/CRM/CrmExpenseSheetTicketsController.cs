@@ -54,13 +54,14 @@ namespace IND_CRM_API.Controllers.CRM
         private readonly IAxaptaSessionManager _sessionManager;
         private readonly IExpenseTicketBlobStorageService _ticketBlobStorage;
         private readonly IND_IExpenseTicketDraftService _ticketDraft;
+        private readonly IExchangeRateProvider _exchangeRateProvider;
 
         /// <summary>
         /// Compatibility constructor when DI does not provide blob service explicitly.
         /// </summary>
         public CrmExpenseSheetTicketsController(
             IAxaptaSessionManager sessionManager,
-            IAxLogger logger) : this(sessionManager, null, null, logger)
+            IAxLogger logger) : this(sessionManager, null, null, null, logger)
         {
         }
 
@@ -70,7 +71,7 @@ namespace IND_CRM_API.Controllers.CRM
         public CrmExpenseSheetTicketsController(
             IAxaptaSessionManager sessionManager,
             IExpenseTicketBlobStorageService ticketBlobStorage,
-            IAxLogger logger) : this(sessionManager, ticketBlobStorage, null, logger)
+            IAxLogger logger) : this(sessionManager, ticketBlobStorage, null, null, logger)
         {
         }
 
@@ -81,12 +82,36 @@ namespace IND_CRM_API.Controllers.CRM
             IAxaptaSessionManager sessionManager,
             IExpenseTicketBlobStorageService ticketBlobStorage,
             IND_IExpenseTicketDraftService ticketDraft,
+            IAxLogger logger) : this(sessionManager, ticketBlobStorage, ticketDraft, null, logger)
+        {
+        }
+
+        /// <summary>
+        /// Creates the controller with its dependencies.
+        /// </summary>
+        public CrmExpenseSheetTicketsController(
+            IAxaptaSessionManager sessionManager,
+            IExpenseTicketBlobStorageService ticketBlobStorage,
+            IND_IExpenseTicketDraftService ticketDraft,
+            IExchangeRateProvider exchangeRateProvider,
             IAxLogger logger) : base(sessionManager, logger)
         {
             _sessionManager = sessionManager;
             _ticketBlobStorage = ticketBlobStorage ?? new ExpenseTicketBlobStorageService(logger);
             _ticketDraft = ticketDraft;
+            _exchangeRateProvider = exchangeRateProvider ?? CreateDefaultExchangeRateProvider(logger);
         }
+
+        // Builds a fallback provider for hosts that instantiate controllers without DI.
+        private static IExchangeRateProvider CreateDefaultExchangeRateProvider(IAxLogger logger)
+        {
+            return new ExchangeRateService(
+                new EcbExchangeRateProvider(logger),
+                new FrankfurterExchangeRateProvider(logger),
+                new OpenErApiExchangeRateProvider(logger),
+                logger);
+        }
+
         /// <summary>
         /// Crea ticket de gasto (cabecera/lineas) en AX.
         /// </summary>
@@ -2132,6 +2157,24 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
+                if (!TryResolveTicketIaCurrencyAmounts(
+                        "endpoint-update-from-ia",
+                        fileId,
+                        mergedCurrencyCode,
+                        mergedTotalAmount,
+                        mergedTransDate,
+                        body.amountMST,
+                        body.exchRate,
+                        traceId,
+                        out var resolvedAmountMST,
+                        out var resolvedExchRate,
+                        out var currencyError,
+                        out var currencyStatus))
+                {
+                    LogOut(currencyStatus);
+                    return Content(currencyStatus, currencyError);
+                }
+
                 var rootCon = ax.CreateContainer();
                 rootCon.Append(company);
 
@@ -2150,8 +2193,14 @@ namespace IND_CRM_API.Controllers.CRM
                 headerCon.Append(mergedNormalizedJson ?? string.Empty);
                 headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
                 var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
-                if (mergedTicketTime.HasValue)
-                    headerCon.Append(mergedTicketTime.Value);
+                var shouldAppendCurrencyAmounts = resolvedAmountMST.HasValue || resolvedExchRate.HasValue;
+                if (mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
+                    headerCon.Append(mergedTicketTime ?? 0);
+                if (shouldAppendCurrencyAmounts)
+                {
+                    headerCon.Append(resolvedAmountMST.HasValue ? (object)resolvedAmountMST.Value : "null");
+                    headerCon.Append(resolvedExchRate.HasValue ? (object)resolvedExchRate.Value : "null");
+                }
                 rootCon.Append(headerCon);
 
                 var linesCon = ax.CreateContainer();
@@ -4116,6 +4165,7 @@ namespace IND_CRM_API.Controllers.CRM
                 currencyCode = currencyCode,
                 gastoType = ResolveQuickCreateDraftGastoType(draft),
                 totalAmount = validLines.Count > 0 ? (decimal?)linesTotal : null,
+                exchRate = draft?.exchRate,
                 transDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 ticketDate = FormatApiDate(transDateResolution.NormalizedTransDateYmd),
                 ticketTime = NormalizeQuickCreateDraftTicketTime(draft?.ticketTime),
@@ -4547,6 +4597,12 @@ namespace IND_CRM_API.Controllers.CRM
             if (body.totalAmount.HasValue && body.totalAmount.Value < 0m)
                 validationErrors.Add(new IndValidationError { Field = "totalAmount", Message = TicketNegativeTotalValidationMessage });
 
+            if (body.amountMST.HasValue && body.amountMST.Value < 0m)
+                validationErrors.Add(new IndValidationError { Field = "amountMST", Message = "amountMST no puede ser negativo." });
+
+            if (body.exchRate.HasValue && body.exchRate.Value < 0m)
+                validationErrors.Add(new IndValidationError { Field = "exchRate", Message = "exchRate no puede ser negativo." });
+
             if (body.gastoType.HasValue && !IsValidGastoType(body.gastoType.Value))
             {
                 validationErrors.Add(new IndValidationError
@@ -4802,6 +4858,21 @@ namespace IND_CRM_API.Controllers.CRM
                 return false;
             }
 
+            if (!TryResolveTicketIaCurrencyAmounts(
+                    "quick-create-apply",
+                    fileId,
+                    mergedCurrencyCode,
+                    mergedTotalAmount,
+                    mergedTransDate,
+                    body.amountMST,
+                    body.exchRate,
+                    traceId,
+                    out var resolvedAmountMST,
+                    out var resolvedExchRate,
+                    out error,
+                    out status))
+                return false;
+
             var rootCon = ax.CreateContainer();
             rootCon.Append(company);
 
@@ -4820,8 +4891,14 @@ namespace IND_CRM_API.Controllers.CRM
             headerCon.Append(mergedNormalizedJson ?? string.Empty);
             headerCon.Append(NormalizeTicketDateToAxYmdOrFallback(body.ticketDate, mergedTransDate));
             var mergedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body.ticketTime);
-            if (mergedTicketTime.HasValue)
-                headerCon.Append(mergedTicketTime.Value);
+            var shouldAppendCurrencyAmounts = resolvedAmountMST.HasValue || resolvedExchRate.HasValue;
+            if (mergedTicketTime.HasValue || shouldAppendCurrencyAmounts)
+                headerCon.Append(mergedTicketTime ?? 0);
+            if (shouldAppendCurrencyAmounts)
+            {
+                headerCon.Append(resolvedAmountMST.HasValue ? (object)resolvedAmountMST.Value : "null");
+                headerCon.Append(resolvedExchRate.HasValue ? (object)resolvedExchRate.Value : "null");
+            }
             rootCon.Append(headerCon);
 
             var linesCon = ax.CreateContainer();
@@ -5659,6 +5736,123 @@ namespace IND_CRM_API.Controllers.CRM
             }
 
             return total;
+        }
+
+        // Resolves missing reimbursement data for IA ticket updates in foreign currency.
+        private bool TryResolveTicketIaCurrencyAmounts(
+            string operation,
+            string fileId,
+            string currencyCode,
+            decimal totalAmount,
+            string transDateYmd,
+            decimal? requestedAmountMST,
+            decimal? requestedExchRate,
+            string traceId,
+            out decimal? amountMST,
+            out decimal? exchRate,
+            out IndApiResponse<object> error,
+            out HttpStatusCode status)
+        {
+            amountMST = requestedAmountMST;
+            exchRate = requestedExchRate;
+            error = null;
+            status = HttpStatusCode.OK;
+
+            if (amountMST.HasValue || exchRate.HasValue)
+                return true;
+
+            var normalizedCurrency = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(normalizedCurrency) ||
+                string.Equals(normalizedCurrency, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase) ||
+                totalAmount <= 0m)
+            {
+                return true;
+            }
+
+            var requestedDate = ResolveTicketIaExchangeRateDate(transDateYmd);
+            ExchangeRateResult providerResult = null;
+            try
+            {
+                providerResult = _exchangeRateProvider.GetRate(normalizedCurrency, ExpenseSheetLocalCurrencyCode, requestedDate);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(
+                    $"[TICKET-IA-CURRENCY] operation={ToLogValue(operation)} result=deny reason=provider-exception fileId={ToLogValue(fileId)} currency={ToLogValue(normalizedCurrency)} target={ExpenseSheetLocalCurrencyCode} date={requestedDate:yyyy-MM-dd} error={ToLogValue(ex.Message)} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+            }
+
+            if (providerResult == null || !providerResult.Success || providerResult.Rate <= 0m)
+            {
+                status = HttpStatusCode.NotFound;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"No se pudo obtener el tipo de cambio {normalizedCurrency}->{ExpenseSheetLocalCurrencyCode} para calcular el importe de reembolso del ticket.",
+                    ErrorCode = string.IsNullOrWhiteSpace(providerResult?.ErrorCode)
+                        ? IndErrorCodes.ExchangeRateNotFound
+                        : providerResult.ErrorCode,
+                    Errors = new List<IndValidationError>
+                    {
+                        new IndValidationError
+                        {
+                            Field = "currencyCode",
+                            Message = $"No hay tipo de cambio disponible para {normalizedCurrency}->{ExpenseSheetLocalCurrencyCode} en {requestedDate:yyyy-MM-dd}."
+                        }
+                    },
+                    Data = null,
+                    TraceId = traceId
+                };
+
+                Logger.Log(
+                    $"[TICKET-IA-CURRENCY] operation={ToLogValue(operation)} result=deny reason=rate-unavailable fileId={ToLogValue(fileId)} currency={ToLogValue(normalizedCurrency)} target={ExpenseSheetLocalCurrencyCode} date={requestedDate:yyyy-MM-dd} provider={ToLogValue(providerResult?.ProviderUsed)} errorCode={ToLogValue(providerResult?.ErrorCode)} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+                return false;
+            }
+
+            amountMST = Math.Round(totalAmount * providerResult.Rate, 2, MidpointRounding.AwayFromZero);
+            if (!amountMST.HasValue || amountMST.Value <= 0m)
+            {
+                status = (HttpStatusCode)422;
+                error = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "No se pudo calcular un importe de reembolso valido para el ticket.",
+                    ErrorCode = IndErrorCodes.ValidationError,
+                    Errors = new List<IndValidationError>
+                    {
+                        new IndValidationError
+                        {
+                            Field = "amountMST",
+                            Message = "amountMST calculado debe ser mayor que cero."
+                        }
+                    },
+                    Data = null,
+                    TraceId = traceId
+                };
+
+                Logger.Log(
+                    $"[TICKET-IA-CURRENCY] operation={ToLogValue(operation)} result=deny reason=amountMST-invalid fileId={ToLogValue(fileId)} currency={ToLogValue(normalizedCurrency)} totalAmount={totalAmount.ToString(CultureInfo.InvariantCulture)} rate={providerResult.Rate.ToString(CultureInfo.InvariantCulture)} amountMST={amountMST?.ToString(CultureInfo.InvariantCulture) ?? "null"} traceId={traceId}",
+                    AxaptaSessionManager.LogLevel.Warning);
+                return false;
+            }
+
+            Logger.Log(
+                $"[TICKET-IA-CURRENCY] operation={ToLogValue(operation)} result=allow fileId={ToLogValue(fileId)} currency={ToLogValue(normalizedCurrency)} target={ExpenseSheetLocalCurrencyCode} date={requestedDate:yyyy-MM-dd} totalAmount={totalAmount.ToString(CultureInfo.InvariantCulture)} rate={providerResult.Rate.ToString(CultureInfo.InvariantCulture)} amountMST={amountMST.Value.ToString(CultureInfo.InvariantCulture)} provider={ToLogValue(providerResult.ProviderUsed)} traceId={traceId}");
+
+            return true;
+        }
+
+        // Uses the ticket transaction date as the exchange-rate date when available.
+        private static DateTime ResolveTicketIaExchangeRateDate(string transDateYmd)
+        {
+            if (!string.IsNullOrWhiteSpace(transDateYmd) &&
+                DateTime.TryParseExact(transDateYmd.Trim(), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                return parsed.Date;
+            }
+
+            return DateTime.UtcNow.Date;
         }
 
         // Obtiene detalle de ticket desde AX validando ownership por company y axUserId.

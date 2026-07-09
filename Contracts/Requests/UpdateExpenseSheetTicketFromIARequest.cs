@@ -14,6 +14,14 @@ namespace IND_CRM_API.Contracts.Requests
         /// </summary>
         public int? gastoType { get; set; }
         public decimal? totalAmount { get; set; }
+        /// <summary>
+        /// Optional reimbursable amount in company currency.
+        /// </summary>
+        public decimal? amountMST { get; set; }
+        /// <summary>
+        /// Optional exchange rate for non-local ticket currency.
+        /// </summary>
+        public decimal? exchRate { get; set; }
 
         /// <summary>
         /// Ticket date in mandatory DDMMYYYY format.
