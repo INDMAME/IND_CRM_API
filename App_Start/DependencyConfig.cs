@@ -26,6 +26,7 @@ namespace IND_CRM_API.App_Start
             var azureReceiptAnalyzerService = new AzureReceiptAnalyzerService(axLogger);
             var openAiDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
             var openAiDatasetAnswerService = new IND_OpenAiDatasetAnswerService(axLogger);
+            var openAiTextFormattingService = new IND_OpenAiTextFormattingService(axLogger);
             var openAiTicketNormalizationService = new OpenAITicketNormalizationService(openAiDraftService);
             var ticketAiProcessingService = new TicketAIProcessingService(
                 expenseTicketBlobStorageService,
@@ -60,6 +61,7 @@ namespace IND_CRM_API.App_Start
                 { typeof(IAzureReceiptAnalyzerService), azureReceiptAnalyzerService },
                 { typeof(IOpenAITicketNormalizationService), openAiTicketNormalizationService },
                 { typeof(IAiDatasetAnswerService), openAiDatasetAnswerService },
+                { typeof(IND_ITextFormattingService), openAiTextFormattingService },
                 { typeof(IExpenseSheetAiDatasetProvider), expenseSheetAiDatasetProvider },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };

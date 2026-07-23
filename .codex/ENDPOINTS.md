@@ -84,6 +84,13 @@ Endpoints
   Response y semantica iguales a `/api/crm/enums/by-name`.
 
 ## IA Services
+- POST /api/ia/service/text/format (Authorize)
+  Content-Type: application/json.
+  Body required: `text` (max configurable, 20,000 characters by default).
+  Body optional: `languageId` (`auto` by default or a valid BCP 47 language identifier).
+  Behavior: corrects spelling, grammar, punctuation and readable plain-text layout while preserving the source language, meaning and data. It does not translate, summarize, answer, persist or update content. Server-owned instructions cannot be overridden by the consumer.
+  Response data: `formattedText` (complete result), `hasChanges` (calculated by the API) and `warnings[]` with `fragment` and `reason`.
+  Errors: 422 validation or moderation rejection, 429 per-user rate/concurrency limit, 503 AI provider unavailable.
 - POST /api/ia/service/speech (Authorize)
   Content-Type: multipart/form-data
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)

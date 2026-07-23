@@ -503,6 +503,10 @@ Formatversion: 1
         #    if (!actorCrmUserId || actorCrmUserId == _ownerCrmUserId)
         #        return false;
         #
+        #    // Require an active expense approval relation in addition to the existing scope checks.
+        #    if (!CRMUsuarioSubordinadoTable::EsAprobadorHojaGastos(actorCrmUserId, _ownerCrmUserId))
+        #        return false;
+        #
         #    actorUser = CRMUsuarioTable::Find(actorCrmUserId);
         #    if (!actorUser.RecId)
         #        return false;
@@ -2880,6 +2884,13 @@ Formatversion: 1
         #        if (!recipientCrmUserId)
         #            return [INDCRMUtilityService::buildHeader(false, 'Usuario CRM destinatario no encontrado.', conNull()), conNull()];
         #
+        #        if ((eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetRejected')
+        #            && actorCrmUserId != ownerCrmUserId
+        #            && !CRMUsuarioSubordinadoTable::EsAprobadorHojaGastos(actorCrmUserId, ownerCrmUserId))
+        #        {
+        #            return [INDCRMUtilityService::buildHeader(false, 'El actor no es un aprobador habilitado para la hoja de gastos.', conNull()), conNull()];
+        #        }
+        #
         #        if (actorCrmUserId && actorCrmUserId == recipientCrmUserId)
         #            return [INDCRMUtilityService::buildHeader(false, 'No se requiere email para hojas autogestionadas.', conNull()), conNull()];
         #
@@ -3073,7 +3084,8 @@ Formatversion: 1
         #            visibleUserIds = [crmUserId];
         #
         #            while select subordinadoTable
-        #                where subordinadoTable.UserIdJefe == crmUserId
+        #                where subordinadoTable.UserIdJefe                    == crmUserId
+        #                   && subordinadoTable.ExcluirAprobacionHojaGastos   == NoYes::No
         #            {
         #                if (subordinadoTable.UserIdSubordinado
         #                    && subordinadoTable.UserIdSubordinado != crmUserId
@@ -3870,7 +3882,10 @@ Formatversion: 1
         #            else
         #                personaTable        = INDPersonaTable::findByCRM(crmUsuarioTableSub.RecId);
         #
-        #            if (!subordinateUserId || !personaTable.UserId || crmUsuarioTable.UserId == crmUsuarioTableSub.UserId)
+        #            if (!subordinateUserId
+        #                || !personaTable.UserId
+        #                || crmUsuarioTable.UserId == crmUsuarioTableSub.UserId
+        #                || !CRMUsuarioSubordinadoTable::EsAprobadorHojaGastos(crmUserId, crmUsuarioTableSub.UserId))
         #                continue;
         #
         #            itemCon = [[
@@ -3901,6 +3916,7 @@ Formatversion: 1
         #    DataAreaId                 companyId;
         #    str 20                     axUserId;
         #    CRMUserId                  crmUserId;
+        #    CRMUserId                  subordinateCrmUserId;
         #    CRMUsuarioTable            crmUsuarioTable;
         #    CRMUsuarioSubordinadoTable subordinadoTable;
         #    container                  resultCon, itemCon, subordinateUsersCon;
@@ -3940,6 +3956,10 @@ Formatversion: 1
         #        {
         #            subordinateUserId = strLRTrim(conPeek(subordinateUsersCon, i));
         #            if (!subordinateUserId)
+        #                continue;
+        #
+        #            subordinateCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(subordinateUserId);
+        #            if (!CRMUsuarioSubordinadoTable::EsAprobadorHojaGastos(crmUserId, subordinateCrmUserId))
         #                continue;
         #
         #            itemCon = [[strFmt("%1", subordinateUserId), strFmt("%1",CRMUsuarioTable::Find(subordinateUserId).Name)]];
@@ -4513,7 +4533,7 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #resolveExpenseSheetManagerCrmUserIds
-        #// Devuelve todas las jefaturas directas del propietario de la hoja, sin duplicados.
+        #// Returns all eligible direct managers for expense approval, without duplicates.
         #static server container resolveExpenseSheetManagerCrmUserIds(CRMUserId _ownerCrmUserId)
         #{
         #    CRMUsuarioSubordinadoTable subordinadoTable;
@@ -4527,7 +4547,8 @@ Formatversion: 1
         #        return managerCrmUserIds;
         #
         #    while select subordinadoTable
-        #        where subordinadoTable.UserIdSubordinado == _ownerCrmUserId
+        #        where subordinadoTable.UserIdSubordinado             == _ownerCrmUserId
+        #           && subordinadoTable.ExcluirAprobacionHojaGastos   == NoYes::No
         #    {
         #        managerCrmUserId = subordinadoTable.UserIdJefe;
         #        if (!managerCrmUserId || managerCrmUserId == _ownerCrmUserId)
@@ -4933,6 +4954,14 @@ Formatversion: 1
         #
         #    senderCrmUserId    = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(senderUserId);
         #    recipientCrmUserId = INDCRMExpenseSheetService::resolveCrmUserIdFromAny(recipientUserId);
+        #
+        #    if ((eventType == 'ExpenseSheetApproved' || eventType == 'ExpenseSheetRejected')
+        #        && senderCrmUserId != recipientCrmUserId
+        #        && !CRMUsuarioSubordinadoTable::EsAprobadorHojaGastos(senderCrmUserId, expenseSheet.UserId))
+        #    {
+        #        warning(strFmt('No se envió email %1 para hoja %2: el actor %3 no es un aprobador habilitado.', eventType, expenseSheet.HojaGastosId, senderCrmUserId));
+        #        return false;
+        #    }
         #
         #    return INDCRMExpenseSheetService::sendExpenseSheetNotificationToRecipient(  expenseSheet,
         #                                                                                eventType,

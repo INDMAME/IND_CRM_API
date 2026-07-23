@@ -77,6 +77,9 @@ namespace IND_CRM_API.Services
                 }
                 catch (TaskCanceledException ex)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                        throw;
+
                     _logger.Log("[OPENAI-MOD] Peticion cancelada: " + ex.Message, AxaptaSessionManager.LogLevel.Warning);
                     return new ModerationResult { IsFlagged = false, CategorySummary = null };
                 }
