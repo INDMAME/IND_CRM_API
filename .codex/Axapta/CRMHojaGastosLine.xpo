@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : CRMHojaGastosLine unloaded at Lunes 06/07/2026
+; Navision Axapta Table : CRMHojaGastosLine unloaded at Viernes 24/07/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -1933,8 +1933,9 @@ Formatversion: 1
         #    exchRate                    = this.ExchRate;
         #    reimbursementCurrencyCode   = CompanyInfo::standardCurrency();
         #
-        #    if (hojaGastosTable && hojaGastosTable.CurrencyCode)
-        #        reimbursementCurrencyCode = hojaGastosTable.CurrencyCode;
+        #        //IJL.15/07/26. La divisa de reembolso es la divisa de la compañía en todos los casos
+        #    //if (hojaGastosTable && hojaGastosTable.CurrencyCode)
+        #    //    reimbursementCurrencyCode = hojaGastosTable.CurrencyCode;
         #
         #    if (!currencyCode && hojaGastosTable)
         #        currencyCode = hojaGastosTable.CurrencyCode;
@@ -1945,8 +1946,9 @@ Formatversion: 1
         #    if (currencyCode == reimbursementCurrencyCode)
         #        return Currency::amount(this.Amount, reimbursementCurrencyCode);
         #
-        #    if (!exchRate)
-        #        return 0;
+        #    //IJL.09/07/26. Si no hay exchRate calculamos el importe de todas formas.
+        #    //if (!exchRate)
+        #    //    return 0;
         #
         #    return Currency::amountCur2MST(this.Amount, CompanyInfo::standardCurrency(), exchRate, this.TransDate); //IJL.02/07/26
         #
@@ -2209,8 +2211,9 @@ Formatversion: 1
         #        this.Currency = hojaGastosTable.CurrencyCode;
         #
         #    reimbursementCurrencyCode = CompanyInfo::standardCurrency();
-        #    if (hojaGastosTable && hojaGastosTable.CurrencyCode)
-        #        reimbursementCurrencyCode = hojaGastosTable.CurrencyCode;
+        #    //IJL.15/07/26. La divisa de reembolso es la divisa de la compañía en todos los casos
+        #    //if (hojaGastosTable && hojaGastosTable.CurrencyCode)
+        #    //    reimbursementCurrencyCode = hojaGastosTable.CurrencyCode;
         #
         #    if (!this.ExchRate && this.Currency == reimbursementCurrencyCode)
         #        this.ExchRate = 100;
@@ -2729,7 +2732,7 @@ Formatversion: 1
         #            if (curExt() == "ISI" && this.Type == CRMGastoType::Km){
         #                priceKm = usuarioTable.priceKmAFecha(this.TransDate);
         #                if (! priceKm){
-        #                    ret = checkFailed("Este usuario en esta fecha no tiene configurado un precio por Km y po tanto no s epueden registrar líneas de Hojas de Gasto de este tipo. ");
+        #                    ret = checkFailed("Este usuario en esta fecha no tiene configurado un precio por Km y por tanto no se pueden registrar líneas de Hojas de Gasto de este tipo. ");
         #                }
         #            }
         #            break;

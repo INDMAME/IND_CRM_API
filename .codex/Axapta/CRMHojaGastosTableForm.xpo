@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: FRM
 
-; Navision Axapta Forms unloaded at Lunes 06/07/2026
+; Navision Axapta Forms unloaded at Viernes 24/07/2026
 ; --------------------------------------------------------------------------------
 FRMVERSION 5
 
@@ -11,7 +11,7 @@ FORM #CRMHojaGastosTable
   PROPERTIES
     Name                #CRMHojaGastosTable
   ENDPROPERTIES
-
+  
   METHODS
     Version: 3
     SOURCE #classDeclaration
@@ -247,6 +247,9 @@ FORM #CRMHojaGastosTable
       #    //IJL.11/05/26
       #    CRMHojaGastosTable_ds.object(FIeldNum(CRMHojaGastosTable, NecesariaHGImpresa)).visible(INDDataAreaParameterTable::Find().ActivarAprobacionHojasDeGastos || curUserId() == "TL");
       #
+      #    //IJL.09/07/26
+      #    TotalAmountMST.label(strfmt("Amount (%1)", CompanyInfo::standardCurrency()));
+      #
       #    /*
       #    if (element.args().record().TableId == TableNum(LedgerJournalTrans)){
       #        journalTrans        = element.args().record();
@@ -341,7 +344,7 @@ FORM #CRMHojaGastosTable
           InsertAtEnd         #Yes
           InsertIfEmpty       #No
         ENDPROPERTIES
-
+        
         FIELDLIST
           DATAFIELD ViajeId
             PROPERTIES
@@ -352,7 +355,7 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #validate
@@ -377,7 +380,7 @@ FORM #CRMHojaGastosTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD InformeVisitaId
             PROPERTIES
               AllowEdit           #Yes
@@ -387,7 +390,7 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #lookup
@@ -400,7 +403,7 @@ FORM #CRMHojaGastosTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD HojaGastosId
             PROPERTIES
               AllowEdit           #No
@@ -410,9 +413,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD UserId
             PROPERTIES
               AllowEdit           #No
@@ -422,9 +425,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD AmountAnticipo
             PROPERTIES
               AllowEdit           #No
@@ -434,9 +437,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD PriceKm
             PROPERTIES
               AllowEdit           #No
@@ -446,9 +449,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD Voucher
             PROPERTIES
               AllowEdit           #No
@@ -458,9 +461,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD ExpenseSheetStatus
             PROPERTIES
               AllowEdit           #No
@@ -470,9 +473,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD TransDateAprobacion
             PROPERTIES
               AllowEdit           #No
@@ -482,9 +485,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD NoContabilizarGasolina
             PROPERTIES
               AllowEdit           #Yes
@@ -494,7 +497,7 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #validate
@@ -520,7 +523,7 @@ FORM #CRMHojaGastosTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD NecesariaHGImpresa
             PROPERTIES
               AllowEdit           #No
@@ -530,9 +533,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
         ENDFIELDLIST
       ENDOBJECTPOOL
       METHODS
@@ -709,11 +712,19 @@ FORM #CRMHojaGastosTable
           #            */
           #
           #            //IJL.29/05/26
+          #/*
           #            qbr = this.query().dataSourceTable(TableNum(CRMHojaGastosTable)).findRange(FieldNum(CRMHojaGastosTable, MostrarParaPago));
           #            if (! qbr)
           #                qbr = this.query().dataSourceTable(TableNum(CRMHojaGastosTable)).addRange(FieldNum(CRMHojaGastosTable, MostrarParaPago));
           #            qbr.value("1");
+          #*/
           #        }
+          #
+          #        //IJL.29/05/26
+          #        qbr = this.query().dataSourceTable(TableNum(CRMHojaGastosTable)).findRange(FieldNum(CRMHojaGastosTable, MostrarParaPago));
+          #        if (! qbr)
+          #            qbr = this.query().dataSourceTable(TableNum(CRMHojaGastosTable)).addRange(FieldNum(CRMHojaGastosTable, MostrarParaPago));
+          #        qbr.value("1");
           #
           #    }
           #
@@ -878,7 +889,7 @@ FORM #CRMHojaGastosTable
           InsertAtEnd         #Yes
           InsertIfEmpty       #Yes
         ENDPROPERTIES
-
+        
         FIELDLIST
           DATAFIELD RemesaPagoId
             PROPERTIES
@@ -889,9 +900,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD AccountNum
             PROPERTIES
               AllowEdit           #No
@@ -901,9 +912,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD AmountCur
             PROPERTIES
               AllowEdit           #No
@@ -913,9 +924,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD CurrencyCode
             PROPERTIES
               AllowEdit           #No
@@ -925,9 +936,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD Type
             PROPERTIES
               AllowEdit           #No
@@ -937,9 +948,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD RefRecId
             PROPERTIES
               AllowEdit           #No
@@ -949,9 +960,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD HojaGastosId
             PROPERTIES
               AllowEdit           #No
@@ -961,9 +972,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD InvoiceId
             PROPERTIES
               AllowEdit           #No
@@ -973,9 +984,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD Voucher
             PROPERTIES
               AllowEdit           #No
@@ -985,9 +996,9 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
           ENDDATAFIELD
-
+          
           DATAFIELD RefRecIdAnticipo
             PROPERTIES
               AllowEdit           #Yes
@@ -997,7 +1008,7 @@ FORM #CRMHojaGastosTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #lookup
@@ -1013,7 +1024,7 @@ FORM #CRMHojaGastosTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
         ENDFIELDLIST
       ENDOBJECTPOOL
       METHODS
@@ -1040,10 +1051,10 @@ FORM #CRMHojaGastosTable
       ENDMETHODS
     ENDDATASOURCE
   ENDOBJECTBANK
-
+  
   JOINS
   ENDJOINS
-
+  
   DESIGN
     PROPERTIES
       Left                #Auto (left)
@@ -1093,8 +1104,8 @@ FORM #CRMHojaGastosTable
       ArrangeMethod       #Vertical
       Columns             #2
       Columnspace         #Auto
-      ArrangeGuide
-        ARRAY INDEX Columns
+      ArrangeGuide        
+        ARRAY INDEX Columns 
           #0
           #0
         ENDARRAY
@@ -1104,10 +1115,10 @@ FORM #CRMHojaGastosTable
       AllowUserSetup      #Yes
       NeededAccessLevel   #NoAccess
     ENDPROPERTIES
-
+    
     CONTAINER
       CONTROL GROUP
-        ;==== controlId:12291, containerId: 0, containerdata: 0
+        ;==== controlId:12291, containerId: 0, containerdata: 0   
         ;----------------------------------------------------------
         PROPERTIES
           Name                #GroupFiltro
@@ -1155,8 +1166,8 @@ FORM #CRMHojaGastosTable
           ArrangeMethod       #Vertical
           Columns             #2
           Columnspace         #Auto
-          ArrangeGuide
-            ARRAY INDEX Columns
+          ArrangeGuide        
+            ARRAY INDEX Columns 
               #0
               #0
             ENDARRAY
@@ -1168,10 +1179,10 @@ FORM #CRMHojaGastosTable
           DataGroup           #
           AutoDataGroup       #No
         ENDPROPERTIES
-
+        
           CONTAINER
             CONTROL INTEDIT
-              ;==== controlId:12292, containerId:12291, containerdata:12291
+              ;==== controlId:12292, containerId:12291, containerdata:12291   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #FiltroAnno
@@ -1229,8 +1240,8 @@ FORM #CRMHojaGastosTable
                 DataSource          #
                 DataField           #
                 Mandatory           #No
-                ExtendedDataType
-                  ARRAY
+                ExtendedDataType    
+                  ARRAY 
                     #
                     #
                   ENDARRAY
@@ -1238,7 +1249,7 @@ FORM #CRMHojaGastosTable
                 DataMethod          #
                 SearchMode          #None
               ENDPROPERTIES
-
+              
               METHODS
                 Version: 3
                 SOURCE #modified
@@ -1254,10 +1265,10 @@ FORM #CRMHojaGastosTable
                   #}
                 ENDSOURCE
               ENDMETHODS
-            ENDCONTROL
-
+            ENDCONTROL 
+            
             CONTROL REALEDIT
-              ;==== controlId:12293, containerId:12291, containerdata:12291
+              ;==== controlId:12293, containerId:12291, containerdata:12291   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #AmountSeleccionado_Field
@@ -1324,15 +1335,15 @@ FORM #CRMHojaGastosTable
                 DataMethod          #AmountSeleccionado
                 SearchMode          #None
               ENDPROPERTIES
-
-            ENDCONTROL
-
+              
+            ENDCONTROL 
+            
           ENDCONTAINER
-
-      ENDCONTROL
-
+          
+      ENDCONTROL 
+      
       CONTROL GROUP
-        ;==== controlId:12294, containerId: 0, containerdata:5146
+        ;==== controlId:12294, containerId: 0, containerdata: 4   
         ;----------------------------------------------------------
         PROPERTIES
           Name                #GroupHojaGastos
@@ -1380,8 +1391,8 @@ FORM #CRMHojaGastosTable
           ArrangeMethod       #Vertical
           Columns             #1
           Columnspace         #Auto
-          ArrangeGuide
-            ARRAY INDEX Columns
+          ArrangeGuide        
+            ARRAY INDEX Columns 
               #0
             ENDARRAY
           HideIfEmpty         #Yes
@@ -1392,10 +1403,10 @@ FORM #CRMHojaGastosTable
           DataGroup           #
           AutoDataGroup       #No
         ENDPROPERTIES
-
+        
           CONTAINER
             CONTROL TAB
-              ;==== controlId:12295, containerId:12294, containerdata:12294
+              ;==== controlId:12295, containerId:12294, containerdata:12294   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #Tab
@@ -1433,8 +1444,8 @@ FORM #CRMHojaGastosTable
                 ArrangeMethod       #Vertical
                 Columns             #2
                 Columnspace         #Auto
-                ArrangeGuide
-                  ARRAY INDEX Columns
+                ArrangeGuide        
+                  ARRAY INDEX Columns 
                     #0
                     #0
                   ENDARRAY
@@ -1445,10 +1456,10 @@ FORM #CRMHojaGastosTable
                 NeededAccessLevel   #View
                 TabAutoChange       #Yes
               ENDPROPERTIES
-
+              
               CONTAINER
                 CONTROL TABPAGE
-                  ;==== controlId:12296, containerId:12295, containerdata:12295
+                  ;==== controlId:12296, containerId:12295, containerdata:12295   
                   ;----------------------------------------------------------
                   PROPERTIES
                     Name                #TabOverview
@@ -1481,8 +1492,8 @@ FORM #CRMHojaGastosTable
                     ArrangeMethod       #Vertical
                     Columns             #1
                     Columnspace         #Auto
-                    ArrangeGuide
-                      ARRAY INDEX Columns
+                    ArrangeGuide        
+                      ARRAY INDEX Columns 
                         #0
                       ENDARRAY
                     HideIfEmpty         #Yes
@@ -1492,10 +1503,10 @@ FORM #CRMHojaGastosTable
                     NeededAccessLevel   #View
                     TabAutoChange       #No
                   ENDPROPERTIES
-
+                  
                   CONTAINER
                     CONTROL GRID
-                      ;==== controlId:12297, containerId:12296, containerdata:12296
+                      ;==== controlId:12297, containerId:12296, containerdata:12296   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Grid
@@ -1533,10 +1544,10 @@ FORM #CRMHojaGastosTable
                         AutoDataGroup       #No
                         GridLines           #Yes
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL CHECKBOX
-                            ;==== controlId:12298, containerId:12297, containerdata:12297
+                            ;==== controlId:12298, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #MarcarLineaField
@@ -1577,11 +1588,11 @@ FORM #CRMHojaGastosTable
                               DataField           #
                               DataMethod          #MarcarLinea
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12299, containerId:12297, containerdata:12297
+                            ;==== controlId:12299, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_HojaGastosId
@@ -1640,11 +1651,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL INTEDIT
-                            ;==== controlId:12300, containerId:12297, containerdata:12297
+                            ;==== controlId:12300, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Year
@@ -1705,11 +1716,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL COMBOBOX
-                            ;==== controlId:12301, containerId:12297, containerdata:12297
+                            ;==== controlId:12301, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Month
@@ -1761,11 +1772,11 @@ FORM #CRMHojaGastosTable
                               ComboType           #Standard
                               AppendNew           #No
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12302, containerId:12297, containerdata:12297
+                            ;==== controlId:12302, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_UserId
@@ -1824,11 +1835,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL COMBOBOX
-                            ;==== controlId:12303, containerId:12297, containerdata:12297
+                            ;==== controlId:12303, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Division
@@ -1880,11 +1891,11 @@ FORM #CRMHojaGastosTable
                               ComboType           #Standard
                               AppendNew           #No
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12304, containerId:12297, containerdata:12297
+                            ;==== controlId:12304, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_FromDate
@@ -1945,11 +1956,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12305, containerId:12297, containerdata:12297
+                            ;==== controlId:12305, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_ToDate
@@ -2010,11 +2021,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12306, containerId:12297, containerdata:12297
+                            ;==== controlId:12306, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Description
@@ -2073,11 +2084,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12307, containerId:12297, containerdata:12297
+                            ;==== controlId:12307, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_DestinoId
@@ -2136,11 +2147,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12308, containerId:12297, containerdata:12297
+                            ;==== controlId:12308, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_ViajeId
@@ -2199,11 +2210,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12309, containerId:12297, containerdata:12297
+                            ;==== controlId:12309, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_InformeVisitaId
@@ -2262,11 +2273,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12310, containerId:12297, containerdata:12297
+                            ;==== controlId:12310, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_ProjId
@@ -2325,11 +2336,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12312, containerId:12297, containerdata:12297
+                            ;==== controlId:12311, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_CategoriaId
@@ -2388,11 +2399,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL CHECKBOX
-                            ;==== controlId:12313, containerId:12297, containerdata:12297
+                            ;==== controlId:12312, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #Internacional
@@ -2433,16 +2444,16 @@ FORM #CRMHojaGastosTable
                               DataField           #
                               DataMethod          #Internacional
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12314, containerId:12297, containerdata:12297
+                            ;==== controlId:12313, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TotalAmount
                               AutoDeclaration     #No
-                              Visible             #Yes
+                              Visible             #No
                               AllowEdit           #No
                               Left                #Auto (left)
                               Top                 #Auto
@@ -2504,11 +2515,11 @@ FORM #CRMHojaGastosTable
                               DataMethod          #TotalAmount
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL CHECKBOX
-                            ;==== controlId:12739, containerId:12297, containerdata: 0
+                            ;==== controlId:12314, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_NoContabilizarGasolina
@@ -2549,16 +2560,16 @@ FORM #CRMHojaGastosTable
                               DataField           #NoContabilizarGasolina
                               DataMethod          #
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12311, containerId:12297, containerdata:12297
+                            ;==== controlId:12315, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_CurrencyCode
                               AutoDeclaration     #No
-                              Visible             #Yes
+                              Visible             #No
                               AllowEdit           #Yes
                               Left                #Auto (left)
                               Top                 #Auto
@@ -2612,11 +2623,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12740, containerId:12297, containerdata: 0
+                            ;==== controlId:12316, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TotalReembolsarMexico
@@ -2683,15 +2694,15 @@ FORM #CRMHojaGastosTable
                               DataMethod          #TotalReembolsarMexico
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12419, containerId:12297, containerdata: 0
+                            ;==== controlId:12317, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TotalAmountMST
-                              AutoDeclaration     #No
+                              AutoDeclaration     #Yes
                               Visible             #Yes
                               AllowEdit           #No
                               Left                #Auto (left)
@@ -2754,16 +2765,16 @@ FORM #CRMHojaGastosTable
                               DataMethod          #TotalAmountMST
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12315, containerId:12297, containerdata:12297
+                            ;==== controlId:12318, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TotalAmount_SoloVisa
                               AutoDeclaration     #No
-                              Visible             #Yes
+                              Visible             #No
                               AllowEdit           #No
                               Left                #Auto (left)
                               Top                 #Auto
@@ -2825,16 +2836,16 @@ FORM #CRMHojaGastosTable
                               DataMethod          #TotalAmount_SoloVisa
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12316, containerId:12297, containerdata:12297
+                            ;==== controlId:12319, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TotalAmount_ConVisa
                               AutoDeclaration     #No
-                              Visible             #Yes
+                              Visible             #No
                               AllowEdit           #No
                               Left                #Auto (left)
                               Top                 #Auto
@@ -2896,16 +2907,16 @@ FORM #CRMHojaGastosTable
                               DataMethod          #TotalAmount_ConVisa
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL REALEDIT
-                            ;==== controlId:12317, containerId:12297, containerdata:12297
+                            ;==== controlId:12320, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_AmountAnticipo
                               AutoDeclaration     #No
-                              Visible             #Yes
+                              Visible             #No
                               AllowEdit           #Yes
                               Left                #Auto (left)
                               Top                 #Auto
@@ -2966,11 +2977,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL CHECKBOX
-                            ;==== controlId:12318, containerId:12297, containerdata:12297
+                            ;==== controlId:12321, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Aprobado
@@ -3011,11 +3022,11 @@ FORM #CRMHojaGastosTable
                               DataField           #Aprobado
                               DataMethod          #
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12676, containerId:12297, containerdata: 0
+                            ;==== controlId:12322, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_TransDateAprobacion
@@ -3076,11 +3087,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12575, containerId:12297, containerdata: 0
+                            ;==== controlId:12323, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_DatePhysical
@@ -3141,11 +3152,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12574, containerId:12297, containerdata: 0
+                            ;==== controlId:12324, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_VoucherPhysical
@@ -3204,11 +3215,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12576, containerId:12297, containerdata: 0
+                            ;==== controlId:12325, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_DateFinancial
@@ -3269,11 +3280,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12319, containerId:12297, containerdata:12297
+                            ;==== controlId:12326, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_Voucher
@@ -3332,11 +3343,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL DATEEDIT
-                            ;==== controlId:12377, containerId:12297, containerdata: 0
+                            ;==== controlId:12327, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_TransDateRegistro_Mex
@@ -3397,11 +3408,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL STRINGEDIT
-                            ;==== controlId:12378, containerId:12297, containerdata: 0
+                            ;==== controlId:12328, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_UserIdRegistro_Mex
@@ -3460,11 +3471,11 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL COMBOBOX
-                            ;==== controlId:12489, containerId:12297, containerdata: 0
+                            ;==== controlId:12329, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_ExpenseSheetStatus
@@ -3516,11 +3527,11 @@ FORM #CRMHojaGastosTable
                               ComboType           #Standard
                               AppendNew           #No
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                           CONTROL CHECKBOX
-                            ;==== controlId:12851, containerId:12297, containerdata: 0
+                            ;==== controlId:12330, containerId:12297, containerdata:12297   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #CRMHojaGastosTable_NecesariaHGImpresa
@@ -3561,19 +3572,19 @@ FORM #CRMHojaGastosTable
                               DataField           #NecesariaHGImpresa
                               DataMethod          #
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                   ENDCONTAINER
-
-                ENDCONTROL
-
+                  
+                ENDCONTROL 
+                
                 CONTROL TABPAGE
-                  ;==== controlId:12320, containerId:12295, containerdata:12295
+                  ;==== controlId:12331, containerId:12295, containerdata:12295   
                   ;----------------------------------------------------------
                   PROPERTIES
                     Name                #TabGeneral
@@ -3606,8 +3617,8 @@ FORM #CRMHojaGastosTable
                     ArrangeMethod       #Vertical
                     Columns             #1
                     Columnspace         #Auto
-                    ArrangeGuide
-                      ARRAY INDEX Columns
+                    ArrangeGuide        
+                      ARRAY INDEX Columns 
                         #0
                       ENDARRAY
                     HideIfEmpty         #Yes
@@ -3617,10 +3628,10 @@ FORM #CRMHojaGastosTable
                     NeededAccessLevel   #View
                     TabAutoChange       #No
                   ENDPROPERTIES
-
+                  
                   CONTAINER
                     CONTROL GROUP
-                      ;==== controlId:12321, containerId:12320, containerdata:12320
+                      ;==== controlId:12332, containerId:12331, containerdata:12331   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Group
@@ -3668,8 +3679,8 @@ FORM #CRMHojaGastosTable
                         ArrangeMethod       #Vertical
                         Columns             #2
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                             #0
                           ENDARRAY
@@ -3681,10 +3692,10 @@ FORM #CRMHojaGastosTable
                         DataGroup           #
                         AutoDataGroup       #No
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL GROUP
-                            ;==== controlId:12322, containerId:12321, containerdata:12321
+                            ;==== controlId:12333, containerId:12332, containerdata:12332   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #HojaGastos
@@ -3732,8 +3743,8 @@ FORM #CRMHojaGastosTable
                               ArrangeMethod       #Vertical
                               Columns             #1
                               Columnspace         #Auto
-                              ArrangeGuide
-                                ARRAY INDEX Columns
+                              ArrangeGuide        
+                                ARRAY INDEX Columns 
                                   #0
                                 ENDARRAY
                               HideIfEmpty         #Yes
@@ -3744,14 +3755,14 @@ FORM #CRMHojaGastosTable
                               DataGroup           #HojaGastos
                               AutoDataGroup       #Yes
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                           CONTROL GROUP
-                            ;==== controlId:12323, containerId:12321, containerdata:12321
+                            ;==== controlId:12334, containerId:12332, containerdata:12332   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TipoCambio
@@ -3799,8 +3810,8 @@ FORM #CRMHojaGastosTable
                               ArrangeMethod       #Vertical
                               Columns             #1
                               Columnspace         #Auto
-                              ArrangeGuide
-                                ARRAY INDEX Columns
+                              ArrangeGuide        
+                                ARRAY INDEX Columns 
                                   #0
                                 ENDARRAY
                               HideIfEmpty         #Yes
@@ -3811,10 +3822,10 @@ FORM #CRMHojaGastosTable
                               DataGroup           #
                               AutoDataGroup       #No
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL REALEDIT
-                                  ;==== controlId:12324, containerId:12323, containerdata:12323
+                                  ;==== controlId:12335, containerId:12334, containerdata:12334   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #TipoCambio_ExchRate
@@ -3880,11 +3891,11 @@ FORM #CRMHojaGastosTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STATICTEXT
-                                  ;==== controlId:12325, containerId:12323, containerdata:12323
+                                  ;==== controlId:12336, containerId:12334, containerdata:12334   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #StaticText
@@ -3921,15 +3932,15 @@ FORM #CRMHojaGastosTable
                                     DataMethod          #
                                     Alignment           #Auto
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                           CONTROL GROUP
-                            ;==== controlId:12326, containerId:12321, containerdata:12321
+                            ;==== controlId:12337, containerId:12332, containerdata:12332   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #PriceKm_Group
@@ -3977,8 +3988,8 @@ FORM #CRMHojaGastosTable
                               ArrangeMethod       #Vertical
                               Columns             #1
                               Columnspace         #Auto
-                              ArrangeGuide
-                                ARRAY INDEX Columns
+                              ArrangeGuide        
+                                ARRAY INDEX Columns 
                                   #0
                                 ENDARRAY
                               HideIfEmpty         #Yes
@@ -3989,18 +4000,18 @@ FORM #CRMHojaGastosTable
                               DataGroup           #PriceKm
                               AutoDataGroup       #Yes
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                     CONTROL GROUP
-                      ;==== controlId:12327, containerId:12320, containerdata:12320
+                      ;==== controlId:12338, containerId:12331, containerdata:12331   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Comentarios
@@ -4048,8 +4059,8 @@ FORM #CRMHojaGastosTable
                         ArrangeMethod       #Vertical
                         Columns             #1
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                           ENDARRAY
                         HideIfEmpty         #Yes
@@ -4060,10 +4071,10 @@ FORM #CRMHojaGastosTable
                         DataGroup           #Comentarios
                         AutoDataGroup       #No
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL STRINGEDIT
-                            ;==== controlId:12328, containerId:12327, containerdata:12327
+                            ;==== controlId:12339, containerId:12338, containerdata:12338   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #Comentarios_Comentarios
@@ -4122,15 +4133,15 @@ FORM #CRMHojaGastosTable
                               ArrayIndex          #0
                               SearchMode          #None
                             ENDPROPERTIES
-
-                          ENDCONTROL
-
+                            
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                     CONTROL GROUP
-                      ;==== controlId:12532, containerId:12320, containerdata: 0
+                      ;==== controlId:12340, containerId:12331, containerdata:12331   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Estado
@@ -4178,8 +4189,8 @@ FORM #CRMHojaGastosTable
                         ArrangeMethod       #Vertical
                         Columns             #1
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                           ENDARRAY
                         HideIfEmpty         #Yes
@@ -4190,26 +4201,26 @@ FORM #CRMHojaGastosTable
                         DataGroup           #Estado
                         AutoDataGroup       #Yes
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                   ENDCONTAINER
-
-                ENDCONTROL
-
+                  
+                ENDCONTROL 
+                
               ENDCONTAINER
-
-            ENDCONTROL
-
+              
+            ENDCONTROL 
+            
           ENDCONTAINER
-
-      ENDCONTROL
-
+          
+      ENDCONTROL 
+      
       CONTROL GROUP
-        ;==== controlId:12329, containerId: 0, containerdata:279
+        ;==== controlId:12341, containerId: 0, containerdata:5296   
         ;----------------------------------------------------------
         PROPERTIES
           Name                #GroupRemesaPago
@@ -4257,8 +4268,8 @@ FORM #CRMHojaGastosTable
           ArrangeMethod       #Vertical
           Columns             #1
           Columnspace         #Auto
-          ArrangeGuide
-            ARRAY INDEX Columns
+          ArrangeGuide        
+            ARRAY INDEX Columns 
               #0
             ENDARRAY
           HideIfEmpty         #Yes
@@ -4269,10 +4280,10 @@ FORM #CRMHojaGastosTable
           DataGroup           #
           AutoDataGroup       #No
         ENDPROPERTIES
-
+        
           CONTAINER
             CONTROL GRID
-              ;==== controlId:12330, containerId:12329, containerdata:12329
+              ;==== controlId:12342, containerId:12341, containerdata:12341   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #GridHojaGastos
@@ -4310,10 +4321,10 @@ FORM #CRMHojaGastosTable
                 AutoDataGroup       #No
                 GridLines           #Yes
               ENDPROPERTIES
-
+              
                 CONTAINER
                   CONTROL CHECKBOX
-                    ;==== controlId:12331, containerId:12330, containerdata:12330
+                    ;==== controlId:12343, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #MarcarLineaRemesaPagoLine_Field
@@ -4354,11 +4365,11 @@ FORM #CRMHojaGastosTable
                       DataField           #
                       DataMethod          #MarcarLineaRemesaPagoLine
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12332, containerId:12330, containerdata:12330
+                    ;==== controlId:12344, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #CRMHojaGastosTable_HojaGastosId1
@@ -4417,11 +4428,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12333, containerId:12330, containerdata:12330
+                    ;==== controlId:12345, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #CRMHojaGastosTable_UserId1
@@ -4480,11 +4491,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12636, containerId:12330, containerdata: 0
+                    ;==== controlId:12346, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #UserName
@@ -4544,11 +4555,11 @@ FORM #CRMHojaGastosTable
                       DataMethod          #UserName
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12334, containerId:12330, containerdata:12330
+                    ;==== controlId:12347, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #CRMHojaGastosTable_Description1
@@ -4607,11 +4618,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL REALEDIT
-                    ;==== controlId:12335, containerId:12330, containerdata:12330
+                    ;==== controlId:12348, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #TotalAmount_Remesa
@@ -4675,14 +4686,14 @@ FORM #CRMHojaGastosTable
                       DataField           #
                       Mandatory           #No
                       ArrayIndex          #0
-                      DataMethod          #TotalAmount
+                      DataMethod          #TotalAmountMST
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL DATEEDIT
-                    ;==== controlId:12635, containerId:12330, containerdata: 0
+                    ;==== controlId:12349, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #CRMHojaGastosTable_createdDate
@@ -4743,11 +4754,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL CHECKBOX
-                    ;==== controlId:12812, containerId:12330, containerdata: 0
+                    ;==== controlId:12350, containerId:12342, containerdata:12342   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #CRMHojaGastosTable_JustificarConHGIMpresa
@@ -4788,15 +4799,15 @@ FORM #CRMHojaGastosTable
                       DataField           #NecesariaHGImpresa
                       DataMethod          #
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                 ENDCONTAINER
-
-            ENDCONTROL
-
+                
+            ENDCONTROL 
+            
             CONTROL GRID
-              ;==== controlId:12336, containerId:12329, containerdata:12329
+              ;==== controlId:12351, containerId:12341, containerdata:12341   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #GridRemesaLine
@@ -4834,10 +4845,10 @@ FORM #CRMHojaGastosTable
                 AutoDataGroup       #No
                 GridLines           #Yes
               ENDPROPERTIES
-
+              
                 CONTAINER
                   CONTROL STRINGEDIT
-                    ;==== controlId:12337, containerId:12336, containerdata:12336
+                    ;==== controlId:12352, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_AccountNum
@@ -4896,11 +4907,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL REALEDIT
-                    ;==== controlId:12338, containerId:12336, containerdata:12336
+                    ;==== controlId:12353, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_AmountCur
@@ -4966,11 +4977,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12339, containerId:12336, containerdata:12336
+                    ;==== controlId:12354, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_CurrencyCode
@@ -5029,11 +5040,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12340, containerId:12336, containerdata:12336
+                    ;==== controlId:12355, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_HojaGastosId
@@ -5092,11 +5103,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL INTEDIT
-                    ;==== controlId:12341, containerId:12336, containerdata:12336
+                    ;==== controlId:12356, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_RefRecIdAnticipo
@@ -5157,11 +5168,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL REALEDIT
-                    ;==== controlId:12342, containerId:12336, containerdata:12336
+                    ;==== controlId:12357, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #INDRemesaPagoLine_AmountAnticipo
@@ -5227,11 +5238,11 @@ FORM #CRMHojaGastosTable
                       ArrayIndex          #0
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL STRINGEDIT
-                    ;==== controlId:12343, containerId:12336, containerdata:12336
+                    ;==== controlId:12358, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #remesaPagoIdAnticipo
@@ -5291,11 +5302,11 @@ FORM #CRMHojaGastosTable
                       DataMethod          #remesaPagoIdAnticipo
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                   CONTROL DATEEDIT
-                    ;==== controlId:12344, containerId:12336, containerdata:12336
+                    ;==== controlId:12359, containerId:12351, containerdata:12351   
                     ;----------------------------------------------------------
                     PROPERTIES
                       Name                #remesaPagoAnticipo_TransDate
@@ -5357,19 +5368,19 @@ FORM #CRMHojaGastosTable
                       DataMethod          #remesaPagoAnticipo_TransDate
                       SearchMode          #None
                     ENDPROPERTIES
-
-                  ENDCONTROL
-
+                    
+                  ENDCONTROL 
+                  
                 ENDCONTAINER
-
-            ENDCONTROL
-
+                
+            ENDCONTROL 
+            
           ENDCONTAINER
-
-      ENDCONTROL
-
+          
+      ENDCONTROL 
+      
       CONTROL BUTTONGROUP
-        ;==== controlId:12345, containerId: 0, containerdata:357
+        ;==== controlId:12360, containerId: 0, containerdata:31073   
         ;----------------------------------------------------------
         PROPERTIES
           Name                #ButtonGroup
@@ -5411,8 +5422,8 @@ FORM #CRMHojaGastosTable
           ArrangeMethod       #Vertical
           Columns             #1
           Columnspace         #Auto
-          ArrangeGuide
-            ARRAY INDEX Columns
+          ArrangeGuide        
+            ARRAY INDEX Columns 
               #0
             ENDARRAY
           HideIfEmpty         #Yes
@@ -5421,10 +5432,10 @@ FORM #CRMHojaGastosTable
           AllowUserSetup      #Yes
           NeededAccessLevel   #View
         ENDPROPERTIES
-
+        
         CONTAINER
           CONTROL COMMANDBUTTON
-            ;==== controlId:12346, containerId:12345, containerdata:12345
+            ;==== controlId:12361, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #CommandButtonAceptar
@@ -5468,11 +5479,11 @@ FORM #CRMHojaGastosTable
               NeededAccessLevel   #View
               Command             #263
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12347, containerId:12345, containerdata:12345
+            ;==== controlId:12362, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #CRMHojaGastosLine
@@ -5518,11 +5529,11 @@ FORM #CRMHojaGastosTable
               MenuItemName        #CRMHojaGastosLine
               DataSource          #
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12348, containerId:12345, containerdata:12345
+            ;==== controlId:12363, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #CRMHojaGastos
@@ -5568,7 +5579,7 @@ FORM #CRMHojaGastosTable
               MenuItemName        #CRMHojaGastos
               DataSource          #
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #clicked
@@ -5586,10 +5597,10 @@ FORM #CRMHojaGastosTable
                 #}
               ENDSOURCE
             ENDMETHODS
-          ENDCONTROL
-
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12467, containerId:12345, containerdata:12345
+            ;==== controlId:12364, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #CRMHojaGastos_MEX
@@ -5635,7 +5646,7 @@ FORM #CRMHojaGastosTable
               MenuItemName        #CRMHojaGastos_MEX
               DataSource          #
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #clicked
@@ -5653,10 +5664,10 @@ FORM #CRMHojaGastosTable
                 #}
               ENDSOURCE
             ENDMETHODS
-          ENDCONTROL
-
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12357, containerId:12345, containerdata:12345
+            ;==== controlId:12365, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #CRMHojaGastosLineCust
@@ -5702,11 +5713,11 @@ FORM #CRMHojaGastosTable
               MenuItemName        #CRMHojaGastosLineCust_cust
               DataSource          #
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL BUTTON
-            ;==== controlId:12367, containerId:12345, containerdata: 0
+            ;==== controlId:12366, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #ButtonCambiarEmpleado
@@ -5749,7 +5760,7 @@ FORM #CRMHojaGastosTable
               ForegroundColor     #Button text
               NeededAccessLevel   #View
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #clicked
@@ -5797,10 +5808,10 @@ FORM #CRMHojaGastosTable
                 #}
               ENDSOURCE
             ENDMETHODS
-          ENDCONTROL
-
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12479, containerId:12345, containerdata: 0
+            ;==== controlId:12367, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #INDImputacionCosteDetalleTable
@@ -5846,11 +5857,11 @@ FORM #CRMHojaGastosTable
               MenuItemName        #INDImputacionCosteDetalleTable
               DataSource          #CRMHojaGastosTable
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL MENUBUTTON
-            ;==== controlId:12568, containerId:12345, containerdata: 0
+            ;==== controlId:12368, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #MenuButtonFunciones
@@ -5897,10 +5908,10 @@ FORM #CRMHojaGastosTable
               RightMargin         #0
               LeftMargin          #0
             ENDPROPERTIES
-
+            
             CONTAINER
               CONTROL BUTTON
-                ;==== controlId:12569, containerId:12568, containerdata: 0
+                ;==== controlId:12369, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonSolicitarAprobacion
@@ -5943,7 +5954,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -5986,10 +5997,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12570, containerId:12568, containerdata: 0
+                ;==== controlId:12370, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonCancelarSolicitarAprobacion
@@ -6032,7 +6043,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6069,10 +6080,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12571, containerId:12568, containerdata: 0
+                ;==== controlId:12371, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonAprobar
@@ -6115,7 +6126,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6145,10 +6156,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12573, containerId:12568, containerdata: 0
+                ;==== controlId:12372, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonDesAprobar
@@ -6191,7 +6202,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6221,10 +6232,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12572, containerId:12568, containerdata: 0
+                ;==== controlId:12373, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonRechazar
@@ -6267,7 +6278,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6296,10 +6307,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12577, containerId:12568, containerdata:12568
+                ;==== controlId:12374, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonAnularRechazoRechazar
@@ -6342,7 +6353,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6371,10 +6382,10 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
               CONTROL BUTTON
-                ;==== controlId:12922, containerId:12568, containerdata: 0
+                ;==== controlId:12375, containerId:12368, containerdata:12368   
                 ;----------------------------------------------------------
                 PROPERTIES
                   Name                #ButtonVolverBorrador
@@ -6417,7 +6428,7 @@ FORM #CRMHojaGastosTable
                   ForegroundColor     #Button text
                   NeededAccessLevel   #View
                 ENDPROPERTIES
-
+                
                 METHODS
                   Version: 3
                   SOURCE #clicked
@@ -6446,14 +6457,14 @@ FORM #CRMHojaGastosTable
                     #}
                   ENDSOURCE
                 ENDMETHODS
-              ENDCONTROL
-
+              ENDCONTROL 
+              
             ENDCONTAINER
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12578, containerId:12345, containerdata: 0
+            ;==== controlId:12376, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #LedgerTransVoucher
@@ -6499,11 +6510,11 @@ FORM #CRMHojaGastosTable
               MenuItemName        #LedgerTransVoucher
               DataSource          #CRMHojaGastosTable
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
           CONTROL BUTTON
-            ;==== controlId:12741, containerId:12345, containerdata: 0
+            ;==== controlId:12377, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #ButtonPostHojaGastos_MEX
@@ -6546,7 +6557,7 @@ FORM #CRMHojaGastosTable
               ForegroundColor     #Button text
               NeededAccessLevel   #View
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #clicked
@@ -6570,10 +6581,10 @@ FORM #CRMHojaGastosTable
                 #}
               ENDSOURCE
             ENDMETHODS
-          ENDCONTROL
-
+          ENDCONTROL 
+          
           CONTROL BUTTON
-            ;==== controlId:12742, containerId:12345, containerdata:12345
+            ;==== controlId:12378, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #ButtonUnPostHojaGastos_MEX
@@ -6616,7 +6627,7 @@ FORM #CRMHojaGastosTable
               ForegroundColor     #Button text
               NeededAccessLevel   #View
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #clicked
@@ -6633,10 +6644,10 @@ FORM #CRMHojaGastosTable
                 #}
               ENDSOURCE
             ENDMETHODS
-          ENDCONTROL
-
+          ENDCONTROL 
+          
           CONTROL MENUITEMBUTTON
-            ;==== controlId:12910, containerId:12345, containerdata:12345
+            ;==== controlId:12379, containerId:12360, containerdata:12360   
             ;----------------------------------------------------------
             PROPERTIES
               Name                #INDFormWikiTable
@@ -6682,17 +6693,17 @@ FORM #CRMHojaGastosTable
               MenuItemName        #INDFormWikiTable
               DataSource          #
             ENDPROPERTIES
-
-          ENDCONTROL
-
+            
+          ENDCONTROL 
+          
         ENDCONTAINER
-
-      ENDCONTROL
-
+        
+      ENDCONTROL 
+      
     ENDCONTAINER
-
+    
   ENDDESIGN
-
+  
 ENDFORM
 
 
