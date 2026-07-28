@@ -21,11 +21,14 @@ namespace IND_CRM_API.App_Start
         private const string ExpenseFromTicketPath = "/api/ia/service/expensefromticket";
         private const string ExpenseSheetAskPath = "/api/ia/service/expensesheets/ask";
         private const string QuickCreateTicketPath = "/api/crm/expensesheets/tickets/quick-create";
+        private const string TextFormattingPath = "/api/ia/service/text/format";
 
         private const string SpeechMaxRequestsSettingKey = "OpenAI:RateLimitSpeechMaxRequests";
         private const string SpeechWindowSecondsSettingKey = "OpenAI:RateLimitSpeechWindowSeconds";
         private const string ExpenseMaxRequestsSettingKey = "OpenAI:RateLimitExpenseTicketMaxRequests";
         private const string ExpenseWindowSecondsSettingKey = "OpenAI:RateLimitExpenseTicketWindowSeconds";
+        private const string TextFormattingMaxRequestsSettingKey = "OpenAI:RateLimitTextFormattingMaxRequests";
+        private const string TextFormattingWindowSecondsSettingKey = "OpenAI:RateLimitTextFormattingWindowSeconds";
         private const string MaxConcurrentPerUserSettingKey = "OpenAI:RateLimitMaxConcurrentPerUser";
         private const string ValidationMultiplierSettingKey = "OpenAI:RateLimitValidationMultiplier";
         private const string RateLimitEnabledSettingKey = "OpenAI:RateLimitEnabled";
@@ -34,6 +37,8 @@ namespace IND_CRM_API.App_Start
         private const int DefaultSpeechWindowSeconds = 300;
         private const int DefaultExpenseMaxRequests = 10;
         private const int DefaultExpenseWindowSeconds = 600;
+        private const int DefaultTextFormattingMaxRequests = 20;
+        private const int DefaultTextFormattingWindowSeconds = 600;
         private const int DefaultMaxConcurrentPerUser = 1;
         private const int DefaultValidationMultiplier = 1;
         private const bool DefaultRateLimitEnabled = true;
@@ -61,6 +66,14 @@ namespace IND_CRM_API.App_Start
             NormalizePath(QuickCreateTicketPath),
             ReadPositiveIntFromConfig(ExpenseMaxRequestsSettingKey, DefaultExpenseMaxRequests),
             TimeSpan.FromSeconds(ReadPositiveIntFromConfig(ExpenseWindowSecondsSettingKey, DefaultExpenseWindowSeconds)));
+
+        private static readonly EndpointLimit TextFormattingLimit = new EndpointLimit(
+            "text-formatting",
+            NormalizePath(TextFormattingPath),
+            ReadPositiveIntFromConfig(TextFormattingMaxRequestsSettingKey, DefaultTextFormattingMaxRequests),
+            TimeSpan.FromSeconds(ReadPositiveIntFromConfig(
+                TextFormattingWindowSecondsSettingKey,
+                DefaultTextFormattingWindowSeconds)));
 
         private readonly ConcurrentDictionary<string, RateWindowState> _rateWindows =
             new ConcurrentDictionary<string, RateWindowState>(StringComparer.OrdinalIgnoreCase);
@@ -229,6 +242,12 @@ namespace IND_CRM_API.App_Start
             if (string.Equals(path, QuickCreateTicketLimit.Path, StringComparison.OrdinalIgnoreCase))
             {
                 endpoint = QuickCreateTicketLimit;
+                return true;
+            }
+
+            if (string.Equals(path, TextFormattingLimit.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                endpoint = TextFormattingLimit;
                 return true;
             }
 

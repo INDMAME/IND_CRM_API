@@ -161,6 +161,9 @@
     <Compile Include="App_Start\CompanyHeaderOperationFilter.cs" />
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
     <Compile Include="App_Start\IND_OpenAiRateLimitHandler.cs" />
+    <Compile Include="Contracts\Requests\FormatTextRequest.cs" />
+    <Compile Include="Contracts\Responses\FormatTextResponse.cs" />
+    <Compile Include="Controllers\System\INDTextFormattingController.cs" />
     <Compile Include="App_Start\McpToolsDocumentFilter.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
@@ -256,6 +259,7 @@
     <Compile Include="Services\IND_OpenAiAudioTranscriptionService.cs" />
     <Compile Include="Services\IND_OpenAiDatasetAnswerService.cs" />
     <Compile Include="Services\IND_OpenAiModerationService.cs" />
+    <Compile Include="Services\IND_OpenAiTextFormattingService.cs" />
     <Compile Include="Services\IND_OpenAiExpenseTicketDraftService.cs" />
     <Compile Include="Services\IND_OpenAiRateLimitException.cs" />
     <Compile Include="Services\IAxLogger.cs" />
@@ -268,6 +272,7 @@
     <Compile Include="Services\Interfaces\IExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\Interfaces\IND_IExpenseTicketDraftService.cs" />
     <Compile Include="Services\Interfaces\IND_ITextModerationService.cs" />
+    <Compile Include="Services\Interfaces\IND_ITextFormattingService.cs" />
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
