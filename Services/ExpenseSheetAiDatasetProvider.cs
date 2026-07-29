@@ -87,6 +87,9 @@ namespace IND_CRM_API.Services
                 totalAmount = item.TotalAmount,
                 totalAmountCurrency = item.TotalAmountCurrency,
                 totalAmountMST = item.TotalAmountMST,
+                //MMS - Exposes explicit company currency totals to the expense sheet AI dataset - 2026.07.29
+                totalGrossAmountMST = item.TotalGrossAmountMST,
+                totalReimbursableAmount = item.TotalReimbursableAmount,
                 exchRate = item.ExchRate,
                 exchangeRateMode = item.ExchangeRateMode,
                 reimbursableExpense = item.ReimbursableExpense,

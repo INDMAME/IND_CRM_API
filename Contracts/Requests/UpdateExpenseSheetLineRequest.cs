@@ -28,7 +28,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
-        /// Numeric AX enum value for INDReimbursableExpenseLines. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.
+        /// AX reimbursement flag: Yes (1) includes AmountMST and No (0) sets ReimbursableAmount to zero.
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>

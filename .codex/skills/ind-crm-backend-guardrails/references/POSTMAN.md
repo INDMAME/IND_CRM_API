@@ -66,7 +66,7 @@ Notas
   - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false`
   - `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
   - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
-- Expense Sheets admite `reimbursableExpense` en cabecera y lineas. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
+- Expense Sheets admite `reimbursableExpense` en cabecera y lineas: `Yes=1` incluye `AmountMST` en el reembolso y `No=0` lo excluye dejando `ReimbursableAmount=0`; `Both=2` representa una cabecera mixta. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
 - Tickets admite `amountMST` y `exchRate` en update de cabecera; si el ticket vinculado esta en la misma divisa de reembolso de la hoja, modificar `amountMST` no recalcula `exchRate`.
 - Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.
 - Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.
@@ -113,4 +113,4 @@ Notas
   - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.
   - La consola de Postman muestra `actorAxUserId` junto con el evento esperado.
 - DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.
-- DEV actual incorpora `TotalAmountCurrency` y `TotalAmountMST` en cabeceras de hojas de gastos, listados de hojas, cabeceras de tickets, listados de tickets y respuestas de mutacion que devuelven totales recalculados. `TotalAmount` y `AmountMST` se mantienen como aliases legacy donde ya existian.
+- DEV actual mantiene `TotalAmountCurrency` y `TotalAmountMST` como totales contables legacy y agrega `TotalGrossAmountMST` y `TotalReimbursableAmount` en cabeceras y listados de hojas. Las lineas distinguen `Amount` original, `AmountMST` company y `ReimbursableAmount` reembolsable company; `ReimbursableExpense=Yes` copia `AmountMST` y `No` deja el derivado en cero. Visa no participa en el calculo y queda como espejo inverso legacy bloqueado. El JSON real usa PascalCase. La coleccion DEV activa no contiene response schemas para estos endpoints, por lo que no se crea una version nueva solo por esta ampliacion aditiva.
