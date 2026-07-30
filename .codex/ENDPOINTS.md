@@ -205,6 +205,8 @@ Endpoints
   Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate`, `ticketTime`, `totalAmountCurrency` y `totalAmountMST`.
   Nota totales: `totalAmountCurrency` viene de `INDTicketInfoTable.TotalAmount`; `totalAmountMST` viene de `INDTicketInfoTable.AmountMST`. `totalAmount` y `amountMST` se mantienen como aliases legacy.
   Lineas incluyen `AdjustmentAmount` cuando AX devuelve el flag `INDTicketInfoLine.Adjustment`.
+  Cada elemento de `Lines[*]` incluye tambien `ReimbursableExpense` (`int?`, `0=No`, `1=Yes`) y `ReimbursableAmount` (`decimal?`, importe en divisa de la empresa), obtenidos de la `CRMHojaGastosLine` vinculada al ticket.
+  Compatibilidad: ambos campos son `null` cuando AX devuelve el contrato legacy o cuando no existe una vinculacion unica con `CRMHojaGastosLine`. Si existen varias lineas de ticket, los valores se repiten como metadatos de la misma linea de hoja vinculada; no son importes propios de cada linea de ticket y no deben sumarse.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.
   Body optional: searchKey (compat: `filter`), status, createdDateFrom (DDMMYYYY o DD.MM.YYYY), createdDateTo (DDMMYYYY o DD.MM.YYYY), currencyCode, gastoType, processedByAI (bool).

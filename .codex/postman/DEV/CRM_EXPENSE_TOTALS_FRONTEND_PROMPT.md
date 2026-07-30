@@ -25,6 +25,24 @@ La serializacion real de Web API usa nombres PascalCase. En TypeScript/JavaScrip
 
 Actualizar `IND_CRM_APP` para mostrar por separado el total bruto company/MST, el total reembolsable y los importes en divisa original. No reutilizar un unico helper entre hojas y tickets porque sus contratos mantienen semanticas distintas.
 
+Antes de modificar:
+
+- Leer las instrucciones y skills locales de `IND_CRM_APP`.
+- Revisar `git status` y conservar todos los cambios pendientes del frontend.
+- Usar `Web/wwwroot` como fuente canonica. No editar manualmente bundles, chunks ni la copia generada raiz `wwwroot`.
+- No agregar dependencias, credenciales ni URLs de entorno al codigo.
+
+## Frontera proxy C# del frontend
+
+No basta con actualizar TypeScript. `IND_CRM_APP` deserializa y reconstruye la respuesta del backend antes de entregarla a React.
+
+Actualizar tambien:
+
+- `App/Models/CRM/ExpenseSheetTicketModels.cs`: agregar a `ExpenseSheetTicketLineDto` las propiedades nullable `int? ReimbursableExpense` y `decimal? ReimbursableAmount`, con sus nombres JSON PascalCase.
+- `Web/Controllers/Gastos/GastosController.cs`: propagar ambos valores en `ToExpenseSheetTicketApiDetailLine`. Este mapper actualmente enumera los campos de salida y descartaria cualquier propiedad no incluida expresamente.
+
+No cambiar rutas, envelopes, autorizacion ni headers.
+
 ## Endpoints de hojas y campos
 
 1. `POST /api/crm/expensesheets/list`
@@ -37,6 +55,14 @@ Actualizar `IND_CRM_APP` para mostrar por separado el total bruto company/MST, e
    - Las lineas agregan `ReimbursableAmount` y mantienen `Amount` y `AmountMST`.
    - En cabecera, mostrar por separado `Header.TotalReimbursableAmount` y `Header.TotalGrossAmountMST`.
    - En cada linea, usar `Line.ReimbursableAmount` para reembolso, `Line.AmountMST` para bruto company y `Line.Amount` para importe original.
+
+Alias de linea permitidos:
+
+- Importe original: `TotalAmountCurrency ?? Amount`, mostrado con `CurrencyCode`.
+- Bruto company: `AmountMST ?? TotalAmountMST`, mostrado con la divisa de la empresa.
+- Reembolso: exclusivamente `ReimbursableAmount`, mostrado con la divisa de la empresa.
+
+Usar siempre `??` y no `||`, porque cero es un valor funcional valido.
 
 ## Compatibilidad durante el despliegue AX
 
@@ -57,14 +83,55 @@ function getExpenseSheetTotals(row: {
 }
 ```
 
-## Tickets: comportamiento existente
+## Caso de auditoria obligatorio
 
-Los contratos de tickets no cambian con este ajuste. Seguir usando `TotalAmountMST` para su total convertido y `TotalAmountCurrency` para el total en divisa del ticket en:
+Usar como fixture de contrato esta linea observada en `GET /api/crm/expensesheets/{hojaGastosId}`:
+
+```json
+{
+  "ReimbursableExpense": 1,
+  "CurrencyCode": "USD",
+  "AmountMST": 108.11,
+  "ReimbursableAmount": 0.00,
+  "TotalAmountCurrency": 100.00,
+  "TotalAmountMST": 108.11
+}
+```
+
+La UI debe interpretarla sin recalcular ni ocultar diferencias:
+
+- Original: `100.00 USD`.
+- Bruto company: `108.11` en la divisa de la empresa.
+- Reembolso: `0.00` en la divisa de la empresa.
+- Estado: reembolsable (`1=Yes`).
+
+Aunque normalmente `ReimbursableExpense=1` implica `ReimbursableAmount=AmountMST`, el frontend debe mostrar el valor fisico recibido. Debe informar la diferencia como posible registro AX pendiente de recalculo, nunca corregirla usando `AmountMST` como fallback.
+
+## Tickets: detalle ampliado
+
+Los totales de ticket mantienen su semantica: seguir usando `TotalAmountMST` para el total convertido y `TotalAmountCurrency` para el total en divisa del ticket en:
 
 - `POST /api/crm/expensesheets/tickets/list`
 - `POST /api/crm/expensesheets/tickets/link/list`
 - `GET /api/crm/expensesheets/tickets/{fileId}`
 - Respuestas de crear, editar, IA, ajuste, alta/edicion/borrado de lineas de ticket.
+
+El detalle `GET /api/crm/expensesheets/tickets/{fileId}` agrega en cada `Lines[*]`:
+
+- `ReimbursableExpense` (`int?`; TypeScript `number | null`): enum de la `CRMHojaGastosLine` vinculada (`0=No`, `1=Yes`).
+- `ReimbursableAmount` (`decimal?`; TypeScript `number | null`): importe reembolsable de esa linea vinculada en divisa de la empresa.
+
+Ambos valores quedan `null` cuando AX devuelve el contrato legacy o cuando no existe una vinculacion unica con `CRMHojaGastosLine`. Si el ticket contiene varias lineas, el API repite los mismos valores en todas ellas como metadatos de la unica linea de hoja vinculada. No sumarlos ni tratarlos como importes individuales de las lineas del ticket.
+
+Actualizar en React, como minimo:
+
+- `Web/wwwroot/react/src/pages/gastos/expenseTypes.ts`.
+- `Web/wwwroot/react/src/pages/gastos/utils/expenseApiResponseNormalizers.ts`.
+- `Web/wwwroot/react/src/pages/gastos/tickets/detail/expenseTicketDetailTypes.ts`.
+- Los mappers y estados de detalle de ticket que convierten la linea API al modelo UI.
+- `ExpenseTicketLinesList.tsx` y `ExpenseTicketLineDetailForm.tsx` si son las superficies que muestran la linea.
+
+El normalizador debe aceptar PascalCase y camelCase solo en el limite de entrada, conservar `null` y normalizar un unico modelo interno. Rechazar `2=Both` como valor de linea. Mostrar ambos valores como solo lectura; cero debe verse como `0.00`, mientras que `null` debe verse como no disponible.
 
 `AmountMST` permanece como fallback legacy solo en detalle de ticket. No aplicar ese fallback a `ReimbursableAmount` de una linea de hoja.
 
@@ -74,13 +141,29 @@ Los contratos de tickets no cambian con este ajuste. Seguir usando `TotalAmountM
 - No usar `AmountMST` de una linea como si fuera `ReimbursableAmount`.
 - No filtrar el bruto company/MST por Visa ni por `ReimbursableExpense`.
 - No usar Visa para decidir el reembolso; la unica bandera funcional es `ReimbursableExpense`.
+- No sumar `Lines[*].ReimbursableAmount` del detalle de ticket: puede estar repetido como metadato de la linea de hoja vinculada.
 - No sumar ni convertir importes en frontend.
 - No cambiar payloads de entrada.
 
 ## Validacion frontend esperada
 
-- Una linea con `ReimbursableExpense=Yes` muestra `ReimbursableAmount=AmountMST`, suma en `TotalReimbursableAmount` y mantiene `VisaEmpresa=No` como espejo legacy.
+- En datos AX coherentes, una linea con `ReimbursableExpense=Yes` muestra `ReimbursableAmount=AmountMST`, suma en `TotalReimbursableAmount` y mantiene `VisaEmpresa=No` como espejo legacy. Si el servidor devuelve una diferencia, conservar los valores fisicos y reportarla sin recalcular en frontend.
 - Una linea con `ReimbursableExpense=No` muestra `ReimbursableAmount=0`, queda fuera de `TotalReimbursableAmount`, conserva su `AmountMST` bruto y mantiene `VisaEmpresa=Yes` como espejo legacy.
 - Las tarjetas de hoja distinguen total bruto y reembolso con etiquetas claras.
 - El importe original de cada linea se obtiene de `Amount` y conserva su `CurrencyCode`.
 - Los listados y mutaciones de tickets siguen refrescando desde `TotalAmountMST`.
+- El proxy C# conserva los dos campos nuevos hasta la respuesta entregada a React.
+- Las lineas de ticket repetidas no generan ninguna suma de `ReimbursableAmount`.
+- PascalCase y camelCase se normalizan una sola vez y el modelo UI conserva ceros y nulos.
+
+Ejecutar, segun los scripts disponibles del proyecto:
+
+- `npm run test:gastos:currency`.
+- `npm run check:types`.
+- `npm run check:localization:keys`.
+- `npm run check:resx:encoding`.
+- `npm run build`.
+- `dotnet build`.
+- `npm run check:react-doctor`.
+
+No hacer pruebas visuales automatizadas. Entregar un checklist manual de escritorio y movil, detallar archivos modificados y declarar cualquier prueba live pendiente por falta de autenticacion.

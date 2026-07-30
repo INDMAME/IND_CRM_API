@@ -2042,7 +2042,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_tickets_get",
-                      "description":  "Obtiene detalle de ticket por FileId.",
+                      "description":  "Obtiene detalle de ticket por FileId. Lines[*] incluye ReimbursableExpense (int?) y ReimbursableAmount (decimal?) desde la CRMHojaGastosLine vinculada; son null con AX legacy o sin vinculacion unica y, si se repiten, son metadatos no sumables.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {

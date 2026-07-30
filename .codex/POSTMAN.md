@@ -78,6 +78,7 @@ Notas
   - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
   - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
   - `GET /api/crm/expensesheets/tickets/{fileId}` retorna tambien `ocrJson` y `normalizedJson`.
+  - En `GET /api/crm/expensesheets/tickets/{fileId}`, cada `Lines[*]` agrega `ReimbursableExpense` (`int?`, `0=No`, `1=Yes`) y `ReimbursableAmount` (`decimal?`, divisa de la empresa) desde la `CRMHojaGastosLine` vinculada. Ambos quedan `null` con AX legacy o sin vinculacion unica. Son metadatos repetidos no sumables, no importes individuales de las lineas del ticket.
   - `POST /api/crm/expensesheets/tickets/list` devuelve `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName` y `GastoType`. `TotalAmount` queda como alias legacy de `TotalAmountCurrency`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
   - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `ocrJson` y `normalizedJson` como payload opcional de OCR/normalizacion.

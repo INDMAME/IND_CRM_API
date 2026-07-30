@@ -243,6 +243,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 - Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson`, `normalizedJson`, `ticketDate` y `ticketTime`.
+- Respuesta `Lines[*]`: incluye `ReimbursableExpense` (`int?`, `0=No`, `1=Yes`) y `ReimbursableAmount` (`decimal?`, divisa de la empresa), procedentes de la `CRMHojaGastosLine` vinculada. Ambos son `null` con AX legacy o sin vinculacion unica. Se repiten en todas las lineas como metadatos no sumables de la misma linea de hoja; no representan importes individuales del ticket.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`

@@ -929,6 +929,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Obtiene detalle de ticket por FileId.
         /// </summary>
+        /// <remarks>Ticket lines include nullable reimbursement metadata inherited from the linked expense-sheet line; repeated amounts must not be summed.</remarks>
         [HttpGet, Route("{fileId}")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetTicketDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
@@ -6816,7 +6817,7 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
-        // Maps ticket header extras + lines to typed detail DTO.
+        //MMS - Maps current and legacy ticket rows, including linked reimbursement metadata - 2026.07.30
         private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
             if (headerExtras == null || headerExtras.Count < 6)
@@ -6857,7 +6858,11 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = 1; i <= lineCount; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(linesCon, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 7)
+                if (row == null)
+                    continue;
+
+                var rowLength = AxContainerReadHelper.SafeLength(row);
+                if (rowLength < 7)
                     continue;
 
                 detail.Lines.Add(new ExpenseSheetTicketLineDto
@@ -6869,13 +6874,26 @@ namespace IND_CRM_API.Controllers.CRM
                     TotalAmount = SafeDecimal(row, 5),
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 7),
-                    AdjustmentAmount = AxContainerReadHelper.SafeLength(row) >= 8
+                    AdjustmentAmount = rowLength >= 8
                         ? ToNullableBool(AxContainerReadHelper.SafeString(row, 8))
-                        : null
+                        : null,
+                    ReimbursableExpense = rowLength >= 9
+                        ? NormalizeLineReimbursableExpenseOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9)))
+                        : null,
+                    ReimbursableAmount = rowLength >= 10 ? SafeDecimal(row, 10) : null
                 });
             }
 
             return detail;
+        }
+
+        // Keeps ticket line reimbursement metadata limited to AX No/Yes values.
+        private static int? NormalizeLineReimbursableExpenseOrNull(int? value)
+        {
+            if (!value.HasValue || (value.Value != 0 && value.Value != 1))
+                return null;
+
+            return value;
         }
 
         // Maps AX ticket list rows to typed DTO list.
