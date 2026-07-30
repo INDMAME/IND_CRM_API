@@ -29,7 +29,7 @@ namespace IND_CRM_API.Contracts.Requests
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
-        /// Reimbursement filter: Yes (1) includes, No (0) excludes, and Both (2) represents mixed values.
+        /// Reimbursement filter: Yes (0) includes, No (1) excludes, and Both (2) represents mixed values.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 

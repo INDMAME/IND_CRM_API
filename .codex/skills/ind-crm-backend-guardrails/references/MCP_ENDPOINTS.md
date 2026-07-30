@@ -131,7 +131,7 @@ Endpoints
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
   - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
-  - `reimbursableExpense`: enum AX `INDReimbursableExpense` (`1 Yes` incluye, `0 No` excluye, `2 Both` representa lineas mixtas). En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 No` y `1 Yes`; el valor por defecto es `Yes`.
+  - `reimbursableExpense`: enum AX `INDReimbursableExpense` (`0 Yes` incluye, `1 No` excluye, `2 Both` representa lineas mixtas). En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 Yes` y `1 No`; el valor por defecto es `Yes`.
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -156,7 +156,7 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`1 Yes` incluye, `0 No` excluye, `2 Both` representa mezcla)
+- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye, `1 No` excluye, `2 Both` representa mezcla)
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 - Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
 - Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. Si una linea guardada difiere en proyecto o estado de reembolso, AX marca la cabecera con `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`.
@@ -192,7 +192,7 @@ Endpoints
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
 - Nota: si `currencyCode` de linea difiere de la divisa de reembolso de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa. Si ambas divisas coinciden, editar `amountMST` no recalcula `exchRate`.
-- Nota: `reimbursableExpense` de linea admite `1 Yes` para incluir `AmountMST` y `0 No` para excluirlo. Si difiere de cabecera, AX marca cabecera como `Both`.
+- Nota: `reimbursableExpense` de linea admite `0 Yes` para incluir `AmountMST` y `1 No` para excluirlo. Si difiere de cabecera, AX marca cabecera como `Both`.
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -208,7 +208,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `page`, `pageSize`, `filter` (opcional), `billedMode` (opcional), `createdDateFrom` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`, opcional), `projId` (opcional), `currencyCode` (opcional), `expenseSheetStatus` (opcional), `includeSubordinates` (bool opcional; `true` = usuario de header + subordinados directos)
-- Body tambien acepta `reimbursableExpense` (opcional, valor numerico AX de `INDReimbursableExpense`: `1 Yes` incluye, `0 No` excluye, `2 Both` mezcla).
+- Body tambien acepta `reimbursableExpense` (opcional, valor numerico AX de `INDReimbursableExpense`: `0 Yes` incluye, `1 No` excluye, `2 Both` mezcla).
 - Respuesta por item incluye: `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `userId`, `userName`, `exchRate`, `createdDate`, `axCreatedDate`, `reimbursableExpense`, `totalAmountCurrency`, `totalAmountMST`, `totalGrossAmountMST` y `totalReimbursableAmount`.
 - Nota totales: los dos primeros totales conservan la semantica contable legacy; el bruto es company/MST y no se filtra por reembolso ni Visa, mientras el reembolso explicito incluye solo `ReimbursableExpense=Yes` y no consulta Visa. Con AX legacy, el reembolso usa `totalAmountMST` y el bruto queda nulo.
 - Nota JSON: Web API serializa las propiedades en PascalCase; los consumidores JavaScript deben usar `TotalGrossAmountMST` y `TotalReimbursableAmount`.
@@ -243,7 +243,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 - Respuesta: cabecera incluye `processedByAI`, `gastoType`, `hojaGastosIdDisplay`, `ocrJson`, `normalizedJson`, `ticketDate` y `ticketTime`.
-- Respuesta `Lines[*]`: incluye `ReimbursableExpense` (`int?`, `0=No`, `1=Yes`) y `ReimbursableAmount` (`decimal?`, divisa de la empresa), procedentes de la `CRMHojaGastosLine` vinculada. Ambos son `null` con AX legacy o sin vinculacion unica. Se repiten en todas las lineas como metadatos no sumables de la misma linea de hoja; no representan importes individuales del ticket.
+- Respuesta `Lines[*]`: incluye `ReimbursableExpense` (`int?`, `0=Yes`, `1=No`) y `ReimbursableAmount` (`decimal?`, divisa de la empresa), procedentes de la `CRMHojaGastosLine` vinculada. Ambos son `null` con AX legacy o sin vinculacion unica. Se repiten en todas las lineas como metadatos no sumables de la misma linea de hoja; no representan importes individuales del ticket.
 
 ### Tool: crm_expensesheets_tickets_list
 - HTTP: POST `/api/crm/expensesheets/tickets/list`

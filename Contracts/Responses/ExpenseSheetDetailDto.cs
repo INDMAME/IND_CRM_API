@@ -65,7 +65,7 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Line total in the original line currency.</summary>
         public decimal? Amount { get; set; }
         public string ProjId { get; set; }
-        /// <summary>AX reimbursement flag: Yes (1) includes AmountMST and No (0) excludes the line from reimbursement.</summary>
+        /// <summary>AX reimbursement flag: Yes (0) includes AmountMST and No (1) excludes the line from reimbursement.</summary>
         public int? ReimbursableExpense { get; set; }
         public string CurrencyCode { get; set; }
         /// <summary>Line total in company currency/MST.</summary>

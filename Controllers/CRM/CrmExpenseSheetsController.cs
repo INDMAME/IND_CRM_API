@@ -40,9 +40,14 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
+        private const int HeaderReimbursableExpenseYesValue = 0;
+        private const int HeaderReimbursableExpenseNoValue = 1;
+        private const int HeaderReimbursableExpenseBothValue = 2;
+        private const int LineReimbursableExpenseYesValue = 0;
+        private const int LineReimbursableExpenseNoValue = 1;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
-        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=No, 1=Yes, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
-        private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=No, 1=Yes. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
+        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=Yes, 1=No, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
+        private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=Yes, 1=No. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
         private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
@@ -1893,16 +1898,19 @@ namespace IND_CRM_API.Controllers.CRM
             return expenseSheetStatus >= 0;
         }
 
-        // Validates the header enum INDReimbursableExpense: No, Yes and Both.
+        // Validates the header enum INDReimbursableExpense: Yes, No and Both.
         private static bool IsValidHeaderReimbursableExpense(int reimbursableExpense)
         {
-            return reimbursableExpense >= 0 && reimbursableExpense <= 2;
+            return reimbursableExpense == HeaderReimbursableExpenseYesValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseNoValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseBothValue;
         }
 
-        // Validates the line enum INDReimbursableExpenseLines: No and Yes only.
+        // Validates the line enum INDReimbursableExpenseLines: Yes and No only.
         private static bool IsValidLineReimbursableExpense(int reimbursableExpense)
         {
-            return reimbursableExpense == 0 || reimbursableExpense == 1;
+            return reimbursableExpense == LineReimbursableExpenseYesValue ||
+                   reimbursableExpense == LineReimbursableExpenseNoValue;
         }
 
         // Validates CRMGastoType against the physical AX enum indexes used by expense lines.

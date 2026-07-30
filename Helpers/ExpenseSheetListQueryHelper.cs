@@ -85,7 +85,7 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
-        /// Returns a valid INDReimbursableExpense header value (No, Yes, or Both).
+        /// Returns a valid INDReimbursableExpense header value (Yes, No, or Both).
         /// </summary>
         public static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {

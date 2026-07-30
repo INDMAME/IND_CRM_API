@@ -56,7 +56,7 @@ namespace IND_CRM_API.Contracts.Responses
         public string CreatedByUserId { get; set; }
         /// <summary>Indica si la linea fue generada como ajuste de importe total.</summary>
         public bool? AdjustmentAmount { get; set; }
-        /// <summary>AX reimbursement flag inherited from the linked expense-sheet line: Yes (1) includes AmountMST and No (0) excludes it.</summary>
+        /// <summary>AX reimbursement flag inherited from the linked expense-sheet line: Yes (0) includes AmountMST and No (1) excludes it.</summary>
         public int? ReimbursableExpense { get; set; }
         /// <summary>Reimbursable MST amount inherited from the linked expense-sheet line; zero when ReimbursableExpense is No and repeated as non-summable metadata.</summary>
         public decimal? ReimbursableAmount { get; set; }

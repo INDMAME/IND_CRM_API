@@ -45,7 +45,7 @@ namespace IND_CRM_API.Contracts.Requests
         public int? exchangeRateMode { get; set; }
 
         /// <summary>
-        /// AX reimbursement state for the header: Yes (1) includes lines, No (0) excludes them, and Both (2) represents mixed line values.
+        /// AX reimbursement state for the header: Yes (0) includes lines, No (1) excludes them, and Both (2) represents mixed line values.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 
@@ -81,7 +81,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
-        /// AX reimbursement flag: Yes (1) includes AmountMST and No (0) sets ReimbursableAmount to zero.
+        /// AX reimbursement flag: Yes (0) includes AmountMST and No (1) sets ReimbursableAmount to zero.
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>

@@ -14,8 +14,8 @@ En cada linea de gasto:
 
 Semantica funcional del enum:
 
-- Linea `ReimbursableExpense=Yes` (`1`): la linea se incluye en el pago y `ReimbursableAmount=AmountMST`.
-- Linea `ReimbursableExpense=No` (`0`): la linea se excluye del pago y `ReimbursableAmount=0`.
+- Linea `ReimbursableExpense=Yes` (`0`): la linea se incluye en el pago y `ReimbursableAmount=AmountMST`.
+- Linea `ReimbursableExpense=No` (`1`): la linea se excluye del pago y `ReimbursableAmount=0`.
 - Cabecera `Both` (`2`): marcador calculado por AX cuando existen lineas con ambos valores; no debe enviarse a las lineas.
 - `VisaEmpresa` se mantiene visible pero bloqueado. AX lo conserva como espejo inverso legacy (`ReimbursableExpense=Yes` -> Visa `No`; `ReimbursableExpense=No` -> Visa `Yes`), pero nunca lo usa para calcular o filtrar el reembolso.
 
@@ -103,9 +103,9 @@ La UI debe interpretarla sin recalcular ni ocultar diferencias:
 - Original: `100.00 USD`.
 - Bruto company: `108.11` en la divisa de la empresa.
 - Reembolso: `0.00` en la divisa de la empresa.
-- Estado: reembolsable (`1=Yes`).
+- Estado: no reembolsable (`1=No`).
 
-Aunque normalmente `ReimbursableExpense=1` implica `ReimbursableAmount=AmountMST`, el frontend debe mostrar el valor fisico recibido. Debe informar la diferencia como posible registro AX pendiente de recalculo, nunca corregirla usando `AmountMST` como fallback.
+El ejemplo es coherente con el contrato actual: `ReimbursableExpense=1` significa `No`, por lo que `ReimbursableAmount=0`. El frontend debe mostrar siempre el valor fisico recibido y nunca corregirlo usando `AmountMST` como fallback.
 
 ## Tickets: detalle ampliado
 
@@ -118,7 +118,7 @@ Los totales de ticket mantienen su semantica: seguir usando `TotalAmountMST` par
 
 El detalle `GET /api/crm/expensesheets/tickets/{fileId}` agrega en cada `Lines[*]`:
 
-- `ReimbursableExpense` (`int?`; TypeScript `number | null`): enum de la `CRMHojaGastosLine` vinculada (`0=No`, `1=Yes`).
+- `ReimbursableExpense` (`int?`; TypeScript `number | null`): enum de la `CRMHojaGastosLine` vinculada (`0=Yes`, `1=No`).
 - `ReimbursableAmount` (`decimal?`; TypeScript `number | null`): importe reembolsable de esa linea vinculada en divisa de la empresa.
 
 Ambos valores quedan `null` cuando AX devuelve el contrato legacy o cuando no existe una vinculacion unica con `CRMHojaGastosLine`. Si el ticket contiene varias lineas, el API repite los mismos valores en todas ellas como metadatos de la unica linea de hoja vinculada. No sumarlos ni tratarlos como importes individuales de las lineas del ticket.
@@ -147,8 +147,8 @@ El normalizador debe aceptar PascalCase y camelCase solo en el limite de entrada
 
 ## Validacion frontend esperada
 
-- En datos AX coherentes, una linea con `ReimbursableExpense=Yes` muestra `ReimbursableAmount=AmountMST`, suma en `TotalReimbursableAmount` y mantiene `VisaEmpresa=No` como espejo legacy. Si el servidor devuelve una diferencia, conservar los valores fisicos y reportarla sin recalcular en frontend.
-- Una linea con `ReimbursableExpense=No` muestra `ReimbursableAmount=0`, queda fuera de `TotalReimbursableAmount`, conserva su `AmountMST` bruto y mantiene `VisaEmpresa=Yes` como espejo legacy.
+- En datos AX coherentes, una linea con `ReimbursableExpense=Yes` (`0`) muestra `ReimbursableAmount=AmountMST`, suma en `TotalReimbursableAmount` y mantiene `VisaEmpresa=No` como espejo legacy. Si el servidor devuelve una diferencia, conservar los valores fisicos y reportarla sin recalcular en frontend.
+- Una linea con `ReimbursableExpense=No` (`1`) muestra `ReimbursableAmount=0`, queda fuera de `TotalReimbursableAmount`, conserva su `AmountMST` bruto y mantiene `VisaEmpresa=Yes` como espejo legacy.
 - Las tarjetas de hoja distinguen total bruto y reembolso con etiquetas claras.
 - El importe original de cada linea se obtiene de `Amount` y conserva su `CurrencyCode`.
 - Los listados y mutaciones de tickets siguen refrescando desde `TotalAmountMST`.

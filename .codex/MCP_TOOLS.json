@@ -644,7 +644,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_create",
-                      "description":  "Crea hoja de gastos. ReimbursableExpense usa Yes=1 para incluir y No=0 para excluir del reembolso.",
+                      "description":  "Crea hoja de gastos. ReimbursableExpense usa Yes=0 para incluir y No=1 para excluir del reembolso.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -712,7 +712,7 @@
                                                                                                                   },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 1 Yes incluye, 0 No excluye, 2 Both representa lineas mixtas.",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,
@@ -752,7 +752,7 @@
                                                                                                                                                        },
                                                                                                                                             "reimbursableExpense":  {
                                                                                                                                                                         "type":  "integer",
-                                                                                                                                                                        "description":  "INDReimbursableExpenseLines: 1 Yes incluye AmountMST, 0 No excluye y deja ReimbursableAmount en cero.",
+                                                                                                                                                                        "description":  "INDReimbursableExpenseLines: 0 Yes incluye AmountMST, 1 No excluye y deja ReimbursableAmount en cero.",
                                                                                                                                                                         "enum":  [
                                                                                                                                                                                      0,
                                                                                                                                                                                      1
@@ -818,7 +818,7 @@
                                                         "projId":  "",
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
-                                                        "reimbursableExpense":  1,
+                                                        "reimbursableExpense":  0,
                                                         "lines":  [
                                                                       {
                                                                                 "transDate":  "15012026",
@@ -829,7 +829,7 @@
                                                                           "internacional":  false,
                                                                           "projId":  "",
                                                                           "fileId":  "",
-                                                                          "reimbursableExpense":  1,
+                                                                          "reimbursableExpense":  0,
                                                                           "currencyCode":  "EUR",
                                                                           "amountMST":  25.5,
                                                                           "exchRate":  100
@@ -985,7 +985,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_header",
-                      "description":  "Actualiza cabecera de hoja de gastos. ReimbursableExpense usa Yes=1 para incluir, No=0 para excluir y Both=2 para mezcla.",
+                      "description":  "Actualiza cabecera de hoja de gastos. ReimbursableExpense usa Yes=0 para incluir, No=1 para excluir y Both=2 para mezcla.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1059,7 +1059,7 @@
                                                                                                                    },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                        "description":  "INDReimbursableExpense: 1 Yes incluye, 0 No excluye, 2 Both representa lineas mixtas.",
+                                                                                                                        "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,
@@ -1111,7 +1111,7 @@
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
                                                         "estadoComentarios":  "Pendiente de revision",
-                                                        "reimbursableExpense":  1
+                                                        "reimbursableExpense":  0
                                                     }
                                        }
                                    ]
@@ -1352,7 +1352,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_line",
-                      "description":  "Actualiza linea de hoja de gastos. ReimbursableExpense Yes=1 incluye AmountMST y No=0 lo excluye. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si el indicador difiere de cabecera, AX marca cabecera como Both.",
+                      "description":  "Actualiza linea de hoja de gastos. ReimbursableExpense Yes=0 incluye AmountMST y No=1 lo excluye. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si el indicador difiere de cabecera, AX marca cabecera como Both.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1434,7 +1434,7 @@
                                                                                                         },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                        "description":  "INDReimbursableExpenseLines: 1 Yes incluye AmountMST, 0 No excluye y deja ReimbursableAmount en cero.",
+                                                                                                                        "description":  "INDReimbursableExpenseLines: 0 Yes incluye AmountMST, 1 No excluye y deja ReimbursableAmount en cero.",
                                                                                                                          "enum":  [
                                                                                                                                      0,
                                                                                                                                      1
@@ -1500,7 +1500,7 @@
                                                         "internacional":  false,
                                                         "projId":  "",
                                                         "fileId":  "",
-                                                        "reimbursableExpense":  1,
+                                                        "reimbursableExpense":  0,
                                                         "currencyCode":  "EUR",
                                                         "amountMST":  30.0,
                                                         "exchRate":  100
@@ -1695,7 +1695,7 @@
                                                                                                                     },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                        "description":  "INDReimbursableExpense: 1 Yes incluye, 0 No excluye, 2 Both representa lineas mixtas.",
+                                                                                                                        "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,

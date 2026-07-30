@@ -31,7 +31,7 @@ namespace IND_CRM_API.Contracts.Requests
         public string estadoComentarios { get; set; }
 
         /// <summary>
-        /// AX reimbursement state for the header: Yes (1) includes lines, No (0) excludes them, and Both (2) represents mixed line values.
+        /// AX reimbursement state for the header: Yes (0) includes lines, No (1) excludes them, and Both (2) represents mixed line values.
         /// </summary>
         public int? reimbursableExpense { get; set; }
     }

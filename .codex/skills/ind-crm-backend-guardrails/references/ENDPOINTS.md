@@ -124,7 +124,7 @@ Endpoints
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
   Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense (INDReimbursableExpense, default Yes), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense (INDReimbursableExpenseLines, default heredado/default Yes), lines[].currencyCode, lines[].amountMST, lines[].exchRate
   Nota: la cabecera AX mantiene siempre la divisa local de reembolso y ExchRate=100; la divisa real se informa en cada linea.
-  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`. En reembolso, `Yes=1` incluye el `AmountMST`; `No=0` excluye y deja `ReimbursableAmount=0`; `Both=2` solo representa una cabecera con lineas mixtas.
+  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`. En reembolso, `Yes=0` incluye el `AmountMST`; `No=1` excluye y deja `ReimbursableAmount=0`; `Both=2` solo representa una cabecera con lineas mixtas.
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
   Response: IndApiResponse con PriceKm, Source y TransDate
@@ -205,7 +205,7 @@ Endpoints
   Cabecera incluye `processedByAI` (bool), `gastoType` (int), `hojaGastosIdDisplay` (string), `ocrJson` (string), `normalizedJson` (string), `ticketDate`, `ticketTime`, `totalAmountCurrency` y `totalAmountMST`.
   Nota totales: `totalAmountCurrency` viene de `INDTicketInfoTable.TotalAmount`; `totalAmountMST` viene de `INDTicketInfoTable.AmountMST`. `totalAmount` y `amountMST` se mantienen como aliases legacy.
   Lineas incluyen `AdjustmentAmount` cuando AX devuelve el flag `INDTicketInfoLine.Adjustment`.
-  Cada elemento de `Lines[*]` incluye tambien `ReimbursableExpense` (`int?`, `0=No`, `1=Yes`) y `ReimbursableAmount` (`decimal?`, importe en divisa de la empresa), obtenidos de la `CRMHojaGastosLine` vinculada al ticket.
+  Cada elemento de `Lines[*]` incluye tambien `ReimbursableExpense` (`int?`, `0=Yes`, `1=No`) y `ReimbursableAmount` (`decimal?`, importe en divisa de la empresa), obtenidos de la `CRMHojaGastosLine` vinculada al ticket.
   Compatibilidad: ambos campos son `null` cuando AX devuelve el contrato legacy o cuando no existe una vinculacion unica con `CRMHojaGastosLine`. Si existen varias lineas de ticket, los valores se repiten como metadatos de la misma linea de hoja vinculada; no son importes propios de cada linea de ticket y no deben sumarse.
 - POST /api/crm/expensesheets/tickets/list (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: page, pageSize.

@@ -42,7 +42,7 @@ nuevas.
 - API nueva y AX anterior: ambos campos se devuelven como `null`.
 - Ticket sin linea de gasto vinculada: ambos campos se devuelven como `null`.
 - `FileId` ambiguo en datos heredados: ambos campos se devuelven como `null`.
-- `ReimbursableExpense=No`: se conservan los valores funcionales `0` y
+- `ReimbursableExpense=No`: se conservan los valores funcionales `1` y
   `ReimbursableAmount=0`.
 - No existe fallback desde `TotalAmount`, `AmountMST`,
   `TotalAmountMST` ni `VisaEmpresa`.
@@ -83,8 +83,8 @@ Importar y compilar despues:
 Despues de importar:
 
 1. Compilar la clase en Axapta.
-2. Consultar un ticket vinculado reembolsable y comprobar `1` + importe.
-3. Consultar un ticket vinculado no reembolsable y comprobar `0` + `0`.
+2. Consultar un ticket vinculado reembolsable y comprobar `0` + importe.
+3. Consultar un ticket vinculado no reembolsable y comprobar `1` + `0`.
 4. Consultar un ticket sin vinculo y comprobar valores nulos en la API.
 5. Comprobar un ticket multilinea y verificar que el importe repetido no se
    suma en la UI.

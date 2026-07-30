@@ -28,7 +28,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
-        /// AX reimbursement flag: Yes (1) includes AmountMST and No (0) sets ReimbursableAmount to zero.
+        /// AX reimbursement flag: Yes (0) includes AmountMST and No (1) sets ReimbursableAmount to zero.
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>

@@ -2044,7 +2044,7 @@
                                                                                                      "  lines.forEach(function (line) {",
                                                                                                      "    var reimbursableExpense = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
                                                                                                      "    var reimbursableAmount = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
-                                                                                                     "    if (reimbursableExpense === 0) pm.expect(reimbursableAmount).to.eql(0);",
+                                                                                                     "    if (reimbursableExpense === 1) pm.expect(reimbursableAmount).to.eql(0);",
                                                                                                      "  });",
                                                                                                      "});",
                                                                                                      "",
@@ -2994,7 +2994,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 1,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 1,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
+                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 0,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets",
@@ -3203,7 +3203,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 1,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
+                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 0,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",
