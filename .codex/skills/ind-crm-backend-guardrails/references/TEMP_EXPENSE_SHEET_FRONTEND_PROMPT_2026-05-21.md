@@ -73,8 +73,8 @@ These values mean "mixed values in existing lines". They must not be silently pu
 
 Enum values:
 
-- `INDReimbursableExpense::No = 0`
-- `INDReimbursableExpense::Yes = 1`
+- `INDReimbursableExpense::Yes = 0`
+- `INDReimbursableExpense::No = 1`
 - `INDReimbursableExpense::Both = 2`
 
 ## Frontend Behavior To Implement

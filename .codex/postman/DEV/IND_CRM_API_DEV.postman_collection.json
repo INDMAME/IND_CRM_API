@@ -3036,7 +3036,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 2,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 2\n}"
+                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 2,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 0\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/009998",
@@ -3444,6 +3444,8 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovalRequestedStatus\", 0);",
+                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
+                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3452,7 +3454,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApprovalRequested - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
+                                                                                                     "    reimbursableExpense: reimbursableExpense",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -3573,6 +3575,8 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovedStatus\", 0);",
+                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
+                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3581,7 +3585,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApproved - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
+                                                                                                     "    reimbursableExpense: reimbursableExpense",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -4056,7 +4060,7 @@
                      },
                      {
                          "key":  "expenseNotificationReimbursableExpense",
-                         "value":  "2",
+                         "value":  "0",
                          "type":  "string"
                      },
                      {

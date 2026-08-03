@@ -123,9 +123,9 @@ Endpoints
   mode 0 (default): description, lines[] (con lines[].price)
   mode 1: description (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
-  Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense (INDReimbursableExpense, default Yes), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense (INDReimbursableExpenseLines, default heredado/default Yes), lines[].currencyCode, lines[].amountMST, lines[].exchRate
+  Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense (INDReimbursableExpense, solo 0=Yes o 1=No; default Yes), lines[].projId, lines[].internacional, lines[].fileId, lines[].reimbursableExpense (INDReimbursableExpenseLines, default heredado/default Yes), lines[].currencyCode, lines[].amountMST, lines[].exchRate
   Nota: la cabecera AX mantiene siempre la divisa local de reembolso y ExchRate=100; la divisa real se informa en cada linea.
-  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`. En reembolso, `Yes=0` incluye el `AmountMST`; `No=1` excluye y deja `ReimbursableAmount=0`; `Both=2` solo representa una cabecera con lineas mixtas.
+  Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`. En escritura de cabecera solo se admiten `Yes=0` y `No=1`; `Both=2` es un valor derivado de lineas mixtas y queda reservado para respuestas y filtros. En lineas, `Yes=0` incluye el `AmountMST` y `No=1` excluye dejando `ReimbursableAmount=0`.
   Response data: `HojaGastosId` y `LineRecIds` (`number[]`, RecIds AX numericos).
 - GET /api/crm/expensesheets/fuel-price-km?transDate=2026-02-18 (Authorize + X-IND-Company + X-IND-AxUserId)
   Query optional: transDate (DDMMYYYY o DD.MM.YYYY; si no se envia usa hoy)
@@ -140,7 +140,8 @@ Endpoints
   Nota lineas: `amount` y su alias `totalAmountCurrency` expresan el total en la divisa original de la linea; `amountMST` y su alias `totalAmountMST` expresan el total company/MST; `reimbursableAmount` expresa la parte reembolsable company/MST, copia `amountMST` con `ReimbursableExpense=Yes` y vale cero con `ReimbursableExpense=No`, independientemente de `VisaEmpresa`; queda nulo contra contratos AX legacy. AX conserva `VisaEmpresa` bloqueado como espejo inverso de compatibilidad (`Yes` reembolsable -> Visa `No`; `No` reembolsable -> Visa `Yes`).
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
-  Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional con enum INDReimbursableExpense; Yes incluye, No excluye y Both representa mezcla)
+  Body required: description (projId optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional con enum INDReimbursableExpense; solo `0=Yes` o `1=No`)
+  Nota: `Both=2` no se admite en escritura de cabecera; AX lo deriva cuando existen lineas mixtas y la API lo conserva en respuestas y filtros.
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
   Nota: actualizar cabecera no propaga divisa a lineas existentes. La cabecera queda siempre en divisa local de reembolso (`ExchRate=100`).
   Nota: si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.

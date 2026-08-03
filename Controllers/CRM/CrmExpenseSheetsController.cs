@@ -46,7 +46,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int LineReimbursableExpenseYesValue = 0;
         private const int LineReimbursableExpenseNoValue = 1;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
-        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=Yes, 1=No, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
+        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera solo admite valores editables de INDReimbursableExpense: 0=Yes, 1=No. El valor 2=Both es derivado y solo se admite en respuestas y filtros. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
         private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=Yes, 1=No. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
@@ -79,6 +79,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
         /// currencyCode/exchRate on the header are legacy defaults for new lines; AX keeps header reimbursement currency local.
         /// Optional header enums: expenseSheetStatus, exchangeRateMode and reimbursableExpense.
+        /// Header reimbursableExpense accepts only writable values Yes (0) and No (1); Both (2) is derived from mixed lines.
         /// </remarks>
         [HttpPost, Route("")]
         [ResponseType(typeof(IndApiResponse<object>))]
@@ -697,6 +698,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         /// <remarks>
         /// Optional header fields: expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
+        /// Header reimbursableExpense accepts only writable values Yes (0) and No (1); Both (2) is derived from mixed lines.
         /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
         // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
@@ -739,7 +741,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = AxEnumNumericValidationMessage });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
-                if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
+                if (body.reimbursableExpense.HasValue && !IsValidWritableHeaderReimbursableExpense(body.reimbursableExpense.Value))
                 {
                     validationErrors.Add(new IndValidationError
                     {
@@ -1712,7 +1714,7 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
             if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
                 errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
-            if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
+            if (body.reimbursableExpense.HasValue && !IsValidWritableHeaderReimbursableExpense(body.reimbursableExpense.Value))
             {
                 errors.Add(new IndValidationError
                 {
@@ -1898,11 +1900,17 @@ namespace IND_CRM_API.Controllers.CRM
             return expenseSheetStatus >= 0;
         }
 
-        // Validates the header enum INDReimbursableExpense: Yes, No and Both.
-        private static bool IsValidHeaderReimbursableExpense(int reimbursableExpense)
+        //MMS - Validates writable header states; Both remains derived and read-only. - 2026.08.03
+        private static bool IsValidWritableHeaderReimbursableExpense(int reimbursableExpense)
         {
             return reimbursableExpense == HeaderReimbursableExpenseYesValue ||
-                   reimbursableExpense == HeaderReimbursableExpenseNoValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseNoValue;
+        }
+
+        // Validates header filter states, including the derived mixed value.
+        private static bool IsValidHeaderReimbursableExpenseFilter(int reimbursableExpense)
+        {
+            return IsValidWritableHeaderReimbursableExpense(reimbursableExpense) ||
                    reimbursableExpense == HeaderReimbursableExpenseBothValue;
         }
 
@@ -1931,7 +1939,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Standard enum normalization: invalid values are treated as null.
         private static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {
-            if (!reimbursableExpense.HasValue || !IsValidHeaderReimbursableExpense(reimbursableExpense.Value))
+            if (!reimbursableExpense.HasValue || !IsValidHeaderReimbursableExpenseFilter(reimbursableExpense.Value))
                 return null;
 
             return reimbursableExpense.Value;

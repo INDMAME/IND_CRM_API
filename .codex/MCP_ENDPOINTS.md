@@ -131,7 +131,7 @@ Endpoints
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
   - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
-  - `reimbursableExpense`: enum AX `INDReimbursableExpense` (`0 Yes` incluye, `1 No` excluye, `2 Both` representa lineas mixtas). En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 Yes` y `1 No`; el valor por defecto es `Yes`.
+  - `reimbursableExpense`: en escritura de cabecera, el enum AX `INDReimbursableExpense` solo admite `0 Yes` y `1 No`; `2 Both` es derivado de lineas mixtas y solo se conserva en respuestas y filtros. En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 Yes` y `1 No`; el valor por defecto es `Yes`.
 
 ### Tool: crm_expensesheets_fuel_price_km
 - HTTP: GET `/api/crm/expensesheets/fuel-price-km`
@@ -156,10 +156,10 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye, `1 No` excluye, `2 Both` representa mezcla)
+- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye o `1 No` excluye; `2 Both` no se admite en escritura)
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 - Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
-- Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. Si una linea guardada difiere en proyecto o estado de reembolso, AX marca la cabecera con `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`.
+- Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. Si una linea guardada difiere en proyecto o estado de reembolso, AX marca la cabecera con `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`; este ultimo valor sigue disponible en respuestas y filtros.
 
 ### Tool: crm_expensesheets_propagate_currency_defaults
 - HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate`

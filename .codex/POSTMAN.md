@@ -61,12 +61,12 @@ Notas
 - Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
 - `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
 - Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
-- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`) y `reimbursableExpense` (0 Yes, 1 No, 2 Both), y cuando se envia `estadoComentarios` requiere `expenseSheetStatus` + `exchangeRateMode`.
+- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `estadoComentarios` en body (posicion AX `_data[10]`) y `reimbursableExpense` (solo 0 Yes o 1 No), y cuando se envia `estadoComentarios` requiere `expenseSheetStatus` + `exchangeRateMode`. `Both=2` es derivado y solo se admite en respuestas y filtros.
 - `PUT /api/crm/expensesheets/{hojaGastosId}` no propaga cambios a lineas. Para confirmar desde web, usar:
   - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false`
   - `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
   - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
-- Expense Sheets admite `reimbursableExpense` en cabecera y lineas: `Yes=0` incluye `AmountMST` en el reembolso y `No=1` lo excluye dejando `ReimbursableAmount=0`; `Both=2` representa una cabecera mixta. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
+- Expense Sheets admite `reimbursableExpense` en cabecera y lineas: `Yes=0` incluye `AmountMST` en el reembolso y `No=1` lo excluye dejando `ReimbursableAmount=0`; `Both=2` representa una cabecera mixta derivada y no se acepta en POST/PUT de cabecera. Las lineas tambien admiten `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
 - Tickets admite `amountMST` y `exchRate` en update de cabecera; si el ticket vinculado esta en la misma divisa de reembolso de la hoja, modificar `amountMST` no recalcula `exchRate`.
 - Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.
 - Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.

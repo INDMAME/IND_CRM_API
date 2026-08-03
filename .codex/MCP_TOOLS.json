@@ -712,11 +712,10 @@
                                                                                                                   },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
+                                                                                                                         "description":  "INDReimbursableExpense escribible: 0 Yes incluye, 1 No excluye. 2 Both es derivado y no se admite en escritura.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
-                                                                                                                                      1,
-                                                                                                                                      2
+                                                                                                                                      1
                                                                                                                                   ]
                                                                                                                      },
                                                                                              "lines":  {
@@ -985,7 +984,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_header",
-                      "description":  "Actualiza cabecera de hoja de gastos. ReimbursableExpense usa Yes=0 para incluir, No=1 para excluir y Both=2 para mezcla.",
+                      "description":  "Actualiza cabecera de hoja de gastos. ReimbursableExpense solo admite Yes=0 para incluir o No=1 para excluir; Both=2 es derivado y no se admite en escritura.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1059,11 +1058,10 @@
                                                                                                                    },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                        "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
+                                                                                                                        "description":  "INDReimbursableExpense escribible: 0 Yes incluye, 1 No excluye. 2 Both es derivado y no se admite en escritura.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
-                                                                                                                                      1,
-                                                                                                                                      2
+                                                                                                                                      1
                                                                                                                                   ]
                                                                                                                      }
                                                                                          },
