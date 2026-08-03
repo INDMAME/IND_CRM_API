@@ -224,10 +224,21 @@ namespace IND_CRM_API.Services
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
-            var fallbackTotalAmount = ReadProjectedAmount(totalToken) ?? TryExtractTotalAmountFromReceiptContent(receiptContent);
+            var structuredTotalAmount = ReadProjectedAmount(totalToken);
+            var explicitTextTotalAmount = TryExtractExplicitTotalAmountFromReceiptContent(receiptContent);
+            var structuredTotalWasOverridden =
+                explicitTextTotalAmount.HasValue &&
+                structuredTotalAmount.HasValue &&
+                Math.Abs(explicitTextTotalAmount.Value - structuredTotalAmount.Value) > 0.02m;
+            var fallbackTotalAmount = structuredTotalAmount.HasValue
+                ? (structuredTotalWasOverridden ? explicitTextTotalAmount : structuredTotalAmount)
+                : (explicitTextTotalAmount ?? TryExtractTotalAmountFromReceiptContent(receiptContent));
             var effectiveTotalToken = totalToken;
-            if ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) && fallbackTotalAmount.HasValue)
+            if (fallbackTotalAmount.HasValue &&
+                ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) || structuredTotalWasOverridden))
+            {
                 effectiveTotalToken = BuildFallbackMoneyToken(fallbackTotalAmount.Value, resolvedCurrencyCode, resolvedRawCurrency);
+            }
             var projected = new JObject
             {
                 ["source"] = "azure-document-intelligence",
@@ -488,7 +499,20 @@ namespace IND_CRM_API.Services
             return null;
         }
 
+        // Returns the best payable, plain-total, or generic amount candidate from OCR text.
         private static decimal? TryExtractTotalAmountFromReceiptContent(string receiptContent)
+        {
+            return TryExtractTotalAmountFromReceiptContentCore(receiptContent, false);
+        }
+
+        // Returns only a payable-total label so it can safely override a misclassified Azure Total field.
+        private static decimal? TryExtractExplicitTotalAmountFromReceiptContent(string receiptContent)
+        {
+            return TryExtractTotalAmountFromReceiptContentCore(receiptContent, true);
+        }
+
+        // Scans the complete OCR text and keeps the last candidate at each confidence tier.
+        private static decimal? TryExtractTotalAmountFromReceiptContentCore(string receiptContent, bool explicitOnly)
         {
             if (string.IsNullOrWhiteSpace(receiptContent))
                 return null;
@@ -501,47 +525,129 @@ namespace IND_CRM_API.Services
             if (lines.Count == 0)
                 return null;
 
+            decimal? payableTotal = null;
+            decimal? plainTotal = null;
+            decimal? genericTotal = null;
             for (int i = 0; i < lines.Count; i++)
             {
                 var line = lines[i];
-                if (!IsReceiptTotalCandidateLine(line))
+                var priority = GetReceiptTotalCandidatePriority(line);
+                if (priority == ReceiptTotalCandidatePriority.None)
                     continue;
 
                 var amount = TryExtractAmountFromLine(line);
-                if (amount.HasValue && amount.Value > 0m)
-                    return amount.Value;
-
-                if (i + 1 < lines.Count)
+                if ((!amount.HasValue || amount.Value <= 0m) && i + 1 < lines.Count)
                 {
-                    amount = TryExtractAmountFromLine(lines[i + 1]);
-                    if (amount.HasValue && amount.Value > 0m)
-                        return amount.Value;
+                    var nextLine = lines[i + 1];
+                    if (!IsReceiptTotalExcludedLine(nextLine))
+                        amount = TryExtractAmountFromLine(nextLine);
                 }
+
+                if (!amount.HasValue || amount.Value <= 0m)
+                    continue;
+
+                if (priority == ReceiptTotalCandidatePriority.Payable)
+                    payableTotal = amount.Value;
+                else if (priority == ReceiptTotalCandidatePriority.PlainTotal)
+                    plainTotal = amount.Value;
+                else if (!explicitOnly)
+                    genericTotal = amount.Value;
             }
 
-            return null;
+            return payableTotal ?? plainTotal ?? (explicitOnly ? null : genericTotal);
         }
 
-        private static bool IsReceiptTotalCandidateLine(string line)
+        //MMS - Ranks explicit payable totals above generic amount labels across the complete OCR text - 2026.08.03
+        private static ReceiptTotalCandidatePriority GetReceiptTotalCandidatePriority(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return ReceiptTotalCandidatePriority.None;
+
+            if (ContainsReceiptBaseOrSubtotalLabel(line))
+                return ReceiptTotalCandidatePriority.None;
+
+            if (IsReceiptTotalExcludedLine(line))
+                return ReceiptTotalCandidatePriority.None;
+
+            var isPayableTotal = line.IndexOf("amount due", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("balance due", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("grand total", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("importe a pagar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("importo da pagare", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("total a pagar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("totale da pagare", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("a pagar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("total factura", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("total final", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("totale fattura", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isPayableTotal)
+                return ReceiptTotalCandidatePriority.Payable;
+
+            if (IsReceiptPlainTotalLabel(line))
+                return ReceiptTotalCandidatePriority.PlainTotal;
+
+            return line.IndexOf("importe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("zenbatekoa", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("amount", StringComparison.OrdinalIgnoreCase) >= 0
+                ? ReceiptTotalCandidatePriority.Generic
+                : ReceiptTotalCandidatePriority.None;
+        }
+
+        private static bool IsReceiptTotalExcludedLine(string line)
+        {
+            return ContainsReceiptBaseOrSubtotalLabel(line) || IsReceiptNonPayableComponentLine(line);
+        }
+
+        // Accepts a standalone total label and rejects product or merchant names that merely contain "total".
+        private static bool IsReceiptPlainTotalLabel(string line)
         {
             if (string.IsNullOrWhiteSpace(line))
                 return false;
 
-            if (line.IndexOf("importe", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                line.IndexOf("zenbatekoa", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                line.IndexOf("amount due", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return true;
-            }
+            return Regex.IsMatch(
+                line,
+                @"^\s*(?:(?:(?:importe|importo)\s+)?(?:total|totale)|guztira)(?:\s+(?:general|generale|geral|factura|fattura|final|finale|ttc|(?:iva|vat)\s+incl\w*))?\s*[:\-]?\s*(?:(?:EUR|USD|GBP)\s*)?(?:€|\$|£)?\s*(?:\d|$)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
 
-            if (line.IndexOf("total", StringComparison.OrdinalIgnoreCase) < 0 &&
-                line.IndexOf("amount", StringComparison.OrdinalIgnoreCase) < 0)
-            {
+        private static bool ContainsReceiptBaseOrSubtotalLabel(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
                 return false;
-            }
 
-            var excludedKeywords = new[] { "subtotal", "tax", "iva", "vat", "tip", "propina", "%" };
-            return excludedKeywords.All(keyword => line.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0);
+            var excludedKeywords = new[]
+            {
+                "subtotal",
+                "sub-total",
+                "sub total",
+                "base imponible",
+                "importe base",
+                "base amount",
+                "taxable amount",
+                "net amount",
+                "importe neto"
+            };
+            return excludedKeywords.Any(keyword => line.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        // Rejects tax, tip, discount, savings, tendered, paid, and change components as payable totals.
+        private static bool IsReceiptNonPayableComponentLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return false;
+
+            var containsTaxOrTip = Regex.IsMatch(
+                                       line,
+                                       @"\b(?:tax|taxes|iva|vat|impuesto|impuestos|imposta|imposte|tip|tips|propina|propinas|mancia)\b",
+                                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+                                   line.IndexOf('%') >= 0;
+            if (containsTaxOrTip && line.IndexOf("incl", StringComparison.OrdinalIgnoreCase) < 0)
+                return true;
+
+            return Regex.IsMatch(
+                line,
+                @"\b(?:descuento|descuentos|discount|discounts|sconto|sconti|ahorro|ahorros|saving|savings|risparmio|risparmi|cambio|change|resto|pagado|paid|pagato|pagata|entregado|tendered|recibido|received|ricevuto|ricevuta)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
         private static decimal? TryExtractAmountFromLine(string line)
@@ -785,6 +891,14 @@ namespace IND_CRM_API.Services
         private static string ToLogDecimal(decimal? value)
         {
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "null";
+        }
+
+        private enum ReceiptTotalCandidatePriority
+        {
+            None = 0,
+            Generic = 1,
+            PlainTotal = 2,
+            Payable = 3
         }
     }
 }

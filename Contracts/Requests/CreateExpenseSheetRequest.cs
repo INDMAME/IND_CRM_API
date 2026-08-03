@@ -45,7 +45,7 @@ namespace IND_CRM_API.Contracts.Requests
         public int? exchangeRateMode { get; set; }
 
         /// <summary>
-        /// Numeric AX enum value for INDReimbursableExpense. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.
+        /// AX reimbursement state for the header: Yes (0) includes lines, No (1) excludes them, and Both (2) represents mixed line values.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 
@@ -81,7 +81,7 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
-        /// Numeric AX enum value for INDReimbursableExpenseLines. Resolve active options through /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.
+        /// AX reimbursement flag: Yes (0) includes AmountMST and No (1) sets ReimbursableAmount to zero.
         /// </summary>
         public int? reimbursableExpense { get; set; }
         /// <summary>

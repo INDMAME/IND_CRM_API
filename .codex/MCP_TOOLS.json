@@ -644,7 +644,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_create",
-                      "description":  "Crea hoja de gastos.",
+                      "description":  "Crea hoja de gastos. ReimbursableExpense usa Yes=0 para incluir y No=1 para excluir del reembolso.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -712,7 +712,7 @@
                                                                                                                   },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                         "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,
@@ -726,8 +726,8 @@
                                                                                                                          "properties":  {
                                                                                                                                             "transDate":  {
                                                                                                                                                               "type":  "string",
-                                                                                                                                                              "description":  "Fecha en formato yyyyMMdd o yyyy-MM-dd",
-                                                                                                                                                              "pattern":  "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                                                                                                                                                       "description":  "Fecha en formato DDMMYYYY o DD.MM.YYYY",
+                                                                                                                                                       "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                                                                           },
                                                                                                                                             "typeValue":  {
                                                                                                                                                               "type":  "integer"
@@ -752,11 +752,10 @@
                                                                                                                                                        },
                                                                                                                                             "reimbursableExpense":  {
                                                                                                                                                                         "type":  "integer",
-                                                                                                                                                                        "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                                                                        "description":  "INDReimbursableExpenseLines: 0 Yes incluye AmountMST, 1 No excluye y deja ReimbursableAmount en cero.",
                                                                                                                                                                         "enum":  [
                                                                                                                                                                                      0,
-                                                                                                                                                                                     1,
-                                                                                                                                                                                     2
+                                                                                                                                                                                     1
                                                                                                                                                                                  ]
                                                                                                                                                                     },
                                                                                                                                             "currencyCode":  {
@@ -819,10 +818,10 @@
                                                         "projId":  "",
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
-                                                        "reimbursableExpense":  2,
+                                                        "reimbursableExpense":  0,
                                                         "lines":  [
                                                                       {
-                                                                          "transDate":  "20260115",
+                                                                                "transDate":  "15012026",
                                                                           "typeValue":  5,
                                                                           "description":  "Comida",
                                                                           "qty":  1,
@@ -830,7 +829,7 @@
                                                                           "internacional":  false,
                                                                           "projId":  "",
                                                                           "fileId":  "",
-                                                                          "reimbursableExpense":  1,
+                                                                          "reimbursableExpense":  0,
                                                                           "currencyCode":  "EUR",
                                                                           "amountMST":  25.5,
                                                                           "exchRate":  100
@@ -842,7 +841,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_get",
-                      "description":  "Obtiene hoja de gastos por id. La cabecera incluye estadoComentarios.",
+                      "description":  "Obtiene hoja de gastos por id. Incluye TotalGrossAmountMST, TotalReimbursableAmount y ReimbursableAmount por linea junto a los totales legacy.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -945,8 +944,8 @@
                                                                            "properties":  {
                                                                                               "transDate":  {
                                                                                                                 "type":  "string",
-                                                                                                                "description":  "Optional date in yyyyMMdd or yyyy-MM-dd.",
-                                                                                                                "pattern":  "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                                                                                                                "description":  "Fecha opcional en formato DDMMYYYY o DD.MM.YYYY.",
+                                                                                                                "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                             }
                                                                                           },
                                                                            "required":  [
@@ -979,14 +978,14 @@
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
                                            "query":  {
-                                                         "transDate":  "20260218"
+                                                         "transDate":  "18022026"
                                                      }
                                        }
                                    ]
                   },
                   {
                       "name":  "crm_expensesheets_update_header",
-                      "description":  "Actualiza cabecera de hoja de gastos. Soporta estadoComentarios y reimbursableExpense.",
+                      "description":  "Actualiza cabecera de hoja de gastos. ReimbursableExpense usa Yes=0 para incluir, No=1 para excluir y Both=2 para mezcla.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1060,21 +1059,16 @@
                                                                                                                    },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                        "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,
                                                                                                                                       2
                                                                                                                                   ]
-                                                                                                                     },
-                                                                                             "includeSubordinates":  {
-                                                                                                                         "type":  "boolean",
-                                                                                                                         "description":  "When true, returns the header user plus direct subordinate expense sheets."
                                                                                                                      }
                                                                                          },
                                                                           "required":  [
-                                                                                           "description",
-                                                                                           "currencyCode"
+                                                                                           "description"
                                                                                        ],
                                                                           "additionalProperties":  false
                                                                       }
@@ -1117,14 +1111,14 @@
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
                                                         "estadoComentarios":  "Pendiente de revision",
-                                                        "reimbursableExpense":  2
+                                                        "reimbursableExpense":  0
                                                     }
                                        }
                                    ]
                   },
                   {
                       "name":  "crm_expensesheets_propagate_currency_defaults",
-                      "description":  "Propaga divisa y tipo de cambio de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada con CRMCurrencyVarios.",
+                      "description":  "Ruta legacy/no-op: conserva compatibilidad sin modificar divisa, tipo de cambio ni AmountMST de las lineas.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1287,7 +1281,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_propagate_reimbursable_expense",
-                      "description":  "Propaga el valor reembolsable de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada como Both.",
+                      "description":  "Propaga el estado de reembolso de cabecera a las lineas: Yes incluye AmountMST; No excluye y deja ReimbursableAmount en cero. No aplica con Both.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1358,7 +1352,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_line",
-                      "description":  "Actualiza linea de hoja de gastos. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si reimbursableExpense difiere de cabecera, AX marca cabecera como Both.",
+                      "description":  "Actualiza linea de hoja de gastos. ReimbursableExpense Yes=0 incluye AmountMST y No=1 lo excluye. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si el indicador difiere de cabecera, AX marca cabecera como Both.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1414,8 +1408,8 @@
                                                                           "properties":  {
                                                                                              "transDate":  {
                                                                                                                "type":  "string",
-                                                                                                               "description":  "Fecha en formato yyyyMMdd o yyyy-MM-dd",
-                                                                                                               "pattern":  "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                                                                                                                     "description":  "Fecha en formato DDMMYYYY o DD.MM.YYYY",
+                                                                                                                     "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                            },
                                                                                              "typeValue":  {
                                                                                                                "type":  "integer"
@@ -1440,11 +1434,10 @@
                                                                                                         },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                        "description":  "INDReimbursableExpenseLines: 0 Yes incluye AmountMST, 1 No excluye y deja ReimbursableAmount en cero.",
                                                                                                                          "enum":  [
-                                                                                                                                      0,
-                                                                                                                                      1,
-                                                                                                                                      2
+                                                                                                                                     0,
+                                                                                                                                     1
                                                                                                                                   ]
                                                                                                                      },
                                                                                              "currencyCode":  {
@@ -1499,7 +1492,7 @@
                                                         "lineRecId":  12345
                                                     },
                                            "body":  {
-                                                        "transDate":  "20260115",
+                                                        "transDate":  "15012026",
                                                         "typeValue":  5,
                                                         "description":  "Comida",
                                                         "qty":  1,
@@ -1507,7 +1500,7 @@
                                                         "internacional":  false,
                                                         "projId":  "",
                                                         "fileId":  "",
-                                                        "reimbursableExpense":  1,
+                                                        "reimbursableExpense":  0,
                                                         "currencyCode":  "EUR",
                                                         "amountMST":  30.0,
                                                         "exchRate":  100
@@ -1619,7 +1612,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_list",
-                      "description":  "Lista hojas de gastos con paginacion. Cada item incluye estadoComentarios.",
+                      "description":  "Lista hojas de gastos con paginacion. Cada item incluye TotalGrossAmountMST y TotalReimbursableAmount junto a los totales legacy.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1675,13 +1668,13 @@
                                                                                                             },
                                                                                              "createdDateFrom":  {
                                                                                                                      "type":  "string",
-                                                                                                                     "description":  "Fecha de creacion desde en yyyyMMdd o yyyy-MM-dd",
-                                                                                                                     "pattern":  "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                                                                                                                     "description":  "Fecha de creacion desde en DDMMYYYY o DD.MM.YYYY",
+                                                                                                                     "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                                  },
                                                                                              "createdDateTo":  {
                                                                                                                    "type":  "string",
-                                                                                                                   "description":  "Fecha de creacion hasta en yyyyMMdd o yyyy-MM-dd",
-                                                                                                                   "pattern":  "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+                                                                                                                   "description":  "Fecha de creacion hasta en DDMMYYYY o DD.MM.YYYY",
+                                                                                                                   "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                                },
                                                                                              "projId":  {
                                                                                                             "type":  "string"
@@ -1702,12 +1695,16 @@
                                                                                                                     },
                                                                                              "reimbursableExpense":  {
                                                                                                                          "type":  "integer",
-                                                                                                                         "description":  "INDReimbursableExpense: 0 No, 1 Yes, 2 Both.",
+                                                                                                                        "description":  "INDReimbursableExpense: 0 Yes incluye, 1 No excluye, 2 Both representa lineas mixtas.",
                                                                                                                          "enum":  [
                                                                                                                                       0,
                                                                                                                                       1,
                                                                                                                                       2
                                                                                                                                   ]
+                                                                                                                     },
+                                                                                             "includeSubordinates":  {
+                                                                                                                         "type":  "boolean",
+                                                                                                                         "description":  "Cuando es true, incluye las hojas propias y las de subordinados directos visibles."
                                                                                                                      }
                                                                                          },
                                                                           "required":  [
@@ -1748,8 +1745,8 @@
                                                         "page":  1,
                                                         "pageSize":  50,
                                                         "billedMode":  0,
-                                                        "createdDateFrom":  "20260101",
-                                                        "createdDateTo":  "20260131",
+                                                        "createdDateFrom":  "01012026",
+                                                        "createdDateTo":  "31012026",
                                                         "projId":  "PROJ-001",
                                                         "currencyCode":  "USD",
                                                         "expenseSheetStatus":  1,
@@ -1854,7 +1851,7 @@
                                                                                                                  },
                                                                                               "date":  {
                                                                                                            "type":  "string",
-                                                                                                           "pattern":  "^\\\\d{4}-\\\\d{2}-\\\\d{2}$"
+                                                                                                           "pattern":  "^\\d{4}-\\d{2}-\\d{2}$"
                                                                                                        }
                                                                                           },
                                                                            "required":  [
@@ -1941,11 +1938,13 @@
                                                                                                              },
                                                                                              "transDate":  {
                                                                                                                "type":  "string",
-                                                                                                               "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                               "description":  "Fecha en formato DDMMYYYY o DD.MM.YYYY.",
+                                                                                                               "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                            },
                                                                                              "ticketDate":  {
                                                                                                                 "type":  "string",
-                                                                                                                "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                                "description":  "Fecha del ticket en formato DDMMYYYY o DD.MM.YYYY.",
+                                                                                                                "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                             },
                                                                                              "ticketTime":  {
                                                                                                                 "type":  "string",
@@ -2023,8 +2022,8 @@
                                                         "mode":  0,
                                                         "description":  "Ticket restaurante",
                                                         "currencyCode":  "EUR",
-                                                        "transDate":  "20260224",
-                                                        "ticketDate":  "20260224",
+                                                        "transDate":  "24022026",
+                                                        "ticketDate":  "24022026",
                                                         "ticketTime":  "12:30:00",
                                                         "comentario":  "Gasto viaje",
                                                         "urlFile":  "https://\u003cblob-url\u003e",
@@ -2043,7 +2042,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_tickets_get",
-                      "description":  "Obtiene detalle de ticket por FileId.",
+                      "description":  "Obtiene detalle de ticket por FileId. Lines[*] incluye ReimbursableExpense (int?) y ReimbursableAmount (decimal?) desde la CRMHojaGastosLine vinculada; son null con AX legacy o sin vinculacion unica y, si se repiten, son metadatos no sumables.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -2281,11 +2280,13 @@
                                                                                                         },
                                                                                              "transDate":  {
                                                                                                                "type":  "string",
-                                                                                                               "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                               "description":  "Fecha en formato DDMMYYYY o DD.MM.YYYY.",
+                                                                                                               "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                            },
                                                                                              "ticketDate":  {
                                                                                                                 "type":  "string",
-                                                                                                                "pattern":  "^(\\\\d{8}|\\\\d{4}-\\\\d{2}-\\\\d{2})$"
+                                                                                                                "description":  "Fecha del ticket en formato DDMMYYYY o DD.MM.YYYY.",
+                                                                                                                "pattern":  "^(\\d{8}|\\d{2}\\.\\d{2}\\.\\d{4})$"
                                                                                                             },
                                                                                              "ticketTime":  {
                                                                                                                 "type":  "string",
@@ -2342,7 +2343,7 @@
                                                     },
                                            "body":  {
                                                         "comentario":  "Actualizado",
-                                                        "ticketDate":  "20260224",
+                                                        "ticketDate":  "24022026",
                                                         "ticketTime":  "12:30:00",
                                                         "fileExtension":  "jpg"
                                                     }

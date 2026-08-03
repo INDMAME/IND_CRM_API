@@ -55,6 +55,8 @@ namespace IND_CRM_API.Services
         private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
         private const int DefaultGastoTypeValue = 8;
+        private const decimal OcrTotalTolerance = 0.02m;
+        private const string OcrTotalAdjustmentDescription = "AJUSTE AL TOTAL OCR";
         private static readonly string CrmGastoTypePromptCatalog = BuildCrmGastoTypePromptCatalog();
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
         private static readonly int MaxImageBytes = ReadMaxImageBytesFromConfig();
@@ -396,7 +398,7 @@ namespace IND_CRM_API.Services
                     }
 
                     ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
-                    ApplySingleLineTotalFallbackFromOcr(extracted, receiptAnalysis);
+                    ReconcileDraftTotalFromOcr(extracted, receiptAnalysis);
                     extracted.gastoType = ResolveDraftGastoType(extracted.gastoType, extracted.lines);
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
@@ -928,6 +930,8 @@ namespace IND_CRM_API.Services
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
 - El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fecha, hora y moneda.
+- totals.total representa el total bruto final a pagar; nunca uses totals.subtotal, base imponible, IVA/VAT/tax o propina aislados como totalAmount.
+- totalAmount debe representar totals.total. El backend lo validara y fijara de forma determinista desde el OCR.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
@@ -943,6 +947,7 @@ namespace IND_CRM_API.Services
 - typeValue debe ser siempre el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
 - gastoType en cabecera debe usar el mismo enum AX numerico.
 - gastoType representa el tipo de gasto dominante del ticket.
+- totalAmount debe ser el total bruto final a pagar del ticket, nunca la base imponible, subtotal o impuesto aislado.
 - Si no hay evidencia clara para gastoType, usa 8.
 - Si no hay evidencia clara de tipo, usa 8.
 - qty debe ser la cantidad real de la linea (admite decimales). Solo puede ser 0 cuando la linea sea un descuento con lineTotal negativo visible.
@@ -978,6 +983,7 @@ namespace IND_CRM_API.Services
 - No agrupes, no resumas y no combines multiples conceptos en una sola linea si aparecen separados en el ticket.
 - Si el ticket muestra varios conceptos o importes parciales, devuelve una linea por cada concepto visible.
 - gastoType en cabecera es obligatorio y debe reflejar el tipo dominante del ticket usando el valor numerico real de CRMGastoType segun la tabla fija incluida abajo.
+- totalAmount debe ser el total bruto final a pagar del ticket, nunca la base imponible, subtotal o impuesto aislado.
 - No devuelvas typeValue por linea. Solo resuelve gastoType en cabecera.
 - Cada linea debe incluir como minimo description, qty y price.
 - ticketDate debe ser la fecha impresa del ticket y debe ir solo en cabecera, en formato DD.MM.YYYY o null.
@@ -1207,6 +1213,7 @@ namespace IND_CRM_API.Services
                 transDate = normalizedTransDate,
                 ticketDate = normalizedTicketDate ?? normalizedTransDate,
                 ticketTime = NormalizeTime(root["ticketTime"]?.ToString()),
+                totalAmount = TryParseDecimal(root["totalAmount"]),
                 exchRate = TryParseDecimal(root["exchRate"]),
                 projId = NormalizeText(root["projId"]?.ToString(), null),
                 lines = new List<CreateExpenseSheetLineRequest>(),
@@ -1280,41 +1287,119 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(draft.Warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
         }
 
-        private static void ApplySingleLineTotalFallbackFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
+        //MMS - Reconciles every normalized draft against the authoritative gross OCR total - 2026.08.03
+        private static void ReconcileDraftTotalFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
         {
-            var totalAmount = receiptAnalysis?.TotalAmount;
-            if (draft == null || !totalAmount.HasValue || totalAmount.Value <= 0m)
+            if (draft == null)
                 return;
 
-            if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
+            var totalAmount = receiptAnalysis?.TotalAmount;
+            draft.totalAmount = totalAmount.HasValue && totalAmount.Value > 0m
+                ? totalAmount
+                : null;
+            if (!draft.totalAmount.HasValue)
                 return;
 
             var fallbackTypeValue = draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value)
                 ? draft.gastoType.Value
                 : DefaultGastoTypeValue;
-            var fallbackDescription = ResolveSingleLineFallbackDescription(draft, fallbackTypeValue);
-            var fallbackTransDate = draft.lines?.FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?.transDate;
-            if (string.IsNullOrWhiteSpace(fallbackTransDate))
-                fallbackTransDate = draft.transDate;
-
-            draft.lines = new List<CreateExpenseSheetLineRequest>
+            var fallbackTransDate = ResolveOcrTotalLineTransDate(draft);
+            var sourceLineCount = draft.lines?.Count ?? 0;
+            var validLines = (draft.lines ?? new List<CreateExpenseSheetLineRequest>())
+                .Where(IsValidDraftLineForTotal)
+                .ToList();
+            if (validLines.Count == 0)
             {
-                new CreateExpenseSheetLineRequest
+                draft.lines = new List<CreateExpenseSheetLineRequest>
                 {
-                    transDate = fallbackTransDate,
-                    typeValue = fallbackTypeValue,
-                    description = fallbackDescription,
-                    internacional = false,
-                    fileId = null,
-                    qty = 1m,
-                    price = totalAmount.Value,
-                    projId = draft.projId
-                }
-            };
+                    BuildOcrTotalLine(
+                        ResolveSingleLineFallbackDescription(draft, fallbackTypeValue),
+                        totalAmount.Value,
+                        fallbackTypeValue,
+                        fallbackTransDate,
+                        draft.projId)
+                };
+
+                draft.Warnings = EnsureWarnings(
+                    draft.Warnings,
+                    "No se detectaron lineas validas; se genero una linea unica con el total bruto OCR.");
+                return;
+            }
+
+            draft.lines = validLines;
+            if (validLines.Count != sourceLineCount)
+            {
+                draft.Warnings = EnsureWarnings(
+                    draft.Warnings,
+                    "Se descartaron lineas sin importe valido antes de reconciliar el total bruto OCR.");
+            }
+
+            var validLinesTotal = validLines.Sum(CalculateValidDraftLineTotal);
+            var difference = totalAmount.Value - validLinesTotal;
+            if (Math.Abs(difference) <= OcrTotalTolerance)
+                return;
+
+            draft.lines.Add(BuildOcrTotalLine(
+                OcrTotalAdjustmentDescription,
+                difference,
+                fallbackTypeValue,
+                fallbackTransDate,
+                draft.projId));
 
             draft.Warnings = EnsureWarnings(
                 draft.Warnings,
-                "No se detectaron lineas de detalle; se genero una linea unica con el total del ticket.");
+                "La suma de lineas no coincidia con el total bruto OCR; se agrego una linea de ajuste.");
+        }
+
+        // Keeps only lines whose signed amount can pass the ticket persistence rules.
+        private static bool IsValidDraftLineForTotal(CreateExpenseSheetLineRequest line)
+        {
+            if (line == null || !line.price.HasValue || line.price.Value == 0m)
+                return false;
+
+            var qty = line.qty ?? 0m;
+            if (qty < 0m)
+                return false;
+
+            return qty > 0m || (qty == 0m && line.price.Value < 0m);
+        }
+
+        // Calculates the signed amount exactly as the quick-create mapper will persist it.
+        private static decimal CalculateValidDraftLineTotal(CreateExpenseSheetLineRequest line)
+        {
+            var qty = line?.qty ?? 0m;
+            var price = line?.price ?? 0m;
+            return qty == 0m && price < 0m ? price : qty * price;
+        }
+
+        // Builds either a positive gross-total line or a zero-quantity negative adjustment.
+        private static CreateExpenseSheetLineRequest BuildOcrTotalLine(
+            string description,
+            decimal amount,
+            int typeValue,
+            string transDate,
+            string projId)
+        {
+            return new CreateExpenseSheetLineRequest
+            {
+                transDate = transDate,
+                typeValue = typeValue,
+                description = description,
+                internacional = false,
+                fileId = null,
+                qty = amount < 0m ? 0m : 1m,
+                price = amount,
+                projId = projId
+            };
+        }
+
+        // Reuses the first detected line date and falls back to the normalized header date.
+        private static string ResolveOcrTotalLineTransDate(ExpenseSheetDraftResponse draft)
+        {
+            var lineTransDate = draft?.lines?
+                .FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?
+                .transDate;
+            return string.IsNullOrWhiteSpace(lineTransDate) ? draft?.transDate : lineTransDate;
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)
@@ -1797,6 +1882,7 @@ namespace IND_CRM_API.Services
                 ["transDate"] = ToNullableStringToken(draft?.transDate),
                 ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
                 ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
+                ["totalAmount"] = ToNullableDecimalToken(draft?.totalAmount),
                 ["exchRate"] = ToNullableDecimalToken(draft?.exchRate),
                 ["projId"] = ToNullableStringToken(draft?.projId),
                 ["confidence"] = ToNullableDecimalToken(draft?.Confidence),
@@ -1821,6 +1907,7 @@ namespace IND_CRM_API.Services
                 ["transDate"] = ToNullableStringToken(draft?.transDate),
                 ["ticketDate"] = ToNullableStringToken(draft?.ticketDate),
                 ["ticketTime"] = ToNullableStringToken(draft?.ticketTime),
+                ["totalAmount"] = ToNullableDecimalToken(draft?.totalAmount),
                 ["rawCurrency"] = ToNullableStringToken(draft?.RawCurrency),
                 ["merchant"] = ToNullableStringToken(draft?.Merchant),
                 ["lines"] = lines
@@ -1941,6 +2028,11 @@ namespace IND_CRM_API.Services
                         ["type"] = new JArray("integer", "null"),
                         ["minimum"] = 0
                     },
+                    ["totalAmount"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null"),
+                        ["minimum"] = 0
+                    },
                     ["transDate"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
@@ -1995,6 +2087,7 @@ namespace IND_CRM_API.Services
                     "description",
                     "currencyCode",
                     "gastoType",
+                    "totalAmount",
                     "transDate",
                     "ticketDate",
                     "ticketTime",
@@ -2088,6 +2181,11 @@ namespace IND_CRM_API.Services
                         ["type"] = "integer",
                         ["minimum"] = 0
                     },
+                    ["totalAmount"] = new JObject
+                    {
+                        ["type"] = new JArray("number", "null"),
+                        ["minimum"] = 0
+                    },
                     ["transDate"] = new JObject
                     {
                         ["type"] = new JArray("string", "null")
@@ -2119,6 +2217,7 @@ namespace IND_CRM_API.Services
                     "description",
                     "currencyCode",
                     "gastoType",
+                    "totalAmount",
                     "transDate",
                     "ticketDate",
                     "ticketTime",

@@ -1842,7 +1842,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"mode\": 0,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket restaurante\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 32.5,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Consumo cliente\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Menu ejecutivo\",\n      \"qty\": 1,\n      \"price\": 20,\n      \"totalAmount\": 20\n    },\n    {\n      \"description\": \"Bebida\",\n      \"qty\": 1,\n      \"price\": 12.5,\n      \"totalAmount\": 12.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"12:30:00\"\n}"
+                                                                                    "raw":  "{\n  \"mode\": 0,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket restaurante\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 32.5,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Consumo cliente\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Menu ejecutivo\",\n      \"qty\": 1,\n      \"price\": 20,\n      \"totalAmount\": 20\n    },\n    {\n      \"description\": \"Bebida\",\n      \"qty\": 1,\n      \"price\": 12.5,\n      \"totalAmount\": 12.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"12:30:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1915,7 +1915,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"mode\": 1,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket sin detalle\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 8,\n  \"totalAmount\": 15,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Solo cabecera\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"08:45:00\"\n}"
+                                                                                    "raw":  "{\n  \"mode\": 1,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket sin detalle\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 8,\n  \"totalAmount\": 15,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Solo cabecera\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"08:45:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1995,7 +1995,8 @@
                                                                                                      "  pm.expect(success).to.eql(true);",
                                                                                                      "});",
                                                                                                      "",
-                                                                                                     "var d = j.data || j.Data || {};",
+                                                                                                     "var items = j.Items || j.items || [];",
+                                                                                                     "var d = Array.isArray(items) \u0026\u0026 items.length \u003e 0 ? items[0] : {};",
                                                                                                      "var fileId = d.FileId || d.fileId || \u0027\u0027;",
                                                                                                      "pm.test(\u0027Ticket has fileId\u0027, function () {",
                                                                                                      "  pm.expect(String(fileId || \u0027\u0027)).to.not.eql(\u0027\u0027);",
@@ -2024,6 +2025,40 @@
                                                                                                      "  var firstLineRecId = lines[0].RecId || lines[0].recId;",
                                                                                                      "  if (firstLineRecId) pm.collectionVariables.set(\u0027lineRecId\u0027, String(firstLineRecId));",
                                                                                                      "}",
+                                                                                                     "",
+                                                                                                     "pm.test(\u0027ReimbursableExpense is null or integer 0/1\u0027, function () {",
+                                                                                                     "  lines.forEach(function (line) {",
+                                                                                                     "    var value = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
+                                                                                                     "    pm.expect(value === null || (Number.isInteger(value) \u0026\u0026 (value === 0 || value === 1))).to.eql(true);",
+                                                                                                     "  });",
+                                                                                                     "});",
+                                                                                                     "",
+                                                                                                     "pm.test(\u0027ReimbursableAmount is null or number\u0027, function () {",
+                                                                                                     "  lines.forEach(function (line) {",
+                                                                                                     "    var value = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
+                                                                                                     "    pm.expect(value === null || typeof value === \u0027number\u0027).to.eql(true);",
+                                                                                                     "  });",
+                                                                                                     "});",
+                                                                                                     "",
+                                                                                                     "pm.test(\u0027Non-reimbursable lines have zero reimbursable amount\u0027, function () {",
+                                                                                                     "  lines.forEach(function (line) {",
+                                                                                                     "    var reimbursableExpense = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
+                                                                                                     "    var reimbursableAmount = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
+                                                                                                     "    if (reimbursableExpense === 1) pm.expect(reimbursableAmount).to.eql(0);",
+                                                                                                     "  });",
+                                                                                                     "});",
+                                                                                                     "",
+                                                                                                     "pm.test(\u0027Reimbursement metadata is consistent across ticket lines\u0027, function () {",
+                                                                                                     "  if (lines.length \u003c 2) return;",
+                                                                                                     "  var firstExpense = (lines[0].ReimbursableExpense !== undefined) ? lines[0].ReimbursableExpense : lines[0].reimbursableExpense;",
+                                                                                                     "  var firstAmount = (lines[0].ReimbursableAmount !== undefined) ? lines[0].ReimbursableAmount : lines[0].reimbursableAmount;",
+                                                                                                     "  lines.forEach(function (line) {",
+                                                                                                     "    var reimbursableExpense = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
+                                                                                                     "    var reimbursableAmount = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
+                                                                                                     "    pm.expect(reimbursableExpense).to.eql(firstExpense);",
+                                                                                                     "    pm.expect(reimbursableAmount).to.eql(firstAmount);",
+                                                                                                     "  });",
+                                                                                                     "});",
                                                                                                      "",
                                                                                                      "var traceId = j.traceId || j.TraceId;",
                                                                                                      "if (traceId) pm.collectionVariables.set(\u0027lastTraceId\u0027, String(traceId));"
@@ -2295,7 +2330,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"description\": \"Ticket actualizado\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 37.5,\n  \"status\": 0,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Comentario update\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"processedByAI\": false,\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"13:15:00\"\n}"
+                                                                                    "raw":  "{\n  \"description\": \"Ticket actualizado\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 37.5,\n  \"status\": 0,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Comentario update\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"processedByAI\": false,\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"13:15:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}",
@@ -2385,7 +2420,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"description\": \"Cafe Teatre expense\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 11.7,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Procesado por IA\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Pinchos Patatas\",\n      \"qty\": 1.0,\n      \"price\": 7.2,\n      \"totalAmount\": 7.2\n    },\n    {\n      \"description\": \"Varios\",\n      \"qty\": 3.0,\n      \"price\": 1.5,\n      \"totalAmount\": 4.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"21:10:00\"\n}"
+                                                                                    "raw":  "{\n  \"description\": \"Cafe Teatre expense\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 11.7,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Procesado por IA\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Pinchos Patatas\",\n      \"qty\": 1.0,\n      \"price\": 7.2,\n      \"totalAmount\": 7.2\n    },\n    {\n      \"description\": \"Varios\",\n      \"qty\": 3.0,\n      \"price\": 1.5,\n      \"totalAmount\": 4.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"21:10:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}/ia",
@@ -2959,7 +2994,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 2,\n  \"lines\": [\n    {\n      \"transDate\": \"20260302\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 1,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
+                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 0,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets",
@@ -3168,7 +3203,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"transDate\": \"20260302\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 1,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
+                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 0,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",
@@ -3254,7 +3289,7 @@
                                                                      }
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/fuel-price-km?transDate=20260218",
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/fuel-price-km?transDate=18022026",
                                                                   "host":  [
                                                                                "{{baseUrl}}"
                                                                            ],
@@ -3267,7 +3302,7 @@
                                                                   "query":  [
                                                                                 {
                                                                                     "key":  "transDate",
-                                                                                    "value":  "20260218"
+                                                                                    "value":  "18022026"
                                                                                 }
                                                                             ]
                                                               }

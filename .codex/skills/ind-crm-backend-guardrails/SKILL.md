@@ -89,7 +89,7 @@ Execution:
 2. Create or update `.codex/AX_<ClassName>_CHANGES_YYYY-MM-DD.md`.
 3. Keep that file current with objective, methods touched, contract adjustments, risks, and pending API work.
 4. Implement AX first when the contract originates there, then align DTOs, mappers, endpoints, and docs.
-5. Document every new or changed Axapta method with a simple Spanish explanation in the XPO source comments.
+5. Write every new or modified X++/XPO source comment in simple Spanish ASCII. This includes method summaries, inline comments, compatibility notes, TODOs, and explanatory commented blocks; keep identifiers and contractual literals unchanged. Every new or changed Axapta method must include a concise Spanish explanation when a comment adds useful context.
 6. Keep external calls such as HTTP/DLL/email outside `tts` whenever possible; they must be best-effort and must not block the committed business transaction.
 7. When touching Axapta table or form XPO code, mark each new or changed code block with `//MMS - Ajustes CRM - YYYY.MM.DD`, using the actual current date. This marker is not required for class-only work unless the user asks for it.
 8. Do not close AX->API work if the temporary change log is stale or incomplete.

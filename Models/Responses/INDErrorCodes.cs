@@ -53,6 +53,9 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Campos obligatorios faltantes en operaciones de ticket de gasto.</summary>
         public const string CrmExpenseSheetTicketMissingFields = "CRM_EXPENSESHEET_TICKET_MISSING_FIELDS";
 
+        /// <summary>Duplicate expense ticket date and time for the same owner.</summary>
+        public const string CrmExpenseSheetTicketDuplicate = "CRM_EXPENSESHEET_TICKET_DUPLICATE";
+
         /// <summary>Ticket de gasto no encontrado.</summary>
         public const string CrmExpenseSheetTicketNotFound = "CRM_EXPENSESHEET_TICKET_NOT_FOUND";
 

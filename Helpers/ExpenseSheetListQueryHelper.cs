@@ -47,6 +47,33 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
+        /// Parses AX decimal text without treating a decimal comma as a thousands separator.
+        /// </summary>
+        public static decimal? ParseAxDecimalOrNull(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var normalized = NormalizeAxDecimalValue(value);
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-MX"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-ES"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out parsed))
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out parsed))
+                return parsed;
+
+            return null;
+        }
+
+        /// <summary>
         /// Returns valid numeric AX enum values; available options are exposed by the enum catalog endpoint.
         /// </summary>
         public static int? NormalizeExpenseSheetStatusOrNull(int? expenseSheetStatus)
@@ -58,11 +85,11 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
-        /// Returns valid numeric AX enum values; available options are exposed by the enum catalog endpoint.
+        /// Returns a valid INDReimbursableExpense header value (Yes, No, or Both).
         /// </summary>
         public static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {
-            if (!reimbursableExpense.HasValue || reimbursableExpense.Value < 0)
+            if (!reimbursableExpense.HasValue || reimbursableExpense.Value < 0 || reimbursableExpense.Value > 2)
                 return null;
 
             return reimbursableExpense.Value;
@@ -130,7 +157,9 @@ namespace IND_CRM_API.Helpers
                 if (row == null || rowLen < 3)
                     continue;
 
-                items.Add(MapExpenseSheetListItem(row, rowLen));
+                var item = MapExpenseSheetListItem(row, rowLen);
+                ApplyExpenseSheetTotalCompatibility(item);
+                items.Add(item);
             }
 
             return items.Where(item => item != null).ToList();
@@ -140,6 +169,10 @@ namespace IND_CRM_API.Helpers
         {
             if (rowLen >= 14)
             {
+                var totalAmountMST = rowLen >= 17
+                    ? ToDecimal(AxContainerReadHelper.SafeString(row, 17))
+                    : null;
+
                 return new ExpenseSheetListItemDto
                 {
                     HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
@@ -152,12 +185,19 @@ namespace IND_CRM_API.Helpers
                     ProjId = AxContainerReadHelper.SafeString(row, 11),
                     CurrencyCode = AxContainerReadHelper.SafeString(row, 7),
                     TotalAmount = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
+                    TotalAmountCurrency = ToDecimal(AxContainerReadHelper.SafeString(row, 8)),
                     ExchRate = ToDecimal(AxContainerReadHelper.SafeString(row, 9)),
                     ExchangeRateMode = ToInt(AxContainerReadHelper.SafeString(row, 10)),
                     CreatedDate = FormatApiDate(AxContainerReadHelper.SafeString(row, 13)),
                     ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
                     OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
-                    OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty
+                    OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty,
+                    TotalAmountMST = totalAmountMST,
+                    AxCreatedDate = rowLen >= 18 ? FormatApiDate(AxContainerReadHelper.SafeString(row, 18)) : null,
+                    TotalGrossAmountMST = rowLen >= 19 ? ToDecimal(AxContainerReadHelper.SafeString(row, 19)) : null,
+                    TotalReimbursableAmount = rowLen >= 20
+                        ? ToDecimal(AxContainerReadHelper.SafeString(row, 20))
+                        : totalAmountMST
                 };
             }
 
@@ -321,6 +361,16 @@ namespace IND_CRM_API.Helpers
             };
         }
 
+        //MMS - Preserves the legacy currency alias while AX versions coexist - 2026.07.29
+        private static void ApplyExpenseSheetTotalCompatibility(ExpenseSheetListItemDto item)
+        {
+            if (item == null)
+                return;
+
+            if (!item.TotalAmountCurrency.HasValue)
+                item.TotalAmountCurrency = item.TotalAmount;
+        }
+
         private static bool TryNormalizeAnyDateToAxYmd(string input, out string normalized)
         {
             normalized = string.Empty;
@@ -402,16 +452,64 @@ namespace IND_CRM_API.Helpers
 
         private static decimal? ToDecimal(string value)
         {
+            return ParseAxDecimalOrNull(value);
+        }
+
+        private static string NormalizeAxDecimalValue(string value)
+        {
             if (string.IsNullOrWhiteSpace(value))
-                return null;
+                return string.Empty;
 
-            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var invariantValue))
-                return invariantValue;
+            var raw = value.Trim()
+                .Replace("\u00A0", string.Empty)
+                .Replace(" ", string.Empty);
 
-            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.GetCultureInfo("es-ES"), out var spanishValue))
-                return spanishValue;
+            var hasComma = raw.Contains(",");
+            var hasDot = raw.Contains(".");
 
-            return null;
+            if (hasComma && hasDot)
+            {
+                var lastComma = raw.LastIndexOf(',');
+                var lastDot = raw.LastIndexOf('.');
+                var decimalSeparator = lastComma > lastDot ? ',' : '.';
+                var thousandSeparator = decimalSeparator == ',' ? "." : ",";
+                var withoutThousands = raw.Replace(thousandSeparator, string.Empty);
+
+                return decimalSeparator == ','
+                    ? withoutThousands.Replace(',', '.')
+                    : withoutThousands;
+            }
+
+            if (hasComma)
+            {
+                var commaCount = raw.Count(c => c == ',');
+                var lastComma = raw.LastIndexOf(',');
+                var digitsAfter = lastComma >= 0 ? raw.Length - lastComma - 1 : 0;
+
+                if (digitsAfter > 0 && digitsAfter <= 2)
+                {
+                    var whole = raw.Substring(0, lastComma).Replace(",", string.Empty);
+                    var fraction = raw.Substring(lastComma + 1);
+                    return string.Concat(whole, ".", fraction);
+                }
+
+                if (commaCount >= 1)
+                    return raw.Replace(",", string.Empty);
+            }
+
+            if (hasDot)
+            {
+                var dotCount = raw.Count(c => c == '.');
+                if (dotCount > 1)
+                {
+                    var lastDot = raw.LastIndexOf('.');
+                    var whole = raw.Substring(0, lastDot).Replace(".", string.Empty);
+                    var fraction = raw.Substring(lastDot + 1);
+                    return string.Concat(whole, ".", fraction);
+                }
+            }
+
+            return raw;
         }
 
         private static int? ToInt(string value)

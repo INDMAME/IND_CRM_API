@@ -341,11 +341,12 @@
     </section>
 
     <section class="inventory-item">
-      <h4>2. <code>INDReimbursableExpense</code></h4>
+      <h4>2. <code>INDReimbursableExpense</code> y <code>INDReimbursableExpenseLines</code></h4>
       <ul>
-        <li>Valores conocidos: <code>0 No</code>, <code>1 Yes</code>, <code>2 Both</code>.</li>
+        <li>Cabecera (<code>INDReimbursableExpense</code>): <code>0 Yes</code>, <code>1 No</code>, <code>2 Both</code>.</li>
+        <li>Línea (<code>INDReimbursableExpenseLines</code>): <code>0 Yes</code>, <code>1 No</code>.</li>
         <li>Campos API: <code>reimbursableExpense</code>, <code>ReimbursableExpense</code>.</li>
-        <li>Usos: cabecera y líneas de hojas de gastos; filtros; propagación de reembolso.</li>
+        <li>Usos: enum de cabecera en filtros y propagación; enum de línea en altas y actualizaciones de gastos.</li>
         <li>Prioridad: alta.</li>
       </ul>
     </section>

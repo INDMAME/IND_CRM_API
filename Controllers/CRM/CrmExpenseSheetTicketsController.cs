@@ -125,6 +125,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.Created, "Ticket creado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> CreateExpenseSheetTicket()
@@ -393,6 +394,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.Created, "Ticket creado y finalizado", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Servicio IA no disponible", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
@@ -929,6 +931,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Obtiene detalle de ticket por FileId.
         /// </summary>
+        /// <remarks>Ticket lines include nullable reimbursement metadata inherited from the linked expense-sheet line; repeated amounts must not be summed.</remarks>
         [HttpGet, Route("{fileId}")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetTicketDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
@@ -1533,6 +1536,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket actualizado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult UpdateExpenseSheetTicket(string fileId, [FromBody] UpdateExpenseSheetTicketRequest body)
@@ -1982,6 +1986,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket actualizado desde IA", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> UpdateExpenseSheetTicketFromIA(string fileId)
@@ -3560,7 +3565,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             var fileId = data.FileId.Trim();
             var rollbackMessages = new List<string>();
-            var blobDeleteFailed = false;
             var blobDeleteAttempted = false;
             var blobDeleted = false;
             var ticketDeleted = false;
@@ -3581,7 +3585,6 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 catch (Exception ex)
                 {
-                    blobDeleteFailed = true;
                     rollbackMessages.Add("blob-delete failed");
                     Logger.Log(
                         $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
@@ -3639,7 +3642,8 @@ namespace IND_CRM_API.Controllers.CRM
                     AxaptaSessionManager.LogLevel.Warning);
             }
 
-            var rollbackSucceeded = !blobDeleteFailed && ticketDeleted;
+            var blobSucceeded = !blobDeleteAttempted || blobDeleted;
+            var rollbackSucceeded = blobSucceeded && ticketDeleted;
             var blobSummary = blobDeleteAttempted
                 ? "blobDeleted=" + blobDeleted.ToString()
                 : "blobDeleted=skipped";
@@ -3770,7 +3774,7 @@ namespace IND_CRM_API.Controllers.CRM
                     : NormalizeApiDateToAxYmd(body?.transDate);
                 var normalizedTicketDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
-                    : NormalizeTicketDateToAxYmdOrFallback(body?.ticketDate, normalizedTransDate);
+                    : NormalizeApiDateToAxYmd(body?.ticketDate);
                 var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body?.ticketTime);
 
                 var rootCon = ax.CreateContainer();
@@ -6695,6 +6699,21 @@ namespace IND_CRM_API.Controllers.CRM
         private static IndApiResponse<object> BuildTicketActionError(string message, string traceId, out HttpStatusCode status)
         {
             var lower = (message ?? string.Empty).ToLowerInvariant();
+            if (lower.Contains("ya existe otro ticket") &&
+                lower.Contains("misma fecha") &&
+                lower.Contains("hora"))
+            {
+                status = HttpStatusCode.Conflict;
+                return new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message) ? "Ya existe otro ticket con la misma fecha y hora." : message,
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketDuplicate,
+                    Data = null,
+                    TraceId = traceId
+                };
+            }
+
             if (lower.Contains("no encontrada") || lower.Contains("no encontrado") || lower.Contains("no existe"))
             {
                 status = HttpStatusCode.NotFound;
@@ -6816,7 +6835,7 @@ namespace IND_CRM_API.Controllers.CRM
             };
         }
 
-        // Maps ticket header extras + lines to typed detail DTO.
+        //MMS - Maps current and legacy ticket rows, including linked reimbursement metadata - 2026.07.30
         private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
             if (headerExtras == null || headerExtras.Count < 6)
@@ -6857,7 +6876,11 @@ namespace IND_CRM_API.Controllers.CRM
             for (int i = 1; i <= lineCount; i++)
             {
                 var row = AxContainerReadHelper.SafePeekContainer(linesCon, i);
-                if (row == null || AxContainerReadHelper.SafeLength(row) < 7)
+                if (row == null)
+                    continue;
+
+                var rowLength = AxContainerReadHelper.SafeLength(row);
+                if (rowLength < 7)
                     continue;
 
                 detail.Lines.Add(new ExpenseSheetTicketLineDto
@@ -6869,13 +6892,26 @@ namespace IND_CRM_API.Controllers.CRM
                     TotalAmount = SafeDecimal(row, 5),
                     RefRecIdTable = AxContainerReadHelper.SafeString(row, 6),
                     CreatedByUserId = AxContainerReadHelper.SafeString(row, 7),
-                    AdjustmentAmount = AxContainerReadHelper.SafeLength(row) >= 8
+                    AdjustmentAmount = rowLength >= 8
                         ? ToNullableBool(AxContainerReadHelper.SafeString(row, 8))
-                        : null
+                        : null,
+                    ReimbursableExpense = rowLength >= 9
+                        ? NormalizeLineReimbursableExpenseOrNull(ToInt(AxContainerReadHelper.SafeString(row, 9)))
+                        : null,
+                    ReimbursableAmount = rowLength >= 10 ? SafeDecimal(row, 10) : null
                 });
             }
 
             return detail;
+        }
+
+        // Keeps ticket line reimbursement metadata limited to AX No/Yes values.
+        private static int? NormalizeLineReimbursableExpenseOrNull(int? value)
+        {
+            if (!value.HasValue || (value.Value != 0 && value.Value != 1))
+                return null;
+
+            return value;
         }
 
         // Maps AX ticket list rows to typed DTO list.

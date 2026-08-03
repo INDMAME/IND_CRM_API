@@ -1,0 +1,279 @@
+Exportfile for AOT version 1.0 or later
+Formatversion: 1
+
+***Element: JOB
+
+; Navision Axapta Job: INDRecalAmountMSTExchange_HojasGastosV2 descargados en Miércoles 29/07/2026
+; --------------------------------------------------------------------------------
+  JOBVERSION 1
+
+  SOURCE #INDRecalAmountMSTExchange_HojasGastosV2
+    #static void INDRecalAmountMSTExchange_HojasGastosV2(Args _args)
+    #{
+    #    Set                 accountingRefreshRecIds;
+    #
+    #    void updateLines()
+    #    {
+    #        CRMHojaGastosLine   hojaGastosLine;
+    #        CRMHojaGastosLine   hojaGastosLineUpdate;
+    #        CRMHojaGastosTable  hojaGastosTable;
+    #        Amount              newAmountMST;
+    #        ExchRate            targetExchRate;
+    #        int                 scanned;
+    #        int                 updated;
+    #        int                 skippedCurrencyMismatch;
+    #        int                 skippedInvalidHeaderRate;
+    #        int                 skippedNoCalculation;
+    #
+    #        Amount              origAmount;
+    #        INDReimbursableAmount origReimbursableAmount;
+    #        ;
+    #
+    #        while select hojaGastosLine
+    #            //where hojaGastosLine.ExchRate == 0
+    #            join hojaGastosTable
+    #                where hojaGastosTable.HojaGastosId == hojaGastosLine.HojaGastosId
+    #                      //&& hojaGastosTable.HojaGastosId   == "010131"
+    #        {
+    #            scanned++;
+    #            ttsbegin;
+    #
+    #            select firstonly forupdate hojaGastosLineUpdate
+    #                where hojaGastosLineUpdate.RecId     == hojaGastosLine.RecId;
+    #                      //&& hojaGastosLineUpdate.ExchRate == 0;
+    #
+    #            if (!hojaGastosLineUpdate.RecId)
+    #            {
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            //select firstonly hojaGastosTable
+    #            //    where hojaGastosTable.HojaGastosId == hojaGastosLineUpdate.HojaGastosId;
+    #
+    #            //MMS - Establece el tipo de cambio antes de recalcular el importe historico - 2026.07.21
+    #            if (!hojaGastosTable.RecId ||
+    #                hojaGastosLineUpdate.Currency != hojaGastosTable.CurrencyCode)
+    #            {
+    #                skippedCurrencyMismatch++;
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            if (hojaGastosTable.CurrencyCode == CompanyInfo::standardCurrency())
+    #            {
+    #                targetExchRate = 100;
+    #            }
+    #            else
+    #            {
+    #                targetExchRate = hojaGastosTable.ExchRate;
+    #            }
+    #
+    #            if (targetExchRate <= 0)
+    #            {
+    #                skippedInvalidHeaderRate++;
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            // Asigna el tipo de cambio antes del recalculo.
+    #            hojaGastosLineUpdate.ExchRate   = targetExchRate;
+    #            newAmountMST                    = hojaGastosLineUpdate.LineAmountMST();
+    #
+    #            if (newAmountMST == 0)
+    #            {
+    #                skippedNoCalculation++;
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            origAmount             = hojaGastosLineUpdate.AmountMST;
+    #            origReimbursableAmount = hojaGastosLineUpdate.ReimbursableAmount;
+    #
+    #            hojaGastosLineUpdate.AmountMST = newAmountMST;
+    #            hojaGastosLineUpdate.recalculateReimbursableAmount();
+    #            hojaGastosLineUpdate.doUpdate();
+    #
+    #            if (origAmount != newAmountMST || origReimbursableAmount != hojaGastosLineUpdate.ReimbursableAmount)
+    #            {
+    #                accountingRefreshRecIds.add(hojaGastosLineUpdate.RecId);
+    #            }
+    #
+    #            updated++;
+    #
+    #            ttscommit;
+    #        }
+    #
+    #        info(strfmt("%6 - %7: Revisadas: %1. Actualizadas: %2. Divisa distinta: %3. Tasa de cabecera no valida: %4. Sin calculo: %5",
+    #                    scanned,
+    #                    updated,
+    #                    skippedCurrencyMismatch,
+    #                    skippedInvalidHeaderRate,
+    #                    skippedNoCalculation,
+    #                    curext(),
+    #                    time2str(timenow(), 1, 1)));
+    #    }
+    #
+    #    void updateReimbursableAmounts()
+    #    {
+    #        CRMHojaGastosLine   hojaGastosLine;
+    #        CRMHojaGastosLine   hojaGastosLineUpdate;
+    #        INDReimbursableAmount origReimbursableAmount;
+    #        INDReimbursableExpenseLines origReimbursableExpense;
+    #        NoYes               origVisaEmpresa;
+    #        int                 scanned;
+    #        int                 updated;
+    #        int                 migratedFromVisa;
+    #        int                 legacyVisaExcluded;
+    #        boolean             reimbursementChanged;
+    #        ;
+    #
+    #        while select hojaGastosLine
+    #        {
+    #            scanned++;
+    #
+    #            ttsbegin;
+    #
+    #            select firstonly forupdate hojaGastosLineUpdate
+    #                where hojaGastosLineUpdate.RecId == hojaGastosLine.RecId;
+    #
+    #            if (!hojaGastosLineUpdate.RecId)
+    #            {
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            //MMS - Migra la elegibilidad historica de Visa antes de aplicar la semantica del nuevo indicador - 2026.07.29
+    #            origReimbursableAmount  = hojaGastosLineUpdate.ReimbursableAmount;
+    #            origReimbursableExpense = hojaGastosLineUpdate.ReimbursableExpense;
+    #            origVisaEmpresa         = hojaGastosLineUpdate.VisaEmpresa;
+    #
+    #            //MMS - La carga historica de una sola ejecucion invierte el valor historico de Visa en el nuevo indicador de reembolso - 2026.07.29
+    #            hojaGastosLineUpdate.ReimbursableExpense = hojaGastosLineUpdate.VisaEmpresa == NoYes::Yes
+    #                                                      ? INDReimbursableExpenseLines::No
+    #                                                      : INDReimbursableExpenseLines::Yes;
+    #
+    #            if (origVisaEmpresa == NoYes::Yes)
+    #                legacyVisaExcluded++;
+    #
+    #            if (origReimbursableExpense != hojaGastosLineUpdate.ReimbursableExpense)
+    #                migratedFromVisa++;
+    #
+    #            hojaGastosLineUpdate.recalculateReimbursableAmount();
+    #
+    #            reimbursementChanged = origReimbursableAmount  != hojaGastosLineUpdate.ReimbursableAmount
+    #                                || origReimbursableExpense != hojaGastosLineUpdate.ReimbursableExpense;
+    #
+    #            if (reimbursementChanged)
+    #            {
+    #                hojaGastosLineUpdate.doUpdate();
+    #
+    #                //MMS - Pospone la actualizacion contable hasta que los valores de linea y cabecera sean definitivos - 2026.07.29
+    #                if (reimbursementChanged)
+    #                    accountingRefreshRecIds.add(hojaGastosLineUpdate.RecId);
+    #
+    #                updated++;
+    #            }
+    #
+    #            ttscommit;
+    #        }
+    #
+    #        info(strfmt(
+    #            "%5 - %6: Importes reembolsables revisados: %1. Actualizados: %2. Flags ajustados desde Visa: %3. Visa excluidos: %4",
+    #            scanned,
+    #            updated,
+    #            migratedFromVisa,
+    #            legacyVisaExcluded,
+    #            curext(),
+    #            time2str(timenow(), 1, 1)));
+    #    }
+    #
+    #    void updateHeaderReimbursableExpenseStates()
+    #    {
+    #        CRMHojaGastosTable hojaGastosTable;
+    #        CRMHojaGastosTable hojaGastosTableUpdate;
+    #        int                scanned;
+    #        int                updated;
+    #        ;
+    #
+    #        while select hojaGastosTable
+    #        {
+    #            scanned++;
+    #            ttsbegin;
+    #
+    #            select firstonly forupdate hojaGastosTableUpdate
+    #                where hojaGastosTableUpdate.RecId == hojaGastosTable.RecId;
+    #
+    #            if (!hojaGastosTableUpdate.RecId)
+    #            {
+    #                ttscommit;
+    #                continue;
+    #            }
+    #
+    #            //MMS - Corrige los indicadores mixtos historicos a partir de los estados persistidos de las lineas - 2026.07.29
+    #            if (hojaGastosTableUpdate.recalculateReimbursableExpenseFromLines())
+    #            {
+    #                hojaGastosTableUpdate.doUpdate();
+    #                updated++;
+    #            }
+    #
+    #            ttscommit;
+    #        }
+    #
+    #        info(strfmt(
+    #            "%3 - %4: Header states scanned: %1. Updated: %2",
+    #            scanned,
+    #            updated,
+    #            curext(),
+    #            time2str(timenow(), 1, 1)));
+    #    }
+    #
+    #    //MMS - Actualiza las lineas contables afectadas cuando todos los valores migrados son definitivos - 2026.07.29
+    #    void refreshAccountingLines()
+    #    {
+    #        SetIterator        accountingIterator;
+    #        CRMHojaGastosLine  hojaGastosLineUpdate;
+    #        RecId               lineRecId;
+    #        int                 refreshed;
+    #        ;
+    #
+    #        accountingIterator = new SetIterator(accountingRefreshRecIds);
+    #
+    #        while (accountingIterator.more())
+    #        {
+    #            lineRecId = accountingIterator.value();
+    #            ttsbegin;
+    #
+    #            select firstonly forupdate hojaGastosLineUpdate
+    #                where hojaGastosLineUpdate.RecId == lineRecId;
+    #
+    #            if (hojaGastosLineUpdate.RecId)
+    #            {
+    #                INDProjCostRevenueTable::CreateProjCostFromCommon(hojaGastosLineUpdate);
+    #                refreshed++;
+    #            }
+    #
+    #            ttscommit;
+    #            accountingIterator.next();
+    #        }
+    #
+    #        info(strfmt("%3 - %4: Accounting lines refreshed: %1. Queued: %2",
+    #            refreshed,
+    #            accountingRefreshRecIds.elements(),
+    #            curext(),
+    #            time2str(timenow(), 1, 1)));
+    #    }
+    #
+    #    //MMS - Ejecuta la migracion solo en la compania actual; el operador decide las companias autorizadas - 2026.07.29
+    #    accountingRefreshRecIds = new Set(Types::Integer);
+    #
+    #    //MMS - Finaliza los indicadores, los importes y el estado de cabecera antes de actualizar una vez la contabilidad - 2026.07.29
+    #    updateReimbursableAmounts();
+    #    updateLines();
+    #    updateHeaderReimbursableExpenseStates();
+    #    refreshAccountingLines();
+    #}
+    #
+  ENDSOURCE
+
+***Element: END

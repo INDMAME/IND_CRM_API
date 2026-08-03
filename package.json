@@ -4,6 +4,7 @@
   "private": true,
   "description": "Codex reference sync utilities for IND_CRM_API",
   "scripts": {
+    "test:expense-ticket-flow": "node --test tests/expense-ticket-flow-regression.test.mjs",
     "sync:skill:references": "node scripts/sync-skill-references.mjs",
     "sync:local:skill:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",
     "sync:codex:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",

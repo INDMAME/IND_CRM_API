@@ -17,14 +17,14 @@ namespace IND_CRM_API.Contracts.Responses
         public string CurrencyCode { get; set; }
         // Legacy alias for TotalAmountCurrency kept for existing clients.
         public decimal? TotalAmount { get; set; }
-        // Total amount in the document currency returned by AX.
+        /// <summary>Legacy accounting total kept under the published currency field name.</summary>
         public decimal? TotalAmountCurrency { get; set; }
         public decimal? ExchRate { get; set; }
         // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
         public int? ExchangeRateMode { get; set; }
         public string CreatedDate { get; set; }
         public string EstadoComentarios { get; set; }
-        // Numeric AX enum value returned by AX; resolve labels through /api/crm/enums.
+        // AX reimbursement state: Yes includes lines, No excludes them, and Both represents mixed line values.
         public int? ReimbursableExpense { get; set; }
         /// <summary>Functional AX owner user id returned at the end of the AX row.</summary>
         public string OwnerAxUserId { get; set; }
@@ -32,10 +32,16 @@ namespace IND_CRM_API.Contracts.Responses
         /// <summary>Display name for the functional owner returned at the end of the AX row.</summary>
         public string OwnerName { get; set; }
 
-        /// <summary>Total reimbursable amount in MST, appended at the end of the AX row.</summary>
+        /// <summary>Legacy accounting total in company currency/MST, kept for existing clients.</summary>
         public decimal? TotalAmountMST { get; set; }
 
         /// <summary>Additional AX-created date appended at the end of the AX row.</summary>
         public string AxCreatedDate { get; set; }
+
+        /// <summary>Gross expense total in company currency/MST, independent of reimbursement and legacy Visa.</summary>
+        public decimal? TotalGrossAmountMST { get; set; }
+
+        /// <summary>Total payable to the employee in company currency/MST; only lines marked ReimbursableExpense=Yes are included.</summary>
+        public decimal? TotalReimbursableAmount { get; set; }
     }
 }

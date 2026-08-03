@@ -40,9 +40,14 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderAndLines = 0;
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
+        private const int HeaderReimbursableExpenseYesValue = 0;
+        private const int HeaderReimbursableExpenseNoValue = 1;
+        private const int HeaderReimbursableExpenseBothValue = 2;
+        private const int LineReimbursableExpenseYesValue = 0;
+        private const int LineReimbursableExpenseNoValue = 1;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
-        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=No, 1=Yes, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
-        private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=No, 1=Yes. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
+        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=Yes, 1=No, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
+        private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=Yes, 1=No. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
         private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
@@ -549,8 +554,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// Gets an expense sheet by id with its lines.
         /// </summary>
         /// <remarks>
-        /// Header fields include expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate and reimbursableExpense.
-        /// Line fields include reimbursableExpense, currencyCode, amountMST and exchRate.
+        /// Header fields include legacy accounting totals plus totalGrossAmountMST and totalReimbursableAmount.
+        /// Line fields distinguish the original amount, company amountMST and reimbursableAmount.
         /// </remarks>
         // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
         [HttpGet, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}")]
@@ -1081,7 +1086,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Propagates current header reimbursable expense value to all existing lines.
+        /// Propagates the current header reimbursement state: Yes includes and No excludes each line.
         /// </summary>
         /// <remarks>
         /// The web client must ask for user confirmation before calling this endpoint.
@@ -1089,7 +1094,7 @@ namespace IND_CRM_API.Controllers.CRM
         [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/reimbursable-expense/propagate")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
-        [SwaggerResponse(HttpStatusCode.OK, "Propagacion de gasto reembolsable aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
+        [SwaggerResponse(HttpStatusCode.OK, "Propagacion del indicador de reembolso aplicada", typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -1525,7 +1530,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// Filtro opcional por reembolso: reimbursableExpense (valor numerico AX de INDReimbursableExpense).
         /// Valores permitidos (INDExpenseSheetStatus): 0 Draft, 1 InReview, 2 Approved, 3 Rejected, 4 Paid.
         /// Filtro opcional includeSubordinates: cuando es true lista hojas propias y de subordinados directos del usuario del header.
-        /// Response items include estadoComentarios, userName, reimbursableExpense, totalAmountCurrency and totalAmountMST.
+        /// Response items include legacy accounting totals plus totalGrossAmountMST and totalReimbursableAmount.
         /// </remarks>
         [HttpPost, Route("list")]
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetListItemDto>))]
@@ -1893,16 +1898,19 @@ namespace IND_CRM_API.Controllers.CRM
             return expenseSheetStatus >= 0;
         }
 
-        // Validates the header enum INDReimbursableExpense: No, Yes and Both.
+        // Validates the header enum INDReimbursableExpense: Yes, No and Both.
         private static bool IsValidHeaderReimbursableExpense(int reimbursableExpense)
         {
-            return reimbursableExpense >= 0 && reimbursableExpense <= 2;
+            return reimbursableExpense == HeaderReimbursableExpenseYesValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseNoValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseBothValue;
         }
 
-        // Validates the line enum INDReimbursableExpenseLines: No and Yes only.
+        // Validates the line enum INDReimbursableExpenseLines: Yes and No only.
         private static bool IsValidLineReimbursableExpense(int reimbursableExpense)
         {
-            return reimbursableExpense == 0 || reimbursableExpense == 1;
+            return reimbursableExpense == LineReimbursableExpenseYesValue ||
+                   reimbursableExpense == LineReimbursableExpenseNoValue;
         }
 
         // Validates CRMGastoType against the physical AX enum indexes used by expense lines.
@@ -2504,7 +2512,8 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // Current (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
+            // Current (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
+            // Previous (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
             // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
             // Current (16): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName
             // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName
@@ -2618,6 +2627,11 @@ namespace IND_CRM_API.Controllers.CRM
             detail.TotalAmountCurrency = detail.TotalAmount;
             detail.TotalAmountMST = headerExtras.Count >= 17 ? ToDecimal(headerExtras[16]) : null;
             detail.AxCreatedDate = headerExtras.Count >= 18 ? FormatApiDate(headerExtras[17]) : null;
+            //MMS - Reads additive totals and falls back to the legacy MST total during AX rollout - 2026.07.29
+            detail.TotalGrossAmountMST = headerExtras.Count >= 19 ? ToDecimal(headerExtras[18]) : null;
+            detail.TotalReimbursableAmount = headerExtras.Count >= 20
+                ? ToDecimal(headerExtras[19])
+                : detail.TotalAmountMST;
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)
@@ -2627,7 +2641,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 9)
                     continue;
 
-                // Current shape (14): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate
+                // Current shape (15): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate [15]ReimbursableAmount
+                // Previous shape (14): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate
                 // Current shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId
                 // Previous shape (9): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId
                 var hasPriceColumn = rowLen >= 10;
@@ -2649,6 +2664,7 @@ namespace IND_CRM_API.Controllers.CRM
                     ReimbursableExpense = hasReimbursableColumns ? SafeInt(row, 11) : null,
                     CurrencyCode = hasReimbursableColumns ? AxContainerReadHelper.SafeString(row, 12) : null,
                     AmountMST = lineAmountMST,
+                    ReimbursableAmount = rowLen >= 15 ? SafeDecimal(row, 15) : null,
                     ExchRate = hasReimbursableColumns ? SafeDecimal(row, 14) : null,
                     TotalAmountCurrency = lineAmountCurrency,
                     TotalAmountMST = lineAmountMST
@@ -2692,7 +2708,8 @@ namespace IND_CRM_API.Controllers.CRM
                     continue;
 
                 // AX list row mapping:
-                // Current (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
+                // Current (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
+                // Previous (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
                 // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
                 // Current (14): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]UserName [7]CurrencyCode [8]TotalAmountCurrency [9]ExchRate [10]ExchangeRateMode [11]ProjId [12]Voucher [13]CreatedDate [14]ReimbursableExpense
                 // Previous (11): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]UserId [5]CurrencyCode [6]TotalAmountCurrency [7]ExchRate [8]ExchangeRateMode [9]ProjId [10]Voucher [11]CreatedDate
@@ -2703,6 +2720,7 @@ namespace IND_CRM_API.Controllers.CRM
                 if (rowLen >= 14)
                 {
                     var rawCreatedDate = AxContainerReadHelper.SafeString(row, 13);
+                    var totalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null;
                     rows.Add(CreateExpenseSheetListRow(new ExpenseSheetListItemDto
                     {
                         HojaGastosId = AxContainerReadHelper.SafeString(row, 1),
@@ -2722,8 +2740,12 @@ namespace IND_CRM_API.Controllers.CRM
                         ReimbursableExpense = ToInt(AxContainerReadHelper.SafeString(row, 14)),
                         OwnerAxUserId = rowLen >= 15 ? AxContainerReadHelper.SafeString(row, 15) : string.Empty,
                         OwnerName = rowLen >= 16 ? AxContainerReadHelper.SafeString(row, 16) : string.Empty,
-                        TotalAmountMST = rowLen >= 17 ? ToDecimal(AxContainerReadHelper.SafeString(row, 17)) : null,
-                        AxCreatedDate = rowLen >= 18 ? FormatApiDate(AxContainerReadHelper.SafeString(row, 18)) : null
+                        TotalAmountMST = totalAmountMST,
+                        AxCreatedDate = rowLen >= 18 ? FormatApiDate(AxContainerReadHelper.SafeString(row, 18)) : null,
+                        TotalGrossAmountMST = rowLen >= 19 ? ToDecimal(AxContainerReadHelper.SafeString(row, 19)) : null,
+                        TotalReimbursableAmount = rowLen >= 20
+                            ? ToDecimal(AxContainerReadHelper.SafeString(row, 20))
+                            : totalAmountMST
                     }, rawCreatedDate));
                     continue;
                 }
@@ -2899,6 +2921,7 @@ namespace IND_CRM_API.Controllers.CRM
                 }, amountAndDate.CreatedDate));
             }
 
+            //MMS - Keeps the legacy currency alias populated while AX versions coexist - 2026.07.29
             foreach (var row in rows)
             {
                 var item = row?.Item;
@@ -3034,90 +3057,10 @@ namespace IND_CRM_API.Controllers.CRM
             return ToDecimal(AxContainerReadHelper.SafeString(container, index));
         }
 
-        // Converts a string to decimal with invariant culture.
+        // Converts AX decimal text using the shared regional-separator parser.
         private static decimal? ToDecimal(string value)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            var normalized = NormalizeDecimalValue(value);
-            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
-                return parsed;
-
-            // Culturas de respaldo para ambientes AX con separadores regionales.
-            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-MX"), out parsed))
-                return parsed;
-
-            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("es-ES"), out parsed))
-                return parsed;
-
-            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.GetCultureInfo("en-US"), out parsed))
-                return parsed;
-
-            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out parsed))
-                return parsed;
-
-            return null;
-        }
-
-        // Normaliza montos de AX para parsear separadores regionales de forma consistente.
-        private static string NormalizeDecimalValue(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-
-            var raw = value.Trim()
-                .Replace("\u00A0", string.Empty)
-                .Replace(" ", string.Empty);
-
-            var hasComma = raw.Contains(",");
-            var hasDot = raw.Contains(".");
-
-            if (hasComma && hasDot)
-            {
-                var lastComma = raw.LastIndexOf(',');
-                var lastDot = raw.LastIndexOf('.');
-                var decimalSeparator = lastComma > lastDot ? ',' : '.';
-                var thousandSeparator = decimalSeparator == ',' ? "." : ",";
-
-                var withoutThousands = raw.Replace(thousandSeparator, string.Empty);
-                return decimalSeparator == ','
-                    ? withoutThousands.Replace(',', '.')
-                    : withoutThousands;
-            }
-
-            if (hasComma)
-            {
-                var commaCount = raw.Count(c => c == ',');
-                var lastComma = raw.LastIndexOf(',');
-                var digitsAfter = lastComma >= 0 ? raw.Length - lastComma - 1 : 0;
-
-                // Caso tipico de AX: coma como separador decimal.
-                if (digitsAfter > 0 && digitsAfter <= 2)
-                {
-                    var whole = raw.Substring(0, lastComma).Replace(",", string.Empty);
-                    var fraction = raw.Substring(lastComma + 1);
-                    return string.Concat(whole, ".", fraction);
-                }
-
-                // Si la coma solo agrupa miles, se elimina.
-                if (commaCount >= 1)
-                    return raw.Replace(",", string.Empty);
-            }
-
-            if (hasDot)
-            {
-                var dotCount = raw.Count(c => c == '.');
-                if (dotCount > 1)
-                {
-                    var lastDot = raw.LastIndexOf('.');
-                    var whole = raw.Substring(0, lastDot).Replace(".", string.Empty);
-                    var fraction = raw.Substring(lastDot + 1);
-                    return string.Concat(whole, ".", fraction);
-                }
-            }
-
-            return raw;
+            return ExpenseSheetListQueryHelper.ParseAxDecimalOrNull(value);
         }
 
         // Detecta textos de fecha comunes para distinguirlos de importes numericos.

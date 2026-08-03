@@ -13,6 +13,8 @@ namespace IND_CRM_API.Contracts.Responses
         public string transDate { get; set; }
         public string ticketDate { get; set; }
         public string ticketTime { get; set; }
+        /// <summary>Gross receipt total selected by OCR and reconciled against the draft lines.</summary>
+        public decimal? totalAmount { get; set; }
         public decimal? Confidence { get; set; }
         public List<string> Warnings { get; set; }
         public string RawCurrency { get; set; }

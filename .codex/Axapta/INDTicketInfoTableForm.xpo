@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: FRM
 
-; Navision Axapta Forms unloaded at Lunes 06/07/2026
+; Navision Axapta Forms unloaded at Miércoles 29/07/2026
 ; --------------------------------------------------------------------------------
 FRMVERSION 5
 
@@ -606,7 +606,7 @@ FORM #INDTicketInfoTable
 
     CONTAINER
       CONTROL GROUP
-        ;==== controlId:12292, containerId: 0, containerdata: 0
+        ;==== controlId:12292, containerId: 0, containerdata:6899
         ;----------------------------------------------------------
         PROPERTIES
           Name                #Body
@@ -841,7 +841,7 @@ FORM #INDTicketInfoTable
                               AllowEdit           #Yes
                               Left                #Auto (left)
                               Top                 #Auto
-                              Width               #1050
+                              Width               #Column width
                               Height              #Auto
                               VerticalSpacing     #Auto
                               Enabled             #Yes
@@ -1048,7 +1048,7 @@ FORM #INDTicketInfoTable
                                     AutoDeclaration     #No
                                     Visible             #Yes
                                     AllowEdit           #Yes
-                                    Left                #Auto (right)
+                                    Left                #Right edge
                                     Top                 #Auto
                                     Width               #Auto
                                     Height              #Auto

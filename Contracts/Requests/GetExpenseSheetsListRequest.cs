@@ -29,8 +29,7 @@ namespace IND_CRM_API.Contracts.Requests
         public int? expenseSheetStatus { get; set; }
 
         /// <summary>
-        /// Filtro de reembolso (valor numerico AX de INDReimbursableExpense).
-        /// Consultar opciones activas en /api/crm/enums.
+        /// Reimbursement filter: Yes (0) includes, No (1) excludes, and Both (2) represents mixed values.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 
