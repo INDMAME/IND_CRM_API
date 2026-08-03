@@ -1111,7 +1111,7 @@ Formatversion: 1
         #}
       ENDSOURCE
       SOURCE #validateUniqueTicketDateTime
-        #//MMS - Valida duplicados solo cuando el ticket tiene una hora valida - 2026.07.29
+        #//MMS - Ajustes CRM - 2026.08.03 - Acota duplicados por usuario cuando la identidad esta informada
         #public boolean validateUniqueTicketDateTime()
         #{
         #    INDTicketInfoTable ticketInfoTable;
@@ -1121,11 +1121,23 @@ Formatversion: 1
         #        return true;
         #    }
         #
-        #    select firstonly RecId, FileId
-        #        from ticketInfoTable
-        #        where ticketInfoTable.TicketDate == this.TicketDate
-        #           && ticketInfoTable.TicketTime == this.TicketTime
-        #           && ticketInfoTable.RecId      != this.RecId;
+        #    if (this.CreatedByUserId)
+        #    {
+        #        select firstonly RecId, FileId
+        #            from ticketInfoTable
+        #            where ticketInfoTable.TicketDate      == this.TicketDate
+        #               && ticketInfoTable.TicketTime      == this.TicketTime
+        #               && ticketInfoTable.CreatedByUserId == this.CreatedByUserId
+        #               && ticketInfoTable.RecId           != this.RecId;
+        #    }
+        #    else
+        #    {
+        #        select firstonly RecId, FileId
+        #            from ticketInfoTable
+        #            where ticketInfoTable.TicketDate == this.TicketDate
+        #               && ticketInfoTable.TicketTime == this.TicketTime
+        #               && ticketInfoTable.RecId      != this.RecId;
+        #    }
         #
         #    if (ticketInfoTable.RecId)
         #    {

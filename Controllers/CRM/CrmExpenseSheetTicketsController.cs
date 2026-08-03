@@ -125,6 +125,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.Created, "Ticket creado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> CreateExpenseSheetTicket()
@@ -393,6 +394,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.Created, "Ticket creado y finalizado", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Servicio IA no disponible", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
@@ -1534,6 +1536,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket actualizado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult UpdateExpenseSheetTicket(string fileId, [FromBody] UpdateExpenseSheetTicketRequest body)
@@ -1983,6 +1986,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket actualizado desde IA", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket duplicado para el mismo usuario, fecha y hora", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> UpdateExpenseSheetTicketFromIA(string fileId)
@@ -3561,7 +3565,6 @@ namespace IND_CRM_API.Controllers.CRM
 
             var fileId = data.FileId.Trim();
             var rollbackMessages = new List<string>();
-            var blobDeleteFailed = false;
             var blobDeleteAttempted = false;
             var blobDeleted = false;
             var ticketDeleted = false;
@@ -3582,7 +3585,6 @@ namespace IND_CRM_API.Controllers.CRM
                 }
                 catch (Exception ex)
                 {
-                    blobDeleteFailed = true;
                     rollbackMessages.Add("blob-delete failed");
                     Logger.Log(
                         $"[QUICKCREATE-ROLLBACK] stage=blob-delete result=deny fileId={ToLogValue(fileId)} error={ToLogValue(ex.Message)} traceId={traceId}",
@@ -3640,7 +3642,8 @@ namespace IND_CRM_API.Controllers.CRM
                     AxaptaSessionManager.LogLevel.Warning);
             }
 
-            var rollbackSucceeded = !blobDeleteFailed && ticketDeleted;
+            var blobSucceeded = !blobDeleteAttempted || blobDeleted;
+            var rollbackSucceeded = blobSucceeded && ticketDeleted;
             var blobSummary = blobDeleteAttempted
                 ? "blobDeleted=" + blobDeleted.ToString()
                 : "blobDeleted=skipped";
@@ -3771,7 +3774,7 @@ namespace IND_CRM_API.Controllers.CRM
                     : NormalizeApiDateToAxYmd(body?.transDate);
                 var normalizedTicketDate = modeValue == ModeAddLinesToExisting
                     ? string.Empty
-                    : NormalizeTicketDateToAxYmdOrFallback(body?.ticketDate, normalizedTransDate);
+                    : NormalizeApiDateToAxYmd(body?.ticketDate);
                 var normalizedTicketTime = NormalizeOptionalTicketTimeToAxSeconds(body?.ticketTime);
 
                 var rootCon = ax.CreateContainer();
@@ -6696,6 +6699,21 @@ namespace IND_CRM_API.Controllers.CRM
         private static IndApiResponse<object> BuildTicketActionError(string message, string traceId, out HttpStatusCode status)
         {
             var lower = (message ?? string.Empty).ToLowerInvariant();
+            if (lower.Contains("ya existe otro ticket") &&
+                lower.Contains("misma fecha") &&
+                lower.Contains("hora"))
+            {
+                status = HttpStatusCode.Conflict;
+                return new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message) ? "Ya existe otro ticket con la misma fecha y hora." : message,
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetTicketDuplicate,
+                    Data = null,
+                    TraceId = traceId
+                };
+            }
+
             if (lower.Contains("no encontrada") || lower.Contains("no encontrado") || lower.Contains("no existe"))
             {
                 status = HttpStatusCode.NotFound;
