@@ -34,10 +34,15 @@ $acl.SetAccessRuleProtection($true, $false)
 $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
 $propagation = [System.Security.AccessControl.PropagationFlags]::None
 $allow = [System.Security.AccessControl.AccessControlType]::Allow
+# Resolve built-in accounts by SID so localized Windows names do not break ACL setup.
+$serviceSid = ([System.Security.Principal.NTAccount]::new($ServiceIdentity)).Translate(
+    [System.Security.Principal.SecurityIdentifier])
+$systemSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+$administratorsSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
 $rules = @(
-    [System.Security.AccessControl.FileSystemAccessRule]::new($ServiceIdentity, 'Modify', $inheritance, $propagation, $allow),
-    [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', $inheritance, $propagation, $allow),
-    [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', $inheritance, $propagation, $allow)
+    [System.Security.AccessControl.FileSystemAccessRule]::new($serviceSid, 'Modify', $inheritance, $propagation, $allow),
+    [System.Security.AccessControl.FileSystemAccessRule]::new($systemSid, 'FullControl', $inheritance, $propagation, $allow),
+    [System.Security.AccessControl.FileSystemAccessRule]::new($administratorsSid, 'FullControl', $inheritance, $propagation, $allow)
 )
 foreach ($rule in $rules) { [void]$acl.AddAccessRule($rule) }
 Set-Acl -LiteralPath $target -AclObject $acl
