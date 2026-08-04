@@ -36,6 +36,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
         private const int TicketStatusValueForLinking = 0;
+        private const int TicketStatusValueAssigned = 1;
         private const int MaxPageSize = 50;
         private const string BulkSelectionModeSelected = "selected";
         private const string BulkSelectionModeFiltered = "filtered";
@@ -2513,11 +2514,16 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Elimina la imagen asociada al ticket en Azure Blob y limpia DocuRef en AX.
         /// </summary>
+        /// <remarks>
+        /// Primero limpia DocuRef mediante la proteccion atomica de AX y despues intenta eliminar el blob.
+        /// Si el ticket esta Assigned responde 409 sin tocar el blob. BlobDeleted puede ser false si el blob no existia o no pudo eliminarse.
+        /// </remarks>
         [HttpDelete, Route("{fileId}/file")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Archivo del ticket eliminado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket o archivo no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "El ticket esta asignado a una linea de gastos", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteExpenseSheetTicketFile(string fileId)
@@ -2568,6 +2574,19 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(getStatus, getError);
                 }
 
+                if (existingTicket.Status == TicketStatusValueAssigned)
+                {
+                    LogOut(HttpStatusCode.Conflict);
+                    return Content(HttpStatusCode.Conflict, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se puede eliminar la imagen de un ticket asignado a una linea de gastos.",
+                        ErrorCode = IndErrorCodes.CrmExpenseSheetTicketAssigned,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
                 if (string.IsNullOrWhiteSpace(existingTicket.UrlFile) && string.IsNullOrWhiteSpace(existingTicket.FileName))
                 {
                     LogOut(HttpStatusCode.NotFound);
@@ -2581,12 +2600,7 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
-                var blobDeleted = false;
-                if (!string.IsNullOrWhiteSpace(existingTicket.UrlFile))
-                {
-                    blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(existingTicket.UrlFile);
-                }
-
+                // MMS - Clears AX under lock before the best-effort blob deletion. - 2026.08.04
                 if (!TryUpdateTicketFromExisting(
                         ax,
                         company,
@@ -2600,8 +2614,24 @@ namespace IND_CRM_API.Controllers.CRM
                         out var updateError,
                         out var updateStatus))
                 {
+                    updateStatus = NormalizeAssignedTicketDeleteStatus(updateError, updateStatus);
                     LogOut(updateStatus);
                     return Content(updateStatus, updateError);
+                }
+
+                var blobDeleted = false;
+                if (!string.IsNullOrWhiteSpace(existingTicket.UrlFile))
+                {
+                    try
+                    {
+                        blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(existingTicket.UrlFile);
+                    }
+                    catch (Exception blobDeleteEx)
+                    {
+                        Logger.Log(
+                            $"[WARN] DeleteExpenseSheetTicketFile AX cleanup succeeded but blob deletion failed: " +
+                            $"{blobDeleteEx.Message} traceId={traceId}");
+                    }
                 }
 
                 LogOut(HttpStatusCode.OK);
@@ -2663,11 +2693,16 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Elimina ticket completo o una linea granular de ticket.
         /// </summary>
+        /// <remarks>
+        /// La eliminacion completa devuelve 409 si el ticket sigue vinculado a una linea de gastos.
+        /// La eliminacion granular mediante lineRecId conserva sus reglas actuales.
+        /// </remarks>
         [HttpDelete, Route("{fileId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Eliminacion aplicada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket completo vinculado a una linea de gastos", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteExpenseSheetTicket(string fileId, [FromUri] long? lineRecId = null)
@@ -2742,6 +2777,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!success)
                 {
                     var error = BuildTicketActionError(message, traceId, out var status);
+                    if (!lineRecId.HasValue)
+                        status = NormalizeAssignedTicketDeleteStatus(error, status);
                     LogOut(status);
                     return Content(status, error);
                 }
@@ -6693,6 +6730,28 @@ namespace IND_CRM_API.Controllers.CRM
             return value.HasValue && value.Value > 0m
                 ? value.Value
                 : (decimal?)null;
+        }
+
+        // Converts the existing assigned-ticket business error to a delete conflict without changing other actions.
+        private static HttpStatusCode NormalizeAssignedTicketDeleteStatus(
+            IndApiResponse<object> error,
+            HttpStatusCode currentStatus)
+        {
+            if (error == null)
+                return currentStatus;
+
+            var normalizedMessage = (error.Message ?? string.Empty).ToLowerInvariant();
+            var isAssignedConflict = string.Equals(
+                                         error.ErrorCode,
+                                         IndErrorCodes.CrmExpenseSheetTicketAssigned,
+                                         StringComparison.Ordinal) ||
+                                     normalizedMessage.Contains("asignad") ||
+                                     normalizedMessage.Contains("vinculad");
+            if (!isAssignedConflict)
+                return currentStatus;
+
+            error.ErrorCode = IndErrorCodes.CrmExpenseSheetTicketAssigned;
+            return HttpStatusCode.Conflict;
         }
 
         // Builds a standard error response for ticket actions.

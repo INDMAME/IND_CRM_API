@@ -299,9 +299,13 @@ test("AX also reserves Both for derived header state", () => {
     expenseSheetServiceSource,
     /isValidReimbursableExpense\(reimbursableExpenseFilter\)/,
   );
-  assert.match(
+  assert.doesNotMatch(
     expenseSheetServiceSource,
     /hasReimbursableExpense\s*&&[\s\S]*isWritableReimbursableExpense\(any2int\(header\.ReimbursableExpense\)\)/,
+  );
+  assert.match(
+    expenseSheetServiceSource,
+    /if \(hasReimbursableExpense\)[\s\S]*header\.ReimbursableExpense = reimbursableExpense;/,
   );
 });
 

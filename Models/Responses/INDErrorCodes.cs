@@ -50,6 +50,24 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>Expense sheet is locked by voucher.</summary>
         public const string CrmExpenseSheetLocked = "CRM_EXPENSESHEET_LOCKED";
 
+        /// <summary>Missing or invalid fields for an expense line ticket association.</summary>
+        public const string CrmExpenseSheetLineTicketMissingFields = "CRM_EXPENSESHEET_LINE_TICKET_MISSING_FIELDS";
+
+        /// <summary>Expense sheet, line, or ticket association target not found.</summary>
+        public const string CrmExpenseSheetLineTicketNotFound = "CRM_EXPENSESHEET_LINE_TICKET_NOT_FOUND";
+
+        /// <summary>Expense line or ticket already has an incompatible association.</summary>
+        public const string CrmExpenseSheetLineTicketConflict = "CRM_EXPENSESHEET_LINE_TICKET_CONFLICT";
+
+        /// <summary>Expense sheet or ticket state does not allow changing the association.</summary>
+        public const string CrmExpenseSheetLineTicketInvalidState = "CRM_EXPENSESHEET_LINE_TICKET_INVALID_STATE";
+
+        /// <summary>Ticket does not satisfy the association business rules.</summary>
+        public const string CrmExpenseSheetLineTicketInvalidTicket = "CRM_EXPENSESHEET_LINE_TICKET_INVALID_TICKET";
+
+        /// <summary>Another business rule rejected the expense line ticket association.</summary>
+        public const string CrmExpenseSheetLineTicketBusinessRule = "CRM_EXPENSESHEET_LINE_TICKET_BUSINESS_RULE";
+
         /// <summary>Campos obligatorios faltantes en operaciones de ticket de gasto.</summary>
         public const string CrmExpenseSheetTicketMissingFields = "CRM_EXPENSESHEET_TICKET_MISSING_FIELDS";
 

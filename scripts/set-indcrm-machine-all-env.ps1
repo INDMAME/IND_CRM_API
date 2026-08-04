@@ -250,6 +250,33 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_EXPENSE_TICKET_WINDOW_SECONDS" -Category "OpenAI" -DefaultValue "600"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_MAX_CONCURRENT_PER_USER" -Category "OpenAI" -DefaultValue "1"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_VALIDATION_MULTIPLIER" -Category "OpenAI" -DefaultValue "4"
+
+        New-InteractiveSetting -Name "INDCRM_HELP_ENABLED" -Category "CRMHelp" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_HELP_KNOWLEDGE_BUNDLE_PATH" -Category "CRMHelp" -DefaultValue "Knowledge\crm-help.bundle.json"
+        New-InteractiveSetting -Name "INDCRM_HELP_MODEL" -Category "CRMHelp" -DefaultValue "gpt-5.4-mini"
+        New-InteractiveSetting -Name "INDCRM_HELP_REASONING_EFFORT" -Category "CRMHelp" -DefaultValue "low"
+        New-InteractiveSetting -Name "INDCRM_HELP_PROMPT_CACHE_KEY" -Category "CRMHelp" -DefaultValue "crm-help-v1"
+        New-InteractiveSetting -Name "INDCRM_HELP_TIMEOUT_SECONDS" -Category "CRMHelp" -DefaultValue "90"
+        New-InteractiveSetting -Name "INDCRM_HELP_MAX_INPUT_TOKENS" -Category "CRMHelp" -DefaultValue "18000"
+        New-InteractiveSetting -Name "INDCRM_HELP_MIN_DOCUMENT_TOKENS" -Category "CRMHelp" -DefaultValue "4000"
+        New-InteractiveSetting -Name "INDCRM_HELP_MAX_DOCUMENT_TOKENS" -Category "CRMHelp" -DefaultValue "12000"
+        New-InteractiveSetting -Name "INDCRM_HELP_MIN_OUTPUT_TOKENS" -Category "CRMHelp" -DefaultValue "1600"
+        New-InteractiveSetting -Name "INDCRM_HELP_MAX_OUTPUT_TOKENS" -Category "CRMHelp" -DefaultValue "3200"
+        New-InteractiveSetting -Name "INDCRM_HELP_MAX_HISTORY_MESSAGES" -Category "CRMHelp" -DefaultValue "8"
+        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_MAX_REQUESTS" -Category "CRMHelp" -DefaultValue "20"
+        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_WINDOW_SECONDS" -Category "CRMHelp" -DefaultValue "600"
+        New-InteractiveSetting -Name "INDCRM_HELP_FEEDBACK_HMAC_SECRET" -Category "CRMHelp" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
+        New-InteractiveSetting -Name "INDCRM_HELP_FEEDBACK_TOKEN_MINUTES" -Category "CRMHelp" -DefaultValue "60"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_PATH" -Category "CRMHelp" -DefaultValue "C:\INDData\CRMHelpAnalytics"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_HMAC_SECRET" -Category "CRMHelp" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_TEXT_ENABLED" -Category "CRMHelp" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_ACL_READY" -Category "CRMHelp" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_VOLUME_ENCRYPTED" -Category "CRMHelp" -DefaultValue "false"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_SUCCESS_SAMPLE_PERCENT" -Category "CRMHelp" -DefaultValue "10"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_SUCCESS_SAMPLE_MAX_PER_DAY" -Category "CRMHelp" -DefaultValue "200"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_TEXT_RETENTION_DAYS" -Category "CRMHelp" -DefaultValue "90"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_METRIC_RETENTION_DAYS" -Category "CRMHelp" -DefaultValue "180"
+        New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_AGGREGATE_RETENTION_DAYS" -Category "CRMHelp" -DefaultValue "730"
         New-InteractiveSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PATH") -Category "HTTPS" -DefaultValue $defaults.PfxPath -Required $false
         New-InteractiveSetting -Name ("INDCRM_" + $EnvironmentName + "_PFX_PASSWORD") -Category "HTTPS" -Secret $true -Required $false
 

@@ -113,6 +113,44 @@ Endpoints
   Response data: `Answer`, `Model`, `SourceKey`, `FiltersApplied`, `TotalSourceRecords`, `RecordsSentToModel`, `RetrievalMode`, `Truncated`, `Warnings`.
   Errores relevantes: 422 validacion, 429 rate limit IA, 500 error interno.
 
+## CRM Help Assistant
+- GET /api/help/catalog?responseLocale=es-ES (Authorize)
+  Devuelve `KnowledgeVersion`, `DefaultLocale`, `ResponseLocale` y modulos/temas ordenados. No llama a OpenAI.
+  El contenido documental de catalogo es canonico en espanol; `responseLocale` queda reservado para compatibilidad y solo admite `es-ES`, `eu-ES`, `en`, `pt`, `it`, `zh-Hans`.
+  Incluye ETag privado y admite `If-None-Match`.
+- GET /api/help/topics/{topicId}?responseLocale=es-ES (Authorize)
+  Devuelve chunks y respuestas rapidas canonicas del tema sin llamar a OpenAI. El contenido es espanol aunque la interfaz solicitante use otra cultura.
+  Response data: `Id`, `ModuleId`, `Title`, `Summary`, `RouteKey`, `PrerequisiteTopicIds`, `RelatedTopicIds`, `Chunks`, `QuickAnswers`, `KnowledgeVersion`, `ResponseLocale`.
+  `RouteKey` es una clave allowlist (`home`, `visits.history`, `expenses.sheets`, `expenses.tickets`), nunca una URL.
+- POST /api/ia/service/help/ask (Authorize)
+  Body required: `question` (max 1200) y `responseLocale` (`es-ES`, `eu-ES`, `en`, `pt`, `it`, `zh-Hans`).
+  Body optional: `selectedTopicId`, `history` (max 8 mensajes `user|assistant`, 1600 caracteres cada uno), `clientInteractionId` (UUID).
+  Response data: `InteractionId`, `Resolution`, `Answer`, `Candidates`, `Sources`, `Actions`, `KnowledgeVersion`, `ResponseLocale`, `FeedbackToken`, `QuickAnswerUsed`, `Model`.
+  `Resolution`: `answered`, `needsSelection` o `notDocumented`. Las selecciones ambiguas no llaman a OpenAI.
+  OpenAI recibe texto redactado, contexto local recuperado, `store:false`, sin tools y sin identidad. Citas y acciones se validan contra los chunks y routeKeys seleccionados.
+  Limite independiente por defecto: 20 peticiones por usuario y 600 segundos, incluso si `OpenAI:RateLimitEnabled=false`.
+- POST /api/help/feedback (Authorize)
+  Body required: `feedbackToken`, `helpful`.
+  Si `helpful=false`, `reason` es obligatorio: `incorrect`, `outdated`, `unclear`, `incomplete`, `permissions`, `other`. `comment` es opcional (max 1000).
+  El token HMAC esta ligado al usuario y a `InteractionId`, caduca en 60 minutos por defecto y se consume una sola vez por proceso API; un replay devuelve 403.
+
+Runtime/configuracion:
+- Feature flag: `HelpAssistant:Enabled` / `INDCRM_HELP_ENABLED`; esta desactivada en `App.config` hasta desplegar el bundle validado.
+- Bundle: `HelpAssistant:KnowledgeBundlePath` / `INDCRM_HELP_KNOWLEDGE_BUNDLE_PATH`; default `Knowledge\crm-help.bundle.json` relativo al ejecutable. El proyecto lo copia con `PreserveNewest` cuando existe; la fuente generada se integra desde `IND_CRM_APP\docs\crm-help\generated\crm-help.bundle.json` y no se admite un bundle vacio.
+- Esquema bundle `1.0`: raiz `knowledgeVersion`, `knowledgeHash`, `defaultLocale`, `supportedResponseLocales`, `source`, `modules`, `topics`, `assets`; topic con `aliases`, `sampleQuestions`, `keywords`, `quickAnswers` y `chunks`. El compilador documental valida los hashes contra los bytes fuente; el runtime valida el formato SHA-256, IDs unicos de assets y que cada `imageRef` apunte a un asset declarado.
+- Modelo/presupuesto: `HelpAssistant:Model`, `ReasoningEffort`, `PromptCacheKey`, `TimeoutSeconds`, `MaxInputTokens`, `MinDocumentTokens`, `MaxDocumentTokens`, `MinOutputTokens`, `MaxOutputTokens`, `MaxHistoryMessages`. Defaults efectivos: `gpt-5.4-mini`, low, 90 s, 18k entrada total, 4k-12k documental, 1.6k-3.2k salida.
+- Rate limit: `HelpAssistant:RateLimitEnabled`, `RateLimitMaxRequests`, `RateLimitWindowSeconds`.
+- Feedback: `HelpAssistant:FeedbackHmacSecret` (minimo 32 caracteres) y `FeedbackTokenMinutes`.
+- Analitica: `AnalyticsPath` (default `C:\INDData\CRMHelpAnalytics`), `AnalyticsHmacSecret`, `AnalyticsTextCaptureEnabled`, `AnalyticsAclReady`, `AnalyticsVolumeEncrypted`, muestreo y retenciones.
+- Metricas NDJSON no contienen pregunta, respuesta, historial, IP, email, company, OID o identidad directa. El texto redactado solo se escribe en `review` cuando los tres switches de seguridad estan activos y existe secreto HMAC.
+- Retenciones default: review 90 dias, metricas 180 dias, agregados 730 dias; purga local diaria best effort.
+- `scripts/setup-help-analytics-acl.ps1` prepara la ACL solo para el target exacto y exige `-AllowExisting` si ya contiene datos; `scripts/export-help-analytics-report.ps1 -IncludeReviewQueue` genera HTML/CSV privados semanales o mensuales, mas una cola editorial redactada separada, sin endpoint publico.
+- `scripts/test-help-retrieval.ps1` ejecuta el recuperador real sobre el bundle y `evals/retrieval-cases.json`, calcula Top1/Recall@5 sobre el ranking interno y exige `MenuExact` para todos los topics mas un ID inexistente.
+- `scripts/test-help-feedback-token.ps1` comprueba sin imprimir secretos ni tokens que el primer consumo se acepta y los replay/malformed se rechazan.
+- `scripts/test-help-answer-evals.ps1` valida `answer-cases.json` y, fuera de `-ValidateOnly`, llama secuencialmente al endpoint autenticado directo `/api/ia/service/help/ask`. Requiere `-ApiBaseUrl`, `-CasesPath` y `-OutputDirectory`; lee el bearer exclusivamente de la variable de entorno de proceso indicada por `-TokenEnvironmentVariable` y no lo acepta como parametro ni lo incluye en la salida.
+- El runner comprueba HTTP/envelope, `expectedResolution`, locale, topics mediante `Sources` y `requiredSourceChunkIds`; genera JSON/HTML escapado y devuelve codigo distinto de cero ante fallos estructurales. `-CaseId` limita la ejecucion a un caso y cada request usa un `clientInteractionId` nuevo.
+- `-ValidateOnly` valida parametros y corpus, crea los reportes sin respuestas y no lee el token ni accede a red. `requiredFacts`, `forbiddenClaims`, exactitud semantica y calidad de traduccion se exportan para revision humana; nunca se marcan como aprobadas automaticamente.
+
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
   Response items: CurrencyCode, CurrencyCodeISO
@@ -165,10 +203,27 @@ Endpoints
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId, reimbursableExpense (INDReimbursableExpenseLines), currencyCode, amountMST, exchRate
+  Nota `fileId`: este PUT solo acepta el mismo valor ya persistido; no permite alta, baja ni sustitucion. Para cambiar la asociacion deben usarse los endpoints dedicados `/ticket`.
   Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`; las lineas solo aceptan `INDReimbursableExpenseLines` No/Yes, no Both.
   Nota: si `currencyCode` de linea no es la divisa de reembolso de la hoja, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras. Si la divisa de linea y reembolso coinciden, editar `amountMST` no recalcula `exchRate`.
   Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
+- PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
+  Asocia un ticket existente a una linea manual ya persistida sin reemplazar el resto de campos de la linea.
+  Body required: `fileId` (INDFileId).
+  Identidad: `X-IND-AxUserId` identifica al propietario de la hoja; el actor o viewer se toma exclusivamente del `AxUserId` del snapshot firmado ya validado, nunca de otro header. Si el snapshot no contiene actor devuelve 403 `AUTH_CONTEXT_STALE`.
+  Reglas: `lineRecId` debe ser mayor que 0; la hoja debe estar en estado `Draft`; la linea debe ser manual y no tener marcados `Ticket` ni `Factura`; AX valida permiso delegado viewer-propietario, propiedad del ticket, elegibilidad y ausencia de otra asociacion incompatible.
+  Idempotencia: repetir la peticion con el mismo `fileId` devuelve 200; normalmente `Changed=false`, salvo que AX repare el estado derivado del ticket. Una asociacion nueva devuelve `Changed=true`.
+  Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
+  Errores AX: `FORBIDDEN` devuelve 403 `AUTH_FORBIDDEN`; `NOT_FOUND` devuelve 404; `CONFLICT` e `INVALID_STATE` devuelven 409; `INVALID_TICKET` y otras reglas de negocio devuelven 422; `ERROR` devuelve 500.
+  Nota de routing: el sufijo literal `/ticket` y la restriccion `lineRecId:long` separan esta ruta de la actualizacion completa de linea; no existe una combinacion equivalente de metodo y plantilla bajo `/api/crm/expensesheets/tickets`.
+- DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
+  Desvincula el ticket actual de la linea; no elimina la linea de gasto, el ticket ni su imagen.
+  No admite body ni parametros query. `lineRecId` debe ser mayor que 0 y la hoja debe estar en estado `Draft`.
+  Identidad: `X-IND-AxUserId` identifica al propietario y el viewer procede del `AxUserId` del snapshot firmado validado; AX vuelve a validar el permiso delegado. Un snapshot sin actor devuelve 403 `AUTH_CONTEXT_STALE` y `FORBIDDEN` de AX devuelve 403 `AUTH_FORBIDDEN`.
+  Idempotencia: si la linea ya esta desvinculada, devuelve 200 y `Changed=false`; cuando elimina la asociacion devuelve `Changed=true`.
+  Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
+  Errores AX: `NOT_FOUND` devuelve 404; `CONFLICT` e `INVALID_STATE` devuelven 409; otras reglas de negocio devuelven 422; `ERROR` devuelve 500.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}?deleteMode=0|1|2 (Authorize + X-IND-Company + X-IND-AxUserId)
   deleteMode: 0=LineOnly, 1=HeaderOnly (alias de WholeSheet), 2=WholeSheet.
   Legacy: deleteWholeSheet=0|1 sigue soportado si no se envia deleteMode. AX procesa 1 y 2 como deleteWholeSheet.
@@ -266,11 +321,14 @@ Endpoints
   Carga/reemplaza imagen en Azure Blob y actualiza `INDURLFile` + `INDFilename` en AX.
   Formato de nombre aplicado: `yyyyMMddHHmmss_{axUserId}_{fileId}.{ext}`.
 - DELETE /api/crm/expensesheets/tickets/{fileId}/file (Authorize + X-IND-Company + X-IND-AxUserId)
-  Elimina blob asociado y limpia `INDURLFile` + `INDFilename` del ticket en AX.
+  Primero limpia de forma protegida `INDURLFile` + `INDFilename` en AX y solo despues intenta eliminar el blob.
+  Proteccion: si el ticket esta en estado `Assigned`, la limpieza AX se rechaza y no se toca el blob; devuelve 409 con `CRM_EXPENSESHEET_TICKET_ASSIGNED`.
+  Response data: `FileId`, `BlobDeleted`. `BlobDeleted=false` es posible si AX se limpio correctamente pero el blob no existia, la URL no era resoluble o Azure no confirmo la eliminacion; el fallo se registra y no revierte la limpieza AX.
 - DELETE /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Elimina ticket completo.
   Query opcional: lineRecId (si se envia, elimina solo esa linea granular usando el metodo unificado de AX).
   Nota: si se envia `lineRecId`, debe ser distinto de 0 y puede ser negativo para lineas temporales.
+  Proteccion: sin `lineRecId`, un ticket vinculado a una linea no se elimina y devuelve 409 con `CRM_EXPENSESHEET_TICKET_ASSIGNED`; primero debe desvincularse. La eliminacion granular conserva su comportamiento actual.
 - POST /api/crm/expensesheets/tickets/{fileId}/lines (Authorize + X-IND-Company + X-IND-AxUserId)
   Crea una linea granular en `INDTicketInfoLine`.
   Body: `description`, `qty`, `price`, `totalAmount` opcional.

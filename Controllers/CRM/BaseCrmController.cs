@@ -12,6 +12,8 @@ namespace IND_CRM_API.Controllers
 {
     public abstract class BaseCrmController : ApiController
     {
+        private const string ValidatedSnapshotAxUserIdRequestPropertyKey = "IND.ValidatedSnapshotAxUserId";
+
         protected readonly IAxaptaSessionManager SessionManager;
         protected readonly IAxLogger Logger;
 
@@ -41,6 +43,7 @@ namespace IND_CRM_API.Controllers
         {
             var effectiveTraceId = GetOrCreateTraceId();
             errorResult = null;
+            StoreValidatedSnapshotAxUserId(null);
             var company = GetHeaderValue("X-IND-Company");
             var axUserId = GetHeaderValue("X-IND-AxUserId");
             var entraOid = GetHeaderValue("X-IND-EntraOid");
@@ -151,6 +154,7 @@ namespace IND_CRM_API.Controllers
                 return null;
             }
 
+            StoreValidatedSnapshotAxUserId(validation.Snapshot?.AxUserId);
             LogCompanyAuthorization(
                 "allow",
                 validation.Reason,
@@ -162,6 +166,43 @@ namespace IND_CRM_API.Controllers
                 validation.Snapshot ?? latestSnapshot,
                 effectiveTraceId);
             return company.Trim();
+        }
+
+        /// <summary>
+        /// Returns the AX actor from the signed context snapshot validated for this request.
+        /// </summary>
+        // MMS - Exposes only the AX actor validated from the signed snapshot. - 2026.08.04
+        protected string RequireValidatedSnapshotAxUserIdOrReturn403(out IHttpActionResult errorResult, string traceId)
+        {
+            var effectiveTraceId = GetOrCreateTraceId();
+            errorResult = null;
+            object rawAxUserId = null;
+            if (Request?.Properties != null)
+                Request.Properties.TryGetValue(ValidatedSnapshotAxUserIdRequestPropertyKey, out rawAxUserId);
+            var axUserId = rawAxUserId as string;
+
+            if (string.IsNullOrWhiteSpace(axUserId))
+            {
+                Logger.Log(
+                    $"[AUTHZ-VIEWER-AXUSER] gate=BaseCrmController.RequireValidatedSnapshotAxUserIdOrReturn403 " +
+                    $"result=deny reason=missing-signed-axuserid authenticatedUser={ToLogValue(User?.Identity?.Name)} traceId={effectiveTraceId}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Contexto de autorizacion sin usuario AX firmado. Consulte /api/auth/entra/context.",
+                    ErrorCode = IndErrorCodes.AuthContextStale,
+                    Errors = null,
+                    Data = null,
+                    TraceId = effectiveTraceId
+                };
+                errorResult = Content(HttpStatusCode.Forbidden, response);
+                return null;
+            }
+
+            Logger.Log(
+                $"[AUTHZ-VIEWER-AXUSER] gate=BaseCrmController.RequireValidatedSnapshotAxUserIdOrReturn403 " +
+                $"result=allow viewerAxUserId={ToLogValue(axUserId)} authenticatedUser={ToLogValue(User?.Identity?.Name)} traceId={effectiveTraceId}");
+            return axUserId.Trim();
         }
 
         /// <summary>
@@ -231,6 +272,16 @@ namespace IND_CRM_API.Controllers
             }
 
             return null;
+        }
+
+        private void StoreValidatedSnapshotAxUserId(string axUserId)
+        {
+            if (Request?.Properties == null)
+                return;
+
+            Request.Properties.Remove(ValidatedSnapshotAxUserIdRequestPropertyKey);
+            if (!string.IsNullOrWhiteSpace(axUserId))
+                Request.Properties[ValidatedSnapshotAxUserIdRequestPropertyKey] = axUserId.Trim();
         }
 
         private static bool TryParseContextVersion(string rawContextVersion, out long contextVersion)

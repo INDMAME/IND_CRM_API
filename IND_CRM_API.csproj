@@ -162,8 +162,11 @@
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
     <Compile Include="App_Start\IND_OpenAiRateLimitHandler.cs" />
     <Compile Include="Contracts\Requests\FormatTextRequest.cs" />
+    <Compile Include="Contracts\Requests\HelpAssistantRequests.cs" />
     <Compile Include="Contracts\Responses\FormatTextResponse.cs" />
+    <Compile Include="Contracts\Responses\HelpAssistantResponses.cs" />
     <Compile Include="Controllers\System\INDTextFormattingController.cs" />
+    <Compile Include="Controllers\System\INDHelpController.cs" />
     <Compile Include="App_Start\McpToolsDocumentFilter.cs" />
     <Compile Include="App_Start\TokenRefreshHandler.cs" />
     <Compile Include="App_Start\IndGlobalExceptionFilter.cs" />
@@ -179,6 +182,7 @@
     <Compile Include="Contracts\Requests\GetExpenseSheetsListRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetTicketLinkListRequest.cs" />
     <Compile Include="Contracts\Requests\GetExpenseSheetTicketsListRequest.cs" />
+    <Compile Include="Contracts\Requests\LinkExpenseSheetLineTicketRequest.cs" />
     <Compile Include="Contracts\Requests\EntraContextRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\UpdateExpenseSheetHeaderRequest.cs" />
@@ -194,6 +198,7 @@
     <Compile Include="Contracts\Responses\ExpenseSheetDetailDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetDraftResponse.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetFuelPriceKmDto.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetLineTicketResultDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetListItemDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetPropagationResultDto.cs" />
     <Compile Include="Contracts\Responses\ExpenseSheetTicketDtos.cs" />
@@ -249,6 +254,11 @@
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
+    <Compile Include="Services\HelpKnowledgeModels.cs" />
+    <Compile Include="Services\HelpKnowledgeStore.cs" />
+    <Compile Include="Services\HelpOpenAiAnswerService.cs" />
+    <Compile Include="Services\HelpPrivacyServices.cs" />
+    <Compile Include="Services\HelpTopicRetriever.cs" />
     <Compile Include="Services\OpenErApiExchangeRateProvider.cs" />
     <Compile Include="Services\ExchangeRateProviderErrorCodes.cs" />
     <Compile Include="Services\ExchangeRateResult.cs" />
@@ -276,6 +286,7 @@
     <Compile Include="Services\Interfaces\IAxaptaSessionManager.cs" />
     <Compile Include="Services\Interfaces\IExpenseSheetAiDatasetProvider.cs" />
     <Compile Include="Services\Interfaces\IExchangeRateProvider.cs" />
+    <Compile Include="Services\Interfaces\IHelpAssistantServices.cs" />
     <Compile Include="Services\Interfaces\IOpenAITicketNormalizationService.cs" />
     <Compile Include="Services\Interfaces\IRawExchangeRateProvider.cs" />
     <Compile Include="Services\Interfaces\ITicketAIProcessingService.cs" />
@@ -286,6 +297,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <Content Include="Knowledge\crm-help.bundle.json" Condition="Exists('Knowledge\crm-help.bundle.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Bats\desinstalar_api_axapta.bat">
       <TargetPath>desinstalar_api_axapta.bat</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

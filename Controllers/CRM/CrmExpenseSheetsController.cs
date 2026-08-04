@@ -1367,6 +1367,58 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
+        /// Associates an existing ticket with a persisted expense sheet line.
+        /// </summary>
+        /// <remarks>
+        /// The operation is idempotent when the same ticket is already associated.
+        /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
+        /// AX requires an editable Draft sheet and validates delegated ownership, ticket eligibility, and association uniqueness.
+        /// </remarks>
+        /// <param name="hojaGastosId">Expense sheet identifier.</param>
+        /// <param name="lineRecId">Positive persisted expense sheet line identifier.</param>
+        /// <param name="body">Ticket identifier to associate.</param>
+        [HttpPut, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Ticket asociado a la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX o acceso delegado denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja, linea o ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Asociacion incompatible o estado no editable", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o ticket no elegible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult LinkExpenseSheetLineTicket(
+            string hojaGastosId,
+            long lineRecId,
+            [FromBody] LinkExpenseSheetLineTicketRequest body)
+        {
+            return ChangeExpenseSheetLineTicketAssociation(hojaGastosId, lineRecId, body, true);
+        }
+
+        /// <summary>
+        /// Removes the ticket association from a persisted expense sheet line.
+        /// </summary>
+        /// <remarks>
+        /// The operation does not delete the expense line, ticket, or ticket image.
+        /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
+        /// AX requires an editable Draft sheet, validates delegated ownership, and returns whether the association changed.
+        /// </remarks>
+        /// <param name="hojaGastosId">Expense sheet identifier.</param>
+        /// <param name="lineRecId">Positive persisted expense sheet line identifier.</param>
+        [HttpDelete, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Ticket desvinculado de la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX o acceso delegado denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja o linea no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Estado no editable o asociacion incompatible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o regla de negocio", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult UnlinkExpenseSheetLineTicket(string hojaGastosId, long lineRecId)
+        {
+            return ChangeExpenseSheetLineTicketAssociation(hojaGastosId, lineRecId, null, false);
+        }
+
+        /// <summary>
         /// Deletes expense sheet data using line, header, or whole-sheet mode.
         /// </summary>
         /// <remarks>
@@ -2332,6 +2384,250 @@ namespace IND_CRM_API.Controllers.CRM
         private static int ToAxBool(bool? value)
         {
             return value.HasValue && value.Value ? 1 : 0;
+        }
+
+        // MMS - Keeps the owner separate from the signed actor for ticket links. - 2026.08.04
+        private IHttpActionResult ChangeExpenseSheetLineTicketAssociation(
+            string hojaGastosId,
+            long lineRecId,
+            LinkExpenseSheetLineTicketRequest body,
+            bool linkTicket)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+            var operationName = linkTicket ? "LinkExpenseSheetLineTicket" : "UnlinkExpenseSheetLineTicket";
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var viewerAxUserId = RequireValidatedSnapshotAxUserIdOrReturn403(out var viewerError, traceId);
+            if (viewerError != null)
+                return viewerError;
+
+            var ownerAxUserId = RequireAxUserIdOrReturn422(
+                out var userError,
+                traceId,
+                IndErrorCodes.CrmExpenseSheetLineTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (linkTicket && !ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
+
+            if (string.IsNullOrWhiteSpace(hojaGastosId))
+                validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
+
+            if (lineRecId <= 0)
+                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId debe ser mayor que cero." });
+
+            if (linkTicket)
+            {
+                if (body == null)
+                {
+                    validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                }
+                else if (string.IsNullOrWhiteSpace(body.fileId))
+                {
+                    validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
+                }
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetLineTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] {operationName} {(int)statusCode} traceId={traceId}");
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                var cleanHojaGastosId = hojaGastosId.Trim();
+                var cleanFileId = linkTicket ? body.fileId.Trim() : string.Empty;
+                Logger.Log(
+                    $"[API-IN] {operationName} hojaGastosId={cleanHojaGastosId} lineRecId={lineRecId} " +
+                    $"fileId={(linkTicket ? cleanFileId : "-")} user={username} ownerAxUserId={ownerAxUserId} " +
+                    $"viewerAxUserId={viewerAxUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(ownerAxUserId);
+                con.Append(viewerAxUserId);
+                con.Append(cleanHojaGastosId);
+                con.Append(lineRecId.ToString(CultureInfo.InvariantCulture));
+                if (linkTicket)
+                    con.Append(cleanFileId);
+
+                var axMethod = linkTicket ? "linkExpenseSheetLineTicket" : "unlinkExpenseSheetLineTicket";
+                object resultObj = ax.CallStaticClassMethod("INDCRMExpenseSheetService", axMethod, con);
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _) ||
+                    (success && (extras == null || extras.Count < 6)))
+                {
+                    var malformedResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, malformedResponse);
+                }
+
+                var reasonCode = extras != null && extras.Count > 0
+                    ? (extras[0] ?? string.Empty).Trim().ToUpperInvariant()
+                    : string.Empty;
+                if (!success || !string.IsNullOrWhiteSpace(reasonCode))
+                {
+                    var errorResponse = BuildExpenseSheetLineTicketError(reasonCode, message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = MapExpenseSheetLineTicketResult(
+                    cleanHojaGastosId,
+                    lineRecId,
+                    cleanFileId,
+                    extras);
+                var okResponse = new IndApiResponse<ExpenseSheetLineTicketResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message)
+                        ? (linkTicket ? "Ticket asociado correctamente." : "Ticket desvinculado correctamente.")
+                        : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] {operationName}: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        // Maps the stable AX reason code to the existing API envelope.
+        private static IndApiResponse<object> BuildExpenseSheetLineTicketError(
+            string reasonCode,
+            string message,
+            string traceId,
+            out HttpStatusCode status)
+        {
+            var normalizedReasonCode = (reasonCode ?? string.Empty).Trim().ToUpperInvariant();
+            var errorCode = IndErrorCodes.CrmExpenseSheetLineTicketBusinessRule;
+            var fallbackMessage = "AX rechazo la operacion por una regla de negocio.";
+            status = (HttpStatusCode)422;
+
+            switch (normalizedReasonCode)
+            {
+                case "NOT_FOUND":
+                    status = HttpStatusCode.NotFound;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketNotFound;
+                    fallbackMessage = "No se encontro la hoja, la linea o el ticket indicado.";
+                    break;
+                case "FORBIDDEN":
+                    status = HttpStatusCode.Forbidden;
+                    errorCode = IndErrorCodes.AuthForbidden;
+                    fallbackMessage = "El usuario actual no puede modificar la hoja del propietario indicado.";
+                    break;
+                case "CONFLICT":
+                    status = HttpStatusCode.Conflict;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketConflict;
+                    fallbackMessage = "La linea o el ticket ya tiene una asociacion incompatible.";
+                    break;
+                case "INVALID_STATE":
+                    status = HttpStatusCode.Conflict;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketInvalidState;
+                    fallbackMessage = "El estado actual no permite cambiar la asociacion del ticket.";
+                    break;
+                case "INVALID_TICKET":
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketInvalidTicket;
+                    fallbackMessage = "El ticket no cumple las reglas necesarias para la asociacion.";
+                    break;
+                case "ERROR":
+                    status = HttpStatusCode.InternalServerError;
+                    errorCode = IndErrorCodes.InternalError;
+                    fallbackMessage = "AX no pudo completar la operacion.";
+                    break;
+            }
+
+            return new IndApiResponse<object>
+            {
+                Success = false,
+                Message = string.IsNullOrWhiteSpace(message) ? fallbackMessage : message,
+                ErrorCode = errorCode,
+                Data = null,
+                TraceId = traceId
+            };
+        }
+
+        // Maps buildHeader extras without changing the public response when AX repeats an idempotent request.
+        private static ExpenseSheetLineTicketResultDto MapExpenseSheetLineTicketResult(
+            string requestedHojaGastosId,
+            long requestedLineRecId,
+            string requestedFileId,
+            List<string> extras)
+        {
+            var hojaGastosId = requestedHojaGastosId ?? string.Empty;
+            var lineRecId = requestedLineRecId;
+            var fileId = requestedFileId ?? string.Empty;
+            int? ticketStatus = null;
+            var changed = false;
+
+            if (extras != null)
+            {
+                if (extras.Count > 1 && !string.IsNullOrWhiteSpace(extras[1]))
+                    hojaGastosId = extras[1].Trim();
+
+                if (extras.Count > 2 && TryToLong(extras[2], out var returnedLineRecId))
+                    lineRecId = returnedLineRecId;
+
+                if (extras.Count > 3)
+                    fileId = (extras[3] ?? string.Empty).Trim();
+
+                if (extras.Count > 4)
+                    ticketStatus = ToInt(extras[4]);
+
+                if (extras.Count > 5)
+                    changed = ToBool(extras[5]);
+            }
+
+            return new ExpenseSheetLineTicketResultDto
+            {
+                HojaGastosId = hojaGastosId,
+                LineRecId = lineRecId,
+                FileId = fileId,
+                TicketStatus = ticketStatus,
+                Changed = changed
+            };
         }
 
         // Reads a header and optional lines container from AX.
