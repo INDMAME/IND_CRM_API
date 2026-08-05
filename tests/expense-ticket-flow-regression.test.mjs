@@ -114,6 +114,11 @@ const headerReimbursementFilterNormalizerSource = sourceBetween(
   "private static int? NormalizeReimbursableExpenseOrNull(",
   "private static void AppendExpenseSheetListFilters(",
 );
+const lineTicketAssociationSource = sourceBetween(
+  expenseSheetsControllerSource,
+  "private IHttpActionResult ChangeExpenseSheetLineTicketAssociation(",
+  "private static IndApiResponse<object> BuildExpenseSheetLineTicketError(",
+);
 const axWritableHeaderReimbursementValidatorSource = sourceBetween(
   expenseSheetServiceSource,
   "SOURCE #isWritableReimbursableExpense",
@@ -412,4 +417,17 @@ test("ticket recalculation preserves its legacy multi-company traversal", () => 
   );
   assert.match(ticketCompanyExecutionBlock, /UpdateTickets\(\);/);
   assert.doesNotMatch(ticketCompanyExecutionBlock, /ttsbegin|ttscommit/i);
+});
+
+test("line-ticket association accepts signed non-zero line RecIds", () => {
+  assert.match(
+    lineTicketAssociationSource,
+    /AddLineRecIdValidation\(validationErrors,\s*lineRecId\);/,
+  );
+  assert.doesNotMatch(lineTicketAssociationSource, /lineRecId\s*<=\s*0/);
+  assert.doesNotMatch(lineTicketAssociationSource, /lineRecId debe ser mayor que cero/);
+  assert.doesNotMatch(
+    expenseSheetsControllerSource,
+    /Positive persisted expense sheet line identifier/,
+  );
 });

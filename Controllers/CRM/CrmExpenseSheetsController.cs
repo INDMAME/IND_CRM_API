@@ -1375,7 +1375,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// AX requires an editable Draft sheet and validates delegated ownership, ticket eligibility, and association uniqueness.
         /// </remarks>
         /// <param name="hojaGastosId">Expense sheet identifier.</param>
-        /// <param name="lineRecId">Positive persisted expense sheet line identifier.</param>
+        /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
         /// <param name="body">Ticket identifier to associate.</param>
         [HttpPut, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
@@ -1403,7 +1403,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// AX requires an editable Draft sheet, validates delegated ownership, and returns whether the association changed.
         /// </remarks>
         /// <param name="hojaGastosId">Expense sheet identifier.</param>
-        /// <param name="lineRecId">Positive persisted expense sheet line identifier.</param>
+        /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
         [HttpDelete, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -2418,8 +2418,7 @@ namespace IND_CRM_API.Controllers.CRM
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
 
-            if (lineRecId <= 0)
-                validationErrors.Add(new IndValidationError { Field = "lineRecId", Message = "lineRecId debe ser mayor que cero." });
+            AddLineRecIdValidation(validationErrors, lineRecId);
 
             if (linkTicket)
             {

@@ -214,14 +214,14 @@ Runtime/configuracion:
   Asocia un ticket existente a una linea manual ya persistida sin reemplazar el resto de campos de la linea.
   Body required: `fileId` (INDFileId).
   Identidad: `X-IND-AxUserId` identifica al propietario de la hoja; el actor o viewer se toma exclusivamente del `AxUserId` del snapshot firmado ya validado, nunca de otro header. Si el snapshot no contiene actor devuelve 403 `AUTH_CONTEXT_STALE`.
-  Reglas: `lineRecId` debe ser mayor que 0; la hoja debe estar en estado `Draft`; la linea debe ser manual y no tener marcados `Ticket` ni `Factura`; AX valida permiso delegado viewer-propietario, propiedad del ticket, elegibilidad y ausencia de otra asociacion incompatible.
+  Reglas: `lineRecId` debe ser distinto de 0 y puede ser negativo; la hoja debe estar en estado `Draft`; la linea debe ser manual y no tener marcados `Ticket` ni `Factura`; AX valida permiso delegado viewer-propietario, propiedad del ticket, elegibilidad y ausencia de otra asociacion incompatible.
   Idempotencia: repetir la peticion con el mismo `fileId` devuelve 200; normalmente `Changed=false`, salvo que AX repare el estado derivado del ticket. Una asociacion nueva devuelve `Changed=true`.
   Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
   Errores AX: `FORBIDDEN` devuelve 403 `AUTH_FORBIDDEN`; `NOT_FOUND` devuelve 404; `CONFLICT` e `INVALID_STATE` devuelven 409; `INVALID_TICKET` y otras reglas de negocio devuelven 422; `ERROR` devuelve 500.
   Nota de routing: el sufijo literal `/ticket` y la restriccion `lineRecId:long` separan esta ruta de la actualizacion completa de linea; no existe una combinacion equivalente de metodo y plantilla bajo `/api/crm/expensesheets/tickets`.
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
   Desvincula el ticket actual de la linea; no elimina la linea de gasto, el ticket ni su imagen.
-  No admite body ni parametros query. `lineRecId` debe ser mayor que 0 y la hoja debe estar en estado `Draft`.
+  No admite body ni parametros query. `lineRecId` debe ser distinto de 0 y puede ser negativo; la hoja debe estar en estado `Draft`.
   Identidad: `X-IND-AxUserId` identifica al propietario y el viewer procede del `AxUserId` del snapshot firmado validado; AX vuelve a validar el permiso delegado. Un snapshot sin actor devuelve 403 `AUTH_CONTEXT_STALE` y `FORBIDDEN` de AX devuelve 403 `AUTH_FORBIDDEN`.
   Idempotencia: si la linea ya esta desvinculada, devuelve 200 y `Changed=false`; cuando elimina la asociacion devuelve `Changed=true`.
   Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
