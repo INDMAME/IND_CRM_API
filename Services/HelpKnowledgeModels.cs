@@ -157,6 +157,8 @@ namespace IND_CRM_API.Services
 
         public string SelectedTopicId { get; set; }
 
+        public string SelectedModuleId { get; set; }
+
         public string ResponseLocale { get; set; }
     }
 
@@ -191,6 +193,8 @@ namespace IND_CRM_API.Services
         public string Question { get; set; }
 
         public string ResponseLocale { get; set; }
+
+        public string AnswerInstructions { get; set; }
 
         public IList<HelpConversationMessageRequest> History { get; set; }
 

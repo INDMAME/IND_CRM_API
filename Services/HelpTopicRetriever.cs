@@ -50,12 +50,24 @@ namespace IND_CRM_API.Services
                 throw new ArgumentNullException(nameof(request));
 
             var locale = snapshot.ResolveLocale(request.ResponseLocale);
+            HelpKnowledgeModule selectedModule = null;
+            if (!string.IsNullOrWhiteSpace(request.SelectedModuleId) &&
+                !snapshot.ModulesById.TryGetValue(request.SelectedModuleId.Trim(), out selectedModule))
+            {
+                return EmptyResult("notDocumented", "exact-module-missing");
+            }
+
             if (!string.IsNullOrWhiteSpace(request.SelectedTopicId))
             {
                 HelpKnowledgeTopic selected;
                 if (!snapshot.TopicsById.TryGetValue(request.SelectedTopicId.Trim(), out selected))
                 {
                     return EmptyResult("notDocumented", "exact-topic-missing");
+                }
+                if (selectedModule != null &&
+                    !string.Equals(selected.moduleId, selectedModule.id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return EmptyResult("notDocumented", "exact-topic-outside-module");
                 }
 
                 var exactTopic = new HelpRetrievedTopic { Topic = selected, Score = 1m };
@@ -81,11 +93,19 @@ namespace IND_CRM_API.Services
             if (queryTokens.Count == 0)
                 return EmptyResult("notDocumented", "empty-query");
 
-            var broadModuleResult = TryBuildBroadModuleResult(snapshot, queryTokens);
-            if (broadModuleResult != null)
-                return broadModuleResult;
+            if (selectedModule == null)
+            {
+                var broadModuleResult = TryBuildBroadModuleResult(snapshot, queryTokens);
+                if (broadModuleResult != null)
+                    return broadModuleResult;
+            }
 
-            var scored = snapshot.Bundle.topics
+            var scopedTopics = selectedModule == null
+                ? snapshot.Bundle.topics
+                : selectedModule.topicIds
+                    .Where(snapshot.TopicsById.ContainsKey)
+                    .Select(id => snapshot.TopicsById[id]);
+            var scored = scopedTopics
                 .Select(topic => new HelpRetrievedTopic
                 {
                     Topic = topic,
@@ -106,6 +126,32 @@ namespace IND_CRM_API.Services
                 .Where(item => item.Score >= Math.Max(MinimumAnswerScore, top.Score * 0.62m))
                 .Take(4)
                 .ToList();
+
+            if (selectedModule != null)
+            {
+                var scopedSelection = scored
+                    .Where(item => item.Score >= Math.Max(MinimumAnswerScore, top.Score * 0.72m))
+                    .Take(4)
+                    .ToList();
+                var scopedResult = new HelpRetrievalResult
+                {
+                    Resolution = "answered",
+                    Topics = scopedSelection,
+                    Candidates = new List<HelpTopicCandidateDto>(),
+                    Ranking = ranking,
+                    Confidence = top.Score,
+                    Mode = scopedSelection.Count > 1 ? "module-multi-topic" : "module-topic"
+                };
+                if (scopedSelection.Count == 1)
+                {
+                    AttachQuickAnswer(
+                        scopedResult,
+                        request.Question,
+                        top.Topic,
+                        string.Equals(locale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase));
+                }
+                return scopedResult;
+            }
 
             if (!hasCrossTopicConnector && top.Score < 0.90m && scored.Count > 1 &&
                 scored[1].Score >= MinimumAnswerScore &&

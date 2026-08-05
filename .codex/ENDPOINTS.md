@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-06-19)
+# IND_CRM_API Endpoints (actualizado 2026-08-05)
 
 Base URL: `{{baseUrl}}`
 
@@ -124,10 +124,12 @@ Endpoints
   `RouteKey` es una clave allowlist (`home`, `visits.history`, `expenses.sheets`, `expenses.tickets`), nunca una URL.
 - POST /api/ia/service/help/ask (Authorize)
   Body required: `question` (max 1200) y `responseLocale` (`es-ES`, `eu-ES`, `en`, `pt`, `it`, `zh-Hans`).
-  Body optional: `selectedTopicId`, `history` (max 8 mensajes `user|assistant`, 1600 caracteres cada uno), `clientInteractionId` (UUID).
+  Body optional: `selectedModuleId`, `selectedTopicId`, `answerInstructions` (max 2000), `history` (max 8 mensajes `user|assistant`, 1600 caracteres cada uno), `clientInteractionId` (UUID).
+  `selectedModuleId` debe ser un ID devuelto por `GET /api/help/catalog` y actua como scope estricto: el recuperador solo considera temas de ese modulo. Con un modulo valido no devuelve `needsSelection` por ambiguedad entre temas granulares; usa hasta cuatro temas relevantes del modulo o devuelve `notDocumented` cuando no hay evidencia suficiente. Un modulo inexistente, o un `selectedTopicId` que no pertenece al modulo seleccionado, devuelve `notDocumented` sin llamar a OpenAI.
+  `answerInstructions` solo puede ajustar tono, claridad, longitud, formato y organizacion. Las reglas fijas del servidor sobre grounding, seguridad, idioma, citas y rutas no pueden ser anuladas por este campo. Cuando se envia, incluso una respuesta rapida canonica pasa por la reescritura del modelo.
   Response data: `InteractionId`, `Resolution`, `Answer`, `Candidates`, `Sources`, `Actions`, `KnowledgeVersion`, `ResponseLocale`, `FeedbackToken`, `QuickAnswerUsed`, `Model`.
   `Resolution`: `answered`, `needsSelection` o `notDocumented`. Las selecciones ambiguas no llaman a OpenAI.
-  OpenAI recibe texto redactado, contexto local recuperado, `store:false`, sin tools y sin identidad. Citas y acciones se validan contra los chunks y routeKeys seleccionados.
+  OpenAI recibe texto redactado, contexto local recuperado, `store:false`, sin tools y sin identidad. Citas y acciones se validan contra los chunks y routeKeys seleccionados. El prompt fijo obliga a sintetizar y parafrasear; la API detecta solapamientos literales largos con chunks/respuestas rapidas, reintenta una reescritura una vez y falla de forma segura si persisten. Las etiquetas UI, nombres de campos y routeKeys cortos pueden conservarse literalmente para mantener precision.
   Limite independiente por defecto: 20 peticiones por usuario y 600 segundos, incluso si `OpenAI:RateLimitEnabled=false`.
 - POST /api/help/feedback (Authorize)
   Body required: `feedbackToken`, `helpful`.

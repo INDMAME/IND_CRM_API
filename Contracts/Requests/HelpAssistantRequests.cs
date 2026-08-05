@@ -13,6 +13,16 @@ namespace IND_CRM_API.Contracts.Requests
 
         public string selectedTopicId { get; set; }
 
+        /// <summary>
+        /// Optional catalog module used as a strict retrieval scope.
+        /// </summary>
+        public string selectedModuleId { get; set; }
+
+        /// <summary>
+        /// Optional application guidance limited to answer style and organization.
+        /// </summary>
+        public string answerInstructions { get; set; }
+
         public List<HelpConversationMessageRequest> history { get; set; }
 
         public string clientInteractionId { get; set; }

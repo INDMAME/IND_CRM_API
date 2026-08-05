@@ -78,6 +78,7 @@ try {
         $request = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
         $request.Question = $question
         $request.SelectedTopicId = [string]$case.selectedTopicId
+        $request.SelectedModuleId = [string]$case.selectedModuleId
         $request.ResponseLocale = $locale
         try {
             $result = $retriever.Retrieve($snapshot, $request)
@@ -137,13 +138,107 @@ try {
     $missingTopicPassed = $missingResult.Resolution -eq 'notDocumented' -and
         @($missingResult.Topics).Count -eq 0 -and @($missingResult.Ranking).Count -eq 0
 
+    $moduleScopeResults = foreach ($module in $snapshot.Bundle.modules) {
+        $firstTopicId = @($module.topicIds | Where-Object { $snapshot.TopicsById.ContainsKey($_) } | Select-Object -First 1)
+        if ($firstTopicId.Count -eq 0) {
+            continue
+        }
+        $firstTopic = $snapshot.TopicsById[$firstTopicId[0]]
+        $request = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $request.Question = $firstTopic.title
+        $request.SelectedModuleId = $module.id
+        $request.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $result = $retriever.Retrieve($snapshot, $request)
+        $outsideTopics = @($result.Topics | Where-Object { $_.Topic.moduleId -ne $module.id })
+        $outsideRanking = @($result.Ranking | Where-Object { $_.Topic.moduleId -ne $module.id })
+        [pscustomobject]@{
+            ModuleId = $module.id
+            Passed = $result.Resolution -eq 'answered' -and
+                @($result.Topics).Count -gt 0 -and
+                $outsideTopics.Count -eq 0 -and
+                $outsideRanking.Count -eq 0 -and
+                @($result.Candidates).Count -eq 0
+        }
+    }
+    $moduleScopeCount = @($moduleScopeResults).Count
+    $moduleScopePassedCount = @($moduleScopeResults | Where-Object Passed).Count
+    $moduleScopeRate = $moduleScopePassedCount / [math]::Max(1, $moduleScopeCount)
+
+    $missingModuleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+    $missingModuleRequest.Question = 'ayuda'
+    $missingModuleRequest.SelectedModuleId = '__missing-help-module__'
+    $missingModuleRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+    $missingModuleResult = $retriever.Retrieve($snapshot, $missingModuleRequest)
+    $missingModulePassed = $missingModuleResult.Resolution -eq 'notDocumented' -and
+        @($missingModuleResult.Topics).Count -eq 0 -and @($missingModuleResult.Ranking).Count -eq 0
+
+    $modulePair = @($snapshot.Bundle.modules | Where-Object { @($_.topicIds).Count -gt 0 } | Select-Object -First 2)
+    $mismatchedSelectionPassed = $modulePair.Count -lt 2
+    if ($modulePair.Count -ge 2) {
+        $mismatchRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $mismatchRequest.Question = ''
+        $mismatchRequest.SelectedTopicId = [string]$modulePair[0].topicIds[0]
+        $mismatchRequest.SelectedModuleId = [string]$modulePair[1].id
+        $mismatchRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $mismatchResult = $retriever.Retrieve($snapshot, $mismatchRequest)
+        $mismatchedSelectionPassed = $mismatchResult.Resolution -eq 'notDocumented' -and
+            @($mismatchResult.Topics).Count -eq 0
+    }
+
+    $broadModulePassed = $true
+    if ($snapshot.ModulesById.ContainsKey('expenses')) {
+        $broadModuleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $broadModuleRequest.Question = 'gastos'
+        $broadModuleRequest.SelectedModuleId = 'expenses'
+        $broadModuleRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $broadModuleResult = $retriever.Retrieve($snapshot, $broadModuleRequest)
+        $broadModulePassed = $broadModuleResult.Resolution -ne 'needsSelection' -and
+            @($broadModuleResult.Topics | Where-Object { $_.Topic.moduleId -ne 'expenses' }).Count -eq 0 -and
+            @($broadModuleResult.Ranking | Where-Object { $_.Topic.moduleId -ne 'expenses' }).Count -eq 0
+    }
+
+    $overlapMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
+        'HasLongVerbatimOverlap',
+        [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
+    if ($null -eq $overlapMethod) {
+        throw 'The long verbatim overlap guard could not be resolved.'
+    }
+    $compactEvidence = -join (1..5 | ForEach-Object { 'abcdefghijklmnopqrstuvwxyz0123456789' })
+    $offsetKnowledgeJson = ConvertTo-Json -InputObject @([ordered]@{
+        summary = ''
+        quickAnswers = @()
+        chunks = @([ordered]@{ body = $compactEvidence })
+    }) -Depth 5 -Compress
+    $offsetKnowledge = [Newtonsoft.Json.Linq.JArray]::Parse($offsetKnowledgeJson)
+    $offsetAnswer = 'xyz' + $compactEvidence.Substring(0, 120)
+    $offsetCopyDetected = [bool]$overlapMethod.Invoke($null, [object[]]@($offsetAnswer, $offsetKnowledge))
+
+    $shortLabelKnowledgeJson = ConvertTo-Json -InputObject @([ordered]@{
+        summary = ''
+        quickAnswers = @()
+        chunks = @([ordered]@{ body = 'Abre Hojas de gastos para consultar los registros disponibles.' })
+    }) -Depth 5 -Compress
+    $shortLabelKnowledge = [Newtonsoft.Json.Linq.JArray]::Parse($shortLabelKnowledgeJson)
+    $shortLabelRejected = [bool]$overlapMethod.Invoke($null, [object[]]@('Hojas de gastos', $shortLabelKnowledge))
+    $verbatimGuardPassed = $offsetCopyDetected -and -not $shortLabelRejected
+
     $results | Format-Table -AutoSize
     Write-Host ('Cases={0} TopicCases={1} Resolution={2:P2} Top1={3:P2} RecallAt5={4:P2}' -f $count, $topicCases.Count, $resolutionRate, $top1Rate, $recallRate)
     Write-Host ('MenuExact={0:P2} ({1}/{2}) MissingTopic={3}' -f `
         $menuExactRate, $menuExactPassedCount, $menuExactCount, $(if ($missingTopicPassed) { 'Passed' } else { 'Failed' }))
+    Write-Host ('ModuleScope={0:P2} ({1}/{2}) MissingModule={3} MismatchedSelection={4} BroadModule={5}' -f `
+        $moduleScopeRate, $moduleScopePassedCount, $moduleScopeCount, `
+        $(if ($missingModulePassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($mismatchedSelectionPassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($broadModulePassed) { 'Passed' } else { 'Failed' }))
+    Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1}' -f `
+        $(if ($offsetCopyDetected) { 'Passed' } else { 'Failed' }), `
+        $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }))
 
     if ($resolutionRate -lt 1.0 -or $top1Rate -lt $MinimumTop1 -or $recallRate -lt $MinimumRecallAt5 -or
-        $menuExactRate -lt 1.0 -or -not $missingTopicPassed) {
+        $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or $moduleScopeRate -lt 1.0 -or
+        -not $missingModulePassed -or -not $mismatchedSelectionPassed -or -not $broadModulePassed -or
+        -not $verbatimGuardPassed) {
         Write-Host 'Failed cases:'
         $results |
             Where-Object { -not $_.ResolutionPassed -or (-not [string]::IsNullOrWhiteSpace($_.ExpectedTopicIds) -and (-not $_.Top1Passed -or -not $_.RecallAt5Passed)) } |
@@ -156,6 +251,21 @@ try {
         }
         if (-not $missingTopicPassed) {
             Write-Host ('- MissingTopic failed: resolution={0}' -f $missingResult.Resolution)
+        }
+        $moduleScopeResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- ModuleScope failed: {0}' -f $_.ModuleId)
+        }
+        if (-not $missingModulePassed) {
+            Write-Host ('- MissingModule failed: resolution={0}' -f $missingModuleResult.Resolution)
+        }
+        if (-not $mismatchedSelectionPassed) {
+            Write-Host '- Mismatched topic/module selection failed.'
+        }
+        if (-not $broadModulePassed) {
+            Write-Host '- Broad selected module returned a granular selection or escaped its scope.'
+        }
+        if (-not $verbatimGuardPassed) {
+            Write-Host '- Verbatim guard failed the offset-copy or short-label regression.'
         }
         exit 1
     }

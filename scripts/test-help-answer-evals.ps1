@@ -215,6 +215,34 @@ function ConvertTo-NormalizedCase {
         }
     }
 
+    $selectedModuleId = $null
+    if (Test-ObjectProperty -InputObject $Case -Name 'selectedModuleId') {
+        $rawSelectedModuleId = Get-ObjectPropertyValue -InputObject $Case -Name 'selectedModuleId'
+        if ($null -ne $rawSelectedModuleId -and -not [string]::IsNullOrWhiteSpace([string]$rawSelectedModuleId)) {
+            if (-not ($rawSelectedModuleId -is [string])) {
+                throw "Evaluation case '$id' must define selectedModuleId as a string or null."
+            }
+            $selectedModuleId = ([string]$rawSelectedModuleId).Trim()
+            if ($selectedModuleId -cnotmatch $idPattern -or $selectedModuleId.Length -gt 80) {
+                throw "Evaluation case '$id' has invalid selectedModuleId '$selectedModuleId'."
+            }
+        }
+    }
+
+    $answerInstructions = $null
+    if (Test-ObjectProperty -InputObject $Case -Name 'answerInstructions') {
+        $rawAnswerInstructions = Get-ObjectPropertyValue -InputObject $Case -Name 'answerInstructions'
+        if ($null -ne $rawAnswerInstructions -and -not [string]::IsNullOrWhiteSpace([string]$rawAnswerInstructions)) {
+            if (-not ($rawAnswerInstructions -is [string])) {
+                throw "Evaluation case '$id' must define answerInstructions as a string or null."
+            }
+            $answerInstructions = ([string]$rawAnswerInstructions).Trim()
+            if ($answerInstructions.Length -gt 2000) {
+                throw "Evaluation case '$id' exceeds the 2000 character limit for answerInstructions."
+            }
+        }
+    }
+
     if ($resolution -eq 'answered') {
         if ($expectedTopicIds.Count -eq 0) {
             throw "Evaluation case '$id' must define expectedTopicIds for an answered result."
@@ -234,6 +262,8 @@ function ConvertTo-NormalizedCase {
         Question = $question
         ResponseLocale = $locale
         SelectedTopicId = $selectedTopicId
+        SelectedModuleId = $selectedModuleId
+        AnswerInstructions = $answerInstructions
         ExpectedResolution = $resolution
         ExpectedTopicIds = @($expectedTopicIds)
         SourceChunkIds = @($sourceChunkIds)
@@ -366,6 +396,33 @@ function New-CaseReportResult {
     }
 }
 
+function New-AnswerRequestBody {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Case,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ClientInteractionId
+    )
+
+    $requestBody = [ordered]@{
+        question = $Case.Question
+        responseLocale = $Case.ResponseLocale
+        history = @()
+        clientInteractionId = $ClientInteractionId
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Case.SelectedTopicId)) {
+        $requestBody['selectedTopicId'] = $Case.SelectedTopicId
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Case.SelectedModuleId)) {
+        $requestBody['selectedModuleId'] = $Case.SelectedModuleId
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Case.AnswerInstructions)) {
+        $requestBody['answerInstructions'] = $Case.AnswerInstructions
+    }
+    return $requestBody
+}
+
 function Invoke-AnswerCase {
     param(
         [Parameter(Mandatory = $true)]
@@ -379,15 +436,7 @@ function Invoke-AnswerCase {
     )
 
     $clientInteractionId = [guid]::NewGuid().ToString('D')
-    $requestBody = [ordered]@{
-        question = $Case.Question
-        responseLocale = $Case.ResponseLocale
-        history = @()
-        clientInteractionId = $clientInteractionId
-    }
-    if (-not [string]::IsNullOrWhiteSpace($Case.SelectedTopicId)) {
-        $requestBody['selectedTopicId'] = $Case.SelectedTopicId
-    }
+    $requestBody = New-AnswerRequestBody -Case $Case -ClientInteractionId $clientInteractionId
 
     $failures = New-Object 'System.Collections.Generic.List[string]'
     $stopwatch = [Diagnostics.Stopwatch]::StartNew()
@@ -719,6 +768,27 @@ for ($index = 0; $index -lt $rawCases.Count; $index++) {
 $duplicateIds = @($normalizedCases | Group-Object -Property Id -CaseSensitive | Where-Object Count -gt 1)
 if ($duplicateIds.Count -ne 0) {
     throw 'Evaluation case ids must be unique: ' + (($duplicateIds | ForEach-Object Name) -join ', ')
+}
+
+$contractProbe = ConvertTo-NormalizedCase -Case ([pscustomobject][ordered]@{
+    id = 'contract-probe-module-instructions'
+    question = 'Como creo una hoja de gastos?'
+    responseLocale = 'es-ES'
+    selectedModuleId = 'expenses'
+    answerInstructions = 'Explica la respuesta con un tono amable y pasos breves.'
+    expectedResolution = 'answered'
+    expectedTopicIds = @('expenses.modulo-hojas-de-gastos')
+    sourceChunkIds = @('expenses.modulo-hojas-de-gastos.overview')
+    requiredSourceChunkIds = @('expenses.modulo-hojas-de-gastos.overview')
+    requiredFacts = @('La respuesta debe basarse en el modulo seleccionado.')
+    forbiddenClaims = @('No debe inventar pasos.')
+}) -Index -1
+$contractProbeId = [guid]::NewGuid().ToString('D')
+$contractProbeBody = New-AnswerRequestBody -Case $contractProbe -ClientInteractionId $contractProbeId
+if ($contractProbeBody['selectedModuleId'] -cne 'expenses' -or
+    $contractProbeBody['answerInstructions'] -cne $contractProbe.AnswerInstructions -or
+    $contractProbeBody['clientInteractionId'] -cne $contractProbeId) {
+    throw 'The answer evaluation request builder did not preserve selectedModuleId and answerInstructions.'
 }
 
 if (-not [string]::IsNullOrWhiteSpace($CaseId)) {

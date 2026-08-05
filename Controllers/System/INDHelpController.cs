@@ -198,6 +198,7 @@ namespace IND_CRM_API.Controllers.System
     public sealed class INDHelpAiController : HelpControllerBase
     {
         private const int MaxQuestionChars = 1200;
+        private const int MaxAnswerInstructionsChars = 2000;
         private const int MaxHistoryMessages = 8;
         private const int MaxHistoryMessageChars = 1600;
         private static readonly HashSet<string> AllowedLocales = new HashSet<string>(
@@ -233,6 +234,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerOperation(Tags = new[] { "CRM Help AI" })]
         [SwaggerResponse((HttpStatusCode)422, "Validation error", typeof(IndApiResponse<AskHelpResponse>))]
         [SwaggerResponse((HttpStatusCode)429, "Rate limit exceeded", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Help or AI provider unavailable", typeof(IndApiResponse<AskHelpResponse>))]
         public async Task<IHttpActionResult> Ask([FromBody] AskHelpRequest body, CancellationToken cancellationToken)
         {
             var traceId = Guid.NewGuid().ToString("N");
@@ -249,6 +251,9 @@ namespace IND_CRM_API.Controllers.System
             var userKey = ResolveUserKey();
             var responseLocale = body.responseLocale.Trim();
             var safeQuestion = HelpTextRedactor.Redact(body.question, MaxQuestionChars);
+            var safeAnswerInstructions = HelpTextRedactor.Redact(
+                body.answerInstructions,
+                MaxAnswerInstructionsChars);
             var safeHistory = RedactHistory(body.history);
             try
             {
@@ -258,6 +263,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     Question = safeQuestion,
                     SelectedTopicId = body.selectedTopicId,
+                    SelectedModuleId = body.selectedModuleId,
                     ResponseLocale = responseLocale
                 });
 
@@ -280,7 +286,7 @@ namespace IND_CRM_API.Controllers.System
                     return Ok(BuildEnvelope(true, "OK", null, unresolved, traceId));
                 }
 
-                if (retrieval.QuickAnswer != null)
+                if (retrieval.QuickAnswer != null && string.IsNullOrWhiteSpace(safeAnswerInstructions))
                 {
                     var quickSources = BuildQuickAnswerSources(retrieval);
                     var quickActions = BuildActions(retrieval, new[] { retrieval.QuickAnswerTopic.routeKey });
@@ -305,6 +311,7 @@ namespace IND_CRM_API.Controllers.System
                 {
                     Question = safeQuestion,
                     ResponseLocale = responseLocale,
+                    AnswerInstructions = safeAnswerInstructions,
                     History = safeHistory,
                     Snapshot = snapshot,
                     Retrieval = retrieval
@@ -388,6 +395,17 @@ namespace IND_CRM_API.Controllers.System
                 errors.Add(new IndValidationError { Field = "responseLocale", Message = "responseLocale no esta soportado." });
             if (!string.IsNullOrWhiteSpace(body.selectedTopicId) && body.selectedTopicId.Trim().Length > 80)
                 errors.Add(new IndValidationError { Field = "selectedTopicId", Message = "selectedTopicId no es valido." });
+            if (!string.IsNullOrWhiteSpace(body.selectedModuleId) && body.selectedModuleId.Trim().Length > 80)
+                errors.Add(new IndValidationError { Field = "selectedModuleId", Message = "selectedModuleId no es valido." });
+            if (!string.IsNullOrWhiteSpace(body.answerInstructions) &&
+                body.answerInstructions.Trim().Length > MaxAnswerInstructionsChars)
+            {
+                errors.Add(new IndValidationError
+                {
+                    Field = "answerInstructions",
+                    Message = "answerInstructions supera el maximo permitido."
+                });
+            }
             if (!string.IsNullOrWhiteSpace(body.clientInteractionId) && !Guid.TryParse(body.clientInteractionId, out _))
                 errors.Add(new IndValidationError { Field = "clientInteractionId", Message = "clientInteractionId debe ser UUID." });
 
