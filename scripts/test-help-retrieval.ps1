@@ -339,8 +339,11 @@ try {
         $parseResponseMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
             'ParseResponse',
             [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
+        $buildActionsMethod = [IND_CRM_API.Controllers.System.INDHelpAiController].GetMethod(
+            'BuildActions',
+            [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
         if ($null -eq $completeEvidenceProperty -or $null -eq $buildContextMethod -or
-            $null -eq $parseResponseMethod) {
+            $null -eq $parseResponseMethod -or $null -eq $buildActionsMethod) {
             $moduleAiContextPassed = $false
             $moduleAiOversizePassed = $false
             $moduleAiResolutionPassed = $false
@@ -473,10 +476,26 @@ try {
                         $unrelatedActionRejected = $_.Exception.InnerException.ProviderSummary -eq 'ungrounded-structured-output'
                     }
                 }
+
+                $actionLabelMatchesCitation = $true
+                $sharedRouteGroup = @($context.SourceTopicLookup.GetEnumerator() |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_.Value.routeKey) } |
+                    Group-Object { $_.Value.routeKey } |
+                    Where-Object Count -gt 1 |
+                    Select-Object -First 1)
+                if ($sharedRouteGroup.Count -gt 0) {
+                    $citedEntry = @($sharedRouteGroup[0].Group | Select-Object -Last 1)[0]
+                    $actions = @($buildActionsMethod.Invoke($null, [object[]]@(
+                        $broadModuleResult,
+                        [string[]]@($citedEntry.Value.routeKey),
+                        [string[]]@($citedEntry.Value.id))))
+                    $actionLabelMatchesCitation = $actions.Count -eq 1 -and
+                        $actions[0].Label -eq $citedEntry.Value.title
+                }
                 $moduleAiResolutionPassed = $answeredParsed.Answer.Resolution -eq 'answered' -and
                     $notDocumentedParsed.Answer.Resolution -eq 'notDocumented' -and
                     $invalidCitationRejected -and $notDocumentedCitationRejected -and
-                    $unrelatedActionRejected
+                    $unrelatedActionRejected -and $actionLabelMatchesCitation
                 if (-not $moduleAiResolutionPassed) {
                     $moduleAiContextFailure = 'Structured resolution, citation, or action validation failed.'
                 }

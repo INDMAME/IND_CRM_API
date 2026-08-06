@@ -322,13 +322,17 @@ namespace IND_CRM_API.Controllers.System
                     Retrieval = retrieval
                 }, cancellationToken).ConfigureAwait(false);
 
+                var generatedSources = BuildGeneratedSources(retrieval, generated.CitationChunkIds);
                 var answer = BuildResponse(
                     interactionId,
                     generated.Resolution,
                     generated.Answer,
                     new List<HelpTopicCandidateDto>(),
-                    BuildGeneratedSources(retrieval, generated.CitationChunkIds),
-                    BuildActions(retrieval, generated.ActionRouteKeys),
+                    generatedSources,
+                    BuildActions(
+                        retrieval,
+                        generated.ActionRouteKeys,
+                        generatedSources.Select(source => source.TopicId)),
                     snapshot,
                     responseLocale,
                     userKey,
@@ -515,14 +519,21 @@ namespace IND_CRM_API.Controllers.System
 
         private static List<HelpAnswerActionDto> BuildActions(
             HelpRetrievalResult retrieval,
-            IEnumerable<string> routeKeys)
+            IEnumerable<string> routeKeys,
+            IEnumerable<string> citedTopicIds = null)
         {
             var result = new List<HelpAnswerActionDto>();
+            var citedTopics = new HashSet<string>(
+                citedTopicIds ?? Enumerable.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var eligibleTopics = retrieval.Topics
+                .Select(item => item.Topic)
+                .Where(topic => citedTopics.Count == 0 || citedTopics.Contains(topic.id));
             foreach (var routeKey in (routeKeys ?? Enumerable.Empty<string>())
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var topic = retrieval.Topics.Select(item => item.Topic).FirstOrDefault(item =>
+                var topic = eligibleTopics.FirstOrDefault(item =>
                     string.Equals(item.routeKey, routeKey, StringComparison.OrdinalIgnoreCase));
                 if (topic == null)
                     continue;

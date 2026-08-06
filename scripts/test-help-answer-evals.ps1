@@ -564,8 +564,15 @@ function Invoke-AnswerCase {
                             [void]$failures.Add('A needsSelection result must contain candidates.')
                         }
                     }
-                    elseif ($Case.ExpectedResolution -eq 'notDocumented' -and -not [string]::IsNullOrWhiteSpace([string]$answer)) {
-                        [void]$failures.Add('A notDocumented result must not contain an answer.')
+                    elseif ($Case.ExpectedResolution -eq 'notDocumented') {
+                        $usesAiScope = -not [string]::IsNullOrWhiteSpace($Case.SelectedModuleId) -or
+                            -not [string]::IsNullOrWhiteSpace($Case.SelectedTopicId)
+                        if ($usesAiScope -and [string]::IsNullOrWhiteSpace([string]$answer)) {
+                            [void]$failures.Add('An AI-scoped notDocumented result must contain an explanation.')
+                        }
+                        elseif (-not $usesAiScope -and -not [string]::IsNullOrWhiteSpace([string]$answer)) {
+                            [void]$failures.Add('A lexical notDocumented result must not contain an answer.')
+                        }
                     }
 
                     $candidates = @($rawCandidates | ForEach-Object {
@@ -581,6 +588,9 @@ function Invoke-AnswerCase {
                             Label = [string](Get-ObjectPropertyValue -InputObject $_ -Name 'Label')
                         }
                     })
+                    if ($Case.ExpectedResolution -ne 'answered' -and $actions.Count -ne 0) {
+                        [void]$failures.Add("A '$($Case.ExpectedResolution)' result must not contain actions.")
+                    }
 
                     # Project an allowlist and deliberately omit FeedbackToken from disk reports.
                     $safeResponse = [pscustomobject][ordered]@{
