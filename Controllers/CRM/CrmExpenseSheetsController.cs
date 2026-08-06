@@ -1372,7 +1372,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// The operation is idempotent when the same ticket is already associated.
         /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
-        /// AX requires an editable Draft sheet and validates delegated ownership, ticket eligibility, and association uniqueness.
+        /// AX requires an editable Draft sheet owned by the signed actor and validates ticket eligibility and association uniqueness.
         /// </remarks>
         /// <param name="hojaGastosId">Expense sheet identifier.</param>
         /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
@@ -1381,7 +1381,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket asociado a la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
-        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX o acceso delegado denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX, actor no propietario o permiso insuficiente", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja, linea o ticket no encontrado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Conflict, "Asociacion incompatible o estado no editable", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o ticket no elegible", typeof(IndApiResponse<object>))]
@@ -1400,7 +1400,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// <remarks>
         /// The operation does not delete the expense line, ticket, or ticket image.
         /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
-        /// AX requires an editable Draft sheet, validates delegated ownership, and returns whether the association changed.
+        /// AX requires an editable Draft sheet owned by the signed actor and returns whether the association changed.
         /// </remarks>
         /// <param name="hojaGastosId">Expense sheet identifier.</param>
         /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
@@ -1408,7 +1408,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Ticket desvinculado de la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
-        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX o acceso delegado denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX, actor no propietario o permiso insuficiente", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja o linea no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Conflict, "Estado no editable o asociacion incompatible", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o regla de negocio", typeof(IndApiResponse<object>))]
@@ -2448,6 +2448,17 @@ namespace IND_CRM_API.Controllers.CRM
             void LogOut(HttpStatusCode statusCode)
             {
                 Logger.Log($"[API-OUT] {operationName} {(int)statusCode} traceId={traceId}");
+            }
+
+            if (!string.Equals(ownerAxUserId.Trim(), viewerAxUserId.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                var forbiddenResponse = BuildExpenseSheetLineTicketError(
+                    "FORBIDDEN",
+                    "Solo el propietario de la hoja puede vincular o desvincular tickets.",
+                    traceId,
+                    out var forbiddenStatus);
+                LogOut(forbiddenStatus);
+                return Content(forbiddenStatus, forbiddenResponse);
             }
 
             try

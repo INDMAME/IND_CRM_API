@@ -119,6 +119,21 @@ const lineTicketAssociationSource = sourceBetween(
   "private IHttpActionResult ChangeExpenseSheetLineTicketAssociation(",
   "private static IndApiResponse<object> BuildExpenseSheetLineTicketError(",
 );
+const axLinkLineTicketSource = sourceBetween(
+  expenseSheetServiceSource,
+  "SOURCE #linkExpenseSheetLineTicket",
+  "SOURCE #unlinkExpenseSheetLineTicket",
+).replace(/^\s*#/gm, "");
+const axUnlinkLineTicketSource = sourceBetween(
+  expenseSheetServiceSource,
+  "SOURCE #unlinkExpenseSheetLineTicket",
+  "    ENDMETHODS",
+).replace(/^\s*#/gm, "");
+const axRefreshTicketStatusSource = sourceBetween(
+  expenseSheetServiceSource,
+  "SOURCE #refreshTicketStatusByFileId",
+  "SOURCE #renderExpenseSheetTemplate",
+).replace(/^\s*#/gm, "");
 const axWritableHeaderReimbursementValidatorSource = sourceBetween(
   expenseSheetServiceSource,
   "SOURCE #isWritableReimbursableExpense",
@@ -429,5 +444,40 @@ test("line-ticket association accepts signed non-zero line RecIds", () => {
   assert.doesNotMatch(
     expenseSheetsControllerSource,
     /Positive persisted expense sheet line identifier/,
+  );
+});
+
+test("line-ticket association is owner-only and requires sheet Edit plus ticket View", () => {
+  assert.match(
+    lineTicketAssociationSource,
+    /string\.Equals\(ownerAxUserId\.Trim\(\),\s*viewerAxUserId\.Trim\(\),\s*StringComparison\.OrdinalIgnoreCase\)/,
+  );
+
+  for (const source of [axLinkLineTicketSource, axUnlinkLineTicketSource]) {
+    assert.match(
+      source,
+      /strUpr\(strLRTrim\(viewerAxUserId\)\)\s*!=\s*strUpr\(strLRTrim\(ownerAxUserId\)\)/,
+    );
+    assert.match(source, /'GASTOS_HOJA_GASTO'[\s\S]*AccessRights\s*<\s*SysAccessRights::Edit/);
+    assert.match(source, /'GASTOS_TICKETS'[\s\S]*AccessRights\s*<\s*SysAccessRights::View/);
+  }
+});
+
+test("link writes FileId and unlink clears it before deriving ticket status", () => {
+  assert.match(
+    axLinkLineTicketSource,
+    /line\.FileId\s*=\s*fileId;[\s\S]*line\.update\(\);[\s\S]*refreshTicketStatusByFileId\(ownerAxUserId,\s*fileId\)/,
+  );
+  assert.match(
+    axUnlinkLineTicketSource,
+    /previousFileId\s*=\s*line\.FileId;[\s\S]*line\.FileId\s*=\s*'';[\s\S]*line\.update\(\);[\s\S]*refreshTicketStatusByFileId\(ownerAxUserId,\s*previousFileId\)/,
+  );
+  assert.match(
+    axRefreshTicketStatusSource,
+    /!hasAssignedLine\s*&&\s*ticketHeader\.Status\s*!=\s*INDTicketStatus::Pending[\s\S]*ticketHeader\.Status\s*=\s*INDTicketStatus::Pending/,
+  );
+  assert.match(
+    axRefreshTicketStatusSource,
+    /hasAssignedLine\s*&&\s*ticketHeader\.Status\s*!=\s*INDTicketStatus::Assigned[\s\S]*ticketHeader\.Status\s*=\s*INDTicketStatus::Assigned/,
   );
 });

@@ -250,6 +250,10 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_EXPENSE_TICKET_WINDOW_SECONDS" -Category "OpenAI" -DefaultValue "600"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_MAX_CONCURRENT_PER_USER" -Category "OpenAI" -DefaultValue "1"
         New-InteractiveSetting -Name "OPENAI_RATE_LIMIT_VALIDATION_MULTIPLIER" -Category "OpenAI" -DefaultValue "4"
+        New-InteractiveSetting -Name "INDCRM_ASSISTANT_QUERY_RATE_LIMIT_ENABLED" -Category "AssistantQueries" -DefaultValue "true"
+        New-InteractiveSetting -Name "INDCRM_ASSISTANT_QUERY_RATE_LIMIT_MAX_REQUESTS" -Category "AssistantQueries" -DefaultValue "30"
+        New-InteractiveSetting -Name "INDCRM_ASSISTANT_QUERY_RATE_LIMIT_WINDOW_SECONDS" -Category "AssistantQueries" -DefaultValue "900"
+        New-InteractiveSetting -Name "INDCRM_ASSISTANT_QUERY_RATE_LIMIT_VALIDATION_MULTIPLIER" -Category "AssistantQueries" -DefaultValue "1"
 
         New-InteractiveSetting -Name "INDCRM_HELP_ENABLED" -Category "CRMHelp" -DefaultValue "false"
         New-InteractiveSetting -Name "INDCRM_HELP_KNOWLEDGE_BUNDLE_PATH" -Category "CRMHelp" -DefaultValue "Knowledge\crm-help.bundle.json"
@@ -263,8 +267,9 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_HELP_MIN_OUTPUT_TOKENS" -Category "CRMHelp" -DefaultValue "1600"
         New-InteractiveSetting -Name "INDCRM_HELP_MAX_OUTPUT_TOKENS" -Category "CRMHelp" -DefaultValue "3200"
         New-InteractiveSetting -Name "INDCRM_HELP_MAX_HISTORY_MESSAGES" -Category "CRMHelp" -DefaultValue "8"
-        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_MAX_REQUESTS" -Category "CRMHelp" -DefaultValue "20"
-        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_WINDOW_SECONDS" -Category "CRMHelp" -DefaultValue "600"
+        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_MAX_REQUESTS" -Category "CRMHelp" -DefaultValue "30"
+        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_WINDOW_SECONDS" -Category "CRMHelp" -DefaultValue "900"
+        New-InteractiveSetting -Name "INDCRM_HELP_RATE_LIMIT_VALIDATION_MULTIPLIER" -Category "CRMHelp" -DefaultValue "1"
         New-InteractiveSetting -Name "INDCRM_HELP_FEEDBACK_HMAC_SECRET" -Category "CRMHelp" -Secret $true -DefaultValue (New-RandomSecret) -Required $false
         New-InteractiveSetting -Name "INDCRM_HELP_FEEDBACK_TOKEN_MINUTES" -Category "CRMHelp" -DefaultValue "60"
         New-InteractiveSetting -Name "INDCRM_HELP_ANALYTICS_PATH" -Category "CRMHelp" -DefaultValue "C:\INDData\CRMHelpAnalytics"

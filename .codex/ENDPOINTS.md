@@ -112,6 +112,7 @@ Endpoints
   Si no llega `sourceJson`, el backend carga todos los registros filtrados server-side y decide si responde en modo `direct` o `chunked`.
   Response data: `Answer`, `Model`, `SourceKey`, `FiltersApplied`, `TotalSourceRecords`, `RecordsSentToModel`, `RetrievalMode`, `Truncated`, `Warnings`.
   Errores relevantes: 422 validacion, 429 rate limit IA, 500 error interno.
+  Limite de consultas por defecto: 30 peticiones por usuario y 900 segundos. Usa la politica `AssistantQueries:*`, independiente de OCR, voz, tickets, formateo y del switch global `OpenAI:RateLimitEnabled`. Al agotar esta cuota local responde `429 ASSISTANT_QUERY_RATE_LIMIT_EXCEEDED`; otros `429` conservan su codigo y espera propios.
 
 ## CRM Help Assistant
 - GET /api/help/catalog?responseLocale=es-ES (Authorize)
@@ -130,7 +131,7 @@ Endpoints
   Response data: `InteractionId`, `Resolution`, `Answer`, `Candidates`, `Sources`, `Actions`, `KnowledgeVersion`, `ResponseLocale`, `FeedbackToken`, `QuickAnswerUsed`, `Model`.
   `Resolution`: `answered`, `needsSelection` o `notDocumented`. Las selecciones ambiguas no llaman a OpenAI.
   OpenAI recibe texto redactado, contexto local recuperado, `store:false`, sin tools y sin identidad. Citas y acciones se validan contra los chunks y routeKeys seleccionados. El prompt fijo obliga a sintetizar y parafrasear; la API detecta solapamientos literales largos con chunks/respuestas rapidas, reintenta una reescritura una vez y falla de forma segura si persisten. Las etiquetas UI, nombres de campos y routeKeys cortos pueden conservarse literalmente para mantener precision.
-  Limite independiente por defecto: 20 peticiones por usuario y 600 segundos, incluso si `OpenAI:RateLimitEnabled=false`.
+  Limite independiente por defecto: 30 peticiones por usuario y 900 segundos, incluso si `OpenAI:RateLimitEnabled=false`. Usa la misma configuracion `AssistantQueries:*` que el chat de Gastos, aunque cada endpoint conserva su contador propio. Al superarlo responde `429 ASSISTANT_QUERY_RATE_LIMIT_EXCEEDED`, conserva `Retry-After` con la espera restante y explica que se ha alcanzado un limite establecido de consultas. Los `429` de concurrencia o del proveedor mantienen sus codigos y esperas propios.
 - POST /api/help/feedback (Authorize)
   Body required: `feedbackToken`, `helpful`.
   Si `helpful=false`, `reason` es obligatorio: `incorrect`, `outdated`, `unclear`, `incomplete`, `permissions`, `other`. `comment` es opcional (max 1000).
@@ -141,7 +142,9 @@ Runtime/configuracion:
 - Bundle: `HelpAssistant:KnowledgeBundlePath` / `INDCRM_HELP_KNOWLEDGE_BUNDLE_PATH`; default `Knowledge\crm-help.bundle.json` relativo al ejecutable. El proyecto lo copia con `PreserveNewest` cuando existe; la fuente generada se integra desde `IND_CRM_APP\docs\crm-help\generated\crm-help.bundle.json` y no se admite un bundle vacio.
 - Esquemas bundle admitidos: `1.0` y `1.1`. `1.1` anade `module.localizations[locale]={title,description}` y `topic.localizations[locale]={title,summary,chunks,quickAnswers}` sin retirar los campos escalares canonicos. El bundle actual declara unicamente `es-ES`. Los mapas son opcionales para compatibilidad con bundles antiguos; cada entrada presente debe usar una cultura declarada en `supportedResponseLocales`, y sus IDs de chunks y respuestas rapidas deben coincidir exactamente con los conjuntos canonicos. El runtime aplica los mismos limites de texto, assets e IDs relacionados. Los `title`, `summary`, `chunks` y `quickAnswers` canonicos siguen siendo la unica fuente de contenido para retrieval y grounding; aliases y preguntas localizadas conservan su funcion de busqueda.
 - Modelo/presupuesto: `HelpAssistant:Model`, `ReasoningEffort`, `PromptCacheKey`, `TimeoutSeconds`, `MaxInputTokens`, `MinDocumentTokens`, `MaxDocumentTokens`, `MinOutputTokens`, `MaxOutputTokens`, `MaxHistoryMessages`. Defaults efectivos: `gpt-5.4-mini`, low, 90 s, 18k entrada total, 4k-12k documental, 1.6k-3.2k salida.
-- Rate limit: `HelpAssistant:RateLimitEnabled`, `RateLimitMaxRequests`, `RateLimitWindowSeconds`.
+- Rate limit comun de consultas: `AssistantQueries:RateLimitEnabled`, `RateLimitMaxRequests`, `RateLimitWindowSeconds`, `RateLimitValidationMultiplier`. Defaults `true`, `30`, `900`, `1`; las tres claves numericas legacy `HelpAssistant:RateLimit*` se conservan como fallback si no existe la nueva configuracion comun. `HelpAssistant:RateLimitEnabled` sigue siendo el interruptor adicional exclusivo de Ayuda CRM.
+- Variables de maquina equivalentes: `INDCRM_ASSISTANT_QUERY_RATE_LIMIT_ENABLED`, `INDCRM_ASSISTANT_QUERY_RATE_LIMIT_MAX_REQUESTS`, `INDCRM_ASSISTANT_QUERY_RATE_LIMIT_WINDOW_SECONDS`, `INDCRM_ASSISTANT_QUERY_RATE_LIMIT_VALIDATION_MULTIPLIER`.
+- Verificacion local tras compilar x86: `powershell.exe -File scripts\test-assistant-query-rate-limit.ps1`; valida ambos contadores, solicitudes 1-30, rechazo de la 31, `Retry-After: 900`, el codigo de error exclusivo y el mensaje de 15 minutos.
 - Feedback: `HelpAssistant:FeedbackHmacSecret` (minimo 32 caracteres) y `FeedbackTokenMinutes`.
 - Analitica: `AnalyticsPath` (default `C:\INDData\CRMHelpAnalytics`), `AnalyticsHmacSecret`, `AnalyticsTextCaptureEnabled`, `AnalyticsAclReady`, `AnalyticsVolumeEncrypted`, muestreo y retenciones.
 - Metricas NDJSON no contienen pregunta, respuesta, historial, IP, email, company, OID o identidad directa. El texto redactado solo se escribe en `review` cuando los tres switches de seguridad estan activos y existe secreto HMAC.
@@ -213,8 +216,8 @@ Runtime/configuracion:
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
   Asocia un ticket existente a una linea manual ya persistida sin reemplazar el resto de campos de la linea.
   Body required: `fileId` (INDFileId).
-  Identidad: `X-IND-AxUserId` identifica al propietario de la hoja; el actor o viewer se toma exclusivamente del `AxUserId` del snapshot firmado ya validado, nunca de otro header. Si el snapshot no contiene actor devuelve 403 `AUTH_CONTEXT_STALE`.
-  Reglas: `lineRecId` debe ser distinto de 0 y puede ser negativo; la hoja debe estar en estado `Draft`; la linea debe ser manual y no tener marcados `Ticket` ni `Factura`; AX valida permiso delegado viewer-propietario, propiedad del ticket, elegibilidad y ausencia de otra asociacion incompatible.
+  Identidad: `X-IND-AxUserId` identifica al propietario de la hoja; el actor o viewer se toma exclusivamente del `AxUserId` del snapshot firmado ya validado, nunca de otro header. Si el snapshot no contiene actor devuelve 403 `AUTH_CONTEXT_STALE`; si no coincide con el propietario devuelve 403 `AUTH_FORBIDDEN`.
+  Reglas: `lineRecId` debe ser distinto de 0 y puede ser negativo; la hoja debe estar en estado `Draft`; la linea debe ser manual y no tener marcados `Ticket` ni `Factura`; solo el propietario firmado puede asociar y debe tener `Edit` sobre `GASTOS_HOJA_GASTO` y `View` sobre `GASTOS_TICKETS`; AX valida ademas propiedad del ticket, elegibilidad y ausencia de otra asociacion incompatible.
   Idempotencia: repetir la peticion con el mismo `fileId` devuelve 200; normalmente `Changed=false`, salvo que AX repare el estado derivado del ticket. Una asociacion nueva devuelve `Changed=true`.
   Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
   Errores AX: `FORBIDDEN` devuelve 403 `AUTH_FORBIDDEN`; `NOT_FOUND` devuelve 404; `CONFLICT` e `INVALID_STATE` devuelven 409; `INVALID_TICKET` y otras reglas de negocio devuelven 422; `ERROR` devuelve 500.
@@ -222,7 +225,7 @@ Runtime/configuracion:
 - DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
   Desvincula el ticket actual de la linea; no elimina la linea de gasto, el ticket ni su imagen.
   No admite body ni parametros query. `lineRecId` debe ser distinto de 0 y puede ser negativo; la hoja debe estar en estado `Draft`.
-  Identidad: `X-IND-AxUserId` identifica al propietario y el viewer procede del `AxUserId` del snapshot firmado validado; AX vuelve a validar el permiso delegado. Un snapshot sin actor devuelve 403 `AUTH_CONTEXT_STALE` y `FORBIDDEN` de AX devuelve 403 `AUTH_FORBIDDEN`.
+  Identidad: `X-IND-AxUserId` identifica al propietario y el viewer procede del `AxUserId` del snapshot firmado validado; solo se permite cuando ambos coinciden y el actor tiene `Edit` sobre `GASTOS_HOJA_GASTO` y `View` sobre `GASTOS_TICKETS`. Un snapshot sin actor devuelve 403 `AUTH_CONTEXT_STALE`; un actor no propietario o sin permisos devuelve 403 `AUTH_FORBIDDEN`.
   Idempotencia: si la linea ya esta desvinculada, devuelve 200 y `Changed=false`; cuando elimina la asociacion devuelve `Changed=true`.
   Response data: `HojaGastosId`, `LineRecId`, `FileId`, `TicketStatus`, `Changed`.
   Errores AX: `NOT_FOUND` devuelve 404; `CONFLICT` e `INVALID_STATE` devuelven 409; otras reglas de negocio devuelven 422; `ERROR` devuelve 500.

@@ -464,7 +464,8 @@ namespace IND_CRM_API.Services
             foreach (var character in decomposed)
             {
                 var category = CharUnicodeInfo.GetUnicodeCategory(character);
-                if (category == UnicodeCategory.NonSpacingMark)
+                // Preserves words when Unicode format characters are pasted into help questions.
+                if (category == UnicodeCategory.NonSpacingMark || category == UnicodeCategory.Format)
                     continue;
                 builder.Append(char.IsLetterOrDigit(character) ? character : ' ');
             }

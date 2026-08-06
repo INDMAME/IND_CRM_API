@@ -113,6 +113,9 @@ namespace IND_CRM_API.Models.Responses
         /// <summary>OpenAI rate limit exceeded for the current user and endpoint.</summary>
         public const string AiRateLimitExceeded = "AI_RATE_LIMIT_EXCEEDED";
 
+        /// <summary>Local query quota exceeded for a textual assistant.</summary>
+        public const string AssistantQueryRateLimitExceeded = "ASSISTANT_QUERY_RATE_LIMIT_EXCEEDED";
+
         /// <summary>OpenAI concurrency limit exceeded for the current user.</summary>
         public const string AiConcurrencyLimitExceeded = "AI_CONCURRENCY_LIMIT_EXCEEDED";
 
