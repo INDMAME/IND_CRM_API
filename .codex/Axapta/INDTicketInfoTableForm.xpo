@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: FRM
 
-; Navision Axapta Forms unloaded at Miércoles 29/07/2026
+; Navision Axapta Forms unloaded at Jueves 06/08/2026
 ; --------------------------------------------------------------------------------
 FRMVERSION 5
 
@@ -11,7 +11,7 @@ FORM #INDTicketInfoTable
   PROPERTIES
     Name                #INDTicketInfoTable
   ENDPROPERTIES
-
+  
   METHODS
     Version: 3
     SOURCE #classDeclaration
@@ -111,7 +111,7 @@ FORM #INDTicketInfoTable
           InsertAtEnd         #Yes
           InsertIfEmpty       #No
         ENDPROPERTIES
-
+        
         FIELDLIST
           DATAFIELD CurrencyCode
             PROPERTIES
@@ -122,7 +122,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -135,7 +135,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD TotalAmount
             PROPERTIES
               AllowEdit           #Yes
@@ -145,7 +145,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -159,7 +159,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD AmountMST
             PROPERTIES
               AllowEdit           #Yes
@@ -169,7 +169,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -183,7 +183,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
         ENDFIELDLIST
       ENDOBJECTPOOL
       METHODS
@@ -398,7 +398,7 @@ FORM #INDTicketInfoTable
           InsertAtEnd         #Yes
           InsertIfEmpty       #No
         ENDPROPERTIES
-
+        
         FIELDLIST
           DATAFIELD TotalAmount
             PROPERTIES
@@ -409,7 +409,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -423,7 +423,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD Qty
             PROPERTIES
               AllowEdit           #Yes
@@ -433,7 +433,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -447,7 +447,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
           DATAFIELD Price
             PROPERTIES
               AllowEdit           #Yes
@@ -457,7 +457,7 @@ FORM #INDTicketInfoTable
               AllowAdd            #Restricted
               Mandatory           #No
             ENDPROPERTIES
-
+            
             METHODS
               Version: 3
               SOURCE #modified
@@ -471,7 +471,7 @@ FORM #INDTicketInfoTable
               ENDSOURCE
             ENDMETHODS
           ENDDATAFIELD
-
+          
         ENDFIELDLIST
       ENDOBJECTPOOL
       METHODS
@@ -531,18 +531,18 @@ FORM #INDTicketInfoTable
           InsertAtEnd         #Yes
           InsertIfEmpty       #No
         ENDPROPERTIES
-
+        
         FIELDLIST
         ENDFIELDLIST
       ENDOBJECTPOOL
     ENDDATASOURCE
   ENDOBJECTBANK
-
+  
   JOINS
     INDTicketInfoLine INDTicketInfoTable
     DocuRef INDTicketInfoTable
   ENDJOINS
-
+  
   DESIGN
     PROPERTIES
       Left                #Auto (left)
@@ -592,8 +592,8 @@ FORM #INDTicketInfoTable
       ArrangeMethod       #Vertical
       Columns             #2
       Columnspace         #Auto
-      ArrangeGuide
-        ARRAY INDEX Columns
+      ArrangeGuide        
+        ARRAY INDEX Columns 
           #0
           #0
         ENDARRAY
@@ -603,10 +603,10 @@ FORM #INDTicketInfoTable
       AllowUserSetup      #Yes
       NeededAccessLevel   #NoAccess
     ENDPROPERTIES
-
+    
     CONTAINER
       CONTROL GROUP
-        ;==== controlId:12292, containerId: 0, containerdata:6899
+        ;==== controlId:12292, containerId: 0, containerdata:6899   
         ;----------------------------------------------------------
         PROPERTIES
           Name                #Body
@@ -654,8 +654,8 @@ FORM #INDTicketInfoTable
           ArrangeMethod       #Vertical
           Columns             #1
           Columnspace         #Auto
-          ArrangeGuide
-            ARRAY INDEX Columns
+          ArrangeGuide        
+            ARRAY INDEX Columns 
               #0
             ENDARRAY
           HideIfEmpty         #Yes
@@ -666,10 +666,10 @@ FORM #INDTicketInfoTable
           DataGroup           #
           AutoDataGroup       #No
         ENDPROPERTIES
-
+        
           CONTAINER
             CONTROL TAB
-              ;==== controlId:12293, containerId:12292, containerdata:12292
+              ;==== controlId:12293, containerId:12292, containerdata:12292   
               ;----------------------------------------------------------
               PROPERTIES
                 Name                #Tab
@@ -707,8 +707,8 @@ FORM #INDTicketInfoTable
                 ArrangeMethod       #Vertical
                 Columns             #2
                 Columnspace         #Auto
-                ArrangeGuide
-                  ARRAY INDEX Columns
+                ArrangeGuide        
+                  ARRAY INDEX Columns 
                     #0
                     #0
                   ENDARRAY
@@ -719,10 +719,10 @@ FORM #INDTicketInfoTable
                 NeededAccessLevel   #View
                 TabAutoChange       #Yes
               ENDPROPERTIES
-
+              
               CONTAINER
                 CONTROL TABPAGE
-                  ;==== controlId:12294, containerId:12293, containerdata:12293
+                  ;==== controlId:12294, containerId:12293, containerdata:12293   
                   ;----------------------------------------------------------
                   PROPERTIES
                     Name                #Overview
@@ -755,8 +755,8 @@ FORM #INDTicketInfoTable
                     ArrangeMethod       #Vertical
                     Columns             #1
                     Columnspace         #Auto
-                    ArrangeGuide
-                      ARRAY INDEX Columns
+                    ArrangeGuide        
+                      ARRAY INDEX Columns 
                         #0
                       ENDARRAY
                     HideIfEmpty         #Yes
@@ -766,10 +766,10 @@ FORM #INDTicketInfoTable
                     NeededAccessLevel   #View
                     TabAutoChange       #No
                   ENDPROPERTIES
-
+                  
                   CONTAINER
                     CONTROL GROUP
-                      ;==== controlId:12295, containerId:12294, containerdata:12294
+                      ;==== controlId:12295, containerId:12294, containerdata:12294   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Head
@@ -817,8 +817,8 @@ FORM #INDTicketInfoTable
                         ArrangeMethod       #Vertical
                         Columns             #1
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                           ENDARRAY
                         HideIfEmpty         #Yes
@@ -829,10 +829,10 @@ FORM #INDTicketInfoTable
                         DataGroup           #
                         AutoDataGroup       #No
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL GROUP
-                            ;==== controlId:12296, containerId:12295, containerdata:12295
+                            ;==== controlId:12296, containerId:12295, containerdata:12295   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #ActionPane
@@ -880,8 +880,8 @@ FORM #INDTicketInfoTable
                               ArrangeMethod       #Vertical
                               Columns             #2
                               Columnspace         #Auto
-                              ArrangeGuide
-                                ARRAY INDEX Columns
+                              ArrangeGuide        
+                                ARRAY INDEX Columns 
                                   #0
                                   #0
                                 ENDARRAY
@@ -893,10 +893,10 @@ FORM #INDTicketInfoTable
                               DataGroup           #
                               AutoDataGroup       #No
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL GROUP
-                                  ;==== controlId:12297, containerId:12296, containerdata:12296
+                                  ;==== controlId:12297, containerId:12296, containerdata:12296   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #FilterGrp
@@ -944,8 +944,8 @@ FORM #INDTicketInfoTable
                                     ArrangeMethod       #Horizontal, flush right
                                     Columns             #1
                                     Columnspace         #Auto
-                                    ArrangeGuide
-                                      ARRAY INDEX Columns
+                                    ArrangeGuide        
+                                      ARRAY INDEX Columns 
                                         #0
                                       ENDARRAY
                                     HideIfEmpty         #Yes
@@ -956,10 +956,10 @@ FORM #INDTicketInfoTable
                                     DataGroup           #
                                     AutoDataGroup       #No
                                   ENDPROPERTIES
-
+                                  
                                     CONTAINER
                                       CONTROL COMBOBOX
-                                        ;==== controlId:12298, containerId:12297, containerdata:12297
+                                        ;==== controlId:12298, containerId:12297, containerdata:12297   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #StatusFilter
@@ -1006,8 +1006,8 @@ FORM #INDTicketInfoTable
                                           LabelAlignment      #Right
                                           DataSource          #
                                           DataField           #
-                                          ExtendedDataType
-                                            ARRAY
+                                          ExtendedDataType    
+                                            ARRAY 
                                               #
                                               #
                                             ENDARRAY
@@ -1018,7 +1018,7 @@ FORM #INDTicketInfoTable
                                           ComboType           #Standard
                                           AppendNew           #No
                                         ENDPROPERTIES
-
+                                        
                                         METHODS
                                           Version: 3
                                           SOURCE #modified
@@ -1034,14 +1034,14 @@ FORM #INDTicketInfoTable
                                             #}
                                           ENDSOURCE
                                         ENDMETHODS
-                                      ENDCONTROL
-
+                                      ENDCONTROL 
+                                      
                                     ENDCONTAINER
-
-                                ENDCONTROL
-
+                                    
+                                ENDCONTROL 
+                                
                                 CONTROL BUTTONGROUP
-                                  ;==== controlId:12299, containerId:12296, containerdata:12296
+                                  ;==== controlId:12299, containerId:12296, containerdata:12296   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #ButtonGroup
@@ -1083,8 +1083,8 @@ FORM #INDTicketInfoTable
                                     ArrangeMethod       #Vertical
                                     Columns             #2
                                     Columnspace         #Auto
-                                    ArrangeGuide
-                                      ARRAY INDEX Columns
+                                    ArrangeGuide        
+                                      ARRAY INDEX Columns 
                                         #0
                                         #0
                                       ENDARRAY
@@ -1094,10 +1094,10 @@ FORM #INDTicketInfoTable
                                     AllowUserSetup      #Yes
                                     NeededAccessLevel   #View
                                   ENDPROPERTIES
-
+                                  
                                   CONTAINER
                                     CONTROL BUTTON
-                                      ;==== controlId:12300, containerId:12299, containerdata:12299
+                                      ;==== controlId:12300, containerId:12299, containerdata:12299   
                                       ;----------------------------------------------------------
                                       PROPERTIES
                                         Name                #CRMHojaGastosTableBtn
@@ -1140,7 +1140,7 @@ FORM #INDTicketInfoTable
                                         ForegroundColor     #Button text
                                         NeededAccessLevel   #View
                                       ENDPROPERTIES
-
+                                      
                                       METHODS
                                         Version: 3
                                         SOURCE #clicked
@@ -1162,10 +1162,10 @@ FORM #INDTicketInfoTable
                                           #}
                                         ENDSOURCE
                                       ENDMETHODS
-                                    ENDCONTROL
-
+                                    ENDCONTROL 
+                                    
                                     CONTROL BUTTON
-                                      ;==== controlId:12301, containerId:12299, containerdata:12299
+                                      ;==== controlId:12301, containerId:12299, containerdata:12299   
                                       ;----------------------------------------------------------
                                       PROPERTIES
                                         Name                #SelectToLinkBtn
@@ -1208,7 +1208,7 @@ FORM #INDTicketInfoTable
                                         ForegroundColor     #Button text
                                         NeededAccessLevel   #View
                                       ENDPROPERTIES
-
+                                      
                                       METHODS
                                         Version: 3
                                         SOURCE #clicked
@@ -1237,18 +1237,18 @@ FORM #INDTicketInfoTable
                                           #}
                                         ENDSOURCE
                                       ENDMETHODS
-                                    ENDCONTROL
-
+                                    ENDCONTROL 
+                                    
                                   ENDCONTAINER
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                           CONTROL GRID
-                            ;==== controlId:12302, containerId:12295, containerdata:12295
+                            ;==== controlId:12302, containerId:12295, containerdata:12295   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TicketGrid
@@ -1286,10 +1286,10 @@ FORM #INDTicketInfoTable
                               AutoDataGroup       #No
                               GridLines           #Yes
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL CHECKBOX
-                                  ;==== controlId:12303, containerId:12302, containerdata:12302
+                                  ;==== controlId:12303, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #editSelectToLink
@@ -1330,11 +1330,11 @@ FORM #INDTicketInfoTable
                                     DataField           #
                                     DataMethod          #editSelectToLink
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12304, containerId:12302, containerdata:12302
+                                  ;==== controlId:12304, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_FileId
@@ -1393,11 +1393,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12305, containerId:12302, containerdata:12302
+                                  ;==== controlId:12305, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_Description
@@ -1456,11 +1456,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL COMBOBOX
-                                  ;==== controlId:12306, containerId:12302, containerdata:12302
+                                  ;==== controlId:12306, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_Status
@@ -1512,11 +1512,11 @@ FORM #INDTicketInfoTable
                                     ComboType           #Standard
                                     AppendNew           #No
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL COMBOBOX
-                                  ;==== controlId:12307, containerId:12302, containerdata:12302
+                                  ;==== controlId:12307, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_GastoType
@@ -1568,11 +1568,11 @@ FORM #INDTicketInfoTable
                                     ComboType           #Standard
                                     AppendNew           #No
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12308, containerId:12302, containerdata:12302
+                                  ;==== controlId:12308, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_CurrencyCode
@@ -1631,11 +1631,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12309, containerId:12302, containerdata:12302
+                                  ;==== controlId:12309, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_ExchRate
@@ -1701,11 +1701,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12310, containerId:12302, containerdata:12302
+                                  ;==== controlId:12310, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_TotalAmount
@@ -1771,11 +1771,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12311, containerId:12302, containerdata:12302
+                                  ;==== controlId:12311, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_AmountMST
@@ -1841,11 +1841,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12312, containerId:12302, containerdata:12302
+                                  ;==== controlId:12312, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #HojaGastosId
@@ -1905,11 +1905,11 @@ FORM #INDTicketInfoTable
                                     DataMethod          #hojaGastosIdDisplay
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL CHECKBOX
-                                  ;==== controlId:12313, containerId:12302, containerdata:12302
+                                  ;==== controlId:12313, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_ProcessedByAI
@@ -1950,11 +1950,11 @@ FORM #INDTicketInfoTable
                                     DataField           #ProcessedByAI
                                     DataMethod          #
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL DATEEDIT
-                                  ;==== controlId:12314, containerId:12302, containerdata:12302
+                                  ;==== controlId:12314, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_TicketDate
@@ -2015,11 +2015,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL TIMEEDIT
-                                  ;==== controlId:12315, containerId:12302, containerdata:12302
+                                  ;==== controlId:12315, containerId:12302, containerdata:12302   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoTable_TicketTime
@@ -2080,19 +2080,19 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                     CONTROL GROUP
-                      ;==== controlId:12316, containerId:12294, containerdata:12294
+                      ;==== controlId:12316, containerId:12294, containerdata:12294   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #Lines
@@ -2140,8 +2140,8 @@ FORM #INDTicketInfoTable
                         ArrangeMethod       #Vertical
                         Columns             #1
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                           ENDARRAY
                         HideIfEmpty         #Yes
@@ -2152,10 +2152,10 @@ FORM #INDTicketInfoTable
                         DataGroup           #
                         AutoDataGroup       #No
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL GRID
-                            ;==== controlId:12317, containerId:12316, containerdata:12316
+                            ;==== controlId:12317, containerId:12316, containerdata:12316   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #TicketLinesGrid
@@ -2193,10 +2193,10 @@ FORM #INDTicketInfoTable
                               AutoDataGroup       #No
                               GridLines           #Yes
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12318, containerId:12317, containerdata:12317
+                                  ;==== controlId:12318, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_Description
@@ -2255,11 +2255,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12319, containerId:12317, containerdata:12317
+                                  ;==== controlId:12319, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_Qty
@@ -2325,11 +2325,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12320, containerId:12317, containerdata:12317
+                                  ;==== controlId:12320, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_Price
@@ -2395,11 +2395,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12321, containerId:12317, containerdata:12317
+                                  ;==== controlId:12321, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_TaxPercent
@@ -2465,11 +2465,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL REALEDIT
-                                  ;==== controlId:12322, containerId:12317, containerdata:12317
+                                  ;==== controlId:12322, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_TotalAmount
@@ -2535,11 +2535,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL CHECKBOX
-                                  ;==== controlId:12323, containerId:12317, containerdata:12317
+                                  ;==== controlId:12323, containerId:12317, containerdata:12317   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #INDTicketInfoLine_Adjustment
@@ -2580,23 +2580,23 @@ FORM #INDTicketInfoTable
                                     DataField           #Adjustment
                                     DataMethod          #
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                   ENDCONTAINER
-
-                ENDCONTROL
-
+                  
+                ENDCONTROL 
+                
                 CONTROL TABPAGE
-                  ;==== controlId:12324, containerId:12293, containerdata:12293
+                  ;==== controlId:12324, containerId:12293, containerdata:12293   
                   ;----------------------------------------------------------
                   PROPERTIES
                     Name                #Documents
@@ -2629,8 +2629,8 @@ FORM #INDTicketInfoTable
                     ArrangeMethod       #Vertical
                     Columns             #1
                     Columnspace         #Auto
-                    ArrangeGuide
-                      ARRAY INDEX Columns
+                    ArrangeGuide        
+                      ARRAY INDEX Columns 
                         #0
                       ENDARRAY
                     HideIfEmpty         #Yes
@@ -2640,10 +2640,10 @@ FORM #INDTicketInfoTable
                     NeededAccessLevel   #View
                     TabAutoChange       #No
                   ENDPROPERTIES
-
+                  
                   CONTAINER
                     CONTROL GROUP
-                      ;==== controlId:12325, containerId:12324, containerdata:12324
+                      ;==== controlId:12325, containerId:12324, containerdata:12324   
                       ;----------------------------------------------------------
                       PROPERTIES
                         Name                #DocumentList
@@ -2691,8 +2691,8 @@ FORM #INDTicketInfoTable
                         ArrangeMethod       #Vertical
                         Columns             #1
                         Columnspace         #Auto
-                        ArrangeGuide
-                          ARRAY INDEX Columns
+                        ArrangeGuide        
+                          ARRAY INDEX Columns 
                             #0
                           ENDARRAY
                         HideIfEmpty         #Yes
@@ -2703,10 +2703,10 @@ FORM #INDTicketInfoTable
                         DataGroup           #
                         AutoDataGroup       #No
                       ENDPROPERTIES
-
+                      
                         CONTAINER
                           CONTROL GRID
-                            ;==== controlId:12326, containerId:12325, containerdata:12325
+                            ;==== controlId:12326, containerId:12325, containerdata:12325   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #DocumentsGrid
@@ -2744,10 +2744,10 @@ FORM #INDTicketInfoTable
                               AutoDataGroup       #No
                               GridLines           #Yes
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12327, containerId:12326, containerdata:12326
+                                  ;==== controlId:12327, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDFileId
@@ -2806,11 +2806,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL DATEEDIT
-                                  ;==== controlId:12328, containerId:12326, containerdata:12326
+                                  ;==== controlId:12328, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDTransDate
@@ -2871,11 +2871,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12329, containerId:12326, containerdata:12326
+                                  ;==== controlId:12329, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDFilename
@@ -2934,11 +2934,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12330, containerId:12326, containerdata:12326
+                                  ;==== controlId:12330, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDDescription
@@ -2997,11 +2997,11 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL COMBOBOX
-                                  ;==== controlId:12331, containerId:12326, containerdata:12326
+                                  ;==== controlId:12331, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDFileAllocationType
@@ -3053,11 +3053,11 @@ FORM #INDTicketInfoTable
                                     ComboType           #Standard
                                     AppendNew           #No
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL COMBOBOX
-                                  ;==== controlId:12332, containerId:12326, containerdata:12326
+                                  ;==== controlId:12332, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDFileLocationType
@@ -3109,11 +3109,11 @@ FORM #INDTicketInfoTable
                                     ComboType           #Standard
                                     AppendNew           #No
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                                 CONTROL STRINGEDIT
-                                  ;==== controlId:12333, containerId:12326, containerdata:12326
+                                  ;==== controlId:12333, containerId:12326, containerdata:12326   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #DocuRef_INDURLFile
@@ -3172,15 +3172,15 @@ FORM #INDTicketInfoTable
                                     ArrayIndex          #0
                                     SearchMode          #None
                                   ENDPROPERTIES
-
-                                ENDCONTROL
-
+                                  
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                           CONTROL GROUP
-                            ;==== controlId:12334, containerId:12325, containerdata:12325
+                            ;==== controlId:12334, containerId:12325, containerdata:12325   
                             ;----------------------------------------------------------
                             PROPERTIES
                               Name                #DocumentDetails
@@ -3228,8 +3228,8 @@ FORM #INDTicketInfoTable
                               ArrangeMethod       #Vertical
                               Columns             #2
                               Columnspace         #Auto
-                              ArrangeGuide
-                                ARRAY INDEX Columns
+                              ArrangeGuide        
+                                ARRAY INDEX Columns 
                                   #0
                                   #0
                                 ENDARRAY
@@ -3241,10 +3241,10 @@ FORM #INDTicketInfoTable
                               DataGroup           #
                               AutoDataGroup       #No
                             ENDPROPERTIES
-
+                            
                               CONTAINER
                                 CONTROL GROUP
-                                  ;==== controlId:12335, containerId:12334, containerdata:12334
+                                  ;==== controlId:12335, containerId:12334, containerdata:12334   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #Identification
@@ -3292,8 +3292,8 @@ FORM #INDTicketInfoTable
                                     ArrangeMethod       #Vertical
                                     Columns             #1
                                     Columnspace         #Auto
-                                    ArrangeGuide
-                                      ARRAY INDEX Columns
+                                    ArrangeGuide        
+                                      ARRAY INDEX Columns 
                                         #0
                                       ENDARRAY
                                     HideIfEmpty         #Yes
@@ -3304,10 +3304,10 @@ FORM #INDTicketInfoTable
                                     DataGroup           #
                                     AutoDataGroup       #No
                                   ENDPROPERTIES
-
+                                  
                                     CONTAINER
                                       CONTROL STRINGEDIT
-                                        ;==== controlId:12336, containerId:12335, containerdata:12335
+                                        ;==== controlId:12336, containerId:12335, containerdata:12335   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDFileId
@@ -3366,11 +3366,11 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL DATEEDIT
-                                        ;==== controlId:12337, containerId:12335, containerdata:12335
+                                        ;==== controlId:12337, containerId:12335, containerdata:12335   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDTransDate
@@ -3431,11 +3431,11 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL STRINGEDIT
-                                        ;==== controlId:12338, containerId:12335, containerdata:12335
+                                        ;==== controlId:12338, containerId:12335, containerdata:12335   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDFilename
@@ -3494,11 +3494,11 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL STRINGEDIT
-                                        ;==== controlId:12339, containerId:12335, containerdata:12335
+                                        ;==== controlId:12339, containerId:12335, containerdata:12335   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDDescription
@@ -3557,15 +3557,15 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                     ENDCONTAINER
-
-                                ENDCONTROL
-
+                                    
+                                ENDCONTROL 
+                                
                                 CONTROL GROUP
-                                  ;==== controlId:12340, containerId:12334, containerdata:12334
+                                  ;==== controlId:12340, containerId:12334, containerdata:12334   
                                   ;----------------------------------------------------------
                                   PROPERTIES
                                     Name                #Details
@@ -3613,8 +3613,8 @@ FORM #INDTicketInfoTable
                                     ArrangeMethod       #Vertical
                                     Columns             #1
                                     Columnspace         #Auto
-                                    ArrangeGuide
-                                      ARRAY INDEX Columns
+                                    ArrangeGuide        
+                                      ARRAY INDEX Columns 
                                         #0
                                       ENDARRAY
                                     HideIfEmpty         #Yes
@@ -3625,10 +3625,10 @@ FORM #INDTicketInfoTable
                                     DataGroup           #
                                     AutoDataGroup       #No
                                   ENDPROPERTIES
-
+                                  
                                     CONTAINER
                                       CONTROL COMBOBOX
-                                        ;==== controlId:12341, containerId:12340, containerdata:12340
+                                        ;==== controlId:12341, containerId:12340, containerdata:12340   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDFileLocationType
@@ -3680,11 +3680,11 @@ FORM #INDTicketInfoTable
                                           ComboType           #Standard
                                           AppendNew           #No
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL COMBOBOX
-                                        ;==== controlId:12342, containerId:12340, containerdata:12340
+                                        ;==== controlId:12342, containerId:12340, containerdata:12340   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDFileAllocationType
@@ -3736,11 +3736,11 @@ FORM #INDTicketInfoTable
                                           ComboType           #Standard
                                           AppendNew           #No
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL STRINGEDIT
-                                        ;==== controlId:12343, containerId:12340, containerdata:12340
+                                        ;==== controlId:12343, containerId:12340, containerdata:12340   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDURLFile
@@ -3799,11 +3799,11 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                       CONTROL STRINGEDIT
-                                        ;==== controlId:12344, containerId:12340, containerdata:12340
+                                        ;==== controlId:12344, containerId:12340, containerdata:12340   
                                         ;----------------------------------------------------------
                                         PROPERTIES
                                           Name                #CopyOfDocuRef_INDComentario
@@ -3862,37 +3862,37 @@ FORM #INDTicketInfoTable
                                           ArrayIndex          #0
                                           SearchMode          #None
                                         ENDPROPERTIES
-
-                                      ENDCONTROL
-
+                                        
+                                      ENDCONTROL 
+                                      
                                     ENDCONTAINER
-
-                                ENDCONTROL
-
+                                    
+                                ENDCONTROL 
+                                
                               ENDCONTAINER
-
-                          ENDCONTROL
-
+                              
+                          ENDCONTROL 
+                          
                         ENDCONTAINER
-
-                    ENDCONTROL
-
+                        
+                    ENDCONTROL 
+                    
                   ENDCONTAINER
-
-                ENDCONTROL
-
+                  
+                ENDCONTROL 
+                
               ENDCONTAINER
-
-            ENDCONTROL
-
+              
+            ENDCONTROL 
+            
           ENDCONTAINER
-
-      ENDCONTROL
-
+          
+      ENDCONTROL 
+      
     ENDCONTAINER
-
+    
   ENDDESIGN
-
+  
 ENDFORM
 
 

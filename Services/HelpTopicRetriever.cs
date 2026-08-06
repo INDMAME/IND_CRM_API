@@ -100,11 +100,12 @@ namespace IND_CRM_API.Services
                     return broadModuleResult;
             }
 
-            var scopedTopics = selectedModule == null
+            var scopedTopics = (selectedModule == null
                 ? snapshot.Bundle.topics
                 : selectedModule.topicIds
                     .Where(snapshot.TopicsById.ContainsKey)
-                    .Select(id => snapshot.TopicsById[id]);
+                    .Select(id => snapshot.TopicsById[id]))
+                .ToList();
             var scored = scopedTopics
                 .Select(topic => new HelpRetrievedTopic
                 {
@@ -117,6 +118,9 @@ namespace IND_CRM_API.Services
                 .ToList();
 
             var ranking = scored.Take(5).ToList();
+            if (selectedModule != null)
+                return BuildModuleAiScopeResult(scopedTopics, scored, ranking);
+
             if (scored.Count == 0 || scored[0].Score < MinimumAnswerScore)
                 return EmptyResult("notDocumented", "lexical-no-match", ranking);
 
@@ -126,32 +130,6 @@ namespace IND_CRM_API.Services
                 .Where(item => item.Score >= Math.Max(MinimumAnswerScore, top.Score * 0.62m))
                 .Take(4)
                 .ToList();
-
-            if (selectedModule != null)
-            {
-                var scopedSelection = scored
-                    .Where(item => item.Score >= Math.Max(MinimumAnswerScore, top.Score * 0.72m))
-                    .Take(4)
-                    .ToList();
-                var scopedResult = new HelpRetrievalResult
-                {
-                    Resolution = "answered",
-                    Topics = scopedSelection,
-                    Candidates = new List<HelpTopicCandidateDto>(),
-                    Ranking = ranking,
-                    Confidence = top.Score,
-                    Mode = scopedSelection.Count > 1 ? "module-multi-topic" : "module-topic"
-                };
-                if (scopedSelection.Count == 1)
-                {
-                    AttachQuickAnswer(
-                        scopedResult,
-                        request.Question,
-                        top.Topic,
-                        string.Equals(locale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase));
-                }
-                return scopedResult;
-            }
 
             if (!hasCrossTopicConnector && top.Score < 0.90m && scored.Count > 1 &&
                 scored[1].Score >= MinimumAnswerScore &&
@@ -185,6 +163,38 @@ namespace IND_CRM_API.Services
                     top.Topic,
                     string.Equals(locale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase));
             return result;
+        }
+
+        // Exposes the complete selected module so the answering model can determine user intent.
+        private static HelpRetrievalResult BuildModuleAiScopeResult(
+            IList<HelpKnowledgeTopic> scopedTopics,
+            IList<HelpRetrievedTopic> scored,
+            IList<HelpRetrievedTopic> ranking)
+        {
+            if (scopedTopics == null || scopedTopics.Count == 0)
+                return EmptyResult("notDocumented", "module-empty", ranking);
+
+            var scoresByTopicId = scored.ToDictionary(
+                item => item.Topic.id,
+                item => item.Score,
+                StringComparer.OrdinalIgnoreCase);
+            var moduleTopics = scopedTopics.Select(topic =>
+            {
+                decimal score;
+                scoresByTopicId.TryGetValue(topic.id, out score);
+                return new HelpRetrievedTopic { Topic = topic, Score = score };
+            }).ToList();
+
+            return new HelpRetrievalResult
+            {
+                Resolution = "answered",
+                Topics = moduleTopics,
+                Candidates = new List<HelpTopicCandidateDto>(),
+                Ranking = ranking == null ? new List<HelpRetrievedTopic>() : ranking.ToList(),
+                Confidence = ranking != null && ranking.Count > 0 ? ranking[0].Score : 0m,
+                Mode = "module-ai-scope",
+                RequireCompleteEvidence = true
+            };
         }
 
         private static decimal ScoreTopic(

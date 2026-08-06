@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : INDTicketInfoTable unloaded at Miércoles 29/07/2026
+; Navision Axapta Table : INDTicketInfoTable unloaded at Jueves 06/08/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -1109,9 +1109,10 @@ Formatversion: 1
         #
         #    return ret;
         #}
+        #
       ENDSOURCE
       SOURCE #validateUniqueTicketDateTime
-        #//MMS - Ajustes CRM - 2026.08.03 - Acota duplicados por usuario cuando la identidad esta informada
+        #//MMS - Acota duplicados por usuario cuando la identidad esta informada - 2026.08.03
         #public boolean validateUniqueTicketDateTime()
         #{
         #    INDTicketInfoTable ticketInfoTable;
@@ -1132,11 +1133,11 @@ Formatversion: 1
         #    }
         #    else
         #    {
-        #        select firstonly RecId, FileId
-        #            from ticketInfoTable
-        #            where ticketInfoTable.TicketDate == this.TicketDate
-        #               && ticketInfoTable.TicketTime == this.TicketTime
-        #               && ticketInfoTable.RecId      != this.RecId;
+        #    select firstonly RecId, FileId
+        #        from ticketInfoTable
+        #        where ticketInfoTable.TicketDate == this.TicketDate
+        #           && ticketInfoTable.TicketTime == this.TicketTime
+        #           && ticketInfoTable.RecId      != this.RecId;
         #    }
         #
         #    if (ticketInfoTable.RecId)

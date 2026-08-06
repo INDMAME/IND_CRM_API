@@ -207,6 +207,11 @@ namespace IND_CRM_API.Services
         public decimal Confidence { get; set; }
 
         public string Mode { get; set; }
+
+        /// <summary>
+        /// Requires the answer context to preserve every selected evidence chunk or fail closed.
+        /// </summary>
+        public bool RequireCompleteEvidence { get; set; }
     }
 
     public sealed class HelpRetrievedTopic

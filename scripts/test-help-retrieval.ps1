@@ -252,10 +252,13 @@ try {
         $result = $retriever.Retrieve($snapshot, $request)
         $outsideTopics = @($result.Topics | Where-Object { $_.Topic.moduleId -ne $module.id })
         $outsideRanking = @($result.Ranking | Where-Object { $_.Topic.moduleId -ne $module.id })
+        $expectedTopicIds = @($module.topicIds | Where-Object { $snapshot.TopicsById.ContainsKey($_) })
+        $actualTopicIds = @($result.Topics | ForEach-Object { $_.Topic.id })
         [pscustomobject]@{
             ModuleId = $module.id
             Passed = $result.Resolution -eq 'answered' -and
-                @($result.Topics).Count -gt 0 -and
+                $result.Mode -eq 'module-ai-scope' -and
+                (Test-ExactStringSequence $actualTopicIds $expectedTopicIds) -and
                 $outsideTopics.Count -eq 0 -and
                 $outsideRanking.Count -eq 0 -and
                 @($result.Candidates).Count -eq 0
@@ -287,6 +290,10 @@ try {
     }
 
     $broadModulePassed = $true
+    $moduleNoMatchPassed = $true
+    $moduleAiContextPassed = $true
+    $moduleAiOversizePassed = $true
+    $moduleAiContextFailure = $null
     if ($snapshot.ModulesById.ContainsKey('expenses')) {
         $broadModuleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
         $broadModuleRequest.Question = 'gastos'
@@ -296,6 +303,133 @@ try {
         $broadModulePassed = $broadModuleResult.Resolution -ne 'needsSelection' -and
             @($broadModuleResult.Topics | Where-Object { $_.Topic.moduleId -ne 'expenses' }).Count -eq 0 -and
             @($broadModuleResult.Ranking | Where-Object { $_.Topic.moduleId -ne 'expenses' }).Count -eq 0
+
+        $moduleNoMatchRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $moduleNoMatchRequest.Question = 'zyxwv qqqqq unrelated'
+        $moduleNoMatchRequest.SelectedModuleId = 'expenses'
+        $moduleNoMatchRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $moduleNoMatchResult = $retriever.Retrieve($snapshot, $moduleNoMatchRequest)
+        $moduleNoMatchPassed = $moduleNoMatchResult.Resolution -eq 'answered' -and
+            $moduleNoMatchResult.Mode -eq 'module-ai-scope' -and
+            @($moduleNoMatchResult.Topics).Count -eq @($snapshot.ModulesById['expenses'].topicIds).Count -and
+            @($moduleNoMatchResult.Ranking).Count -eq 0
+
+        $completeEvidenceProperty = [IND_CRM_API.Services.HelpRetrievalResult].GetProperty('RequireCompleteEvidence')
+        $buildContextMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
+            'BuildContext',
+            [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
+        if ($null -eq $completeEvidenceProperty -or $null -eq $buildContextMethod) {
+            $moduleAiContextPassed = $false
+            $moduleAiOversizePassed = $false
+            $moduleAiContextFailure = 'Complete module evidence contract is missing.'
+        }
+        else {
+            $answerService = [IND_CRM_API.Services.HelpOpenAiAnswerService]::new(
+                [IND_CRM_API.Services.FileAxLogger]::new())
+            $firstRetrievedTopic = @($broadModuleResult.Topics | Select-Object -First 1)[0].Topic
+            $extraChunks = @(
+                [IND_CRM_API.Services.HelpKnowledgeChunk]@{
+                    id = $firstRetrievedTopic.id + '--test-extra-01'
+                    heading = 'Additional module evidence one'
+                    body = 'First additional chunk used to verify complete module evidence.'
+                    imageRefs = [System.Collections.Generic.List[string]]::new()
+                    estimatedTokens = 20
+                },
+                [IND_CRM_API.Services.HelpKnowledgeChunk]@{
+                    id = $firstRetrievedTopic.id + '--test-extra-02'
+                    heading = 'Additional module evidence two'
+                    body = 'Second additional chunk used to verify complete module evidence.'
+                    imageRefs = [System.Collections.Generic.List[string]]::new()
+                    estimatedTokens = 20
+                }
+            )
+            foreach ($extraChunk in $extraChunks) {
+                $firstRetrievedTopic.chunks.Add($extraChunk)
+            }
+            try {
+                $history = [System.Collections.Generic.List[IND_CRM_API.Contracts.Requests.HelpConversationMessageRequest]]::new()
+                $largeHistoryText = [string]::new([char]0x754C, 1600)
+                foreach ($index in 1..8) {
+                    $history.Add([IND_CRM_API.Contracts.Requests.HelpConversationMessageRequest]@{
+                        role = $(if ($index % 2 -eq 0) { 'assistant' } else { 'user' })
+                        content = $largeHistoryText
+                    })
+                }
+                $answerRequest = [IND_CRM_API.Services.HelpAnswerRequest]@{
+                    Question = [string]::new([char]0x754C, 1200)
+                    ResponseLocale = $snapshot.Bundle.defaultLocale
+                    AnswerInstructions = [string]::new([char]0x754C, 2000)
+                    History = $history
+                    Snapshot = $snapshot
+                    Retrieval = $broadModuleResult
+                }
+                $context = $buildContextMethod.Invoke($answerService, [object[]]@($answerRequest))
+                $allowedSourceKeys = @($context.AllowedSourceKeys | Sort-Object)
+                $expectedSourceKeys = @($broadModuleResult.Topics | ForEach-Object {
+                    $topic = $_.Topic
+                    @($topic.chunks | ForEach-Object { $topic.id + ':' + $_.id })
+                } | Sort-Object)
+                $completeEvidenceEnabled = [bool]$completeEvidenceProperty.GetValue($broadModuleResult)
+                $sourceKeysPassed = Test-ExactStringSequence $allowedSourceKeys $expectedSourceKeys
+                $contextHistoryCount = $context.History.Count
+                $moduleAiContextPassed = $completeEvidenceEnabled -and
+                    $broadModuleResult.Mode -eq 'module-ai-scope' -and
+                    $sourceKeysPassed -and
+                    $contextHistoryCount -lt 8
+                if (-not $moduleAiContextPassed) {
+                    $moduleAiContextFailure = 'Complete={0}; mode={1}; sources={2}/{3}; history={4}' -f `
+                        $completeEvidenceEnabled, $broadModuleResult.Mode, `
+                        $allowedSourceKeys.Count, $expectedSourceKeys.Count, $contextHistoryCount
+                }
+            }
+            catch {
+                $moduleAiContextPassed = $false
+                $contextFailure = if ($null -ne $_.Exception.InnerException) {
+                    $_.Exception.InnerException
+                }
+                else {
+                    $_.Exception
+                }
+                $moduleAiContextFailure = $contextFailure.ToString()
+            }
+            finally {
+                foreach ($extraChunk in $extraChunks) {
+                    [void]$firstRetrievedTopic.chunks.Remove($extraChunk)
+                }
+            }
+
+            $oversizedChunk = [IND_CRM_API.Services.HelpKnowledgeChunk]@{
+                id = $firstRetrievedTopic.id + '--test-oversized'
+                heading = 'Oversized module evidence'
+                body = ('Oversized complete module evidence. ' * 5000)
+                imageRefs = [System.Collections.Generic.List[string]]::new()
+                estimatedTokens = 50000
+            }
+            $firstRetrievedTopic.chunks.Add($oversizedChunk)
+            try {
+                $oversizedRequest = [IND_CRM_API.Services.HelpAnswerRequest]@{
+                    Question = 'Como debo meter un gasto?'
+                    ResponseLocale = $snapshot.Bundle.defaultLocale
+                    AnswerInstructions = $null
+                    History = [System.Collections.Generic.List[IND_CRM_API.Contracts.Requests.HelpConversationMessageRequest]]::new()
+                    Snapshot = $snapshot
+                    Retrieval = $broadModuleResult
+                }
+                [void]$buildContextMethod.Invoke($answerService, [object[]]@($oversizedRequest))
+                $moduleAiOversizePassed = $false
+            }
+            catch {
+                $providerFailure = $_.Exception.InnerException
+                $moduleAiOversizePassed = $null -ne $providerFailure -and
+                    $providerFailure.ProviderSummary -eq 'module-context-budget-exceeded'
+                if (-not $moduleAiOversizePassed) {
+                    $moduleAiContextFailure = $_.Exception.ToString()
+                }
+            }
+            finally {
+                [void]$firstRetrievedTopic.chunks.Remove($oversizedChunk)
+            }
+        }
     }
 
     $overlapMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
@@ -436,6 +570,10 @@ try {
         $(if ($missingModulePassed) { 'Passed' } else { 'Failed' }), `
         $(if ($mismatchedSelectionPassed) { 'Passed' } else { 'Failed' }), `
         $(if ($broadModulePassed) { 'Passed' } else { 'Failed' }))
+    Write-Host ('ModuleNoLexicalMatch={0} ModuleAiCompleteContext={1} ModuleAiOversizeRejected={2}' -f `
+        $(if ($moduleNoMatchPassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($moduleAiContextPassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($moduleAiOversizePassed) { 'Passed' } else { 'Failed' }))
     Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1}' -f `
         $(if ($offsetCopyDetected) { 'Passed' } else { 'Failed' }), `
         $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }))
@@ -450,6 +588,7 @@ try {
     if ($resolutionRate -lt 1.0 -or $top1Rate -lt $MinimumTop1 -or $recallRate -lt $MinimumRecallAt5 -or
         $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or $moduleScopeRate -lt 1.0 -or
         -not $missingModulePassed -or -not $mismatchedSelectionPassed -or -not $broadModulePassed -or
+        -not $moduleNoMatchPassed -or -not $moduleAiContextPassed -or -not $moduleAiOversizePassed -or
         -not $verbatimGuardPassed -or -not $bundleStructurePassed -or
         $bundleCatalogRate -lt 1.0 -or $bundleTopicRate -lt 1.0 -or
         -not $schema10StructurePassed -or $schema10CatalogRate -lt 1.0 -or $schema10TopicRate -lt 1.0) {
@@ -477,6 +616,12 @@ try {
         }
         if (-not $broadModulePassed) {
             Write-Host '- Broad selected module returned a granular selection or escaped its scope.'
+        }
+        if (-not $moduleNoMatchPassed) {
+            Write-Host '- A selected module question without lexical matches did not reach the AI scope.'
+        }
+        if (-not $moduleAiContextPassed -or -not $moduleAiOversizePassed) {
+            Write-Host ('- Module AI context failed: {0}' -f $moduleAiContextFailure)
         }
         if (-not $verbatimGuardPassed) {
             Write-Host '- Verbatim guard failed the offset-copy or short-label regression.'
