@@ -56,6 +56,107 @@ $resolver = [System.ResolveEventHandler]{
 }
 [System.AppDomain]::CurrentDomain.add_AssemblyResolve($resolver)
 
+# Compares ordered string collections without relying on PowerShell object identity.
+function Test-ExactStringSequence {
+    param($Left, $Right)
+
+    $leftItems = @($Left | ForEach-Object { [string]$_ })
+    $rightItems = @($Right | ForEach-Object { [string]$_ })
+    if ($leftItems.Count -ne $rightItems.Count) {
+        return $false
+    }
+    for ($index = 0; $index -lt $leftItems.Count; $index++) {
+        if ($leftItems[$index] -cne $rightItems[$index]) {
+            return $false
+        }
+    }
+    return $true
+}
+
+# Verifies one topic DTO against either canonical or localized display content.
+function Test-HelpTopicProjection {
+    param($Projection, $Topic, $Localization, [string]$ExpectedLocale)
+
+    $expectedTitle = if ($null -eq $Localization) { $Topic.title } else { $Localization.title }
+    $expectedSummary = if ($null -eq $Localization) { $Topic.summary } else { $Localization.summary }
+    $expectedChunks = if ($null -eq $Localization) { @($Topic.chunks) } else { @($Localization.chunks) }
+    $expectedQuickAnswers = if ($null -eq $Localization) { @($Topic.quickAnswers) } else { @($Localization.quickAnswers) }
+    if ($Projection.ResponseLocale -cne $ExpectedLocale -or
+        $Projection.Title -cne $expectedTitle -or
+        $Projection.Summary -cne $expectedSummary -or
+        @($Projection.Chunks).Count -ne $expectedChunks.Count -or
+        @($Projection.QuickAnswers).Count -ne $expectedQuickAnswers.Count) {
+        return $false
+    }
+
+    for ($index = 0; $index -lt $expectedChunks.Count; $index++) {
+        $actual = $Projection.Chunks[$index]
+        $expected = $expectedChunks[$index]
+        if ($actual.Id -cne $expected.id -or
+            $actual.Heading -cne $expected.heading -or
+            $actual.Body -cne $expected.body -or
+            -not (Test-ExactStringSequence $actual.ImageRefs $expected.imageRefs)) {
+            return $false
+        }
+    }
+
+    for ($index = 0; $index -lt $expectedQuickAnswers.Count; $index++) {
+        $actual = $Projection.QuickAnswers[$index]
+        $expected = $expectedQuickAnswers[$index]
+        if ($actual.Id -cne $expected.id -or
+            $actual.Question -cne $expected.question -or
+            $actual.Answer -cne $expected.answer -or
+            -not (Test-ExactStringSequence $actual.SourceChunkIds $expected.sourceChunkIds)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+# Verifies that a catalog response uses one locale consistently without mixed fallback.
+function Test-HelpCatalogProjection {
+    param($Projection, $Snapshot, [string]$ExpectedLocale)
+
+    $useLocalization = @($Snapshot.Bundle.modules | Where-Object {
+        $null -eq $_.localizations -or -not $_.localizations.ContainsKey($ExpectedLocale)
+    }).Count -eq 0 -and @($Snapshot.Bundle.topics | Where-Object {
+        $null -eq $_.localizations -or -not $_.localizations.ContainsKey($ExpectedLocale)
+    }).Count -eq 0
+    $expectedModules = @($Snapshot.Bundle.modules | Sort-Object order, id)
+    if ($Projection.ResponseLocale -cne $ExpectedLocale -or @($Projection.Modules).Count -ne $expectedModules.Count) {
+        return $false
+    }
+
+    for ($moduleIndex = 0; $moduleIndex -lt $expectedModules.Count; $moduleIndex++) {
+        $module = $expectedModules[$moduleIndex]
+        $actualModule = $Projection.Modules[$moduleIndex]
+        $moduleLocalization = if ($useLocalization) { $module.localizations[$ExpectedLocale] } else { $null }
+        $expectedTitle = if ($null -eq $moduleLocalization) { $module.title } else { $moduleLocalization.title }
+        $expectedDescription = if ($null -eq $moduleLocalization) { $module.description } else { $moduleLocalization.description }
+        if ($actualModule.Id -cne $module.id -or
+            $actualModule.Title -cne $expectedTitle -or
+            $actualModule.Description -cne $expectedDescription -or
+            @($actualModule.Topics).Count -ne @($module.topicIds).Count) {
+            return $false
+        }
+
+        for ($topicIndex = 0; $topicIndex -lt @($module.topicIds).Count; $topicIndex++) {
+            $topic = $Snapshot.TopicsById[[string]$module.topicIds[$topicIndex]]
+            $actualTopic = $actualModule.Topics[$topicIndex]
+            $topicLocalization = if ($useLocalization) { $topic.localizations[$ExpectedLocale] } else { $null }
+            $expectedTopicTitle = if ($null -eq $topicLocalization) { $topic.title } else { $topicLocalization.title }
+            $expectedTopicSummary = if ($null -eq $topicLocalization) { $topic.summary } else { $topicLocalization.summary }
+            if ($actualTopic.Id -cne $topic.id -or
+                $actualTopic.Title -cne $expectedTopicTitle -or
+                $actualTopic.Summary -cne $expectedTopicSummary) {
+                return $false
+            }
+        }
+    }
+    return $true
+}
+
+$schema10BundleValidationPath = $null
 try {
     [void][System.Reflection.Assembly]::LoadFrom($assembly)
     $snapshot = [IND_CRM_API.Services.HelpKnowledgeStore]::LoadForValidation($bundle)
@@ -222,6 +323,110 @@ try {
     $shortLabelRejected = [bool]$overlapMethod.Invoke($null, [object[]]@('Hojas de gastos', $shortLabelKnowledge))
     $verbatimGuardPassed = $offsetCopyDetected -and -not $shortLabelRejected
 
+    # The endpoint accepts every UI culture while the current bundle intentionally publishes Spanish only.
+    $acceptedRequestLocales = @('es-ES', 'eu-ES', 'en', 'pt', 'it', 'zh-Hans')
+    $defaultLocale = [string]$snapshot.Bundle.defaultLocale
+    $nonSpanishModuleLocalizationCount = @($snapshot.Bundle.modules | ForEach-Object {
+        @($_.localizations.Keys) | Where-Object { $_ -cne $defaultLocale }
+    }).Count
+    $nonSpanishTopicLocalizationCount = @($snapshot.Bundle.topics | ForEach-Object {
+        @($_.localizations.Keys) | Where-Object { $_ -cne $defaultLocale }
+    }).Count
+    $bundleStructurePassed = $snapshot.Bundle.schemaVersion -ceq '1.1' -and
+        $defaultLocale -ceq 'es-ES' -and
+        (Test-ExactStringSequence $snapshot.Bundle.supportedResponseLocales @('es-ES')) -and
+        $nonSpanishModuleLocalizationCount -eq 0 -and
+        $nonSpanishTopicLocalizationCount -eq 0
+
+    $bundleCatalogResults = foreach ($locale in $acceptedRequestLocales) {
+        $projection = [IND_CRM_API.Services.HelpKnowledgeProjection]::ToCatalog($snapshot, $locale)
+        [pscustomobject]@{
+            Locale = $locale
+            Passed = Test-HelpCatalogProjection $projection $snapshot $defaultLocale
+        }
+    }
+    $bundleCatalogCount = @($bundleCatalogResults).Count
+    $bundleCatalogPassedCount = @($bundleCatalogResults | Where-Object Passed).Count
+    $bundleCatalogRate = $bundleCatalogPassedCount / [math]::Max(1, $bundleCatalogCount)
+
+    $bundleTopicResults = foreach ($locale in $acceptedRequestLocales) {
+        foreach ($topic in $snapshot.Bundle.topics) {
+            $spanishLocalization = if ($topic.localizations.ContainsKey($defaultLocale)) {
+                $topic.localizations[$defaultLocale]
+            }
+            else {
+                $null
+            }
+            $projection = [IND_CRM_API.Services.HelpKnowledgeProjection]::ToTopic($snapshot, $topic, $locale)
+            [pscustomobject]@{
+                Locale = $locale
+                TopicId = $topic.id
+                Passed = Test-HelpTopicProjection `
+                    $projection `
+                    $topic `
+                    $spanishLocalization `
+                    $defaultLocale
+            }
+        }
+    }
+    $bundleTopicCount = @($bundleTopicResults).Count
+    $bundleTopicPassedCount = @($bundleTopicResults | Where-Object Passed).Count
+    $bundleTopicRate = $bundleTopicPassedCount / [math]::Max(1, $bundleTopicCount)
+
+    # Derive a schema 1.0 fixture without localization maps and verify canonical fallback.
+    $schema10BundleObject = [Newtonsoft.Json.Linq.JObject]::Parse(
+        [Newtonsoft.Json.JsonConvert]::SerializeObject($snapshot.Bundle))
+    $schema10BundleObject['schemaVersion'] = [Newtonsoft.Json.Linq.JValue]::CreateString('1.0')
+    foreach ($moduleToken in @($schema10BundleObject['modules'])) {
+        [void]$moduleToken.Remove('localizations')
+    }
+    foreach ($topicToken in @($schema10BundleObject['topics'])) {
+        [void]$topicToken.Remove('localizations')
+    }
+    $schema10BundleValidationPath = Join-Path `
+        ([System.IO.Path]::GetTempPath()) `
+        ('ind-crm-help-schema-10-{0}.json' -f [Guid]::NewGuid().ToString('N'))
+    [System.IO.File]::WriteAllText(
+        $schema10BundleValidationPath,
+        $schema10BundleObject.ToString([Newtonsoft.Json.Formatting]::None),
+        [System.Text.UTF8Encoding]::new($false))
+    $schema10Snapshot = [IND_CRM_API.Services.HelpKnowledgeStore]::LoadForValidation($schema10BundleValidationPath)
+    $schema10StructurePassed = $schema10Snapshot.Bundle.schemaVersion -ceq '1.0' -and
+        @($schema10Snapshot.Bundle.modules | Where-Object { $_.localizations.Count -ne 0 }).Count -eq 0 -and
+        @($schema10Snapshot.Bundle.topics | Where-Object { $_.localizations.Count -ne 0 }).Count -eq 0
+
+    $schema10CatalogResults = foreach ($locale in $acceptedRequestLocales) {
+        $projection = [IND_CRM_API.Services.HelpKnowledgeProjection]::ToCatalog($schema10Snapshot, $locale)
+        [pscustomobject]@{
+            Locale = $locale
+            Passed = Test-HelpCatalogProjection `
+                $projection `
+                $schema10Snapshot `
+                $schema10Snapshot.Bundle.defaultLocale
+        }
+    }
+    $schema10CatalogCount = @($schema10CatalogResults).Count
+    $schema10CatalogPassedCount = @($schema10CatalogResults | Where-Object Passed).Count
+    $schema10CatalogRate = $schema10CatalogPassedCount / [math]::Max(1, $schema10CatalogCount)
+
+    $schema10TopicResults = foreach ($locale in $acceptedRequestLocales) {
+        foreach ($topic in $schema10Snapshot.Bundle.topics) {
+            $projection = [IND_CRM_API.Services.HelpKnowledgeProjection]::ToTopic($schema10Snapshot, $topic, $locale)
+            [pscustomobject]@{
+                Locale = $locale
+                TopicId = $topic.id
+                Passed = Test-HelpTopicProjection `
+                    $projection `
+                    $topic `
+                    $null `
+                    $schema10Snapshot.Bundle.defaultLocale
+            }
+        }
+    }
+    $schema10TopicCount = @($schema10TopicResults).Count
+    $schema10TopicPassedCount = @($schema10TopicResults | Where-Object Passed).Count
+    $schema10TopicRate = $schema10TopicPassedCount / [math]::Max(1, $schema10TopicCount)
+
     $results | Format-Table -AutoSize
     Write-Host ('Cases={0} TopicCases={1} Resolution={2:P2} Top1={3:P2} RecallAt5={4:P2}' -f $count, $topicCases.Count, $resolutionRate, $top1Rate, $recallRate)
     Write-Host ('MenuExact={0:P2} ({1}/{2}) MissingTopic={3}' -f `
@@ -234,11 +439,20 @@ try {
     Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1}' -f `
         $(if ($offsetCopyDetected) { 'Passed' } else { 'Failed' }), `
         $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }))
-
+    Write-Host ('BundleStructure={0} SpanishFallbackCatalog={1:P2} ({2}/{3}) SpanishFallbackTopics={4:P2} ({5}/{6})' -f `
+        $(if ($bundleStructurePassed) { 'Passed' } else { 'Failed' }), `
+        $bundleCatalogRate, $bundleCatalogPassedCount, $bundleCatalogCount, `
+        $bundleTopicRate, $bundleTopicPassedCount, $bundleTopicCount)
+    Write-Host ('Schema10Structure={0} Schema10Catalog={1:P2} ({2}/{3}) Schema10Topics={4:P2} ({5}/{6})' -f `
+        $(if ($schema10StructurePassed) { 'Passed' } else { 'Failed' }), `
+        $schema10CatalogRate, $schema10CatalogPassedCount, $schema10CatalogCount, `
+        $schema10TopicRate, $schema10TopicPassedCount, $schema10TopicCount)
     if ($resolutionRate -lt 1.0 -or $top1Rate -lt $MinimumTop1 -or $recallRate -lt $MinimumRecallAt5 -or
         $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or $moduleScopeRate -lt 1.0 -or
         -not $missingModulePassed -or -not $mismatchedSelectionPassed -or -not $broadModulePassed -or
-        -not $verbatimGuardPassed) {
+        -not $verbatimGuardPassed -or -not $bundleStructurePassed -or
+        $bundleCatalogRate -lt 1.0 -or $bundleTopicRate -lt 1.0 -or
+        -not $schema10StructurePassed -or $schema10CatalogRate -lt 1.0 -or $schema10TopicRate -lt 1.0) {
         Write-Host 'Failed cases:'
         $results |
             Where-Object { -not $_.ResolutionPassed -or (-not [string]::IsNullOrWhiteSpace($_.ExpectedTopicIds) -and (-not $_.Top1Passed -or -not $_.RecallAt5Passed)) } |
@@ -267,9 +481,32 @@ try {
         if (-not $verbatimGuardPassed) {
             Write-Host '- Verbatim guard failed the offset-copy or short-label regression.'
         }
+        if (-not $bundleStructurePassed) {
+            Write-Host '- BundleStructure failed: expected schema 1.1 with Spanish-only locale coverage.'
+        }
+        $bundleCatalogResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- SpanishFallbackCatalog failed: requested={0}' -f $_.Locale)
+        }
+        $bundleTopicResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- SpanishFallbackTopics failed: requested={0} topic={1}' -f `
+                $_.Locale, $_.TopicId)
+        }
+        if (-not $schema10StructurePassed) {
+            Write-Host '- Schema10Structure failed: schema or localization-map compatibility changed.'
+        }
+        $schema10CatalogResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- Schema10Catalog failed: {0}' -f $_.Locale)
+        }
+        $schema10TopicResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- Schema10Topics failed: {0}/{1}' -f $_.Locale, $_.TopicId)
+        }
         exit 1
     }
 }
 finally {
+    if (-not [string]::IsNullOrWhiteSpace($schema10BundleValidationPath) -and
+        [System.IO.File]::Exists($schema10BundleValidationPath)) {
+        [System.IO.File]::Delete($schema10BundleValidationPath)
+    }
     [System.AppDomain]::CurrentDomain.remove_AssemblyResolve($resolver)
 }

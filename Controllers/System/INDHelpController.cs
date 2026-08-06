@@ -50,6 +50,7 @@ namespace IND_CRM_API.Controllers.System
 
         /// <summary>
         /// Returns the ordered help menu without calling OpenAI.
+        /// Every accepted UI locale falls back to Spanish while only Spanish is published.
         /// </summary>
         [HttpGet, Route("catalog")]
         [ResponseType(typeof(IndApiResponse<HelpCatalogDto>))]
@@ -68,7 +69,7 @@ namespace IND_CRM_API.Controllers.System
             {
                 var snapshot = _knowledgeStore.GetSnapshot();
                 var data = HelpKnowledgeProjection.ToCatalog(snapshot, responseLocale);
-                return OkWithEtag(data, traceId, snapshot.BundleHash);
+                return OkWithEtag(data, traceId, snapshot.BundleHash + "-" + data.ResponseLocale);
             }
             catch (HelpFeatureUnavailableException ex)
             {
@@ -77,7 +78,8 @@ namespace IND_CRM_API.Controllers.System
         }
 
         /// <summary>
-        /// Returns canonical Spanish topic content without an AI call.
+        /// Returns topic content without an AI call.
+        /// Every accepted UI locale falls back to Spanish while only Spanish is published.
         /// </summary>
         [HttpGet, Route("topics/{topicId}")]
         [ResponseType(typeof(IndApiResponse<HelpTopicDto>))]
@@ -107,7 +109,10 @@ namespace IND_CRM_API.Controllers.System
                 }
 
                 var data = HelpKnowledgeProjection.ToTopic(snapshot, topic, responseLocale);
-                return OkWithEtag(data, traceId, snapshot.BundleHash + "-" + (topic.contentHash ?? topic.id));
+                return OkWithEtag(
+                    data,
+                    traceId,
+                    snapshot.BundleHash + "-" + (topic.contentHash ?? topic.id) + "-" + data.ResponseLocale);
             }
             catch (HelpFeatureUnavailableException ex)
             {

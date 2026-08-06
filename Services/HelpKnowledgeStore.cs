@@ -191,7 +191,9 @@ namespace IND_CRM_API.Services
 
         private static void ValidateAndNormalize(HelpKnowledgeBundle bundle)
         {
-            if (bundle == null || !string.Equals(bundle.schemaVersion, "1.0", StringComparison.Ordinal))
+            if (bundle == null ||
+                (!string.Equals(bundle.schemaVersion, "1.0", StringComparison.Ordinal) &&
+                 !string.Equals(bundle.schemaVersion, "1.1", StringComparison.Ordinal)))
                 throw new InvalidDataException("Unsupported help bundle schema.");
             if (string.IsNullOrWhiteSpace(bundle.knowledgeVersion))
                 throw new InvalidDataException("Missing knowledgeVersion.");
@@ -239,6 +241,9 @@ namespace IND_CRM_API.Services
                 module.title = RequireText(module.title, "module.title", 200);
                 module.description = NormalizeText(module.description, 1000);
                 module.topicIds = NormalizeIdList(module.topicIds, topicIds, "module.topicIds");
+                module.localizations = NormalizeModuleLocalizations(
+                    module.localizations,
+                    bundle.supportedResponseLocales);
             }
 
             foreach (var topic in bundle.topics)
@@ -290,6 +295,13 @@ namespace IND_CRM_API.Services
                     if (quickAnswer.sourceChunkIds.Count == 0)
                         throw new InvalidDataException("Quick answers require at least one source chunk.");
                 }
+
+                topic.localizations = NormalizeTopicLocalizations(
+                    topic.localizations,
+                    bundle.supportedResponseLocales,
+                    topic.chunks,
+                    topic.quickAnswers,
+                    assetIds);
             }
 
             foreach (var module in bundle.modules)
@@ -343,6 +355,136 @@ namespace IND_CRM_API.Services
                     result[locale] = NormalizeTextList(localized, 100, 1000);
                 else
                     result[locale] = new List<string>();
+            }
+            return result;
+        }
+
+        // Validates optional module display localizations while preserving old bundles without them.
+        private static Dictionary<string, HelpKnowledgeModuleLocalization> NormalizeModuleLocalizations(
+            Dictionary<string, HelpKnowledgeModuleLocalization> values,
+            IList<string> supportedLocales)
+        {
+            var result = NormalizeLocalizationDictionary(values, supportedLocales, "module.localizations");
+            foreach (var entry in result)
+            {
+                entry.Value.title = RequireText(
+                    entry.Value.title,
+                    "module.localizations[" + entry.Key + "].title",
+                    200);
+                entry.Value.description = RequireText(
+                    entry.Value.description,
+                    "module.localizations[" + entry.Key + "].description",
+                    1000);
+            }
+            return result;
+        }
+
+        // Validates localized topic content against the canonical chunk and quick-answer identities.
+        private static Dictionary<string, HelpKnowledgeTopicLocalization> NormalizeTopicLocalizations(
+            Dictionary<string, HelpKnowledgeTopicLocalization> values,
+            IList<string> supportedLocales,
+            IList<HelpKnowledgeChunk> canonicalChunks,
+            IList<HelpKnowledgeQuickAnswer> canonicalQuickAnswers,
+            ISet<string> assetIds)
+        {
+            var result = NormalizeLocalizationDictionary(values, supportedLocales, "topic.localizations");
+            var canonicalChunkIds = new HashSet<string>(
+                canonicalChunks.Select(item => item.id),
+                StringComparer.OrdinalIgnoreCase);
+            var canonicalQuickAnswerIds = new HashSet<string>(
+                canonicalQuickAnswers.Select(item => item.id),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in result)
+            {
+                var locale = entry.Key;
+                var localization = entry.Value;
+                localization.title = RequireText(
+                    localization.title,
+                    "topic.localizations[" + locale + "].title",
+                    300);
+                localization.summary = RequireText(
+                    localization.summary,
+                    "topic.localizations[" + locale + "].summary",
+                    2000);
+                localization.chunks = localization.chunks ?? new List<HelpKnowledgeChunk>();
+                localization.quickAnswers = localization.quickAnswers ?? new List<HelpKnowledgeQuickAnswer>();
+
+                EnsureUniqueIds(localization.chunks.Select(item => item?.id), "localized chunk");
+                EnsureUniqueIds(localization.quickAnswers.Select(item => item?.id), "localized quickAnswer");
+                var localizedChunkIds = new HashSet<string>(
+                    localization.chunks.Select(item => item.id),
+                    StringComparer.OrdinalIgnoreCase);
+                var localizedQuickAnswerIds = new HashSet<string>(
+                    localization.quickAnswers.Select(item => item.id),
+                    StringComparer.OrdinalIgnoreCase);
+                if (!localizedChunkIds.SetEquals(canonicalChunkIds))
+                    throw new InvalidDataException("Localized chunk ids must match canonical chunk ids.");
+                if (!localizedQuickAnswerIds.SetEquals(canonicalQuickAnswerIds))
+                    throw new InvalidDataException("Localized quick-answer ids must match canonical quick-answer ids.");
+
+                foreach (var chunk in localization.chunks)
+                {
+                    chunk.heading = RequireText(
+                        chunk.heading,
+                        "topic.localizations[" + locale + "].chunk.heading",
+                        300);
+                    chunk.body = RequireText(
+                        chunk.body,
+                        "topic.localizations[" + locale + "].chunk.body",
+                        32000);
+                    chunk.imageRefs = NormalizeIdList(
+                        chunk.imageRefs,
+                        assetIds,
+                        "topic.localizations[" + locale + "].chunk.imageRefs");
+                    if (chunk.estimatedTokens <= 0)
+                        chunk.estimatedTokens = EstimateTokens(chunk.heading + "\n" + chunk.body);
+                }
+
+                foreach (var quickAnswer in localization.quickAnswers)
+                {
+                    quickAnswer.question = RequireText(
+                        quickAnswer.question,
+                        "topic.localizations[" + locale + "].quickAnswer.question",
+                        1000);
+                    quickAnswer.answer = RequireText(
+                        quickAnswer.answer,
+                        "topic.localizations[" + locale + "].quickAnswer.answer",
+                        8000);
+                    quickAnswer.sourceChunkIds = NormalizeIdList(
+                        quickAnswer.sourceChunkIds,
+                        canonicalChunkIds,
+                        "topic.localizations[" + locale + "].quickAnswer.sourceChunkIds");
+                    if (quickAnswer.sourceChunkIds.Count == 0)
+                        throw new InvalidDataException("Localized quick answers require at least one source chunk.");
+                }
+
+                var chunksById = localization.chunks.ToDictionary(item => item.id, StringComparer.OrdinalIgnoreCase);
+                var quickAnswersById = localization.quickAnswers.ToDictionary(item => item.id, StringComparer.OrdinalIgnoreCase);
+                localization.chunks = canonicalChunks.Select(item => chunksById[item.id]).ToList();
+                localization.quickAnswers = canonicalQuickAnswers.Select(item => quickAnswersById[item.id]).ToList();
+            }
+
+            return result;
+        }
+
+        // Keeps only explicitly supplied localizations and canonicalizes their supported locale keys.
+        private static Dictionary<string, T> NormalizeLocalizationDictionary<T>(
+            Dictionary<string, T> values,
+            IList<string> supportedLocales,
+            string field)
+            where T : class
+        {
+            var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in values ?? new Dictionary<string, T>())
+            {
+                var locale = supportedLocales.FirstOrDefault(candidate =>
+                    string.Equals(candidate, entry.Key?.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrWhiteSpace(locale))
+                    throw new InvalidDataException(field + " contains an unsupported locale.");
+                if (entry.Value == null || result.ContainsKey(locale))
+                    throw new InvalidDataException(field + " contains an invalid or duplicate locale.");
+                result.Add(locale, entry.Value);
             }
             return result;
         }
@@ -432,15 +574,19 @@ namespace IND_CRM_API.Services
     {
         public static HelpCatalogDto ToCatalog(HelpKnowledgeSnapshot snapshot, string requestedLocale)
         {
-            var locale = snapshot.Bundle.defaultLocale;
+            var resolvedLocale = snapshot.ResolveLocale(requestedLocale);
+            var locale = HasCompleteCatalogLocalization(snapshot, resolvedLocale)
+                ? resolvedLocale
+                : snapshot.Bundle.defaultLocale;
+            var useLocalization = HasCompleteCatalogLocalization(snapshot, locale);
             var modules = snapshot.Bundle.modules
                 .OrderBy(module => module.order)
                 .ThenBy(module => module.id, StringComparer.OrdinalIgnoreCase)
                 .Select(module => new HelpCatalogModuleDto
                 {
                     Id = module.id,
-                    Title = module.title,
-                    Description = module.description,
+                    Title = useLocalization ? module.localizations[locale].title : module.title,
+                    Description = useLocalization ? module.localizations[locale].description : module.description,
                     Order = module.order,
                     Topics = module.topicIds
                         .Where(snapshot.TopicsById.ContainsKey)
@@ -449,8 +595,8 @@ namespace IND_CRM_API.Services
                         {
                             Id = topic.id,
                             ModuleId = topic.moduleId,
-                            Title = topic.title,
-                            Summary = topic.summary,
+                            Title = useLocalization ? topic.localizations[locale].title : topic.title,
+                            Summary = useLocalization ? topic.localizations[locale].summary : topic.summary,
                             RouteKey = topic.routeKey,
                             HasQuickAnswers = topic.quickAnswers.Count > 0
                         })
@@ -469,24 +615,42 @@ namespace IND_CRM_API.Services
 
         public static HelpTopicDto ToTopic(HelpKnowledgeSnapshot snapshot, HelpKnowledgeTopic topic, string requestedLocale)
         {
-            var locale = snapshot.Bundle.defaultLocale;
+            var resolvedLocale = snapshot.ResolveLocale(requestedLocale);
+            var locale = resolvedLocale;
+            HelpKnowledgeTopicLocalization localization = null;
+            if (topic.localizations != null)
+            {
+                topic.localizations.TryGetValue(resolvedLocale, out localization);
+            }
+            if (localization == null &&
+                !string.Equals(resolvedLocale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase))
+            {
+                locale = snapshot.Bundle.defaultLocale;
+                if (topic.localizations != null)
+                    topic.localizations.TryGetValue(locale, out localization);
+            }
+
+            if (localization == null)
+                locale = snapshot.Bundle.defaultLocale;
+            var chunks = localization == null ? topic.chunks : localization.chunks;
+            var quickAnswers = localization == null ? topic.quickAnswers : localization.quickAnswers;
             return new HelpTopicDto
             {
                 Id = topic.id,
                 ModuleId = topic.moduleId,
-                Title = topic.title,
-                Summary = topic.summary,
+                Title = localization == null ? topic.title : localization.title,
+                Summary = localization == null ? topic.summary : localization.summary,
                 RouteKey = topic.routeKey,
                 PrerequisiteTopicIds = new List<string>(topic.prerequisiteTopicIds),
                 RelatedTopicIds = new List<string>(topic.relatedTopicIds),
-                Chunks = topic.chunks.Select(chunk => new HelpTopicChunkDto
+                Chunks = chunks.Select(chunk => new HelpTopicChunkDto
                 {
                     Id = chunk.id,
                     Heading = chunk.heading,
                     Body = chunk.body,
                     ImageRefs = new List<string>(chunk.imageRefs)
                 }).ToList(),
-                QuickAnswers = topic.quickAnswers.Select(answer => new HelpQuickAnswerDto
+                QuickAnswers = quickAnswers.Select(answer => new HelpQuickAnswerDto
                 {
                     Id = answer.id,
                     Question = answer.question,
@@ -496,6 +660,15 @@ namespace IND_CRM_API.Services
                 KnowledgeVersion = snapshot.Bundle.knowledgeVersion,
                 ResponseLocale = locale
             };
+        }
+
+        // Requires complete module and topic coverage before localizing a catalog response.
+        private static bool HasCompleteCatalogLocalization(HelpKnowledgeSnapshot snapshot, string locale)
+        {
+            return snapshot.Bundle.modules.All(module =>
+                       module.localizations != null && module.localizations.ContainsKey(locale)) &&
+                   snapshot.Bundle.topics.All(topic =>
+                       topic.localizations != null && topic.localizations.ContainsKey(locale));
         }
     }
 }

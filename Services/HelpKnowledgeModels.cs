@@ -48,6 +48,18 @@ namespace IND_CRM_API.Services
         public int order { get; set; }
 
         public List<string> topicIds { get; set; }
+
+        public Dictionary<string, HelpKnowledgeModuleLocalization> localizations { get; set; }
+    }
+
+    /// <summary>
+    /// Localized display metadata for one help module.
+    /// </summary>
+    public sealed class HelpKnowledgeModuleLocalization
+    {
+        public string title { get; set; }
+
+        public string description { get; set; }
     }
 
     public sealed class HelpKnowledgeTopic
@@ -79,6 +91,22 @@ namespace IND_CRM_API.Services
         public string contentVersion { get; set; }
 
         public string contentHash { get; set; }
+
+        public List<HelpKnowledgeQuickAnswer> quickAnswers { get; set; }
+
+        public List<HelpKnowledgeChunk> chunks { get; set; }
+
+        public Dictionary<string, HelpKnowledgeTopicLocalization> localizations { get; set; }
+    }
+
+    /// <summary>
+    /// Localized display content for one help topic without changing retrieval fields.
+    /// </summary>
+    public sealed class HelpKnowledgeTopicLocalization
+    {
+        public string title { get; set; }
+
+        public string summary { get; set; }
 
         public List<HelpKnowledgeQuickAnswer> quickAnswers { get; set; }
 

@@ -116,10 +116,10 @@ Endpoints
 ## CRM Help Assistant
 - GET /api/help/catalog?responseLocale=es-ES (Authorize)
   Devuelve `KnowledgeVersion`, `DefaultLocale`, `ResponseLocale` y modulos/temas ordenados. No llama a OpenAI.
-  El contenido documental de catalogo es canonico en espanol; `responseLocale` queda reservado para compatibilidad y solo admite `es-ES`, `eu-ES`, `en`, `pt`, `it`, `zh-Hans`.
-  Incluye ETag privado y admite `If-None-Match`.
+  `responseLocale` admite `es-ES`, `eu-ES`, `en`, `pt`, `it`, `zh-Hans` por compatibilidad con la interfaz. El bundle publicado contiene solo espanol: todas esas peticiones devuelven el catalogo completo de `DefaultLocale=es-ES` y `ResponseLocale=es-ES`.
+  Incluye ETag privado por cultura efectiva y admite `If-None-Match`.
 - GET /api/help/topics/{topicId}?responseLocale=es-ES (Authorize)
-  Devuelve chunks y respuestas rapidas canonicas del tema sin llamar a OpenAI. El contenido es espanol aunque la interfaz solicitante use otra cultura.
+  Devuelve `Title`, `Summary`, `Chunks` y `QuickAnswers` sin llamar a OpenAI. Mientras solo este publicado el contenido espanol, cualquier cultura admitida recibe la proyeccion completa `es-ES` y `ResponseLocale=es-ES`.
   Response data: `Id`, `ModuleId`, `Title`, `Summary`, `RouteKey`, `PrerequisiteTopicIds`, `RelatedTopicIds`, `Chunks`, `QuickAnswers`, `KnowledgeVersion`, `ResponseLocale`.
   `RouteKey` es una clave allowlist (`home`, `visits.history`, `expenses.sheets`, `expenses.tickets`), nunca una URL.
 - POST /api/ia/service/help/ask (Authorize)
@@ -139,7 +139,7 @@ Endpoints
 Runtime/configuracion:
 - Feature flag: `HelpAssistant:Enabled` / `INDCRM_HELP_ENABLED`; esta desactivada en `App.config` hasta desplegar el bundle validado.
 - Bundle: `HelpAssistant:KnowledgeBundlePath` / `INDCRM_HELP_KNOWLEDGE_BUNDLE_PATH`; default `Knowledge\crm-help.bundle.json` relativo al ejecutable. El proyecto lo copia con `PreserveNewest` cuando existe; la fuente generada se integra desde `IND_CRM_APP\docs\crm-help\generated\crm-help.bundle.json` y no se admite un bundle vacio.
-- Esquema bundle `1.0`: raiz `knowledgeVersion`, `knowledgeHash`, `defaultLocale`, `supportedResponseLocales`, `source`, `modules`, `topics`, `assets`; topic con `aliases`, `sampleQuestions`, `keywords`, `quickAnswers` y `chunks`. El compilador documental valida los hashes contra los bytes fuente; el runtime valida el formato SHA-256, IDs unicos de assets y que cada `imageRef` apunte a un asset declarado.
+- Esquemas bundle admitidos: `1.0` y `1.1`. `1.1` anade `module.localizations[locale]={title,description}` y `topic.localizations[locale]={title,summary,chunks,quickAnswers}` sin retirar los campos escalares canonicos. El bundle actual declara unicamente `es-ES`. Los mapas son opcionales para compatibilidad con bundles antiguos; cada entrada presente debe usar una cultura declarada en `supportedResponseLocales`, y sus IDs de chunks y respuestas rapidas deben coincidir exactamente con los conjuntos canonicos. El runtime aplica los mismos limites de texto, assets e IDs relacionados. Los `title`, `summary`, `chunks` y `quickAnswers` canonicos siguen siendo la unica fuente de contenido para retrieval y grounding; aliases y preguntas localizadas conservan su funcion de busqueda.
 - Modelo/presupuesto: `HelpAssistant:Model`, `ReasoningEffort`, `PromptCacheKey`, `TimeoutSeconds`, `MaxInputTokens`, `MinDocumentTokens`, `MaxDocumentTokens`, `MinOutputTokens`, `MaxOutputTokens`, `MaxHistoryMessages`. Defaults efectivos: `gpt-5.4-mini`, low, 90 s, 18k entrada total, 4k-12k documental, 1.6k-3.2k salida.
 - Rate limit: `HelpAssistant:RateLimitEnabled`, `RateLimitMaxRequests`, `RateLimitWindowSeconds`.
 - Feedback: `HelpAssistant:FeedbackHmacSecret` (minimo 32 caracteres) y `FeedbackTokenMinutes`.
@@ -147,7 +147,7 @@ Runtime/configuracion:
 - Metricas NDJSON no contienen pregunta, respuesta, historial, IP, email, company, OID o identidad directa. El texto redactado solo se escribe en `review` cuando los tres switches de seguridad estan activos y existe secreto HMAC.
 - Retenciones default: review 90 dias, metricas 180 dias, agregados 730 dias; purga local diaria best effort.
 - `scripts/setup-help-analytics-acl.ps1` prepara la ACL solo para el target exacto y exige `-AllowExisting` si ya contiene datos; `scripts/export-help-analytics-report.ps1 -IncludeReviewQueue` genera HTML/CSV privados semanales o mensuales, mas una cola editorial redactada separada, sin endpoint publico.
-- `scripts/test-help-retrieval.ps1` ejecuta el recuperador real sobre el bundle y `evals/retrieval-cases.json`, calcula Top1/Recall@5 sobre el ranking interno y exige `MenuExact` para todos los topics mas un ID inexistente.
+- `scripts/test-help-retrieval.ps1` ejecuta el recuperador real sobre el bundle y `evals/retrieval-cases.json`, calcula Top1/Recall@5 sobre el ranking interno, exige `MenuExact` para todos los topics mas un ID inexistente, valida que las seis culturas admitidas reciban la proyeccion espanola completa y comprueba compatibilidad `1.0` mediante un fixture temporal.
 - `scripts/test-help-feedback-token.ps1` comprueba sin imprimir secretos ni tokens que el primer consumo se acepta y los replay/malformed se rechazan.
 - `scripts/test-help-answer-evals.ps1` valida `answer-cases.json` y, fuera de `-ValidateOnly`, llama secuencialmente al endpoint autenticado directo `/api/ia/service/help/ask`. Requiere `-ApiBaseUrl`, `-CasesPath` y `-OutputDirectory`; lee el bearer exclusivamente de la variable de entorno de proceso indicada por `-TokenEnvironmentVariable` y no lo acepta como parametro ni lo incluye en la salida.
 - El runner comprueba HTTP/envelope, `expectedResolution`, locale, topics mediante `Sources` y `requiredSourceChunkIds`; genera JSON/HTML escapado y devuelve codigo distinto de cero ante fallos estructurales. `-CaseId` limita la ejecucion a un caso y cada request usa un `clientInteractionId` nuevo.
