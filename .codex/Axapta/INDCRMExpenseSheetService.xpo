@@ -3949,7 +3949,9 @@ Formatversion: 1
         #        if (msg)
         #            throw error(msg);
         #
-        #        ticketHeader.update();
+        #        //MMS - Persists only status and search data without reverse line synchronization - 2026.08.06
+        #        ticketHeader.updateSearchKey();
+        #        ticketHeader.doUpdate();
         #    }
         #    else if (!hasAssignedLine && ticketHeader.Status != INDTicketStatus::Pending)
         #    {
@@ -3959,7 +3961,9 @@ Formatversion: 1
         #        if (msg)
         #            throw error(msg);
         #
-        #        ticketHeader.update();
+        #        //MMS - Persists only status and search data without reverse line synchronization - 2026.08.06
+        #        ticketHeader.updateSearchKey();
+        #        ticketHeader.doUpdate();
         #    }
         #}
         #
@@ -6290,7 +6294,7 @@ Formatversion: 1
         #
       ENDSOURCE
       SOURCE #linkExpenseSheetLineTicket
-        #//MMS - Links a pending ticket to a manual line on a Draft expense sheet - 2026.08.04
+        #//MMS - Links a ticket and applies only its monetary snapshot to a manual Draft line - 2026.08.06
         #// Input: [companyId, ownerAxUserId, viewerAxUserId, hojaGastosId, lineRecId, fileId].
         #static server container linkExpenseSheetLineTicket(container _data)
         #{
@@ -6305,6 +6309,8 @@ Formatversion: 1
         #    str                 msg;
         #    str 10              ticketStatusOut;
         #    boolean             changed;
+        #    boolean             alreadyLinked;
+        #    boolean             lineChanged;
         #
         #    CRMHojaGastosTable  header;
         #    CRMHojaGastosLine   line;
@@ -6431,48 +6437,82 @@ Formatversion: 1
         #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'FileId ya esta asignado a otra linea.', 'CONFLICT', hojaId, lineRecId, fileId, ticketStatusOut, false);
         #            }
         #
-        #            if (line.FileId == fileId)
-        #            {
-        #                changed = ticketHeader.Status != INDTicketStatus::Assigned;
-        #                INDCRMExpenseSheetService::refreshTicketStatusByFileId(ownerAxUserId, fileId);
-        #                ticketStatusOut = strFmt('%1', any2int(INDTicketStatus::Assigned));
-        #                ttscommit;
+        #            alreadyLinked = line.FileId == fileId;
         #
-        #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(true, 'La linea ya estaba vinculada al ticket.', '', hojaId, lineRecId, fileId, ticketStatusOut, changed);
-        #            }
-        #
-        #            if (ticketHeader.Status != INDTicketStatus::Pending)
+        #            if (!alreadyLinked && ticketHeader.Status != INDTicketStatus::Pending)
         #            {
         #                ttsabort;
         #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'El ticket no esta pendiente.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
         #            }
         #
-        #            if (ticketHeader.TotalAmount == 0)
+        #            if (ticketHeader.TotalAmount <= 0)
         #            {
         #                ttsabort;
-        #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'El ticket debe tener un importe total distinto de cero.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
+        #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'El ticket debe tener un importe total mayor que cero.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
         #            }
         #
-        #            select firstonly docuRef
-        #                where docuRef.RefTableId == tableNum(INDTicketInfoTable)
-        #                   && docuRef.RefRecId   == ticketHeader.RecId
-        #                   && docuRef.INDFileId  == ticketHeader.FileId;
-        #
-        #            if (!docuRef.RecId ||
-        #                (!strLRTrim(docuRef.INDURLFile) && !strLRTrim(docuRef.INDFilename)))
+        #            if (!alreadyLinked)
         #            {
-        #                ttsabort;
-        #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'El ticket no tiene una foto o documento asociado.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
+        #                select firstonly docuRef
+        #                    where docuRef.RefTableId == tableNum(INDTicketInfoTable)
+        #                       && docuRef.RefRecId   == ticketHeader.RecId
+        #                       && docuRef.INDFileId  == ticketHeader.FileId;
+        #
+        #                if (!docuRef.RecId ||
+        #                    (!strLRTrim(docuRef.INDURLFile) && !strLRTrim(docuRef.INDFilename)))
+        #                {
+        #                    ttsabort;
+        #                    return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'El ticket no tiene una foto o documento asociado.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
+        #                }
         #            }
         #
         #            line.FileId = fileId;
-        #            line.update();
+        #            line.Qty = 1;
+        #            line.Price = ticketHeader.TotalAmount;
+        #            line.Amount = ticketHeader.TotalAmount;
+        #            line.Currency = ticketHeader.CurrencyCode;
+        #            line.ExchRate = ticketHeader.ExchRate;
+        #            line.AmountMST = ticketHeader.AmountMST;
+        #            line.normalizeCurrencyAmounts(line.AmountMST != 0);
+        #            line.recalculateReimbursableAmount();
+        #
+        #            if (!line.validateCurrencyAmounts())
+        #            {
+        #                ttsabort;
+        #                return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(false, 'Datos de divisa del ticket invalidos para la linea.', 'INVALID_TICKET', hojaId, lineRecId, fileId, ticketStatusOut, false);
+        #            }
+        #
+        #            lineChanged = line.FileId             != line.orig().FileId ||
+        #                          line.Qty                != line.orig().Qty ||
+        #                          line.Price              != line.orig().Price ||
+        #                          line.Amount             != line.orig().Amount ||
+        #                          line.Currency           != line.orig().Currency ||
+        #                          line.ExchRate           != line.orig().ExchRate ||
+        #                          line.AmountMST          != line.orig().AmountMST ||
+        #                          line.ReimbursableAmount != line.orig().ReimbursableAmount ||
+        #                          line.VisaEmpresa        != line.orig().VisaEmpresa;
+        #            changed = lineChanged || ticketHeader.Status != INDTicketStatus::Assigned;
+        #
+        #            if (lineChanged)
+        #            {
+        #                //MMS - Bypasses reverse ticket synchronization after applying the ticket monetary snapshot - 2026.08.06
+        #                line.doUpdate();
+        #                line.CreaActualizaProyectoEnLineCust();
+        #                INDProjCostRevenueTable::CreateProjCostFromCommon(line);
+        #                line.syncHojaGastosTable();
+        #            }
+        #
         #            INDCRMExpenseSheetService::refreshTicketStatusByFileId(ownerAxUserId, fileId);
         #
         #            ticketStatusOut = strFmt('%1', any2int(INDTicketStatus::Assigned));
+        #            if (alreadyLinked)
+        #                msg = 'La linea ya estaba vinculada al ticket y sus importes fueron reconciliados.';
+        #            else
+        #                msg = 'Ticket vinculado correctamente.';
+        #
         #            ttscommit;
         #
-        #            return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(true, 'Ticket vinculado correctamente.', '', hojaId, lineRecId, fileId, ticketStatusOut, true);
+        #            return INDCRMExpenseSheetService::buildExpenseSheetLineTicketResult(true, msg, '', hojaId, lineRecId, fileId, ticketStatusOut, changed);
         #        }
         #    }
         #    catch (Exception::Deadlock)

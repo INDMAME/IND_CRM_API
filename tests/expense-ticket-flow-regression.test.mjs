@@ -463,11 +463,65 @@ test("line-ticket association is owner-only and requires sheet Edit plus ticket 
   }
 });
 
-test("link writes FileId and unlink clears it before deriving ticket status", () => {
+test("link replaces only the manual line monetary snapshot from the ticket", () => {
   assert.match(
     axLinkLineTicketSource,
-    /line\.FileId\s*=\s*fileId;[\s\S]*line\.update\(\);[\s\S]*refreshTicketStatusByFileId\(ownerAxUserId,\s*fileId\)/,
+    /line\.FileId\s*=\s*fileId;[\s\S]*line\.Qty\s*=\s*1;[\s\S]*line\.Price\s*=\s*ticketHeader\.TotalAmount;[\s\S]*line\.Amount\s*=\s*ticketHeader\.TotalAmount;[\s\S]*line\.Currency\s*=\s*ticketHeader\.CurrencyCode;[\s\S]*line\.ExchRate\s*=\s*ticketHeader\.ExchRate;[\s\S]*line\.AmountMST\s*=\s*ticketHeader\.AmountMST;/,
   );
+  assert.match(
+    axLinkLineTicketSource,
+    /line\.normalizeCurrencyAmounts\(line\.AmountMST\s*!=\s*0\);[\s\S]*line\.recalculateReimbursableAmount\(\);[\s\S]*line\.validateCurrencyAmounts\(\)[\s\S]*line\.doUpdate\(\);[\s\S]*line\.CreaActualizaProyectoEnLineCust\(\);[\s\S]*INDProjCostRevenueTable::CreateProjCostFromCommon\(line\);[\s\S]*line\.syncHojaGastosTable\(\);[\s\S]*refreshTicketStatusByFileId\(ownerAxUserId,\s*fileId\)/,
+  );
+  assert.match(axLinkLineTicketSource, /ticketHeader\.TotalAmount\s*<=\s*0/);
+  assert.doesNotMatch(axLinkLineTicketSource, /line\.update\(\);/);
+  assert.doesNotMatch(axLinkLineTicketSource, /line\.syncLinkedTicket\(\);/);
+
+  for (const preservedField of [
+    "TransDate",
+    "Type",
+    "Description",
+    "ProjId",
+    "ProjIdHornos",
+    "Internacional",
+    "ReimbursableExpense",
+  ]) {
+    assert.doesNotMatch(
+      axLinkLineTicketSource,
+      new RegExp(`line\\.${preservedField}\\s*=(?!=)`),
+      `${preservedField} must remain unchanged when a ticket is linked`,
+    );
+  }
+});
+
+test("relinking the same FileId reconciles amounts before returning", () => {
+  const sameFileComparisonPosition = axLinkLineTicketSource.indexOf(
+    "line.FileId == fileId",
+  );
+  const monetarySnapshotPosition = axLinkLineTicketSource.indexOf("line.Qty = 1;");
+
+  assert.notEqual(sameFileComparisonPosition, -1, "Missing same-FileId detection");
+  assert.notEqual(monetarySnapshotPosition, -1, "Missing ticket monetary snapshot");
+  assert.ok(
+    monetarySnapshotPosition > sameFileComparisonPosition,
+    "Monetary reconciliation must run after detecting the same FileId",
+  );
+  assert.doesNotMatch(
+    axLinkLineTicketSource.slice(sameFileComparisonPosition, monetarySnapshotPosition),
+    /ttscommit;|buildExpenseSheetLineTicketResult\(true,/,
+    "The same-FileId path must not commit or return before monetary reconciliation",
+  );
+});
+
+test("ticket status refresh cannot synchronize ticket fields back into the line", () => {
+  assert.match(
+    axRefreshTicketStatusSource,
+    /ticketHeader\.updateSearchKey\(\);[\s\S]*ticketHeader\.doUpdate\(\);/,
+  );
+  assert.doesNotMatch(axRefreshTicketStatusSource, /ticketHeader\.update\(\);/);
+  assert.doesNotMatch(axRefreshTicketStatusSource, /syncHojaGastoLine\(\);/);
+});
+
+test("unlink clears FileId before deriving ticket status", () => {
   assert.match(
     axUnlinkLineTicketSource,
     /previousFileId\s*=\s*line\.FileId;[\s\S]*line\.FileId\s*=\s*'';[\s\S]*line\.update\(\);[\s\S]*refreshTicketStatusByFileId\(ownerAxUserId,\s*previousFileId\)/,
