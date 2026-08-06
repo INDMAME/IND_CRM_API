@@ -73,6 +73,23 @@ function Test-ExactStringSequence {
     return $true
 }
 
+# Builds a minimal completed provider response around one structured help result.
+function New-CompletedStructuredHelpResponse {
+    param([Parameter(Mandatory = $true)]$StructuredOutput)
+
+    $outputText = ConvertTo-Json -InputObject $StructuredOutput -Depth 8 -Compress
+    return ConvertTo-Json -InputObject ([ordered]@{
+        status = 'completed'
+        output_text = $outputText
+        output = @([ordered]@{ type = 'message'; content = @() })
+        usage = [ordered]@{
+            input_tokens = 10
+            output_tokens = 10
+            input_tokens_details = [ordered]@{ cached_tokens = 0 }
+        }
+    }) -Depth 10 -Compress
+}
+
 # Verifies one topic DTO against either canonical or localized display content.
 function Test-HelpTopicProjection {
     param($Projection, $Topic, $Localization, [string]$ExpectedLocale)
@@ -293,6 +310,7 @@ try {
     $moduleNoMatchPassed = $true
     $moduleAiContextPassed = $true
     $moduleAiOversizePassed = $true
+    $moduleAiResolutionPassed = $false
     $moduleAiContextFailure = $null
     if ($snapshot.ModulesById.ContainsKey('expenses')) {
         $broadModuleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
@@ -305,7 +323,7 @@ try {
             @($broadModuleResult.Ranking | Where-Object { $_.Topic.moduleId -ne 'expenses' }).Count -eq 0
 
         $moduleNoMatchRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
-        $moduleNoMatchRequest.Question = 'zyxwv qqqqq unrelated'
+        $moduleNoMatchRequest.Question = 'Como?'
         $moduleNoMatchRequest.SelectedModuleId = 'expenses'
         $moduleNoMatchRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
         $moduleNoMatchResult = $retriever.Retrieve($snapshot, $moduleNoMatchRequest)
@@ -318,9 +336,14 @@ try {
         $buildContextMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
             'BuildContext',
             [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
-        if ($null -eq $completeEvidenceProperty -or $null -eq $buildContextMethod) {
+        $parseResponseMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
+            'ParseResponse',
+            [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
+        if ($null -eq $completeEvidenceProperty -or $null -eq $buildContextMethod -or
+            $null -eq $parseResponseMethod) {
             $moduleAiContextPassed = $false
             $moduleAiOversizePassed = $false
+            $moduleAiResolutionPassed = $false
             $moduleAiContextFailure = 'Complete module evidence contract is missing.'
         }
         else {
@@ -380,6 +403,82 @@ try {
                     $moduleAiContextFailure = 'Complete={0}; mode={1}; sources={2}/{3}; history={4}' -f `
                         $completeEvidenceEnabled, $broadModuleResult.Mode, `
                         $allowedSourceKeys.Count, $expectedSourceKeys.Count, $contextHistoryCount
+                }
+
+                $validSourceKey = @($allowedSourceKeys | Select-Object -First 1)[0]
+                [string]$answeredBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                    resolution = 'answered'
+                    answer = 'Use the documented CRM procedure.'
+                    citationSourceKeys = @($validSourceKey)
+                    actionRouteKeys = @()
+                })
+                $answeredParsed = $parseResponseMethod.Invoke(
+                    $answerService,
+                    [object[]]@($answeredBody, $context))
+                [string]$notDocumentedBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                    resolution = 'notDocumented'
+                    answer = 'The supplied CRM documentation does not contain this procedure.'
+                    citationSourceKeys = @()
+                    actionRouteKeys = @()
+                })
+                $notDocumentedParsed = $parseResponseMethod.Invoke(
+                    $answerService,
+                    [object[]]@($notDocumentedBody, $context))
+
+                $invalidCitationRejected = $false
+                try {
+                    [string]$invalidCitationBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                        resolution = 'answered'
+                        answer = 'Use the documented CRM procedure.'
+                        citationSourceKeys = @('invented.topic:invented.chunk')
+                        actionRouteKeys = @()
+                    })
+                    [void]$parseResponseMethod.Invoke($answerService, [object[]]@($invalidCitationBody, $context))
+                }
+                catch {
+                    $invalidCitationRejected = $_.Exception.InnerException.ProviderSummary -eq 'ungrounded-structured-output'
+                }
+
+                $notDocumentedCitationRejected = $false
+                try {
+                    [string]$invalidNotDocumentedBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                        resolution = 'notDocumented'
+                        answer = 'The supplied CRM documentation does not contain this procedure.'
+                        citationSourceKeys = @($validSourceKey)
+                        actionRouteKeys = @()
+                    })
+                    [void]$parseResponseMethod.Invoke($answerService, [object[]]@($invalidNotDocumentedBody, $context))
+                }
+                catch {
+                    $notDocumentedCitationRejected = $_.Exception.InnerException.ProviderSummary -eq 'ungrounded-structured-output'
+                }
+
+                $citedRouteKey = $context.SourceTopicLookup[$validSourceKey].routeKey
+                $unrelatedRouteKey = @($context.AllowedRouteKeys |
+                    Where-Object { $_ -ne $citedRouteKey } |
+                    Select-Object -First 1)
+                $unrelatedActionRejected = $true
+                if ($unrelatedRouteKey.Count -gt 0) {
+                    $unrelatedActionRejected = $false
+                    try {
+                        [string]$unrelatedActionBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                            resolution = 'answered'
+                            answer = 'Use the documented CRM procedure.'
+                            citationSourceKeys = @($validSourceKey)
+                            actionRouteKeys = @($unrelatedRouteKey[0])
+                        })
+                        [void]$parseResponseMethod.Invoke($answerService, [object[]]@($unrelatedActionBody, $context))
+                    }
+                    catch {
+                        $unrelatedActionRejected = $_.Exception.InnerException.ProviderSummary -eq 'ungrounded-structured-output'
+                    }
+                }
+                $moduleAiResolutionPassed = $answeredParsed.Answer.Resolution -eq 'answered' -and
+                    $notDocumentedParsed.Answer.Resolution -eq 'notDocumented' -and
+                    $invalidCitationRejected -and $notDocumentedCitationRejected -and
+                    $unrelatedActionRejected
+                if (-not $moduleAiResolutionPassed) {
+                    $moduleAiContextFailure = 'Structured resolution, citation, or action validation failed.'
                 }
             }
             catch {
@@ -570,10 +669,11 @@ try {
         $(if ($missingModulePassed) { 'Passed' } else { 'Failed' }), `
         $(if ($mismatchedSelectionPassed) { 'Passed' } else { 'Failed' }), `
         $(if ($broadModulePassed) { 'Passed' } else { 'Failed' }))
-    Write-Host ('ModuleNoLexicalMatch={0} ModuleAiCompleteContext={1} ModuleAiOversizeRejected={2}' -f `
+    Write-Host ('ModuleNoLexicalMatch={0} ModuleAiCompleteContext={1} ModuleAiOversizeRejected={2} ModuleAiResolutionContract={3}' -f `
         $(if ($moduleNoMatchPassed) { 'Passed' } else { 'Failed' }), `
         $(if ($moduleAiContextPassed) { 'Passed' } else { 'Failed' }), `
-        $(if ($moduleAiOversizePassed) { 'Passed' } else { 'Failed' }))
+        $(if ($moduleAiOversizePassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($moduleAiResolutionPassed) { 'Passed' } else { 'Failed' }))
     Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1}' -f `
         $(if ($offsetCopyDetected) { 'Passed' } else { 'Failed' }), `
         $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }))
@@ -589,6 +689,7 @@ try {
         $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or $moduleScopeRate -lt 1.0 -or
         -not $missingModulePassed -or -not $mismatchedSelectionPassed -or -not $broadModulePassed -or
         -not $moduleNoMatchPassed -or -not $moduleAiContextPassed -or -not $moduleAiOversizePassed -or
+        -not $moduleAiResolutionPassed -or
         -not $verbatimGuardPassed -or -not $bundleStructurePassed -or
         $bundleCatalogRate -lt 1.0 -or $bundleTopicRate -lt 1.0 -or
         -not $schema10StructurePassed -or $schema10CatalogRate -lt 1.0 -or $schema10TopicRate -lt 1.0) {
@@ -620,7 +721,7 @@ try {
         if (-not $moduleNoMatchPassed) {
             Write-Host '- A selected module question without lexical matches did not reach the AI scope.'
         }
-        if (-not $moduleAiContextPassed -or -not $moduleAiOversizePassed) {
+        if (-not $moduleAiContextPassed -or -not $moduleAiOversizePassed -or -not $moduleAiResolutionPassed) {
             Write-Host ('- Module AI context failed: {0}' -f $moduleAiContextFailure)
         }
         if (-not $verbatimGuardPassed) {

@@ -324,7 +324,7 @@ namespace IND_CRM_API.Controllers.System
 
                 var answer = BuildResponse(
                     interactionId,
-                    "answered",
+                    generated.Resolution,
                     generated.Answer,
                     new List<HelpTopicCandidateDto>(),
                     BuildGeneratedSources(retrieval, generated.CitationChunkIds),

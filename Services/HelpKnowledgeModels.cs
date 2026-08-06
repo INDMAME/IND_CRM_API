@@ -238,6 +238,8 @@ namespace IND_CRM_API.Services
 
     public sealed class HelpGeneratedAnswer
     {
+        public string Resolution { get; set; }
+
         public string Answer { get; set; }
 
         public string Model { get; set; }

@@ -90,7 +90,7 @@ namespace IND_CRM_API.Services
 
             var normalizedQuestion = Normalize(request.Question);
             var queryTokens = Tokenize(normalizedQuestion);
-            if (queryTokens.Count == 0)
+            if (queryTokens.Count == 0 && selectedModule == null)
                 return EmptyResult("notDocumented", "empty-query");
 
             if (selectedModule == null)
