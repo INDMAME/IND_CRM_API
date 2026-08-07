@@ -13,6 +13,10 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class HelpTopicRetriever : IHelpTopicRetriever
     {
+        private const string InternalSupportModuleId = "troubleshooting";
+        private static readonly HashSet<string> ManualOnlyModuleIds = new HashSet<string>(
+            new[] { "troubleshooting", "glossary" },
+            StringComparer.OrdinalIgnoreCase);
         private const decimal MinimumAnswerScore = 0.34m;
         private const decimal AmbiguousRatio = 0.88m;
         private static readonly HashSet<string> StopWords = new HashSet<string>(
@@ -56,6 +60,8 @@ namespace IND_CRM_API.Services
             {
                 return EmptyResult("notDocumented", "exact-module-missing");
             }
+            if (selectedModule != null && IsManualOnlyModule(selectedModule.id))
+                return EmptyResult("notDocumented", "manual-only-module");
 
             if (!string.IsNullOrWhiteSpace(request.SelectedTopicId))
             {
@@ -64,6 +70,8 @@ namespace IND_CRM_API.Services
                 {
                     return EmptyResult("notDocumented", "exact-topic-missing");
                 }
+                if (IsManualOnlyModule(selected.moduleId))
+                    return EmptyResult("notDocumented", "manual-only-topic");
                 if (selectedModule != null &&
                     !string.Equals(selected.moduleId, selectedModule.id, StringComparison.OrdinalIgnoreCase))
                 {
@@ -75,16 +83,19 @@ namespace IND_CRM_API.Services
                 {
                     Resolution = "answered",
                     Topics = new List<HelpRetrievedTopic> { exactTopic },
+                    SupportingTopics = new List<HelpRetrievedTopic>(),
                     Candidates = new List<HelpTopicCandidateDto>(),
                     Ranking = new List<HelpRetrievedTopic> { exactTopic },
                     Confidence = 1m,
-                    Mode = "exact-topic"
+                    Mode = "exact-topic",
+                    RequireCompleteEvidence = selectedModule != null
                 };
                 AttachQuickAnswer(
                     exactResult,
                     request.Question,
                     selected,
                     string.Equals(locale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase));
+                AttachInternalSupportTopics(snapshot, exactResult, selected.moduleId);
                 return exactResult;
             }
 
@@ -101,7 +112,7 @@ namespace IND_CRM_API.Services
             }
 
             var scopedTopics = (selectedModule == null
-                ? snapshot.Bundle.topics
+                ? snapshot.Bundle.topics.Where(topic => !IsManualOnlyModule(topic.moduleId))
                 : selectedModule.topicIds
                     .Where(snapshot.TopicsById.ContainsKey)
                     .Select(id => snapshot.TopicsById[id]))
@@ -119,7 +130,11 @@ namespace IND_CRM_API.Services
 
             var ranking = scored.Take(5).ToList();
             if (selectedModule != null)
-                return BuildModuleAiScopeResult(scopedTopics, scored, ranking);
+            {
+                var moduleResult = BuildModuleAiScopeResult(scopedTopics, scored, ranking);
+                AttachInternalSupportTopics(snapshot, moduleResult, selectedModule.id);
+                return moduleResult;
+            }
 
             if (scored.Count == 0 || scored[0].Score < MinimumAnswerScore)
                 return EmptyResult("notDocumented", "lexical-no-match", ranking);
@@ -139,6 +154,7 @@ namespace IND_CRM_API.Services
                 {
                     Resolution = "needsSelection",
                     Topics = new List<HelpRetrievedTopic>(),
+                    SupportingTopics = new List<HelpRetrievedTopic>(),
                     Candidates = ranking.Select(ToCandidate).ToList(),
                     Ranking = ranking,
                     Confidence = top.Score,
@@ -151,6 +167,7 @@ namespace IND_CRM_API.Services
             {
                 Resolution = "answered",
                 Topics = selectedTopics,
+                SupportingTopics = new List<HelpRetrievedTopic>(),
                 Candidates = new List<HelpTopicCandidateDto>(),
                 Ranking = ranking,
                 Confidence = top.Score,
@@ -162,7 +179,38 @@ namespace IND_CRM_API.Services
                     request.Question,
                     top.Topic,
                     string.Equals(locale, snapshot.Bundle.defaultLocale, StringComparison.OrdinalIgnoreCase));
+            AttachInternalSupportTopics(snapshot, result, selectedTopics.First().Topic.moduleId);
             return result;
+        }
+
+        // Keeps fixed-manual sections out of every visible chatbot retrieval surface.
+        private static bool IsManualOnlyModule(string moduleId)
+        {
+            return !string.IsNullOrWhiteSpace(moduleId) && ManualOnlyModuleIds.Contains(moduleId);
+        }
+
+        // Adds troubleshooting evidence without changing visible topics, candidates, or ranking.
+        private static void AttachInternalSupportTopics(
+            HelpKnowledgeSnapshot snapshot,
+            HelpRetrievalResult result,
+            string selectedModuleId)
+        {
+            result.SupportingTopics = new List<HelpRetrievedTopic>();
+            if (string.Equals(selectedModuleId, InternalSupportModuleId, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            HelpKnowledgeModule supportModule;
+            if (!snapshot.ModulesById.TryGetValue(InternalSupportModuleId, out supportModule))
+                return;
+
+            result.SupportingTopics = supportModule.topicIds
+                .Where(snapshot.TopicsById.ContainsKey)
+                .Select(topicId => new HelpRetrievedTopic
+                {
+                    Topic = snapshot.TopicsById[topicId],
+                    Score = 0m
+                })
+                .ToList();
         }
 
         // Exposes the complete selected module so the answering model can determine user intent.
@@ -189,6 +237,7 @@ namespace IND_CRM_API.Services
             {
                 Resolution = "answered",
                 Topics = moduleTopics,
+                SupportingTopics = new List<HelpRetrievedTopic>(),
                 Candidates = new List<HelpTopicCandidateDto>(),
                 Ranking = ranking == null ? new List<HelpRetrievedTopic>() : ranking.ToList(),
                 Confidence = ranking != null && ranking.Count > 0 ? ranking[0].Score : 0m,
@@ -409,6 +458,7 @@ namespace IND_CRM_API.Services
             {
                 Resolution = "needsSelection",
                 Topics = new List<HelpRetrievedTopic>(),
+                SupportingTopics = new List<HelpRetrievedTopic>(),
                 Candidates = candidates,
                 Ranking = ranking,
                 Confidence = candidates.Count == 0 ? 0m : candidates[0].Score,
@@ -436,6 +486,7 @@ namespace IND_CRM_API.Services
             {
                 Resolution = resolution,
                 Topics = new List<HelpRetrievedTopic>(),
+                SupportingTopics = new List<HelpRetrievedTopic>(),
                 Candidates = new List<HelpTopicCandidateDto>(),
                 Ranking = (ranking ?? Enumerable.Empty<HelpRetrievedTopic>()).Take(5).ToList(),
                 Confidence = 0m,

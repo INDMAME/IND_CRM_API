@@ -196,6 +196,11 @@ namespace IND_CRM_API.Services
 
         public List<HelpRetrievedTopic> Topics { get; set; }
 
+        /// <summary>
+        /// Carries diagnostic evidence that may guide the answer without becoming a visible chatbot topic.
+        /// </summary>
+        public List<HelpRetrievedTopic> SupportingTopics { get; set; }
+
         public List<HelpTopicCandidateDto> Candidates { get; set; }
 
         public List<HelpRetrievedTopic> Ranking { get; set; }
@@ -325,6 +330,23 @@ namespace IND_CRM_API.Services
         public string ErrorCode { get; }
     }
 
+    /// <summary>
+    /// Reports a safe answer-quality rejection separately from provider availability failures.
+    /// </summary>
+    public sealed class HelpAnswerQualityException : Exception
+    {
+        public HelpAnswerQualityException(string errorCode, string message, string summary)
+            : base(message)
+        {
+            ErrorCode = errorCode;
+            Summary = summary;
+        }
+
+        public string ErrorCode { get; }
+
+        public string Summary { get; }
+    }
+
     public static class HelpErrorCodes
     {
         public const string FeatureDisabled = "HELP_FEATURE_DISABLED";
@@ -333,5 +355,6 @@ namespace IND_CRM_API.Services
         public const string InvalidRequest = "HELP_INVALID_REQUEST";
         public const string FeedbackUnavailable = "HELP_FEEDBACK_UNAVAILABLE";
         public const string FeedbackTokenInvalid = "HELP_FEEDBACK_TOKEN_INVALID";
+        public const string AnswerRewriteRequired = "HELP_ANSWER_REWRITE_REQUIRED";
     }
 }

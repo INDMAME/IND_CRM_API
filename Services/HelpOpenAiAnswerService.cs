@@ -54,6 +54,9 @@ namespace IND_CRM_API.Services
             "history, then use only the relevant evidence. When wording is ambiguous, state what you understood and offer the closest " +
             "documented interpretation without assuming that a possible typo is certain. Never copy or return a documentation passage " +
             "or quick answer verbatim. " +
+            "Each knowledge item declares contextRole primary or diagnostic-support. Use diagnostic-support only to interpret symptoms " +
+            "and enrich a relevant primary answer; never present it as a separate topic or suggest that the user select it. Every " +
+            "answered response must cite at least one primary source; diagnostic-support citations can only be additional evidence. " +
             "Keep exact short UI labels, field names, and allowed route keys only when they are needed for accurate guidance.";
         private const string RetryParaphraseInstructions =
             " Rewrite the answer more distinctly. Do not repeat any long sequence from the supplied evidence; preserve only short " +
@@ -165,7 +168,7 @@ namespace IND_CRM_API.Services
                         continue;
                     }
                     if (parsed.HasLongVerbatimOverlap)
-                        throw CreateUnavailable("verbatim-overlap");
+                        throw CreateRewriteRequired();
 
                     parsed.Answer.Model = _model;
                     parsed.Answer.DocumentTokens = context.DocumentTokens;
@@ -189,6 +192,15 @@ namespace IND_CRM_API.Services
         private ContextEnvelope BuildContext(HelpAnswerRequest request)
         {
             var requireCompleteEvidence = request.Retrieval.RequireCompleteEvidence;
+            var supportingTopics = request.Retrieval.SupportingTopics ?? new List<HelpRetrievedTopic>();
+            var primaryTopicIds = new HashSet<string>(
+                request.Retrieval.Topics.Select(item => item.Topic.id),
+                StringComparer.OrdinalIgnoreCase);
+            var contextTopics = request.Retrieval.Topics
+                .Concat(supportingTopics)
+                .GroupBy(item => item.Topic.id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
             var desiredDocumentTokens = ResolveDocumentBudget(request);
             var history = NormalizeHistory(request.History);
             var estimatedFixedTokens = EstimateTokens(StableInstructions) +
@@ -204,7 +216,7 @@ namespace IND_CRM_API.Services
             var sourceLookup = new Dictionary<string, HelpKnowledgeChunk>(StringComparer.OrdinalIgnoreCase);
             var sourceTopicLookup = new Dictionary<string, HelpKnowledgeTopic>(StringComparer.OrdinalIgnoreCase);
             var allowedRouteKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var rankedChunks = request.Retrieval.Topics
+            var rankedChunks = contextTopics
                 .SelectMany(retrieved => retrieved.Topic.chunks.Select(chunk => new RankedChunk
                 {
                     Topic = retrieved.Topic,
@@ -216,11 +228,11 @@ namespace IND_CRM_API.Services
                 .ThenBy(item => item.Chunk.id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var selectedChunks = SelectContextChunks(
-                request.Retrieval.Topics,
+                contextTopics,
                 rankedChunks,
                 requireCompleteEvidence);
 
-            foreach (var retrieved in request.Retrieval.Topics)
+            foreach (var retrieved in contextTopics)
             {
                 var topic = retrieved.Topic;
                 IEnumerable<HelpKnowledgeQuickAnswer> selectedQuickAnswers = requireCompleteEvidence
@@ -253,12 +265,13 @@ namespace IND_CRM_API.Services
                 knowledge.Add(new JObject
                 {
                     ["topicId"] = topic.id,
+                    ["contextRole"] = primaryTopicIds.Contains(topic.id) ? "primary" : "diagnostic-support",
                     ["title"] = topic.title,
                     ["summary"] = topic.summary,
                     ["quickAnswers"] = new JArray(relevantQuickAnswers),
                     ["chunks"] = chunks
                 });
-                if (!string.IsNullOrWhiteSpace(topic.routeKey))
+                if (primaryTopicIds.Contains(topic.id) && !string.IsNullOrWhiteSpace(topic.routeKey))
                     allowedRouteKeys.Add(topic.routeKey);
             }
 
@@ -293,11 +306,17 @@ namespace IND_CRM_API.Services
                 .SelectMany(topic => topic["chunks"] as JArray ?? new JArray())
                 .Select(chunk => chunk?.Value<string>("sourceKey"))
                 .Where(value => !string.IsNullOrWhiteSpace(value)), StringComparer.OrdinalIgnoreCase);
+            var primarySourceKeys = new HashSet<string>(allowedSourceKeys
+                .Where(sourceKey => sourceTopicLookup.ContainsKey(sourceKey) &&
+                    primaryTopicIds.Contains(sourceTopicLookup[sourceKey].id)),
+                StringComparer.OrdinalIgnoreCase);
             FilterQuickAnswerSources(knowledge, allowedSourceKeys);
             var documentTokens = EstimateTokens(knowledge.ToString(Formatting.None));
 
             if (allowedSourceKeys.Count == 0)
                 throw CreateUnavailable("no-context-chunks");
+            if (primarySourceKeys.Count == 0)
+                throw CreateUnavailable("no-primary-context-chunks");
 
             return new ContextEnvelope
             {
@@ -305,6 +324,7 @@ namespace IND_CRM_API.Services
                 History = history,
                 DocumentTokens = documentTokens,
                 AllowedSourceKeys = allowedSourceKeys,
+                PrimarySourceKeys = primarySourceKeys,
                 SourceLookup = sourceLookup,
                 SourceTopicLookup = sourceTopicLookup,
                 AllowedRouteKeys = allowedRouteKeys
@@ -467,6 +487,7 @@ namespace IND_CRM_API.Services
             var isAnswered = string.Equals(resolution, "answered", StringComparison.Ordinal);
             var isNotDocumented = string.Equals(resolution, "notDocumented", StringComparison.Ordinal);
             var citationsAreAllowed = citations.All(value => context.AllowedSourceKeys.Contains(value));
+            var hasPrimaryCitation = citations.Any(value => context.PrimarySourceKeys.Contains(value));
             var citedRouteKeys = new HashSet<string>(citations
                 .Where(context.SourceTopicLookup.ContainsKey)
                 .Select(value => context.SourceTopicLookup[value].routeKey)
@@ -474,7 +495,7 @@ namespace IND_CRM_API.Services
             var actionsAreAllowed = actionRouteKeys.All(value =>
                 context.AllowedRouteKeys.Contains(value) && citedRouteKeys.Contains(value));
             var answerContractIsValid = isAnswered
-                ? citations.Count > 0 && citationsAreAllowed && actionsAreAllowed
+                ? citations.Count > 0 && citationsAreAllowed && hasPrimaryCitation && actionsAreAllowed
                 : isNotDocumented && citations.Count == 0 && actionRouteKeys.Count == 0;
 
             if (string.IsNullOrWhiteSpace(answer) || !answerContractIsValid)
@@ -816,6 +837,15 @@ namespace IND_CRM_API.Services
                 innerException);
         }
 
+        // Separates a rejected paraphrase from a real provider or infrastructure outage.
+        private static HelpAnswerQualityException CreateRewriteRequired()
+        {
+            return new HelpAnswerQualityException(
+                HelpErrorCodes.AnswerRewriteRequired,
+                "No he podido preparar una respuesta clara con la informacion encontrada. Reformula la pregunta con un poco mas de detalle.",
+                "verbatim-overlap");
+        }
+
         private static HttpClient CreateHttpClient()
         {
             var client = new HttpClient
@@ -852,6 +882,8 @@ namespace IND_CRM_API.Services
             public int DocumentTokens { get; set; }
 
             public HashSet<string> AllowedSourceKeys { get; set; }
+
+            public HashSet<string> PrimarySourceKeys { get; set; }
 
             public Dictionary<string, HelpKnowledgeChunk> SourceLookup { get; set; }
 

@@ -237,7 +237,7 @@ namespace IND_CRM_API.Controllers.System
         [HttpPost, Route("ask")]
         [ResponseType(typeof(IndApiResponse<AskHelpResponse>))]
         [SwaggerOperation(Tags = new[] { "CRM Help AI" })]
-        [SwaggerResponse((HttpStatusCode)422, "Validation error", typeof(IndApiResponse<AskHelpResponse>))]
+        [SwaggerResponse((HttpStatusCode)422, "Validation or answer rewrite required", typeof(IndApiResponse<AskHelpResponse>))]
         [SwaggerResponse((HttpStatusCode)429, "Rate limit exceeded", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Help or AI provider unavailable", typeof(IndApiResponse<AskHelpResponse>))]
         public async Task<IHttpActionResult> Ask([FromBody] AskHelpRequest body, CancellationToken cancellationToken)
@@ -359,6 +359,19 @@ namespace IND_CRM_API.Controllers.System
             {
                 RecordFailure(snapshot, retrieval, interactionId, responseLocale, safeQuestion, userKey, stopwatch);
                 return BuildRateLimit(traceId, ex.RetryAfterSeconds);
+            }
+            catch (HelpAnswerQualityException ex)
+            {
+                RecordFailure(snapshot, retrieval, interactionId, responseLocale, safeQuestion, userKey, stopwatch);
+                Logger.Log(
+                    "[HELP-API] Answer quality rejected summary=" + ex.Summary + " traceId=" + traceId,
+                    AxaptaSessionManager.LogLevel.Warning);
+                return Content((HttpStatusCode)422, BuildEnvelope<AskHelpResponse>(
+                    false,
+                    ex.Message,
+                    ex.ErrorCode,
+                    null,
+                    traceId));
             }
             catch (IND_ExternalServiceException ex)
             {

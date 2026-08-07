@@ -184,6 +184,7 @@ try {
     if ($evaluationCases.Count -eq 0) {
         throw 'No retrieval evaluation cases were found.'
     }
+    $manualOnlyModuleIds = @('troubleshooting', 'glossary')
 
     $results = foreach ($case in $evaluationCases) {
         $question = if ($case.question) { [string]$case.question } else { [string]$case.query }
@@ -205,16 +206,36 @@ try {
             throw "Retrieval failed for case '$([string]$case.id)': $($_.Exception.ToString())"
         }
         $actualIds = @($result.Ranking | ForEach-Object { $_.Topic.id })
+        $manualOnlyEvaluation = $expectedIds.Count -gt 0 -and
+            @($expectedIds | Where-Object {
+                -not $snapshot.TopicsById.ContainsKey($_) -or
+                $manualOnlyModuleIds -notcontains $snapshot.TopicsById[$_].moduleId
+            }).Count -eq 0
+        if ($manualOnlyEvaluation) {
+            $returnedTopicIds = @($result.Topics | ForEach-Object { $_.Topic.id }) +
+                @($result.Ranking | ForEach-Object { $_.Topic.id }) +
+                @($result.Candidates | ForEach-Object { $_.topicId })
+            $manualOnlyReturned = @($returnedTopicIds | Where-Object {
+                $snapshot.TopicsById.ContainsKey($_) -and
+                $manualOnlyModuleIds -contains $snapshot.TopicsById[$_].moduleId
+            }).Count -gt 0
+            $expectedResolution = 'manualOnlyHidden'
+            $actualResolution = if ($manualOnlyReturned) { 'manualOnlyExposed' } else { 'manualOnlyHidden' }
+            $expectedIds = @()
+        }
+        else {
+            $actualResolution = $result.Resolution
+        }
 
         $top1 = $expectedIds.Count -eq 0 -or ($actualIds.Count -gt 0 -and $expectedIds -contains $actualIds[0])
         $recall = $expectedIds.Count -eq 0 -or @($expectedIds | Where-Object { $actualIds -contains $_ }).Count -eq $expectedIds.Count
         [pscustomobject]@{
             Id = [string]$case.id
             ExpectedResolution = $expectedResolution
-            ActualResolution = $result.Resolution
+            ActualResolution = $actualResolution
             ExpectedTopicIds = ($expectedIds -join '|')
             ActualTopicIds = ($actualIds -join '|')
-            ResolutionPassed = $result.Resolution -eq $expectedResolution
+            ResolutionPassed = $actualResolution -eq $expectedResolution
             Top1Passed = $top1
             RecallAt5Passed = $recall
         }
@@ -229,7 +250,10 @@ try {
     $top1Rate = @($topicCases | Where-Object Top1Passed).Count / [math]::Max(1, $topicCases.Count)
     $recallRate = @($topicCases | Where-Object RecallAt5Passed).Count / [math]::Max(1, $topicCases.Count)
 
-    $menuExactResults = foreach ($topic in $snapshot.Bundle.topics) {
+    $chatTopics = @($snapshot.Bundle.topics | Where-Object {
+        $manualOnlyModuleIds -notcontains $_.moduleId
+    })
+    $menuExactResults = foreach ($topic in $chatTopics) {
         $request = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
         $request.Question = ''
         $request.SelectedTopicId = $topic.id
@@ -248,6 +272,40 @@ try {
     $menuExactPassedCount = @($menuExactResults | Where-Object Passed).Count
     $menuExactRate = $menuExactPassedCount / [math]::Max(1, $menuExactCount)
 
+    $manualOnlySelectionResults = foreach ($topic in @($snapshot.Bundle.topics | Where-Object {
+        $manualOnlyModuleIds -contains $_.moduleId
+    })) {
+        $topicRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $topicRequest.Question = $topic.title
+        $topicRequest.SelectedTopicId = $topic.id
+        $topicRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $topicResult = $retriever.Retrieve($snapshot, $topicRequest)
+
+        $moduleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $moduleRequest.Question = $topic.title
+        $moduleRequest.SelectedModuleId = $topic.moduleId
+        $moduleRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $moduleResult = $retriever.Retrieve($snapshot, $moduleRequest)
+
+        $genericRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $genericRequest.Question = $topic.title
+        $genericRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $genericResult = $retriever.Retrieve($snapshot, $genericRequest)
+        $genericVisibleModules = @((@($genericResult.Topics) + @($genericResult.Ranking)) | ForEach-Object {
+            $_.Topic.moduleId
+        }) + @($genericResult.Candidates | ForEach-Object {
+            $snapshot.TopicsById[$_.topicId].moduleId
+        })
+
+        [pscustomobject]@{
+            TopicId = $topic.id
+            Passed = $topicResult.Resolution -eq 'notDocumented' -and
+                $moduleResult.Resolution -eq 'notDocumented' -and
+                @($genericVisibleModules | Where-Object { $manualOnlyModuleIds -contains $_ }).Count -eq 0
+        }
+    }
+    $manualOnlyHiddenPassed = @($manualOnlySelectionResults | Where-Object { -not $_.Passed }).Count -eq 0
+
     $missingRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
     $missingRequest.Question = ''
     $missingRequest.SelectedTopicId = '__missing-help-topic__'
@@ -256,7 +314,9 @@ try {
     $missingTopicPassed = $missingResult.Resolution -eq 'notDocumented' -and
         @($missingResult.Topics).Count -eq 0 -and @($missingResult.Ranking).Count -eq 0
 
-    $moduleScopeResults = foreach ($module in $snapshot.Bundle.modules) {
+    $moduleScopeResults = foreach ($module in @($snapshot.Bundle.modules | Where-Object {
+        $manualOnlyModuleIds -notcontains $_.id
+    })) {
         $firstTopicId = @($module.topicIds | Where-Object { $snapshot.TopicsById.ContainsKey($_) } | Select-Object -First 1)
         if ($firstTopicId.Count -eq 0) {
             continue
@@ -271,11 +331,28 @@ try {
         $outsideRanking = @($result.Ranking | Where-Object { $_.Topic.moduleId -ne $module.id })
         $expectedTopicIds = @($module.topicIds | Where-Object { $snapshot.TopicsById.ContainsKey($_) })
         $actualTopicIds = @($result.Topics | ForEach-Object { $_.Topic.id })
+        $expectedSupportingTopicIds = @(if ($snapshot.ModulesById.ContainsKey('troubleshooting')) {
+            @($snapshot.ModulesById['troubleshooting'].topicIds | Where-Object { $snapshot.TopicsById.ContainsKey($_) })
+        }
+        else {
+            @()
+        })
+        $actualSupportingTopicIds = @($result.SupportingTopics | ForEach-Object { $_.Topic.id })
         [pscustomobject]@{
             ModuleId = $module.id
+            ActualTopicIds = $actualTopicIds -join '|'
+            ExpectedTopicIds = $expectedTopicIds -join '|'
+            ActualSupportingTopicIds = $actualSupportingTopicIds -join '|'
+            ExpectedSupportingTopicIds = $expectedSupportingTopicIds -join '|'
+            OutsideTopicCount = $outsideTopics.Count
+            OutsideRankingCount = $outsideRanking.Count
+            CandidateCount = @($result.Candidates).Count
+            Resolution = $result.Resolution
+            Mode = $result.Mode
             Passed = $result.Resolution -eq 'answered' -and
                 $result.Mode -eq 'module-ai-scope' -and
                 (Test-ExactStringSequence $actualTopicIds $expectedTopicIds) -and
+                (Test-ExactStringSequence -Left $actualSupportingTopicIds -Right $expectedSupportingTopicIds) -and
                 $outsideTopics.Count -eq 0 -and
                 $outsideRanking.Count -eq 0 -and
                 @($result.Candidates).Count -eq 0
@@ -284,6 +361,20 @@ try {
     $moduleScopeCount = @($moduleScopeResults).Count
     $moduleScopePassedCount = @($moduleScopeResults | Where-Object Passed).Count
     $moduleScopeRate = $moduleScopePassedCount / [math]::Max(1, $moduleScopeCount)
+
+    $chatSupportAttachedPassed = $true
+    if ($chatTopics.Count -gt 0 -and $snapshot.ModulesById.ContainsKey('troubleshooting')) {
+        $supportProbeRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
+        $supportProbeRequest.Question = $chatTopics[0].title
+        $supportProbeRequest.SelectedTopicId = $chatTopics[0].id
+        $supportProbeRequest.ResponseLocale = $snapshot.Bundle.defaultLocale
+        $supportProbeResult = $retriever.Retrieve($snapshot, $supportProbeRequest)
+        $expectedSupportIds = @($snapshot.ModulesById['troubleshooting'].topicIds | Where-Object {
+            $snapshot.TopicsById.ContainsKey($_)
+        })
+        $actualSupportIds = @($supportProbeResult.SupportingTopics | ForEach-Object { $_.Topic.id })
+        $chatSupportAttachedPassed = Test-ExactStringSequence $actualSupportIds $expectedSupportIds
+    }
 
     $missingModuleRequest = [IND_CRM_API.Services.HelpRetrievalRequest]::new()
     $missingModuleRequest.Question = 'ayuda'
@@ -342,8 +433,12 @@ try {
         $buildActionsMethod = [IND_CRM_API.Controllers.System.INDHelpAiController].GetMethod(
             'BuildActions',
             [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
+        $buildGeneratedSourcesMethod = [IND_CRM_API.Controllers.System.INDHelpAiController].GetMethod(
+            'BuildGeneratedSources',
+            [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
         if ($null -eq $completeEvidenceProperty -or $null -eq $buildContextMethod -or
-            $null -eq $parseResponseMethod -or $null -eq $buildActionsMethod) {
+            $null -eq $parseResponseMethod -or $null -eq $buildActionsMethod -or
+            $null -eq $buildGeneratedSourcesMethod) {
             $moduleAiContextPassed = $false
             $moduleAiOversizePassed = $false
             $moduleAiResolutionPassed = $false
@@ -391,7 +486,13 @@ try {
                 }
                 $context = $buildContextMethod.Invoke($answerService, [object[]]@($answerRequest))
                 $allowedSourceKeys = @($context.AllowedSourceKeys | Sort-Object)
-                $expectedSourceKeys = @($broadModuleResult.Topics | ForEach-Object {
+                $primarySourceKeys = @($context.PrimarySourceKeys | Sort-Object)
+                $contextTopics = @($broadModuleResult.Topics) + @($broadModuleResult.SupportingTopics)
+                $expectedSourceKeys = @($contextTopics | ForEach-Object {
+                    $topic = $_.Topic
+                    @($topic.chunks | ForEach-Object { $topic.id + ':' + $_.id })
+                } | Sort-Object)
+                $expectedPrimarySourceKeys = @($broadModuleResult.Topics | ForEach-Object {
                     $topic = $_.Topic
                     @($topic.chunks | ForEach-Object { $topic.id + ':' + $_.id })
                 } | Sort-Object)
@@ -401,6 +502,10 @@ try {
                 $moduleAiContextPassed = $completeEvidenceEnabled -and
                     $broadModuleResult.Mode -eq 'module-ai-scope' -and
                     $sourceKeysPassed -and
+                    (Test-ExactStringSequence $primarySourceKeys $expectedPrimarySourceKeys) -and
+                    @($context.Knowledge.Children() | Where-Object {
+                        [string]$_['contextRole'] -eq 'diagnostic-support'
+                    }).Count -eq @($broadModuleResult.SupportingTopics).Count -and
                     $contextHistoryCount -lt 8
                 if (-not $moduleAiContextPassed) {
                     $moduleAiContextFailure = 'Complete={0}; mode={1}; sources={2}/{3}; history={4}' -f `
@@ -408,7 +513,19 @@ try {
                         $allowedSourceKeys.Count, $expectedSourceKeys.Count, $contextHistoryCount
                 }
 
-                $validSourceKey = @($allowedSourceKeys | Select-Object -First 1)[0]
+                $validSourceKey = @($primarySourceKeys | Select-Object -First 1)[0]
+                $supportSourceKey = @($broadModuleResult.SupportingTopics | ForEach-Object {
+                    $topic = $_.Topic
+                    @($topic.chunks | ForEach-Object { $topic.id + ':' + $_.id })
+                } | Select-Object -First 1)[0]
+                if (-not [string]::IsNullOrWhiteSpace([string]$supportSourceKey)) {
+                    $supportCitations = [System.Collections.Generic.List[string]]::new()
+                    $supportCitations.Add([string]$supportSourceKey)
+                    $visibleSupportSources = $buildGeneratedSourcesMethod.Invoke(
+                        $null,
+                        [object[]]@($broadModuleResult, $supportCitations))
+                    $moduleAiContextPassed = $moduleAiContextPassed -and @($visibleSupportSources).Count -eq 0
+                }
                 [string]$answeredBody = New-CompletedStructuredHelpResponse ([ordered]@{
                     resolution = 'answered'
                     answer = 'Use the documented CRM procedure.'
@@ -427,6 +544,35 @@ try {
                 $notDocumentedParsed = $parseResponseMethod.Invoke(
                     $answerService,
                     [object[]]@($notDocumentedBody, $context))
+
+                $supportOnlyRejected = $true
+                $primaryAndSupportAccepted = $true
+                if (-not [string]::IsNullOrWhiteSpace([string]$supportSourceKey)) {
+                    $supportOnlyRejected = $false
+                    try {
+                        [string]$supportOnlyBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                            resolution = 'answered'
+                            answer = 'Use the documented CRM procedure.'
+                            citationSourceKeys = @($supportSourceKey)
+                            actionRouteKeys = @()
+                        })
+                        [void]$parseResponseMethod.Invoke($answerService, [object[]]@($supportOnlyBody, $context))
+                    }
+                    catch {
+                        $supportOnlyRejected = $_.Exception.InnerException.ProviderSummary -eq 'ungrounded-structured-output'
+                    }
+
+                    [string]$primaryAndSupportBody = New-CompletedStructuredHelpResponse ([ordered]@{
+                        resolution = 'answered'
+                        answer = 'Use the documented CRM procedure.'
+                        citationSourceKeys = @($validSourceKey, $supportSourceKey)
+                        actionRouteKeys = @()
+                    })
+                    $primaryAndSupportParsed = $parseResponseMethod.Invoke(
+                        $answerService,
+                        [object[]]@($primaryAndSupportBody, $context))
+                    $primaryAndSupportAccepted = $primaryAndSupportParsed.Answer.Resolution -eq 'answered'
+                }
 
                 $invalidCitationRejected = $false
                 try {
@@ -494,6 +640,7 @@ try {
                 }
                 $moduleAiResolutionPassed = $answeredParsed.Answer.Resolution -eq 'answered' -and
                     $notDocumentedParsed.Answer.Resolution -eq 'notDocumented' -and
+                    $supportOnlyRejected -and $primaryAndSupportAccepted -and
                     $invalidCitationRejected -and $notDocumentedCitationRejected -and
                     $unrelatedActionRejected -and $actionLabelMatchesCitation
                 if (-not $moduleAiResolutionPassed) {
@@ -574,6 +721,17 @@ try {
     $shortLabelKnowledge = [Newtonsoft.Json.Linq.JArray]::Parse($shortLabelKnowledgeJson)
     $shortLabelRejected = [bool]$overlapMethod.Invoke($null, [object[]]@('Hojas de gastos', $shortLabelKnowledge))
     $verbatimGuardPassed = $offsetCopyDetected -and -not $shortLabelRejected
+
+    $rewriteRequiredMethod = [IND_CRM_API.Services.HelpOpenAiAnswerService].GetMethod(
+        'CreateRewriteRequired',
+        [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
+    if ($null -eq $rewriteRequiredMethod) {
+        throw 'The answer rewrite error factory could not be resolved.'
+    }
+    $rewriteRequiredError = $rewriteRequiredMethod.Invoke($null, $null)
+    $rewriteRequiredPassed = $rewriteRequiredError -is [IND_CRM_API.Services.HelpAnswerQualityException] -and
+        $rewriteRequiredError.ErrorCode -ceq 'HELP_ANSWER_REWRITE_REQUIRED' -and
+        $rewriteRequiredError.Summary -ceq 'verbatim-overlap'
 
     # The endpoint accepts every UI culture while the current bundle intentionally publishes Spanish only.
     $acceptedRequestLocales = @('es-ES', 'eu-ES', 'en', 'pt', 'it', 'zh-Hans')
@@ -681,8 +839,11 @@ try {
 
     $results | Format-Table -AutoSize
     Write-Host ('Cases={0} TopicCases={1} Resolution={2:P2} Top1={3:P2} RecallAt5={4:P2}' -f $count, $topicCases.Count, $resolutionRate, $top1Rate, $recallRate)
-    Write-Host ('MenuExact={0:P2} ({1}/{2}) MissingTopic={3}' -f `
-        $menuExactRate, $menuExactPassedCount, $menuExactCount, $(if ($missingTopicPassed) { 'Passed' } else { 'Failed' }))
+    Write-Host ('MenuExact={0:P2} ({1}/{2}) MissingTopic={3} ManualOnlyHidden={4} InternalSupport={5}' -f `
+        $menuExactRate, $menuExactPassedCount, $menuExactCount, `
+        $(if ($missingTopicPassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($manualOnlyHiddenPassed) { 'Passed' } else { 'Failed' }), `
+        $(if ($chatSupportAttachedPassed) { 'Passed' } else { 'Failed' }))
     Write-Host ('ModuleScope={0:P2} ({1}/{2}) MissingModule={3} MismatchedSelection={4} BroadModule={5}' -f `
         $moduleScopeRate, $moduleScopePassedCount, $moduleScopeCount, `
         $(if ($missingModulePassed) { 'Passed' } else { 'Failed' }), `
@@ -693,9 +854,10 @@ try {
         $(if ($moduleAiContextPassed) { 'Passed' } else { 'Failed' }), `
         $(if ($moduleAiOversizePassed) { 'Passed' } else { 'Failed' }), `
         $(if ($moduleAiResolutionPassed) { 'Passed' } else { 'Failed' }))
-    Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1}' -f `
+    Write-Host ('VerbatimOffsetCopy={0} ShortUiLabelAllowed={1} RewriteRequiredError={2}' -f `
         $(if ($offsetCopyDetected) { 'Passed' } else { 'Failed' }), `
-        $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }))
+        $(if (-not $shortLabelRejected) { 'Passed' } else { 'Failed' }), `
+        $(if ($rewriteRequiredPassed) { 'Passed' } else { 'Failed' }))
     Write-Host ('BundleStructure={0} SpanishFallbackCatalog={1:P2} ({2}/{3}) SpanishFallbackTopics={4:P2} ({5}/{6})' -f `
         $(if ($bundleStructurePassed) { 'Passed' } else { 'Failed' }), `
         $bundleCatalogRate, $bundleCatalogPassedCount, $bundleCatalogCount, `
@@ -705,11 +867,12 @@ try {
         $schema10CatalogRate, $schema10CatalogPassedCount, $schema10CatalogCount, `
         $schema10TopicRate, $schema10TopicPassedCount, $schema10TopicCount)
     if ($resolutionRate -lt 1.0 -or $top1Rate -lt $MinimumTop1 -or $recallRate -lt $MinimumRecallAt5 -or
-        $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or $moduleScopeRate -lt 1.0 -or
+        $menuExactRate -lt 1.0 -or -not $missingTopicPassed -or -not $manualOnlyHiddenPassed -or
+        -not $chatSupportAttachedPassed -or $moduleScopeRate -lt 1.0 -or
         -not $missingModulePassed -or -not $mismatchedSelectionPassed -or -not $broadModulePassed -or
         -not $moduleNoMatchPassed -or -not $moduleAiContextPassed -or -not $moduleAiOversizePassed -or
         -not $moduleAiResolutionPassed -or
-        -not $verbatimGuardPassed -or -not $bundleStructurePassed -or
+        -not $verbatimGuardPassed -or -not $rewriteRequiredPassed -or -not $bundleStructurePassed -or
         $bundleCatalogRate -lt 1.0 -or $bundleTopicRate -lt 1.0 -or
         -not $schema10StructurePassed -or $schema10CatalogRate -lt 1.0 -or $schema10TopicRate -lt 1.0) {
         Write-Host 'Failed cases:'
@@ -725,8 +888,17 @@ try {
         if (-not $missingTopicPassed) {
             Write-Host ('- MissingTopic failed: resolution={0}' -f $missingResult.Resolution)
         }
+        $manualOnlySelectionResults | Where-Object { -not $_.Passed } | ForEach-Object {
+            Write-Host ('- ManualOnlyHidden failed: {0}' -f $_.TopicId)
+        }
+        if (-not $chatSupportAttachedPassed) {
+            Write-Host '- Internal troubleshooting support was not attached to a visible chatbot topic.'
+        }
         $moduleScopeResults | Where-Object { -not $_.Passed } | ForEach-Object {
-            Write-Host ('- ModuleScope failed: {0}' -f $_.ModuleId)
+            Write-Host ('- ModuleScope failed: {0}; resolution={1}; mode={2}; topics={3}/{4}; support={5}/{6}; outside={7}/{8}; candidates={9}' -f `
+                $_.ModuleId, $_.Resolution, $_.Mode, $_.ActualTopicIds, $_.ExpectedTopicIds, `
+                $_.ActualSupportingTopicIds, $_.ExpectedSupportingTopicIds, $_.OutsideTopicCount, `
+                $_.OutsideRankingCount, $_.CandidateCount)
         }
         if (-not $missingModulePassed) {
             Write-Host ('- MissingModule failed: resolution={0}' -f $missingModuleResult.Resolution)
@@ -745,6 +917,9 @@ try {
         }
         if (-not $verbatimGuardPassed) {
             Write-Host '- Verbatim guard failed the offset-copy or short-label regression.'
+        }
+        if (-not $rewriteRequiredPassed) {
+            Write-Host '- Rewrite-required answers are not separated from provider outages.'
         }
         if (-not $bundleStructurePassed) {
             Write-Host '- BundleStructure failed: expected schema 1.1 with Spanish-only locale coverage.'
