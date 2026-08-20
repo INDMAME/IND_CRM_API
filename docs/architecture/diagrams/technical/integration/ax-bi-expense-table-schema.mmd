@@ -1,0 +1,158 @@
+classDiagram
+direction LR
+
+class SysUserInfo {
+  <<sistema AX>>
+  +Id
+  +Language
+}
+
+class INDPersonaTable {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +Alias
+  +Name
+  +UserId
+  +RefRecIdCRM
+  +Email
+  +Blocked
+}
+
+class CRMUsuarioTable {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +UserId
+  +Name
+  +AxaptaUserId
+  +Division
+  +DepartamentoId
+  +CategoriaId
+  +Bloqueado
+  +EmplId
+  +Email
+  +CocheEmpresa
+  +VisaEmpresa
+  +PriceKm_MEX
+  +NoContabilizarGasolina
+  +CreatedDate
+  +ModifiedDate
+}
+
+class CRMUsuarioSubordinadoTable {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +UserIdJefe
+  +UserIdSubordinado
+  +ExcluirAprobacionHojaGastos
+  +INDRecIdMex
+}
+
+class CRMHojaGastosTable {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +HojaGastosId
+  +UserId
+  +Division
+  +FromDate
+  +ToDate
+  +Description
+  +CurrencyCode
+  +ExchRate
+  +ExchangeRateMode
+  +AmountAnticipo
+  +CategoriaId
+  +ProjId
+  +ViajeId
+  +Aprobado
+  +ExpenseSheetStatus
+  +ReimbursableExpense
+  +Voucher
+  +VoucherPhysical
+  +DatePhysical
+  +DateFinancial
+  +TransDateAprobacion
+  +NoContabilizarGasolina
+  +MostrarParaPago
+  +INDCreatedByUserId
+  +CreatedDate
+  +ModifiedDate
+}
+
+class CRMHojaGastosLine {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +HojaGastosId
+  +UserId
+  +TransDate
+  +Type
+  +Description
+  +Division
+  +AccountNum
+  +Internacional
+  +Ticket
+  +Qty
+  +Price
+  +Amount
+  +Currency
+  +ExchRate
+  +AmountMST
+  +ReimbursableExpense
+  +ReimbursableAmount
+  +NoCobrar
+  +VisaEmpresa
+  +ModalidadPago
+  +TaxAmount
+  +TaxPercent
+  +AmountIVA
+  +AmountRetencion
+  +InvoiceId
+  +VendName
+  +ProjId
+  +ProjIdHornos
+  +ViajeId
+  +FileId
+  +INDCreatedByUserId
+  +CreatedDate
+  +ModifiedDate
+}
+
+class INDTicketInfoTable {
+  <<por empresa, opcional>>
+  +DATAAREAID
+  +RecId
+  +FileId
+  +Description
+  +Status
+  +CurrencyCode
+  +TotalAmount
+  +AmountMST
+  +ExchRate
+  +GastoType
+  +TicketDate
+  +TicketTime
+  +CreatedByUserId
+  +ProcessedByAI
+  +SearchKey
+}
+
+note for SysUserInfo "Usuario AX recibido por el servicio. Estructura completa pendiente de AOT."
+note for INDPersonaTable "Puente por empresa entre usuario AX y referencia CRM."
+note for CRMUsuarioTable "Empleado CRM y configuracion base usada al crear hojas."
+note for CRMUsuarioSubordinadoTable "Jefes directos y exclusion de aprobacion. Sin FK ni indice unico compuesto."
+note for CRMHojaGastosTable "Una cabecera por hoja. UserId es el propietario funcional."
+note for CRMHojaGastosLine "Una linea de gasto. Es el grano monetario principal del BI."
+note for INDTicketInfoTable "Ticket opcional relacionado por FileId."
+
+SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolucion X++
+SysUserInfo ..> CRMUsuarioTable : Id = AxaptaUserId / DATAAREAID / fallback heredado
+CRMUsuarioTable "1" --> "0..*" INDPersonaTable : RecId = RefRecIdCRM + DATAAREAID
+CRMUsuarioTable "1" ..> "0..*" CRMUsuarioSubordinadoTable : DATAAREAID + UserIdJefe
+CRMUsuarioTable "1" ..> "0..*" CRMUsuarioSubordinadoTable : DATAAREAID + UserIdSubordinado
+CRMUsuarioTable "1" --> "0..*" CRMHojaGastosTable : DATAAREAID + UserId
+CRMHojaGastosTable "1" --> "0..*" CRMHojaGastosLine : DATAAREAID + HojaGastosId + UserId
+CRMHojaGastosLine "0..*" --> "0..1" INDTicketInfoTable : DATAAREAID + FileId

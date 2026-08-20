@@ -32,6 +32,7 @@ docs/architecture/
       errors/
     user/
       README.md
+      integration/
       expenses/
       tickets/
       ai/
@@ -45,6 +46,7 @@ docs/architecture/
       ai/
       errors/
     user/
+      integration/
       expenses/
       tickets/
       ai/
@@ -64,6 +66,9 @@ diagrams/technical/ai/ticket-image-ai-sequence.mmd
 | Context | [system-context.md](diagrams/technical/context/system-context.md) | [system-context.mmd](diagrams/technical/context/system-context.mmd) | [system-context.svg](assets/technical/context/system-context.svg) |
 | Integration | [integration-overview.md](diagrams/technical/integration/integration-overview.md) | [integration-overview.mmd](diagrams/technical/integration/integration-overview.mmd) | [integration-overview.svg](assets/technical/integration/integration-overview.svg) |
 | Integration | [data-flow.md](diagrams/technical/integration/data-flow.md) | [data-flow.mmd](diagrams/technical/integration/data-flow.mmd) | [data-flow.svg](assets/technical/integration/data-flow.svg) |
+| Integration | [ax-bi-query-table-schema.md](diagrams/technical/integration/ax-bi-query-table-schema.md) | [ax-bi-query-table-schema.mmd](diagrams/technical/integration/ax-bi-query-table-schema.mmd) | [ax-bi-query-table-schema.svg](assets/technical/integration/ax-bi-query-table-schema.svg) |
+| Integration | [ax-bi-access-table-schema.md](diagrams/technical/integration/ax-bi-access-table-schema.md) | [ax-bi-access-table-schema.mmd](diagrams/technical/integration/ax-bi-access-table-schema.mmd) | [ax-bi-access-table-schema.svg](assets/technical/integration/ax-bi-access-table-schema.svg) |
+| Integration | [ax-bi-expense-table-schema.md](diagrams/technical/integration/ax-bi-expense-table-schema.md) | [ax-bi-expense-table-schema.mmd](diagrams/technical/integration/ax-bi-expense-table-schema.mmd) | [ax-bi-expense-table-schema.svg](assets/technical/integration/ax-bi-expense-table-schema.svg) |
 | Auth | [auth-context-sequence.md](diagrams/technical/auth/auth-context-sequence.md) | [auth-context-sequence.mmd](diagrams/technical/auth/auth-context-sequence.mmd) | [auth-context-sequence.svg](assets/technical/auth/auth-context-sequence.svg) |
 | Expenses | [expense-sheets-sequence.md](diagrams/technical/expenses/expense-sheets-sequence.md) | [expense-sheets-sequence.mmd](diagrams/technical/expenses/expense-sheets-sequence.mmd) | [expense-sheets-sequence.svg](assets/technical/expenses/expense-sheets-sequence.svg) |
 | Expenses | [expense-sheet-line-create-edit-flow.md](diagrams/technical/expenses/expense-sheet-line-create-edit-flow.md) | [expense-sheet-line-create-edit-flow.mmd](diagrams/technical/expenses/expense-sheet-line-create-edit-flow.mmd) | [expense-sheet-line-create-edit-flow.svg](assets/technical/expenses/expense-sheet-line-create-edit-flow.svg) |
@@ -78,6 +83,7 @@ diagrams/technical/ai/ticket-image-ai-sequence.mmd
 | --- | --- | --- | --- |
 | Expenses | [expense-sheets.md](diagrams/user/expenses/expense-sheets.md) | [expense-sheets.mmd](diagrams/user/expenses/expense-sheets.mmd) | [expense-sheets.svg](assets/user/expenses/expense-sheets.svg) |
 | Expenses | [expense-sheet-line-create-edit-flow.md](diagrams/user/expenses/expense-sheet-line-create-edit-flow.md) | [expense-sheet-line-create-edit-flow.mmd](diagrams/user/expenses/expense-sheet-line-create-edit-flow.mmd) | [expense-sheet-line-create-edit-flow.svg](assets/user/expenses/expense-sheet-line-create-edit-flow.svg) |
+| Integration | [ax-bi-query-table-schema.md](diagrams/user/integration/ax-bi-query-table-schema.md) | [ax-bi-query-table-schema.mmd](diagrams/user/integration/ax-bi-query-table-schema.mmd) | [ax-bi-query-table-schema.svg](assets/user/integration/ax-bi-query-table-schema.svg) |
 | Tickets | [tickets.md](diagrams/user/tickets/tickets.md) | [tickets.mmd](diagrams/user/tickets/tickets.mmd) | [tickets.svg](assets/user/tickets/tickets.svg) |
 | AI | [ai-audio-transcription.md](diagrams/user/ai/ai-audio-transcription.md) | [ai-audio-transcription.mmd](diagrams/user/ai/ai-audio-transcription.mmd) | [ai-audio-transcription.svg](assets/user/ai/ai-audio-transcription.svg) |
 | AI | [ticket-image-ai.md](diagrams/user/ai/ticket-image-ai.md) | [ticket-image-ai.mmd](diagrams/user/ai/ticket-image-ai.mmd) | [ticket-image-ai.svg](assets/user/ai/ticket-image-ai.svg) |

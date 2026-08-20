@@ -9,6 +9,9 @@ dependencies.
 | Context | [system-context.md](context/system-context.md) | [system-context.mmd](context/system-context.mmd) |
 | Integration | [integration-overview.md](integration/integration-overview.md) | [integration-overview.mmd](integration/integration-overview.mmd) |
 | Integration | [data-flow.md](integration/data-flow.md) | [data-flow.mmd](integration/data-flow.mmd) |
+| Integration | [ax-bi-query-table-schema.md](integration/ax-bi-query-table-schema.md) | [ax-bi-query-table-schema.mmd](integration/ax-bi-query-table-schema.mmd) |
+| Integration | [ax-bi-access-table-schema.md](integration/ax-bi-access-table-schema.md) | [ax-bi-access-table-schema.mmd](integration/ax-bi-access-table-schema.mmd) |
+| Integration | [ax-bi-expense-table-schema.md](integration/ax-bi-expense-table-schema.md) | [ax-bi-expense-table-schema.mmd](integration/ax-bi-expense-table-schema.mmd) |
 | Auth | [auth-context-sequence.md](auth/auth-context-sequence.md) | [auth-context-sequence.mmd](auth/auth-context-sequence.mmd) |
 | Expenses | [expense-sheets-sequence.md](expenses/expense-sheets-sequence.md) | [expense-sheets-sequence.mmd](expenses/expense-sheets-sequence.mmd) |
 | Expenses | [expense-sheet-line-create-edit-flow.md](expenses/expense-sheet-line-create-edit-flow.md) | [expense-sheet-line-create-edit-flow.mmd](expenses/expense-sheet-line-create-edit-flow.mmd) |
