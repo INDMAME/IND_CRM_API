@@ -265,6 +265,7 @@ Runtime/configuracion:
   Body required: ticketImage (jpg/jpeg/png/webp, max 50 MB).
   Body optional: currencyCode, description, comentario, existingHojaGastosId, projId (legacy alias: projectId).
   Flujo: crea ticket provisional, sube archivo, extrae draft IA, finaliza ticket y opcionalmente lo vincula a una hoja de gastos existente.
+  Al vincularlo, vuelve a leer el ticket persistido como fuente monetaria. EUR mantiene el contrato local; una divisa extranjera exige importe original, `TotalAmountMST`/`AmountMST` y `ExchRate` positivos. Si el snapshot final queda incompleto, responde 422 antes de llamar a AX y aplica el rollback del quick-create.
   El alta provisional conserva `TicketDate` vacio hasta terminar el OCR; la fecha de hoy se usa solo como `DocuRef.INDTransDate` obligatorio y no participa en la duplicidad del ticket.
   Response data: `FileId`, `UrlFile`, `FileName`, `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `TotalAmountCurrency`, `TotalAmountMST`, `CompletedStage`, `FailedStage`, `RollbackAttempted`, `RollbackSucceeded`, `RollbackMessage`, `StepTraceIds.{TicketCreate,FileUpload,DraftExtract,TicketFinalize,SheetLink}`.
   En errores tras crear `FileId`, el endpoint intenta rollback interno del blob y del ticket AX; el error original se conserva y el resultado del rollback viaja en los campos `Rollback*`.
@@ -300,9 +301,9 @@ Runtime/configuracion:
   - `filters` obligatorio en `filtered`: `searchKey` (compat: `filter`), `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`
   - `excludedIds[]` opcional en `filtered`
   En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base de estado pendiente interno de AX y `totalAmount != 0`.
-  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente. La linea generada usa el proyecto de cabecera solo cuando es elegible; si la cabecera esta vacia, contiene el marcador VARIOS o su proyecto ya no es elegible, queda sin proyecto.
+  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente. La API vuelve a leer cada ticket server-side y no acepta importes monetarios autoritativos desde el navegador. EUR conserva valores opcionales vacios; una divisa extranjera exige `CurrencyCode`, importe original, `TotalAmountMST`/`AmountMST` y `ExchRate` positivos antes de llamar a AX. La linea generada usa el proyecto de cabecera solo cuando es elegible; si la cabecera esta vacia, contiene el marcador VARIOS o su proyecto ya no es elegible, queda sin proyecto.
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
-  Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
+  Un snapshot monetario incompleto se informa por ticket en `failed[]`; no se crea su contenedor AX y el resto del lote puede continuar. Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Actualiza cabecera y DocuRef (description, currencyCode, gastoType, totalAmount, amountMST, exchRate, status, transDate (DDMMYYYY o DD.MM.YYYY), ticketDate (DDMMYYYY o DD.MM.YYYY), ticketTime (HH:mm, HH:mm:ss o segundos 0..86399), comentario, urlFile, fileName, fileExtension, processedByAI, ocrJson, normalizedJson).
   Puede responder 409 con `CRM_EXPENSESHEET_TICKET_DUPLICATE` si la fecha y hora informadas ya existen para otro ticket del mismo usuario.

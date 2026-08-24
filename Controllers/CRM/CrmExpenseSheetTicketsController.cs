@@ -876,7 +876,6 @@ namespace IND_CRM_API.Controllers.CRM
                             traceId,
                             quickCreateForm.ProjectId,
                             quickCreateForm.ProjectProvided,
-                            true,
                             out var linkMessage,
                             out var linkStatus))
                     {
@@ -1437,74 +1436,102 @@ namespace IND_CRM_API.Controllers.CRM
 
                 foreach (var ticketId in requestedTicketIds)
                 {
-                    if (!string.IsNullOrWhiteSpace(terminalSheetReason))
-                    {
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = ticketId,
-                            reason = terminalSheetReason
-                        });
-                        continue;
-                    }
+                    var ticketCurrencyCode = string.Empty;
+                    var ticketResult = "failed";
+                    var ticketReason = "Ticket processing did not complete.";
 
-                    if (!TryGetExpenseSheetTicketDetail(ax, company, axUserId, ticketId, traceId, out var ticketDetail, out var ticketMessage, out var ticketStatus))
+                    try
                     {
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        if (!string.IsNullOrWhiteSpace(terminalSheetReason))
                         {
-                            ticketId = ticketId,
-                            reason = NormalizeIssueReason(ticketMessage, ticketStatus == HttpStatusCode.NotFound ? "Ticket not found." : "Ticket could not be loaded.")
-                        });
-                        continue;
-                    }
-
-                    var skipReason = GetBulkLinkSkipReason(ticketDetail);
-                    if (!string.IsNullOrWhiteSpace(skipReason))
-                    {
-                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = ticketId,
-                            reason = skipReason
-                        });
-                        continue;
-                    }
-
-                    if (!TryLinkTicketToExpenseSheet(
-                            ax,
-                            company,
-                            axUserId,
-                            expenseSheetId,
-                            ticketDetail,
-                            traceId,
-                            targetInfo.ProjId,
-                            false,
-                            false,
-                            out var linkMessage,
-                            out var linkStatus))
-                    {
-                        if (IsTicketAlreadyLinkedMessage(linkMessage))
-                        {
-                            result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            ticketReason = terminalSheetReason;
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
                             {
                                 ticketId = ticketId,
-                                reason = NormalizeIssueReason(linkMessage, "Ticket is already linked to an expense sheet.")
+                                reason = ticketReason
                             });
                             continue;
                         }
 
-                        var normalizedFailure = NormalizeIssueReason(linkMessage, "Ticket could not be linked.");
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        if (!TryGetExpenseSheetTicketDetail(ax, company, axUserId, ticketId, traceId, out var ticketDetail, out var ticketMessage, out var ticketStatus))
                         {
-                            ticketId = ticketId,
-                            reason = normalizedFailure
-                        });
+                            ticketReason = NormalizeIssueReason(
+                                ticketMessage,
+                                ticketStatus == HttpStatusCode.NotFound ? "Ticket not found." : "Ticket could not be loaded.");
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+                            continue;
+                        }
 
-                        if (IsTerminalExpenseSheetLinkError(linkMessage, linkStatus))
-                            terminalSheetReason = normalizedFailure;
+                        ticketCurrencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
 
-                        continue;
+                        var skipReason = GetBulkLinkSkipReason(ticketDetail);
+                        if (!string.IsNullOrWhiteSpace(skipReason))
+                        {
+                            ticketResult = "skipped";
+                            ticketReason = skipReason;
+                            result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+                            continue;
+                        }
+
+                        if (!TryLinkTicketToExpenseSheet(
+                                ax,
+                                company,
+                                axUserId,
+                                expenseSheetId,
+                                ticketDetail,
+                                traceId,
+                                targetInfo.ProjId,
+                                false,
+                                out var linkMessage,
+                                out var linkStatus))
+                        {
+                            if (IsTicketAlreadyLinkedMessage(linkMessage))
+                            {
+                                ticketResult = "skipped";
+                                ticketReason = NormalizeIssueReason(linkMessage, "Ticket is already linked to an expense sheet.");
+                                result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                                {
+                                    ticketId = ticketId,
+                                    reason = ticketReason
+                                });
+                                continue;
+                            }
+
+                            ticketReason = NormalizeIssueReason(linkMessage, "Ticket could not be linked.");
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+
+                            if (IsTerminalExpenseSheetLinkError(linkMessage, linkStatus))
+                                terminalSheetReason = ticketReason;
+
+                            continue;
+                        }
+
+                        ticketResult = "linked";
+                        ticketReason = NormalizeIssueReason(linkMessage, "Ticket linked.");
+                        result.linkedTicketIds.Add(ticketId);
                     }
-
-                    result.linkedTicketIds.Add(ticketId);
+                    finally
+                    {
+                        LogBulkLinkTicketResult(
+                            traceId,
+                            expenseSheetId,
+                            ticketId,
+                            ticketCurrencyCode,
+                            ticketResult,
+                            ticketReason);
+                    }
                 }
 
                 result.linkedCount = result.linkedTicketIds.Count;
@@ -6128,6 +6155,20 @@ namespace IND_CRM_API.Controllers.CRM
             return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
         }
 
+        // Keeps structured ticket outcomes single-line and bounded.
+        private static string ToBoundedLogValue(string value)
+        {
+            const int maxLength = 240;
+            var normalized = ToLogValue(value)
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Replace('\t', ' ');
+
+            return normalized.Length <= maxLength
+                ? normalized
+                : normalized.Substring(0, maxLength);
+        }
+
         // Formats string length for logs so null and empty JSON payloads are distinguishable.
         private static string ToLogLength(string value)
         {
@@ -6448,6 +6489,21 @@ namespace IND_CRM_API.Controllers.CRM
             return string.IsNullOrWhiteSpace(message) ? fallback : message.Trim();
         }
 
+        // Logs one bounded outcome for each ticket requested by the bulk-link operation.
+        private void LogBulkLinkTicketResult(
+            string traceId,
+            string expenseSheetId,
+            string ticketId,
+            string currencyCode,
+            string result,
+            string reason)
+        {
+            Logger.Log(
+                $"[EXPENSE-TICKET-BULK-LINK] traceId={ToBoundedLogValue(traceId)} " +
+                $"sheetId={ToBoundedLogValue(expenseSheetId)} ticketId={ToBoundedLogValue(ticketId)} " +
+                $"currency={ToBoundedLogValue(currencyCode)} result={ToBoundedLogValue(result)} reason={ToBoundedLogValue(reason)}");
+        }
+
         // Returns a skip reason when a ticket is not eligible for bulk linking.
         private static string GetBulkLinkSkipReason(ExpenseSheetTicketDetailDto ticketDetail)
         {
@@ -6457,15 +6513,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusValueForLinking)
                 return "Ticket is not available for linking.";
 
-            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
-            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
-                return "Ticket total amount must be greater than zero.";
-
             if (!ticketDetail.GastoType.HasValue || !IsValidGastoType(ticketDetail.GastoType.Value))
                 return "Ticket gastoType is not valid for linking.";
-
-            if (string.IsNullOrWhiteSpace(ticketDetail.CurrencyCode))
-                return "Ticket currencyCode is empty.";
 
             if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out _))
                 return "Ticket transDate is not valid.";
@@ -6608,27 +6657,21 @@ namespace IND_CRM_API.Controllers.CRM
             string traceId,
             string projectId,
             bool projectProvided,
-            bool fallbackMissingCurrencyValues,
             out string message,
             out HttpStatusCode status)
         {
             message = string.Empty;
             status = HttpStatusCode.OK;
 
-            if (ticketDetail == null)
+            if (!TryResolveLinkedTicketCurrencyFields(
+                    ticketDetail,
+                    out var totalAmountCurrency,
+                    out var currencyCode,
+                    out var amountMST,
+                    out var exchRate,
+                    out message))
             {
                 status = (HttpStatusCode)422;
-                message = "Ticket data is empty.";
-                return false;
-            }
-
-            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
-            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
-            {
-                status = (HttpStatusCode)422;
-                message = totalAmountCurrency.HasValue && totalAmountCurrency.Value < 0m
-                    ? TicketNegativeTotalValidationMessage
-                    : "Ticket total amount must be greater than zero.";
                 return false;
             }
 
@@ -6649,9 +6692,9 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append(ToAxBool(false));
             lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
             lineCon.Append(1m);
-            lineCon.Append(totalAmountCurrency ?? 0m);
+            lineCon.Append(totalAmountCurrency);
             lineCon.Append(projectProvided ? (projectId ?? string.Empty).Trim() : string.Empty);
-            AppendLinkedTicketLineCurrencyFields(lineCon, ticketDetail, fallbackMissingCurrencyValues);
+            AppendLinkedTicketLineCurrencyFields(lineCon, currencyCode, amountMST, exchRate);
             // Position 13 preserves omitted versus explicitly empty project for createExpenseSheet.
             lineCon.Append(ToAxBool(projectProvided));
             linesCon.Append(lineCon);
@@ -6715,29 +6758,77 @@ namespace IND_CRM_API.Controllers.CRM
             return true;
         }
 
-        // Appends stable create positions 9-12 and fills currency values only when required.
+        // Resolves and validates the monetary snapshot before any AX container or call is created.
+        private static bool TryResolveLinkedTicketCurrencyFields(
+            ExpenseSheetTicketDetailDto ticketDetail,
+            out decimal totalAmountCurrency,
+            out string currencyCode,
+            out decimal? amountMST,
+            out decimal? exchRate,
+            out string message)
+        {
+            totalAmountCurrency = 0m;
+            currencyCode = string.Empty;
+            amountMST = null;
+            exchRate = null;
+            message = string.Empty;
+
+            if (ticketDetail == null)
+            {
+                message = "Ticket data is empty.";
+                return false;
+            }
+
+            var originalTotalAmount = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
+            if (!originalTotalAmount.HasValue || originalTotalAmount.Value <= 0m)
+            {
+                message = originalTotalAmount.HasValue && originalTotalAmount.Value < 0m
+                    ? TicketNegativeTotalValidationMessage
+                    : "Ticket total amount must be greater than zero.";
+                return false;
+            }
+
+            totalAmountCurrency = originalTotalAmount.Value;
+            currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(currencyCode))
+            {
+                message = "Ticket currencyCode is empty.";
+                return false;
+            }
+
+            if (string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            amountMST = NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST);
+            exchRate = NormalizePositiveCurrencyValue(ticketDetail.ExchRate);
+            if (amountMST.HasValue && exchRate.HasValue)
+                return true;
+
+            var missingFields = !amountMST.HasValue && !exchRate.HasValue
+                ? "AmountMST and ExchRate"
+                : !amountMST.HasValue ? "AmountMST" : "ExchRate";
+            message = $"Ticket {currencyCode} requires positive {missingFields} values before linking.";
+            return false;
+        }
+
+        // Appends stable create positions 9-12 from an already validated monetary snapshot.
         private static void AppendLinkedTicketLineCurrencyFields(
             IAxaptaContainer lineCon,
-            ExpenseSheetTicketDetailDto ticketDetail,
-            bool fallbackMissingCurrencyValues)
+            string currencyCode,
+            decimal? amountMST,
+            decimal? exchRate)
         {
-            if (lineCon == null || ticketDetail == null)
+            if (lineCon == null)
                 return;
 
             const string noOptionalValueToken = "null";
-            var currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
-            var includeCurrencyValues = fallbackMissingCurrencyValues &&
-                !string.IsNullOrWhiteSpace(currencyCode) &&
-                !string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase);
-            var amountMST = includeCurrencyValues
-                ? NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST) ?? QuickCreateInsertFallbackAmount
-                : (decimal?)null;
-            var exchRate = includeCurrencyValues
-                ? NormalizePositiveCurrencyValue(ticketDetail.ExchRate) ?? QuickCreateInsertFallbackAmount
-                : (decimal?)null;
+            var isForeignCurrency = !string.Equals(
+                currencyCode,
+                ExpenseSheetLocalCurrencyCode,
+                StringComparison.OrdinalIgnoreCase);
 
             lineCon.Append(noOptionalValueToken);
-            lineCon.Append(includeCurrencyValues ? currencyCode : string.Empty);
+            lineCon.Append(isForeignCurrency ? currencyCode : string.Empty);
             lineCon.Append(amountMST.HasValue ? (object)amountMST.Value : noOptionalValueToken);
             lineCon.Append(exchRate.HasValue ? (object)exchRate.Value : noOptionalValueToken);
         }

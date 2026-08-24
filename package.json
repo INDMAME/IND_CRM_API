@@ -5,6 +5,7 @@
   "description": "Codex reference sync utilities for IND_CRM_API",
   "scripts": {
     "test:expense-ticket-flow": "node --test tests/expense-ticket-flow-regression.test.mjs",
+    "test:expense-ticket-currency-snapshot": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/expense-ticket-currency-snapshot-reflection.test.ps1 -AssemblyPath bin/x86/Release/IND_CRM_API.exe",
     "sync:skill:references": "node scripts/sync-skill-references.mjs",
     "sync:local:skill:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",
     "sync:codex:references": "node scripts/sync-skill-references.mjs ind-crm-backend-guardrails",

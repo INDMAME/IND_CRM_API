@@ -70,6 +70,10 @@ const ticketRecalculationJobSource = readFileSync(
   path.join(repositoryRoot, ".codex", "Axapta", "INDRecalcularAmountMST_Tickets.xpo"),
   "latin1",
 );
+const nativeTicketExpenseSheetLinkSource = readFileSync(
+  path.join(repositoryRoot, ".codex", "Axapta", "INDTicketExpenseSheetLink.xpo"),
+  "latin1",
+);
 
 // Extracts one source unit so each assertion stays scoped to the intended method.
 function sourceBetween(source, startMarker, endMarker) {
@@ -127,10 +131,45 @@ const linkTicketToExpenseSheetSource = sourceBetween(
   "private static bool TryLinkTicketToExpenseSheet(",
   "// Reads a header and optional lines container from AX.",
 );
+const resolveLinkedTicketCurrencyFieldsSource = sourceBetween(
+  controllerSource,
+  "private static bool TryResolveLinkedTicketCurrencyFields(",
+  "// Appends stable create positions 9-12 from an already validated monetary snapshot.",
+);
+const tryApplyTicketFromIACoreSource = sourceBetween(
+  controllerSource,
+  "private bool TryApplyTicketFromIACore(",
+  "// Resolves ticket creation mode with backward-compatible default.",
+);
 const linkedTicketCurrencyFieldsSource = sourceBetween(
   controllerSource,
   "private static void AppendLinkedTicketLineCurrencyFields(",
   "// Returns only positive currency values because AX rejects empty or zero conversion data.",
+);
+const bulkLinkExpenseSheetTicketsSource = sourceBetween(
+  controllerSource,
+  "public IHttpActionResult BulkLinkExpenseSheetTickets(",
+  "public IHttpActionResult UpdateExpenseSheetTicket(",
+);
+const bulkLinkSkipReasonSource = sourceBetween(
+  controllerSource,
+  "private static string GetBulkLinkSkipReason(",
+  "// Detects duplicate-link business messages returned by AX.",
+);
+const bulkLinkTicketLogSource = sourceBetween(
+  controllerSource,
+  "private void LogBulkLinkTicketResult(",
+  "// Returns a skip reason when a ticket is not eligible for bulk linking.",
+);
+const boundedLogValueSource = sourceBetween(
+  controllerSource,
+  "private static string ToBoundedLogValue(",
+  "// Formats string length for logs so null and empty JSON payloads are distinguishable.",
+);
+const mapExpenseSheetTicketDetailSource = sourceBetween(
+  controllerSource,
+  "private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(",
+  "private static List<ExpenseSheetTicketListItemDto> MapExpenseSheetTicketList(",
 );
 const createExpenseSheetHeaderContainerSource = sourceBetween(
   expenseSheetsControllerSource,
@@ -202,9 +241,22 @@ const realProjectResolverSource = xpoMethod(expenseSheetLineSource, "resolveReal
 const initLineFromSheetSource = xpoMethod(expenseSheetLineSource, "InitFromHojaGastosTable");
 const initLineFromPreviousSource = xpoMethod(expenseSheetLineSource, "InitFromPreviousLine");
 const insertExpenseSheetLineSource = xpoMethod(expenseSheetLineSource, "insert");
+const syncLinkedTicketSource = xpoMethod(expenseSheetLineSource, "syncLinkedTicket");
 const updateExpenseSheetLineTableSource = xpoMethod(expenseSheetLineSource, "update");
 const deleteExpenseSheetLineSource = xpoMethod(expenseSheetLineSource, "delete");
+const linkedTicketMonetarySnapshotSource = xpoMethod(
+  expenseSheetServiceSource,
+  "buildLinkedTicketMonetarySnapshot",
+);
 const axCreateExpenseSheetSource = xpoMethod(expenseSheetServiceSource, "createExpenseSheet");
+const axGetExpenseSheetTicketSource = xpoMethod(
+  expenseSheetServiceSource,
+  "getExpenseSheetTicket",
+);
+const axNativeTicketExpenseSheetLinkRunSource = xpoMethod(
+  nativeTicketExpenseSheetLinkSource,
+  "run",
+);
 const axUpdateExpenseSheetHeaderSource = xpoMethod(
   expenseSheetServiceSource,
   "updateExpenseSheetHeader",
@@ -1046,15 +1098,15 @@ test("automatic ticket links preserve the create-line project tri-state", () => 
   assert.match(quickCreateFormReaderSource, /ProjectProvided = projectProvided/);
   assert.match(
     quickCreateSource,
-    /quickCreateForm\.ProjectId,\s*quickCreateForm\.ProjectProvided,\s*true,/,
+    /quickCreateForm\.ProjectId,\s*quickCreateForm\.ProjectProvided,\s*out var linkMessage/,
   );
   assert.match(
     controllerSource,
-    /targetInfo\.ProjId,\s*false,\s*false,\s*out var linkMessage/,
+    /targetInfo\.ProjId,\s*false,\s*out var linkMessage/,
   );
   assert.match(
     linkTicketToExpenseSheetSource,
-    /string projectId,\s*bool projectProvided,\s*bool fallbackMissingCurrencyValues/,
+    /string projectId,\s*bool projectProvided,\s*out string message/,
   );
   assert.match(
     linkTicketToExpenseSheetSource,
@@ -1062,7 +1114,7 @@ test("automatic ticket links preserve the create-line project tri-state", () => 
   );
 
   const currencyFieldsPosition = linkTicketToExpenseSheetSource.indexOf(
-    "AppendLinkedTicketLineCurrencyFields(lineCon, ticketDetail, fallbackMissingCurrencyValues);",
+    "AppendLinkedTicketLineCurrencyFields(lineCon, currencyCode, amountMST, exchRate);",
   );
   const projectFlagPosition = linkTicketToExpenseSheetSource.indexOf(
     "lineCon.Append(ToAxBool(projectProvided));",
@@ -1071,8 +1123,395 @@ test("automatic ticket links preserve the create-line project tri-state", () => 
 
   const stableFieldAppends = linkedTicketCurrencyFieldsSource.match(/lineCon\.Append\(/g) ?? [];
   assert.equal(stableFieldAppends.length, 4);
-  assert.doesNotMatch(
+});
+
+test("bulk strict linking propagates a valid BRL monetary snapshot", () => {
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /currencyCode\s*=\s*\(ticketDetail\.CurrencyCode \?\? string\.Empty\)\.Trim\(\)\.ToUpperInvariant\(\);/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /amountMST\s*=\s*NormalizePositiveCurrencyValue\(ticketDetail\.TotalAmountMST \?\? ticketDetail\.AmountMST\);/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /exchRate\s*=\s*NormalizePositiveCurrencyValue\(ticketDetail\.ExchRate\);/,
+  );
+  const completeSnapshotPosition = resolveLinkedTicketCurrencyFieldsSource.indexOf(
+    "if (amountMST.HasValue && exchRate.HasValue)",
+  );
+  const missingSnapshotPosition = resolveLinkedTicketCurrencyFieldsSource.indexOf(
+    "var missingFields =",
+    completeSnapshotPosition,
+  );
+  assert.ok(
+    completeSnapshotPosition >= 0 && missingSnapshotPosition > completeSnapshotPosition,
+    "A complete foreign snapshot must succeed before missing fields are rejected",
+  );
+  assert.match(
+    linkTicketToExpenseSheetSource,
+    /AppendLinkedTicketLineCurrencyFields\(lineCon, currencyCode, amountMST, exchRate\);/,
+  );
+  assert.match(
     linkedTicketCurrencyFieldsSource,
-    /if \(!fallbackMissingCurrencyValues\)\s*return;/,
+    /lineCon\.Append\(noOptionalValueToken\);[\s\S]*lineCon\.Append\([^;]*currencyCode[^;]*\);[\s\S]*lineCon\.Append\([^;]*amountMST[^;]*\);[\s\S]*lineCon\.Append\([^;]*exchRate[^;]*\);/,
+  );
+});
+
+test("ticket linking never synthesizes missing monetary values", () => {
+  assert.doesNotMatch(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /QuickCreateInsertFallbackAmount|LinkedTicketCurrencyPolicy|currencyPolicy/,
+    "Persisted ticket linking must not retain a synthetic monetary fallback",
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /if \(amountMST\.HasValue && exchRate\.HasValue\)\s*return true;[\s\S]{0,500}message\s*=[\s\S]{0,500}return false;/,
+  );
+});
+
+test("EUR links keep the local contract without optional foreign values", () => {
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /amountMST\s*=\s*null;[\s\S]*exchRate\s*=\s*null;/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /if \(string\.Equals\(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison\.OrdinalIgnoreCase\)\)\s*return true;/,
+  );
+  assert.match(
+    linkedTicketCurrencyFieldsSource,
+    /lineCon\.Append\([^;]*(?:includeCurrencyValues|isForeignCurrency)[^;]*\?\s*currencyCode\s*:\s*string\.Empty\);/,
+  );
+  assert.match(
+    linkedTicketCurrencyFieldsSource,
+    /lineCon\.Append\(amountMST\.HasValue\s*\?\s*\(object\)amountMST\.Value\s*:\s*noOptionalValueToken\);/,
+  );
+  assert.match(
+    linkedTicketCurrencyFieldsSource,
+    /lineCon\.Append\(exchRate\.HasValue\s*\?\s*\(object\)exchRate\.Value\s*:\s*noOptionalValueToken\);/,
+  );
+});
+
+test("strict BRL without AmountMST fails before the AX create call", () => {
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /amountMST\s*=\s*NormalizePositiveCurrencyValue\(ticketDetail\.TotalAmountMST \?\? ticketDetail\.AmountMST\);/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /var missingFields\s*=\s*!amountMST\.HasValue[\s\S]{0,500}message\s*=[\s\S]{0,500}return false;/,
+  );
+  assert.ok(
+    linkTicketToExpenseSheetSource.indexOf("TryResolveLinkedTicketCurrencyFields(") <
+      linkTicketToExpenseSheetSource.indexOf("ax.CreateContainer()"),
+    "Strict validation must run before the first AX container is created",
+  );
+});
+
+test("strict BRL without ExchRate fails before the AX create call", () => {
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /exchRate\s*=\s*NormalizePositiveCurrencyValue\(ticketDetail\.ExchRate\);/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /var missingFields\s*=\s*[\s\S]{0,500}!exchRate\.HasValue[\s\S]{0,500}message\s*=[\s\S]{0,500}return false;/,
+  );
+});
+
+test("empty currency and non-positive original totals are failed before AX", () => {
+  assert.doesNotMatch(
+    bulkLinkSkipReasonSource,
+    /TotalAmountCurrency|CurrencyCode/,
+    "Monetary snapshot defects must reach failed[] instead of skipped[]",
+  );
+
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /currencyCode\s*=\s*\(ticketDetail\.CurrencyCode \?\? string\.Empty\)\.Trim\(\)\.ToUpperInvariant\(\);/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /string\.IsNullOrWhiteSpace\(currencyCode\)[\s\S]{0,500}message\s*=[\s\S]{0,500}return false;/,
+  );
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /!originalTotalAmount\.HasValue\s*\|\|\s*originalTotalAmount\.Value\s*<=\s*0m[\s\S]{0,500}return false;/,
+  );
+});
+
+test("mixed bulk results keep valid links and report invalid snapshots as failed", () => {
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /if \(!TryLinkTicketToExpenseSheet\([\s\S]*ticketReason\s*=\s*NormalizeIssueReason\(linkMessage,[\s\S]*result\.failed\.Add\([\s\S]*ticketId\s*=\s*ticketId,[\s\S]*reason\s*=\s*ticketReason[\s\S]*continue;/,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /result\.linkedTicketIds\.Add\(ticketId\);/,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /result\.linkedCount\s*=\s*result\.linkedTicketIds\.Count;[\s\S]*result\.skippedCount\s*=\s*result\.skipped\.Count;[\s\S]*result\.failedCount\s*=\s*result\.failed\.Count;/,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /return Ok\(new IndApiResponse<ExpenseSheetTicketBulkLinkResultDto>[\s\S]*Success\s*=\s*true[\s\S]*Data\s*=\s*result/,
+  );
+});
+
+test("quick-create settles and reloads the persisted ticket before strict linking", () => {
+  const finalizePosition = quickCreateSource.indexOf("TryApplyTicketFromIACore(");
+  const reloadPosition = quickCreateSource.indexOf("TryGetExpenseSheetTicketDetail(", finalizePosition);
+  const linkPosition = quickCreateSource.indexOf("TryLinkTicketToExpenseSheet(", reloadPosition);
+  assert.ok(finalizePosition >= 0 && reloadPosition > finalizePosition && linkPosition > reloadPosition);
+  assert.match(
+    tryApplyTicketFromIACoreSource,
+    /TryResolveTicketIaCurrencyAmounts\([\s\S]{0,1000}resolvedAmountMST[\s\S]{0,1000}resolvedExchRate/,
+  );
+  assert.doesNotMatch(quickCreateSource, /LinkedTicketCurrencyPolicy|QuickCreateLegacy/);
+});
+
+test("quick-create linking rejects an incomplete persisted snapshot instead of bypassing AX defense", () => {
+  assert.match(
+    resolveLinkedTicketCurrencyFieldsSource,
+    /if \(string\.IsNullOrWhiteSpace\(currencyCode\)\)[\s\S]{0,300}message\s*=\s*"Ticket currencyCode is empty\.";[\s\S]{0,100}return false;/,
+  );
+  assert.doesNotMatch(resolveLinkedTicketCurrencyFieldsSource, /QuickCreateInsertFallbackAmount/);
+});
+
+test("bulk linking emits one bounded structured outcome per requested ticket", () => {
+  assert.equal(
+    bulkLinkExpenseSheetTicketsSource.match(/LogBulkLinkTicketResult\(/g)?.length,
+    1,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /foreach \(var ticketId in requestedTicketIds\)[\s\S]*try[\s\S]*finally[\s\S]*LogBulkLinkTicketResult\(/,
+  );
+  assert.match(bulkLinkExpenseSheetTicketsSource, /ticketResult\s*=\s*"linked";/);
+  assert.match(bulkLinkExpenseSheetTicketsSource, /ticketResult\s*=\s*"skipped";/);
+  assert.match(bulkLinkExpenseSheetTicketsSource, /ticketResult\s*=\s*"failed";/);
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /if \(!string\.IsNullOrWhiteSpace\(terminalSheetReason\)\)[\s\S]*ticketReason\s*=\s*terminalSheetReason;[\s\S]*result\.failed\.Add\([\s\S]*continue;/,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /if \(!TryGetExpenseSheetTicketDetail\([\s\S]*ticketReason\s*=\s*NormalizeIssueReason\([\s\S]*result\.failed\.Add\([\s\S]*continue;/,
+  );
+  assert.match(
+    bulkLinkExpenseSheetTicketsSource,
+    /if \(IsTicketAlreadyLinkedMessage\(linkMessage\)\)[\s\S]*ticketResult\s*=\s*"skipped";[\s\S]*result\.skipped\.Add\([\s\S]*continue;/,
+  );
+  assert.equal(bulkLinkTicketLogSource.match(/Logger\.Log\(/g)?.length, 1);
+  assert.match(
+    bulkLinkTicketLogSource,
+    /traceId=\{ToBoundedLogValue\(traceId\)\}[\s\S]*sheetId=\{ToBoundedLogValue\(expenseSheetId\)\}[\s\S]*ticketId=\{ToBoundedLogValue\(ticketId\)\}[\s\S]*currency=\{ToBoundedLogValue\(currencyCode\)\}[\s\S]*result=\{ToBoundedLogValue\(result\)\}[\s\S]*reason=\{ToBoundedLogValue\(reason\)\}/,
+  );
+  for (const field of [
+    "traceId",
+    "expenseSheetId",
+    "ticketId",
+    "currencyCode",
+    "result",
+    "reason",
+  ]) {
+    assert.match(
+      bulkLinkTicketLogSource,
+      new RegExp(`ToBoundedLogValue\\(${field}\\)`),
+    );
+  }
+  assert.match(boundedLogValueSource, /var normalized\s*=\s*ToLogValue\(value\)/);
+  assert.match(boundedLogValueSource, /\.Replace\('\\r', ' '\)/);
+  assert.match(boundedLogValueSource, /\.Replace\('\\n', ' '\)/);
+  assert.match(boundedLogValueSource, /const int maxLength\s*=\s*240;/);
+  assert.match(boundedLogValueSource, /normalized\.Substring\(0, maxLength\)/);
+  assert.doesNotMatch(
+    bulkLinkTicketLogSource,
+    /description|ocr|fileName|user|axUserId/i,
+  );
+});
+
+test("AX ticket detail monetary fields map to the intended DTO aliases", () => {
+  assert.match(
+    axGetExpenseSheetTicketSource,
+    /Currency::find\(ticketHeader\.CurrencyCode\)\.CurrencyCodeISO[\s\S]*ticketHeader\.TotalAmount[\s\S]*ticketHeader\.AmountMST[\s\S]*ticketHeader\.ExchRate/,
+  );
+  assert.match(
+    mapExpenseSheetTicketDetailSource,
+    /var totalAmountCurrency\s*=\s*headerExtras\.Count > 4 \? ToDecimal\(headerExtras\[4\]\) : null;/,
+  );
+  assert.match(
+    mapExpenseSheetTicketDetailSource,
+    /var totalAmountMST\s*=\s*headerExtras\.Count > 19 \? ToDecimal\(headerExtras\[19\]\) : null;/,
+  );
+  assert.match(
+    mapExpenseSheetTicketDetailSource,
+    /CurrencyCode\s*=\s*headerExtras\.Count > 3 \? headerExtras\[3\] : string\.Empty,[\s\S]*TotalAmount\s*=\s*totalAmountCurrency,[\s\S]*TotalAmountCurrency\s*=\s*totalAmountCurrency,[\s\S]*AmountMST\s*=\s*totalAmountMST,[\s\S]*TotalAmountMST\s*=\s*totalAmountMST,[\s\S]*ExchRate\s*=\s*headerExtras\.Count > 20 \? ToDecimal\(headerExtras\[20\]\) : null/,
+  );
+});
+
+test("AX create mode 2 treats the persisted ticket as monetary authority", () => {
+  const lineClearPosition = axCreateExpenseSheetSource.indexOf("line.clear();");
+  const lineInsertPosition = axCreateExpenseSheetSource.indexOf("line.insert();");
+  assert.ok(lineClearPosition > 0 && lineInsertPosition > lineClearPosition);
+  const beforeClear = axCreateExpenseSheetSource.slice(0, lineClearPosition);
+  const lineBuild = axCreateExpenseSheetSource.slice(lineClearPosition, lineInsertPosition);
+
+  assert.match(
+    beforeClear,
+    /select firstonly forupdate ticketHeader[\s\S]*ticketHeader\.FileId\s*==\s*fileId[\s\S]*ticketHeader\.CreatedByUserId\s*==\s*axUserId/,
+  );
+  assert.match(
+    beforeClear,
+    /mode\s*==\s*#ModeAddLinesToExisting[\s\S]*ticketMonetarySnapshot\s*=\s*INDCRMExpenseSheetService::buildLinkedTicketMonetarySnapshot\(ticketHeader\);[\s\S]*if \(!conPeek\(ticketMonetarySnapshot, 1\)\)[\s\S]*ttsabort;[\s\S]*buildHeader\(false, conPeek\(ticketMonetarySnapshot, 2\), conNull\(\)\)/,
+  );
+  assert.match(
+    beforeClear,
+    /lineCurrencyCode\s*=\s*conPeek\(ticketMonetarySnapshot, 3\);[\s\S]*price\s*=\s*conPeek\(ticketMonetarySnapshot, 4\);[\s\S]*lineAmountMST\s*=\s*conPeek\(ticketMonetarySnapshot, 5\);[\s\S]*lineExchRate\s*=\s*conPeek\(ticketMonetarySnapshot, 6\);[\s\S]*hasLineAmountMST\s*=\s*true;[\s\S]*hasLineExchRate\s*=\s*true;/,
+  );
+  assert.doesNotMatch(
+    beforeClear,
+    /ticketHeader\.(?:CurrencyCode|TotalAmount|AmountMST|ExchRate)\s*=/,
+    "Snapshot materialization must not mutate the locked ticket buffer",
+  );
+  assert.match(
+    lineBuild,
+    /line\.Price\s*=\s*price;[\s\S]*line\.Qty\s*=\s*qty;[\s\S]*line\.Currency\s*=\s*lineCurrencyCode[\s\S]*line\.Amount\s*=\s*line\.CalcAmount\(\);[\s\S]*if \(hasLineExchRate\)[\s\S]*line\.ExchRate\s*=\s*lineExchRate;[\s\S]*if \(hasLineAmountMST\)[\s\S]*line\.AmountMST\s*=\s*lineAmountMST;/,
+  );
+  assert.ok(
+    lineBuild.indexOf("line.Currency = lineCurrencyCode") < lineBuild.indexOf("line.Amount   = line.CalcAmount();"),
+    "The ticket currency must be assigned before currency-specific amount rounding",
+  );
+});
+
+test("AX shared helper validates local and foreign ticket snapshots", () => {
+  assert.match(
+    linkedTicketMonetarySnapshotSource,
+    /static container buildLinkedTicketMonetarySnapshot\(INDTicketInfoTable _ticketHeader\)/,
+  );
+  assert.doesNotMatch(
+    linkedTicketMonetarySnapshotSource,
+    /static server container buildLinkedTicketMonetarySnapshot/,
+    "Called-from AX link paths must not force a tier transition inside TTS",
+  );
+  assert.match(
+    linkedTicketMonetarySnapshotSource,
+    /currencyCode\s*=\s*strUpr\(strLRTrim\(_ticketHeader\.CurrencyCode\)\);[\s\S]*resolveCurrencyCode\(currencyCode\);[\s\S]*if \(!currencyCode\)[\s\S]*return \[false,/,
+  );
+  assert.match(
+    linkedTicketMonetarySnapshotSource,
+    /totalAmount\s*=\s*Currency::amount\(_ticketHeader\.TotalAmount, currencyCode\);[\s\S]*if \(totalAmount <= 0\)[\s\S]*return \[false,/,
+  );
+  assert.match(
+    linkedTicketMonetarySnapshotSource,
+    /localCurrencyCode\s*=\s*CompanyInfo::standardCurrency\(\);[\s\S]*if \(currencyCode == localCurrencyCode\)[\s\S]*amountMST\s*=\s*Currency::amount\(totalAmount, localCurrencyCode\);[\s\S]*return \[true, '', currencyCode, totalAmount, amountMST, 100\];/,
+  );
+  assert.match(
+    linkedTicketMonetarySnapshotSource,
+    /amountMST\s*=\s*Currency::amount\(_ticketHeader\.AmountMST, localCurrencyCode\);[\s\S]*exchRate\s*=\s*_ticketHeader\.ExchRate;[\s\S]*if \(amountMST <= 0 \|\| exchRate <= 0\)[\s\S]*return \[false,[\s\S]*return \[true, '', currencyCode, totalAmount, amountMST, exchRate\];/,
+  );
+});
+
+test("linked ticket inserts preserve the exact authoritative rate through table normalization", () => {
+  assert.ok(
+    insertExpenseSheetLineSource.indexOf("this.Amount = this.CalcAmount();") <
+      insertExpenseSheetLineSource.indexOf(
+        "linkedMonetarySnapshot = INDCRMExpenseSheetService::buildLinkedTicketMonetarySnapshot(linkedTicketSnapshot);",
+      ),
+    "Legacy callers must finish Qty/Price amount calculation before the authoritative comparison",
+  );
+  assert.match(
+    insertExpenseSheetLineSource,
+    /INDTicketInfoTable\s+linkedTicketSnapshot;[\s\S]*container\s+linkedMonetarySnapshot;[\s\S]*boolean\s+preserveLinkedTicketSnapshot;/,
+  );
+  assert.match(
+    insertExpenseSheetLineSource,
+    /linkedMonetarySnapshot\s*=\s*INDCRMExpenseSheetService::buildLinkedTicketMonetarySnapshot\(linkedTicketSnapshot\);/,
+  );
+  assert.match(
+    insertExpenseSheetLineSource,
+    /preserveLinkedTicketSnapshot\s*=[\s\S]{0,800}this\.Currency\s*==\s*conPeek\(linkedMonetarySnapshot, 3\)[\s\S]{0,800}this\.Amount\s*==\s*conPeek\(linkedMonetarySnapshot, 4\)[\s\S]{0,800}this\.AmountMST\s*==\s*conPeek\(linkedMonetarySnapshot, 5\)[\s\S]{0,800}this\.ExchRate\s*==\s*conPeek\(linkedMonetarySnapshot, 6\)/,
+  );
+  assert.match(
+    insertExpenseSheetLineSource,
+    /if \(preserveLinkedTicketSnapshot\)[\s\S]{0,300}this\.recalculateReimbursableAmount\(\);[\s\S]{0,300}else[\s\S]{0,300}this\.normalizeCurrencyAmounts\(amountMSTWasProvided\);/,
+  );
+  assert.match(
+    insertExpenseSheetLineSource,
+    /this\.syncLinkedTicket\(preserveLinkedTicketSnapshot\);/,
+  );
+  assert.match(
+    syncLinkedTicketSource,
+    /void syncLinkedTicket\(boolean _preserveCurrencySnapshot = false\)/,
+  );
+  assert.doesNotMatch(
+    syncLinkedTicketSource,
+    /buildLinkedTicketMonetarySnapshot\(ticketInfoTable\)/,
+    "Table updates must not force a server helper call from inside their transaction",
+  );
+  assert.match(
+    syncLinkedTicketSource,
+    /_preserveCurrencySnapshot\s*=[\s\S]{0,1400}ticketInfoTable\.CurrencyCode\s*==\s*this\.Currency[\s\S]{0,1400}ticketInfoTable\.TotalAmount\s*==\s*this\.Amount[\s\S]{0,1400}ticketInfoTable\.AmountMST\s*==\s*this\.AmountMST[\s\S]{0,1400}ticketInfoTable\.ExchRate\s*==\s*this\.ExchRate/,
+  );
+  assert.match(
+    syncLinkedTicketSource,
+    /ticketInfoTable\.CurrencyCode\s*==\s*localCurrencyCode[\s\S]{0,500}ticketInfoTable\.ExchRate\s*==\s*100[\s\S]{0,500}ticketInfoTable\.AmountMST\s*==\s*Currency::amount\(ticketInfoTable\.TotalAmount, localCurrencyCode\)[\s\S]{0,500}ticketInfoTable\.CurrencyCode\s*!=\s*localCurrencyCode[\s\S]{0,500}ticketInfoTable\.AmountMST\s*>\s*0[\s\S]{0,500}ticketInfoTable\.ExchRate\s*>\s*0/,
+  );
+  assert.match(
+    syncLinkedTicketSource,
+    /if \(_preserveCurrencySnapshot\)[\s\S]{0,500}ticketInfoTable\.CurrencyCode\s*=\s*this\.Currency;[\s\S]{0,500}ticketInfoTable\.TotalAmount\s*=\s*this\.Amount;[\s\S]{0,500}ticketInfoTable\.ExchRate\s*=\s*this\.ExchRate;[\s\S]{0,500}ticketInfoTable\.AmountMST\s*=\s*this\.AmountMST;[\s\S]{0,500}else[\s\S]{0,300}ticketInfoTable\.normalizeCurrencyAmounts\(ticketInfoTable\.AmountMST != 0\);/,
+  );
+  assert.notEqual(
+    (11.5 * 100) / 1.9,
+    605.26,
+    "Re-deriving a persisted rate from rounded amounts changes the authoritative ticket snapshot",
+  );
+  assert.match(
+    axCreateExpenseSheetSource,
+    /if \(mode == #ModeAddLinesToExisting && fileId\)[\s\S]{0,300}line\.recalculateReimbursableAmount\(\);[\s\S]{0,300}else[\s\S]{0,300}line\.normalizeCurrencyAmounts\(hasLineAmountMST\);/,
+  );
+  assert.match(
+    axNativeTicketExpenseSheetLinkRunSource,
+    /hojaGastosLine\.AmountMST\s*=\s*linkedAmountMST;[\s\S]{0,300}hojaGastosLine\.recalculateReimbursableAmount\(\);[\s\S]{0,500}hojaGastosLine\.insert\(\);/,
+  );
+});
+
+test("native AX ticket linking validates the snapshot before mutating a line", () => {
+  const lineMutationPosition = axNativeTicketExpenseSheetLinkRunSource.indexOf(
+    "hojaGastosLine.clear();",
+  );
+  const lineInsertPosition = axNativeTicketExpenseSheetLinkRunSource.indexOf(
+    "hojaGastosLine.insert();",
+  );
+  assert.ok(lineMutationPosition > 0 && lineInsertPosition > lineMutationPosition);
+
+  const validationPrefix = axNativeTicketExpenseSheetLinkRunSource.slice(
+    0,
+    lineMutationPosition,
+  );
+  assert.match(
+    validationPrefix,
+    /ticketMonetarySnapshot\s*=\s*INDCRMExpenseSheetService::buildLinkedTicketMonetarySnapshot\(ticket\);/,
+  );
+  assert.match(
+    validationPrefix,
+    /if \(!conPeek\(ticketMonetarySnapshot, 1\)\)[\s\S]*warning\([\s\S]*conPeek\(ticketMonetarySnapshot, 2\)[\s\S]*continue;/,
+  );
+  assert.match(
+    validationPrefix,
+    /linkedCurrencyCode\s*=\s*conPeek\(ticketMonetarySnapshot, 3\);[\s\S]*linkedTotalAmount\s*=\s*conPeek\(ticketMonetarySnapshot, 4\);[\s\S]*linkedAmountMST\s*=\s*conPeek\(ticketMonetarySnapshot, 5\);[\s\S]*linkedExchRate\s*=\s*conPeek\(ticketMonetarySnapshot, 6\);/,
+  );
+
+  const beforeInsert = axNativeTicketExpenseSheetLinkRunSource.slice(0, lineInsertPosition);
+  assert.match(
+    beforeInsert,
+    /hojaGastosLine\.Price\s*=\s*linkedTotalAmount;[\s\S]*hojaGastosLine\.Amount\s*=\s*linkedTotalAmount;[\s\S]*hojaGastosLine\.Currency\s*=\s*linkedCurrencyCode;[\s\S]*hojaGastosLine\.ExchRate\s*=\s*linkedExchRate;[\s\S]*hojaGastosLine\.AmountMST\s*=\s*linkedAmountMST;/,
+  );
+  assert.match(
+    beforeInsert,
+    /validationMessage\s*=\s*INDCRMExpenseSheetService::validateExpenseSheetLineForApi\(hojaGastosLine\);[\s\S]*if \(validationMessage\)[\s\S]*warning\([\s\S]*continue;/,
   );
 });
