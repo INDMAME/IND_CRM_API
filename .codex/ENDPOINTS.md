@@ -1,4 +1,4 @@
-# IND_CRM_API Endpoints (actualizado 2026-08-05)
+# IND_CRM_API Endpoints (actualizado 2026-08-24)
 
 Base URL: `{{baseUrl}}`
 
@@ -167,7 +167,7 @@ Runtime/configuracion:
   mode 1: description (sin lines)
   mode 2: existingHojaGastosId y lines[] (con lines[].price)
   Optional: mode (0|1|2), existingHojaGastosId, projId, currencyCode/exchRate legacy como defaults de lineas nuevas, expenseSheetStatus, exchangeRateMode, reimbursableExpense (INDReimbursableExpense, solo 0=Yes o 1=No; default Yes), lines[].projId, lines[].projIdProvided, lines[].internacional, lines[].fileId, lines[].reimbursableExpense (INDReimbursableExpenseLines, default heredado/default Yes), lines[].currencyCode, lines[].amountMST, lines[].exchRate
-  Nota proyecto de linea: `projIdProvided=true` conserva `lines[].projId` como valor explicito, incluido `""`; `false` u omitido sin `projId` delega en `defaultProjectForNewLine` de AX (ultima linea de la hoja/usuario y, si no existe, cabecera elegible). Por compatibilidad, un `projId` presente sin flag se considera explicito.
+  Nota proyecto de linea: `projIdProvided=true` conserva `lines[].projId` como valor explicito, incluido `""`; `false` u omitido sin `projId` delega en `defaultProjectForNewLine` de AX. Ese default usa exclusivamente el proyecto elegible de cabecera; cabecera vacia, con `PurchParameters.INDProjIdVarious` o con un proyecto inelegible deja la linea sin proyecto. Por compatibilidad, un `projId` presente sin flag se considera explicito.
   Nota: la cabecera AX mantiene siempre la divisa local de reembolso y ExchRate=100; la divisa real se informa en cada linea.
   Nota enums AX: `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense` (`INDReimbursableExpense`) y `lines[].reimbursableExpense` (`INDReimbursableExpenseLines`) deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`. En escritura de cabecera solo se admiten `Yes=0` y `No=1`; `Both=2` es un valor derivado de lineas mixtas y queda reservado para respuestas y filtros. En lineas, `Yes=0` incluye el `AmountMST` y `No=1` excluye dejando `ReimbursableAmount=0`.
   Response data: `HojaGastosId` y `LineRecIds` (`number[]`, RecIds AX numericos).
@@ -176,7 +176,7 @@ Runtime/configuracion:
   Response: IndApiResponse con PriceKm, Source y TransDate
 - GET /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Response header fields include: userName, expenseSheetStatus, estadoComentarios, exchangeRateMode, createdDate, axCreatedDate, reimbursableExpense, totalAmountCurrency, totalAmountMST, totalGrossAmountMST, totalReimbursableAmount, defaultLineProjId
-  Nota proyecto predeterminado: `defaultLineProjId` es el proyecto real que debe usar una nueva linea; queda `null` con contratos AX anteriores que no incluyen la posicion 21.
+  Nota proyecto predeterminado: `defaultLineProjId` es el proyecto elegible de cabecera que debe usar una nueva linea. Con el contrato AX actual queda vacio cuando la cabecera esta vacia, contiene `PurchParameters.INDProjIdVarious` o apunta a un proyecto inelegible; queda `null` con contratos AX anteriores que no incluyen la posicion 21.
   Nota totales: `totalAmountCurrency` y su alias `totalAmount` conservan, por compatibilidad nominal, el total contable legacy calculado desde el importe reembolsable; `totalAmountMST` conserva el total contable legacy en divisa company/MST. `totalGrossAmountMST` es el total bruto company/MST y no se filtra por reembolso ni por Visa. `totalReimbursableAmount` es el total explicito de reembolso company/MST e incluye unicamente las lineas con `ReimbursableExpense=Yes`; `VisaEmpresa` no interviene en el calculo. Durante un despliegue AX anterior, `totalReimbursableAmount` usa `totalAmountMST` como fallback y `totalGrossAmountMST` queda nulo.
   Nota JSON: Web API serializa las propiedades en PascalCase; en JavaScript usar `TotalGrossAmountMST`, `TotalReimbursableAmount` y `ReimbursableAmount`.
   Nota AX: `axCreatedDate` expone la fecha final adicional devuelta por el contrato AX y se normaliza a `DD.MM.YYYY`; actualmente refleja la misma fecha de creacion que `createdDate`.
@@ -186,11 +186,11 @@ Runtime/configuracion:
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId` para evitar colision con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: description (projId/projIdProvided optional, currencyCode/exchRate legacy ignorados por cabecera, expenseSheetStatus optional, exchangeRateMode optional, estadoComentarios optional, reimbursableExpense optional con enum INDReimbursableExpense; solo `0=Yes` o `1=No`)
-  Nota proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Si se omite el flag, un `projId` no nulo se considera explicito para mantener clientes anteriores.
+  Nota proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Todo valor no vacio debe ser un proyecto elegible: AX rechaza `PurchParameters.INDProjIdVarious`, proyectos inexistentes, cerrados o no imputables. Si se omite el flag, un `projId` no nulo se considera explicito para mantener clientes anteriores.
   Nota: `Both=2` no se admite en escritura de cabecera; AX lo deriva cuando existen lineas mixtas y la API lo conserva en respuestas y filtros.
   Nota: si se envia `estadoComentarios`, tambien se deben enviar `expenseSheetStatus` y `exchangeRateMode`.
   Nota: actualizar cabecera no propaga divisa, proyecto ni reembolso a lineas existentes. La cabecera queda siempre en divisa local de reembolso (`ExchRate=100`); proyecto y reembolso solo se propagan mediante sus endpoints dedicados despues de la confirmacion del usuario.
-  Nota: si una linea guardada usa otro proyecto (`projId`/`projIdHornos`), AX marca la cabecera con `PurchParameters.INDProjIdVarious`; si una linea guardada usa otro `reimbursableExpense`, AX marca la cabecera con el valor agrupador de reembolso configurado en AX.
+  Nota agregados: AX compara el proyecto operativo `ProjIdHornos` de todas las lineas guardadas. Si todas coinciden, incluido vacio, la cabecera adopta el valor comun; si difieren, incluido vacio, usa `PurchParameters.INDProjIdVarious`. Una diferencia aislada entre el campo oculto `ProjId` y `ProjIdHornos` no activa el marcador. Para reembolso, todas `Yes` o todas `No` producen el valor comun y una mezcla produce `INDReimbursableExpense::Both`.
   Notificaciones de estado: el API no envia emails directamente. `INDCRMExpenseSheetService.updateExpenseSheetHeader` en Axapta captura estado anterior/posterior y lanza el email best-effort fuera del `tts` cuando aplica. Eventos AX soportados: `ExpenseSheetApprovalRequested`, `ExpenseSheetApproved`, `ExpenseSheetRejected`, `ExpenseSheetRejectionCancelled` y `ExpenseSheetPaid`. Si emisor y destinatario resuelven al mismo usuario CRM, se omite el email. Desde 2026-06-09 el transporte AX/DLL usa exclusivamente `SendMailEx`; el parametro opcional `attachmentFilePaths` va despues de `textBody` y antes de `saveToSentItems`. Para estas notificaciones se envia vacio, porque no adjuntan ficheros.
 - POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false (Authorize + X-IND-Company + X-IND-AxUserId)
   Legacy/no-op: se conserva por compatibilidad, pero AX ya no propaga divisa de cabecera a lineas.
@@ -205,17 +205,17 @@ Runtime/configuracion:
 - POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate (Authorize + X-IND-Company + X-IND-AxUserId)
   Propaga el `reimbursableExpense` actual de cabecera a todas las lineas existentes.
   Usar despues de modificar cabecera solo cuando el usuario confirme que desea actualizar todas las lineas.
-  AX bloquea la operacion si `reimbursableExpense` de cabecera es el valor agrupador de reembolso configurado en AX o si la hoja esta bloqueada por Voucher.
+  AX bloquea la operacion si `reimbursableExpense` de cabecera es `INDReimbursableExpense::Both` o si la hoja esta bloqueada por Voucher.
   Response data: `hojaGastosId`, `propagationType`, `updatedLines`, `recalculateAmountMST`.
   Nota de routing: el literal `tickets` queda excluido de `hojaGastosId`.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId} (Authorize + X-IND-Company + X-IND-AxUserId)
   Body required: transDate (DDMMYYYY o DD.MM.YYYY), typeValue, description, qty, price
   Optional: fileId (INDFileId), internacional, projId, projIdProvided, reimbursableExpense (INDReimbursableExpenseLines), currencyCode, amountMST, exchRate
-  Nota proyecto: `projIdProvided=false` conserva el proyecto actual de la linea; `true` aplica `projId`, incluido `""`. Si se omite el flag, el PUT conserva el comportamiento legacy: un `projId` no vacio es explicito; sin valor hereda el proyecto de cabecera salvo que esta use el marcador varios, caso en el que conserva la linea.
+  Nota proyecto: `projIdProvided=false` conserva el proyecto actual de la linea; `true` aplica `projId`, incluido `""`. Si se omite el flag, el PUT conserva el comportamiento legacy: un `projId` no vacio es explicito; sin valor usa solo el proyecto elegible de cabecera. Si la cabecera esta vacia, contiene `PurchParameters.INDProjIdVarious` o apunta a un proyecto inelegible, conserva el proyecto actual de la linea.
   Nota `fileId`: este PUT solo acepta el mismo valor ya persistido; no permite alta, baja ni sustitucion. Para cambiar la asociacion deben usarse los endpoints dedicados `/ticket`.
   Nota enums AX: `typeValue` y `reimbursableExpense` deben enviarse como valores numericos obtenidos desde `/api/crm/enums/by-name`; las lineas solo aceptan `INDReimbursableExpenseLines` No/Yes, no Both.
   Nota: si `currencyCode` de linea no es la divisa de reembolso de la hoja, enviar `exchRate` o `amountMST`; AX no reutiliza tasa de cabecera para divisas extranjeras. Si la divisa de linea y reembolso coinciden, editar `amountMST` no recalcula `exchRate`.
-  Nota: si `reimbursableExpense` de linea difiere de cabecera, AX marca cabecera con el valor agrupador de reembolso configurado en AX.
+  Nota: AX recalcula el agregado tras guardar. Si todas las lineas coinciden en `reimbursableExpense`, la cabecera adopta ese valor; si existen lineas `Yes` y `No`, la cabecera pasa a `INDReimbursableExpense::Both`.
   Nota: `lineRecId` debe ser distinto de 0 y puede ser negativo para lineas manuales temporales.
 - PUT /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}/ticket (Authorize + X-IND-Company + X-IND-AxUserId)
   Asocia un ticket existente a una linea manual ya persistida sin reemplazar el resto de campos de la linea.
@@ -300,7 +300,7 @@ Runtime/configuracion:
   - `filters` obligatorio en `filtered`: `searchKey` (compat: `filter`), `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`
   - `excludedIds[]` opcional en `filtered`
   En `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`, con prefiltros base de estado pendiente interno de AX y `totalAmount != 0`.
-  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente, usando el `projId` de la hoja destino para la linea generada.
+  Reutiliza `createExpenseSheet` en modo `2` para anadir una linea por ticket a una hoja existente. La linea generada usa el proyecto de cabecera solo cuando es elegible; si la cabecera esta vacia, contiene el marcador VARIOS o su proyecto ya no es elegible, queda sin proyecto.
   Valida hoja destino, permisos, editabilidad y deduplicacion, y soporta resultado parcial.
   Response data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 - PUT /api/crm/expensesheets/tickets/{fileId} (Authorize + X-IND-Company + X-IND-AxUserId)

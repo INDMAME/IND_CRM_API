@@ -10,7 +10,7 @@ tecnico, pero evita nombres internos de clases y servicios.
 ```mermaid
 flowchart TD
   Start([Abrir una linea de hoja de gastos]) --> Mode{Crear o editar?}
-  Mode -->|Crear| Defaults["Preparar valores iniciales<br/>fecha de hoy; cantidad 1; proyecto de la hoja<br/>divisa de empresa, con la hoja como alternativa"]
+  Mode -->|Crear| Defaults["Preparar valores iniciales<br/>fecha de hoy; cantidad 1; proyecto valido de la hoja o vacio<br/>divisa de empresa, con la hoja como alternativa"]
   Mode -->|Editar| Load["Cargar los valores guardados"]
   Load --> Locked{Se puede editar?}
   Locked -->|Hoja bloqueada| ReadOnly["Mostrar la linea en modo consulta"]
@@ -68,8 +68,10 @@ flowchart TD
 
 ## Reglas principales
 
-- Una linea nueva comienza con fecha de hoy, cantidad `1`, proyecto de la hoja
-  y la divisa predeterminada de la empresa; si falta, usa la de la hoja.
+- Una linea nueva comienza con fecha de hoy, cantidad `1` y la divisa
+  predeterminada de la empresa; si falta, usa la de la hoja. Solo copia el
+  proyecto de la hoja cuando es valido y unico; si esta vacio, es `VARIOS` o ya
+  no admite gastos, la linea empieza sin proyecto.
 - El precio de kilometraje se obtiene para la fecha elegida y no se puede
   escribir manualmente desde esta pantalla.
 - Cambiar cantidad, precio o importe actualiza los otros valores relacionados.

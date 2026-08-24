@@ -53,6 +53,10 @@ const expenseSheetHeaderSource = readFileSync(
   path.join(repositoryRoot, ".codex", "Axapta", "CRMHojaGastosTable.xpo"),
   "latin1",
 );
+const purchParametersSource = readFileSync(
+  path.join(repositoryRoot, ".codex", "Axapta", "PurchParameters.xpo"),
+  "latin1",
+);
 const expenseSheetRecalculationJobSource = readFileSync(
   path.join(
     repositoryRoot,
@@ -77,16 +81,22 @@ function sourceBetween(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const duplicateValidationSource = sourceBetween(
-  ticketTableSource,
-  "SOURCE #validateUniqueTicketDateTime",
-  "SOURCE #validateWrite",
-).replace(/^\s*#/gm, "");
-const axTicketCreateSource = sourceBetween(
-  expenseSheetServiceSource,
-  "SOURCE #createExpenseSheetTicket",
-  "SOURCE #createExpenseSheetTicketLine",
-).replace(/^\s*#/gm, "");
+// Extracts an XPO method by its own ENDSOURCE marker, independently of method order.
+function xpoMethod(source, methodName) {
+  const startMarker = `SOURCE #${methodName}`;
+  const escapedMethodName = methodName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const startMatch = new RegExp(`SOURCE #${escapedMethodName}(?=\\r?\\n|\\r)`).exec(source);
+  assert.ok(startMatch, `Missing source marker: ${startMarker}`);
+  const start = startMatch.index;
+
+  const endMarker = "ENDSOURCE";
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `Missing ENDSOURCE marker for: ${startMarker}`);
+  return source.slice(start, end + endMarker.length).replace(/^\s*#/gm, "");
+}
+
+const duplicateValidationSource = xpoMethod(ticketTableSource, "validateUniqueTicketDateTime");
+const axTicketCreateSource = xpoMethod(expenseSheetServiceSource, "createExpenseSheetTicket");
 const provisionalCreateSource = sourceBetween(
   controllerSource,
   "private bool TryCreateQuickCreateProvisionalTicket(",
@@ -177,81 +187,53 @@ const lineTicketAssociationSource = sourceBetween(
   "private IHttpActionResult ChangeExpenseSheetLineTicketAssociation(",
   "private static IndApiResponse<object> BuildExpenseSheetLineTicketError(",
 );
-const axLinkLineTicketSource = sourceBetween(
+const axLinkLineTicketSource = xpoMethod(expenseSheetServiceSource, "linkExpenseSheetLineTicket");
+const axUnlinkLineTicketSource = xpoMethod(expenseSheetServiceSource, "unlinkExpenseSheetLineTicket");
+const axRefreshTicketStatusSource = xpoMethod(
   expenseSheetServiceSource,
-  "SOURCE #linkExpenseSheetLineTicket",
-  "SOURCE #unlinkExpenseSheetLineTicket",
-).replace(/^\s*#/gm, "");
-const axUnlinkLineTicketSource = sourceBetween(
+  "refreshTicketStatusByFileId",
+);
+const axWritableHeaderReimbursementValidatorSource = xpoMethod(
   expenseSheetServiceSource,
-  "SOURCE #unlinkExpenseSheetLineTicket",
-  "    ENDMETHODS",
-).replace(/^\s*#/gm, "");
-const axRefreshTicketStatusSource = sourceBetween(
+  "isWritableReimbursableExpense",
+);
+const reimbursableAmountSource = xpoMethod(expenseSheetLineSource, "recalculateReimbursableAmount");
+const realProjectResolverSource = xpoMethod(expenseSheetLineSource, "resolveRealProjectId");
+const initLineFromSheetSource = xpoMethod(expenseSheetLineSource, "InitFromHojaGastosTable");
+const initLineFromPreviousSource = xpoMethod(expenseSheetLineSource, "InitFromPreviousLine");
+const insertExpenseSheetLineSource = xpoMethod(expenseSheetLineSource, "insert");
+const updateExpenseSheetLineTableSource = xpoMethod(expenseSheetLineSource, "update");
+const deleteExpenseSheetLineSource = xpoMethod(expenseSheetLineSource, "delete");
+const axCreateExpenseSheetSource = xpoMethod(expenseSheetServiceSource, "createExpenseSheet");
+const axUpdateExpenseSheetHeaderSource = xpoMethod(
   expenseSheetServiceSource,
-  "SOURCE #refreshTicketStatusByFileId",
-  "SOURCE #renderExpenseSheetTemplate",
-).replace(/^\s*#/gm, "");
-const axWritableHeaderReimbursementValidatorSource = sourceBetween(
+  "updateExpenseSheetHeader",
+);
+const axUpdateExpenseSheetLineSource = xpoMethod(expenseSheetServiceSource, "updateExpenseSheetLine");
+const validateExpenseSheetLineForApiSource = xpoMethod(
   expenseSheetServiceSource,
-  "SOURCE #isWritableReimbursableExpense",
-  "SOURCE #propagateExpenseSheetCurrencyDefaults",
-).replace(/^\s*#/gm, "");
-const reimbursableAmountSource = sourceBetween(
-  expenseSheetLineSource,
-  "SOURCE #recalculateReimbursableAmount",
-  "SOURCE #setProjId",
-).replace(/^\s*#/gm, "");
-const realProjectResolverSource = sourceBetween(
-  expenseSheetLineSource,
-  "SOURCE #resolveRealProjectId",
-  "SOURCE #InitFromHojaGastosTable",
-).replace(/^\s*#/gm, "");
-const initLineFromSheetSource = sourceBetween(
-  expenseSheetLineSource,
-  "SOURCE #InitFromHojaGastosTable",
-  "SOURCE #InitFromPreviousLine",
-).replace(/^\s*#/gm, "");
-const axCreateExpenseSheetSource = sourceBetween(
-  expenseSheetServiceSource,
-  "SOURCE #createExpenseSheet",
-  "SOURCE #createExpenseSheetTicket",
-).replace(/^\s*#/gm, "");
-const axUpdateExpenseSheetHeaderSource = sourceBetween(
-  expenseSheetServiceSource,
-  "SOURCE #updateExpenseSheetHeader",
-  "SOURCE #updateExpenseSheetLine",
-).replace(/^\s*#/gm, "");
-const axUpdateExpenseSheetLineSource = sourceBetween(
-  expenseSheetServiceSource,
-  "SOURCE #updateExpenseSheetLine",
-  "    ENDMETHODS",
-).replace(/^\s*#/gm, "");
-const validateLineProjectFieldSource = sourceBetween(
-  expenseSheetLineSource,
-  "SOURCE #validateField",
-  "SOURCE #validateWrite",
-).replace(/^\s*#/gm, "");
-const validateLineProjectWriteSource = sourceBetween(
-  expenseSheetLineSource,
-  "SOURCE #validateWrite",
-  "SOURCE #Find",
-).replace(/^\s*#/gm, "");
-const defaultLineProjectSource = sourceBetween(
+  "validateExpenseSheetLineForApi",
+);
+const validateLineProjectFieldSource = xpoMethod(expenseSheetLineSource, "validateField");
+const validateLineProjectWriteSource = xpoMethod(expenseSheetLineSource, "validateWrite");
+const defaultLineProjectSource = xpoMethod(expenseSheetHeaderSource, "defaultProjectForNewLine");
+const insertExpenseSheetHeaderSource = xpoMethod(expenseSheetHeaderSource, "insert");
+const updateExpenseSheetHeaderTableSource = xpoMethod(expenseSheetHeaderSource, "update");
+const validateExpenseSheetHeaderWriteSource = xpoMethod(expenseSheetHeaderSource, "validateWrite");
+const recalculateHeaderProjectSource = xpoMethod(
   expenseSheetHeaderSource,
-  "SOURCE #defaultProjectForNewLine",
-  "SOURCE #isVariousProjectDefault",
-).replace(/^\s*#/gm, "");
-const recalculateHeaderProjectSource = sourceBetween(
+  "recalculateProjectFromLines",
+);
+const markHeaderProjectAggregateSource = xpoMethod(
   expenseSheetHeaderSource,
-  "SOURCE #recalculateProjectFromLines",
-  "SOURCE #markHeaderVariousFromLine",
-).replace(/^\s*#/gm, "");
-const propagateHeaderProjectSource = sourceBetween(
+  "markHeaderVariousFromLine",
+);
+const propagateHeaderProjectSource = xpoMethod(
   expenseSheetServiceSource,
-  "SOURCE #propagateExpenseSheetProjectDefault",
-  "SOURCE #propagateExpenseSheetReimbursableExpense",
-).replace(/^\s*#/gm, "");
+  "propagateExpenseSheetProjectDefault",
+);
+const purchParametersUpdateSource = xpoMethod(purchParametersSource, "Update");
+const purchParametersValidateFieldSource = xpoMethod(purchParametersSource, "validateField");
 const expenseSheetRecalculationJobCode = expenseSheetRecalculationJobSource.replace(
   /^\s*#/gm,
   "",
@@ -287,6 +269,17 @@ function resolveHeaderProjectProvided(flag, projId) {
 function hasExplicitLineProjectIntent(flag) {
   return flag !== null && flag !== undefined;
 }
+
+test("XPO method extraction is exact and independent of export order", () => {
+  const reorderedSource =
+    "SOURCE #updateSearchKey\r#prefix();\rENDSOURCE\r" +
+    "SOURCE #otherMethod\r#other();\rENDSOURCE\r" +
+    "SOURCE #update\r#target();\rENDSOURCE\r";
+
+  const extracted = xpoMethod(reorderedSource, "update");
+  assert.match(extracted, /target\(\);/);
+  assert.doesNotMatch(extracted, /prefix\(\)|other\(\);/);
+});
 
 test("same day tickets without a detected time remain distinct", () => {
   assert.match(
@@ -590,7 +583,7 @@ test("line update project intent is stable at AX position 17", () => {
   );
   assert.match(
     axUpdateExpenseSheetLineSource,
-    /if \(legacyProjectContract && !projId\)[\s\S]*if \(!header\.isVariousProjectDefault\(\)\)[\s\S]*projId\s*=\s*header\.ProjId;[\s\S]*else[\s\S]*projectProvided\s*=\s*false;/,
+    /if \(legacyProjectContract && !projId\)[\s\S]*projId\s*=\s*header\.defaultProjectForNewLine\(\);[\s\S]*if \(!projId\)[\s\S]*projectProvided\s*=\s*false;/,
   );
   assert.match(
     axUpdateExpenseSheetLineSource,
@@ -620,6 +613,10 @@ test("normal header updates do not propagate project changes to existing lines",
   );
   assert.doesNotMatch(axUpdateExpenseSheetHeaderSource, /updateProjectDefaultInLines\(/);
   assert.match(
+    axUpdateExpenseSheetHeaderSource,
+    /if \(projectChanged && projId &&[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(projId\)\)/,
+  );
+  assert.match(
     propagateHeaderProjectSource,
     /updated\s*=\s*header\.updateProjectDefaultInLines\(projectId\);/,
   );
@@ -628,9 +625,60 @@ test("normal header updates do not propagate project changes to existing lines",
 test("unchanged historical line projects remain editable after project closure", () => {
   const strictEligibilityPredicate =
     /if \(this\.ProjIdHornos\s*&&\s*\(!this\.RecId \|\| this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos\)\s*&&\s*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjIdHornos\)\)/;
+  const imputableProjectPredicate =
+    /else if \(this\.ProjIdHornos\s*&&\s*\(!this\.RecId \|\| this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos\)\s*&&\s*!ProjTable::find\(this\.ProjIdHornos\)\.INDPermitirImputarGastos\)/;
 
   assert.match(validateLineProjectFieldSource, strictEligibilityPredicate);
   assert.match(validateLineProjectWriteSource, strictEligibilityPredicate);
+  assert.match(validateLineProjectWriteSource, imputableProjectPredicate);
+  assert.match(
+    validateExpenseSheetLineForApiSource,
+    /validateField\(FieldNum\(CRMHojaGastosLine, ProjIdHornos\)\)/,
+  );
+  assert.match(
+    validateLineProjectFieldSource,
+    /if \(!this\.RecId \|\| this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos\)\s*\{[\s\S]*ProjTable::PermitirCambioProyecto\(projTableOrig\.ProjId,\s*projTable\.ProjId\);[\s\S]*\}/,
+  );
+});
+
+test("programmatic line and header writes enforce eligible project changes", () => {
+  assert.match(
+    insertExpenseSheetLineSource,
+    /if \(this\.ProjIdHornos &&[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjIdHornos\)\)[\s\S]*throw error\(/,
+  );
+  assert.match(
+    updateExpenseSheetLineTableSource,
+    /if \(this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos &&[\s\S]*this\.ProjIdHornos &&[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjIdHornos\)\)[\s\S]*throw error\(/,
+  );
+  assert.match(
+    validateLineProjectWriteSource,
+    /this\.ProjIdHornos &&[\s\S]*\(!this\.RecId \|\| this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos\)[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjIdHornos\)/,
+  );
+
+  assert.match(
+    insertExpenseSheetHeaderSource,
+    /if \(this\.ProjId &&[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjId\)\)[\s\S]*throw error\(/,
+  );
+  assert.match(
+    updateExpenseSheetHeaderTableSource,
+    /if \(this\.ProjId != tableOrig\.ProjId &&[\s\S]*this\.ProjId &&[\s\S]*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjId\)\)[\s\S]*throw error\(/,
+  );
+  assert.match(
+    validateExpenseSheetHeaderWriteSource,
+    /projectChanged\s*=\s*this\.ProjId != this\.orig\(\)\.ProjId;[\s\S]*if \(projectChanged && this\.ProjId\)[\s\S]*eligibleProjectId\s*=\s*CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjId\);[\s\S]*else if \(projectChanged && this\.ProjId && !eligibleProjectId\)[\s\S]*checkFailed\(/,
+  );
+  assert.match(
+    validateExpenseSheetHeaderWriteSource,
+    /if \(projectChanged\)\s*\{[\s\S]*ProjTable::PermitirCambioProyecto\(projTableOrig\.ProjId,\s*projTable\.ProjId\);[\s\S]*\}/,
+  );
+  assert.equal(
+    validateExpenseSheetHeaderWriteSource.match(/ProjTable::PermitirCambioProyecto\(/g)?.length,
+    1,
+  );
+  assert.match(
+    markHeaderProjectAggregateSource,
+    /if \(mustUpdate\)[\s\S]*this\.doUpdate\(\);/,
+  );
 });
 
 test("AX also reserves Both for derived header state", () => {
@@ -863,7 +911,7 @@ test("unlink clears FileId before deriving ticket status", () => {
   );
 });
 
-test("expense lines never inherit a mixed or missing project id", () => {
+test("expense lines inherit only the eligible project stored in the header", () => {
   assert.match(
     realProjectResolverSource,
     /_projId\s*==\s*purchParameters\.INDProjIdVarious/,
@@ -878,8 +926,12 @@ test("expense lines never inherit a mixed or missing project id", () => {
     /this\.ProjIdHornos\s*=\s*hojaGastosTable\.defaultProjectForNewLine\(\);/,
   );
   assert.match(
-    expenseSheetLineSource,
-    /this\.ProjIdHornos\s*=\s*CRMHojaGastosLine::resolveRealProjectId\(_hojaGastosLine\.ProjIdHornos\);/,
+    initLineFromPreviousSource,
+    /this\.ProjIdHornos\s*=\s*this\.HojaGastosTable\(\)\.defaultProjectForNewLine\(\);/,
+  );
+  assert.doesNotMatch(
+    initLineFromPreviousSource,
+    /resolveRealProjectId\(_hojaGastosLine\.ProjIdHornos\)/,
   );
   assert.match(
     axCreateExpenseSheetSource,
@@ -899,16 +951,86 @@ test("expense lines never inherit a mixed or missing project id", () => {
     axCreateExpenseSheetSource,
     /line\.ProjId(?:Hornos)?\s*=\s*(?:lineProjId|header\.ProjId);/,
   );
-  assert.match(defaultLineProjectSource, /order by createdDate desc, createdTime desc, RecId desc/);
-  assert.match(defaultLineProjectSource, /lastLine\.UserId\s*==\s*this\.UserId/);
+  assert.match(
+    defaultLineProjectSource,
+    /return\s+CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjId\);/,
+  );
+  assert.doesNotMatch(defaultLineProjectSource, /lastLine|select\s+(?:firstonly\s+)?CRMHojaGastosLine/i);
+  assert.match(
+    recalculateHeaderProjectSource,
+    /if \(!hasLines\)[\s\S]*calculatedProjectId\s*=\s*'';/,
+  );
+  assert.match(
+    recalculateHeaderProjectSource,
+    /if \(!hasLines\)[\s\S]*commonProjectId\s*=\s*lineProjectId;[\s\S]*hasLines\s*=\s*true;[\s\S]*else if \(lineProjectId\s*!=\s*commonProjectId\)/,
+  );
   assert.match(recalculateHeaderProjectSource, /lineProjectId\s*!=\s*commonProjectId/);
   assert.match(
     recalculateHeaderProjectSource,
     /calculatedProjectId\s*=\s*purchParameters\.INDProjIdVarious/,
   );
   assert.match(
+    recalculateHeaderProjectSource,
+    /else\s*\{\s*calculatedProjectId\s*=\s*commonProjectId;/,
+  );
+  assert.match(
+    recalculateHeaderProjectSource,
+    /if \(!purchParameters\.INDProjIdVarious\)[\s\S]*throw error\(/,
+  );
+  assert.match(
     propagateHeaderProjectSource,
     /conLen\(_data\)\s*>=\s*5[\s\S]*conPeek\(_data,\s*5\)/,
+  );
+});
+
+test("deleting an expense line recalculates both header aggregates exactly once", () => {
+  assert.match(deleteExpenseSheetLineSource, /if \(hojaGastosTable\)/);
+  assert.doesNotMatch(
+    deleteExpenseSheetLineSource,
+    /if \(hojaGastosTable\s*&&\s*hojaGastosTable\.recalculateReimbursableExpenseFromLines\(\)\)/,
+  );
+  assert.match(
+    deleteExpenseSheetLineSource,
+    /mustUpdate\s*=\s*hojaGastosTable\.recalculateProjectFromLines\(\);/,
+  );
+  assert.equal(
+    deleteExpenseSheetLineSource.match(/recalculateReimbursableExpenseFromLines\(\)/g)?.length,
+    1,
+  );
+  assert.match(
+    deleteExpenseSheetLineSource,
+    /if \(mustUpdate\)[\s\S]*hojaGastosTable\.doUpdate\(\);/,
+  );
+});
+
+test("PurchParameters enforces and migrates the reserved mixed-project marker", () => {
+  assert.match(
+    purchParametersSource,
+    /FIELD #INDProjIdVarious[\s\S]*?Mandatory\s+#Yes[\s\S]*?ENDPROPERTIES/,
+  );
+  assert.match(
+    purchParametersUpdateSource,
+    /rawMarker\s*=\s*this\.INDProjIdVarious;[\s\S]*markerChanged\s*=\s*rawMarker\s*!=\s*oldMarker;[\s\S]*newMarker\s*=\s*strLRTrim\(rawMarker\);/,
+  );
+  assert.match(
+    purchParametersUpdateSource,
+    /if \(markerChanged\)[\s\S]*this\.INDProjIdVarious\s*=\s*newMarker;[\s\S]*if \(!newMarker\)[\s\S]*throw error\([\s\S]*projTable\s*=\s*ProjTable::find\(newMarker\);[\s\S]*if \(projTable\.RecId\)[\s\S]*throw error\(/,
+  );
+  assert.match(
+    purchParametersUpdateSource,
+    /migrateMarker\s*=\s*markerChanged\s*&&[\s\S]*oldMarker\s*&&[\s\S]*oldMarker\s*!=\s*newMarker;/,
+  );
+  assert.match(
+    purchParametersUpdateSource,
+    /ttsbegin;[\s\S]*CRMHojaGastosTable::migrateVariousProjectMarker\(\s*oldMarker,\s*newMarker\s*\);[\s\S]*super\(\);[\s\S]*ttscommit;/,
+  );
+  assert.match(
+    purchParametersValidateFieldSource,
+    /_fieldIdToCheck\s*==\s*fieldNum\(PurchParameters,\s*INDProjIdVarious\)[\s\S]*marker\s*=\s*strLRTrim\(this\.INDProjIdVarious\);/,
+  );
+  assert.equal(
+    purchParametersValidateFieldSource.match(/checkFailed\(/g)?.length,
+    2,
   );
 });
 

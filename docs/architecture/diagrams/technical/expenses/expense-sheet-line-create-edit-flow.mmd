@@ -3,7 +3,7 @@ flowchart TD
   Entry --> React["ExpenseSheetLineDetailPage<br/>useExpenseSheetLineDetailState"]
   React --> Mode{Crear o editar?}
 
-  Mode -->|Crear| Defaults["Preparar borrador de alta<br/>fecha=hoy; Qty=1; reembolsable=Si<br/>proyecto de cabecera; primero divisa de empresa<br/>alternativa: divisa de cabecera; ExchRate=100"]
+  Mode -->|Crear| Defaults["Preparar borrador de alta<br/>fecha=hoy; Qty=1; reembolsable=Si<br/>proyecto elegible de cabecera o vacio<br/>primero divisa de empresa; alternativa: cabecera; ExchRate=100"]
   Mode -->|Editar| Load["Cargar la hoja y la linea persistidas"]
   Load --> Lock{Edicion bloqueada?}
   Lock -->|Politica de la hoja o Voucher| ReadOnly["Mantener la linea en modo consulta"]
@@ -80,12 +80,12 @@ flowchart TD
 
   CreateValid -->|No| AxError["Revertir y devolver error de validacion AX"]
   UpdateValid -->|No| AxError
-  CreateValid -->|Si| Insert["CRMHojaGastosLine.insert<br/>normalizeCurrencyAmounts<br/>recalculateReimbursableAmount<br/>validar divisa; persistir; asignar proyecto"]
-  UpdateValid -->|Si| Update["CRMHojaGastosLine.update<br/>recalcular Amount si cambian Qty/Price<br/>normalizar divisa y reembolso; persistir<br/>asignar proyecto y actualizar coste de proyecto"]
+  CreateValid -->|Si| Insert["CRMHojaGastosLine.insert<br/>validar proyecto elegible y divisa<br/>normalizar importes y reembolso<br/>persistir; asignar proyecto"]
+  UpdateValid -->|Si| Update["CRMHojaGastosLine.update<br/>validar un cambio de proyecto<br/>normalizar importes y reembolso; persistir<br/>asignar proyecto y actualizar coste de proyecto"]
   Insert --> TicketCheck{FileId presente y sincronizacion permitida?}
   Update --> TicketCheck
   TicketCheck -->|Si| TicketSync["CRMHojaGastosLine.syncLinkedTicket<br/>copiar campos monetarios al ticket<br/>exactamente una linea que no sea Adjustment: copiar Qty/Price<br/>en otro caso: sincronizar linea Adjustment"]
-  TicketCheck -->|No| HeaderSync["CRMHojaGastosLine.syncHojaGastosTable<br/>marcar proyecto como varios cuando proceda<br/>recalcular el estado de reembolso de la cabecera"]
+  TicketCheck -->|No| HeaderSync["CRMHojaGastosTable.markHeaderVariousFromLine<br/>agregar proyecto comun, vacio o VARIOS<br/>recalcular el estado de reembolso de la cabecera"]
   TicketSync --> HeaderSync
   HeaderSync --> Commit["INDCRMExpenseSheetService<br/>actualizar estado del ticket cuando corresponda<br/>ttscommit"]
   Commit --> Success["El controlador devuelve IndApiResponse + TraceId<br/>HTTP 201 al crear o HTTP 200 al editar"]

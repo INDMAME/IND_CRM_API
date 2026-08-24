@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : CRMHojaGastosTable unloaded at Jueves 06/08/2026
+; Navision Axapta Table : CRMHojaGastosTable unloaded at Lunes 24/08/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -2414,6 +2414,15 @@ Formatversion: 1
         #    ttscommit;
         #}
       ENDSOURCE
+      SOURCE #defaultProjectForNewLine
+        #//MMS - Ajustes CRM - 2026.08.24
+        #// Precarga solo el proyecto elegible de cabecera; vacio y VARIOS dejan la linea sin proyecto.
+        #ProjId defaultProjectForNewLine()
+        #{
+        #    return CRMHojaGastosLine::resolveEligibleProjectId(this.ProjId);
+        #}
+        #
+      ENDSOURCE
       SOURCE #delete
         #public void delete()
         #{
@@ -2593,6 +2602,14 @@ Formatversion: 1
         #    ;
         #    this.updateSearchKey();   //IND_MMS - PROYECTO API - 2025.11.10
         #    this.normalizeReimbursementCurrencyDefaults(); //MMS - Ajustes CRM - 2026.06.26
+        #
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // VARIOS solo puede aparecer como agregado derivado despues de insertar la cabecera.
+        #    if (this.ProjId &&
+        #        !CRMHojaGastosLine::resolveEligibleProjectId(this.ProjId))
+        #    {
+        #        throw error(strFmt("El proyecto %1 no existe, esta cerrado, esta reservado o no permite imputar gastos.", this.ProjId));
+        #    }
         #    //this.SelfApproved();      //INDMMS_ExternalCRM - 2026.03.10
         #
         #    //IJL.11/05/26. Si no Activamos el módulo de aprobación hay que marcar las HG como necesario papel para justificar y Pagar.
@@ -2631,29 +2648,6 @@ Formatversion: 1
         #
         #    return CRMHojaGastosLine ? NoYes::Yes : NoYes::No;
         #}
-      ENDSOURCE
-      SOURCE #defaultProjectForNewLine
-        #//MMS - Ajustes CRM - 2026.08.21
-        #// Resuelve el proyecto estricto de la ultima linea persistida para nuevas lineas.
-        #ProjId defaultProjectForNewLine()
-        #{
-        #    CRMHojaGastosLine lastLine;
-        #    ;
-        #
-        #    if (this.HojaGastosId)
-        #    {
-        #        select firstonly lastLine
-        #        order by createdDate desc, createdTime desc, RecId desc
-        #        where lastLine.HojaGastosId == this.HojaGastosId
-        #           && lastLine.UserId        == this.UserId;
-        #
-        #        if (lastLine.RecId)
-        #            return CRMHojaGastosLine::resolveEligibleProjectId(lastLine.ProjIdHornos);
-        #    }
-        #
-        #    return CRMHojaGastosLine::resolveEligibleProjectId(this.ProjId);
-        #}
-        #
       ENDSOURCE
       SOURCE #isVariousProjectDefault
         #//INDMMS_ExternalCRM - 2026.05.21
@@ -2908,92 +2902,6 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
-      SOURCE #recalculateProjectFromLines
-        #//MMS - Ajustes CRM - 2026.08.21
-        #// Recalcula el proyecto de cabecera desde todas las lineas persistidas.
-        #boolean recalculateProjectFromLines()
-        #{
-        #    CRMHojaGastosLine hojaGastosLine;
-        #    PurchParameters   purchParameters = PurchParameters::find();
-        #    ProjId            commonProjectId;
-        #    ProjId            lineProjectId;
-        #    ProjId            calculatedProjectId;
-        #    boolean           hasLines;
-        #    boolean           hasDifferentProjects;
-        #    ;
-        #
-        #    if (!this.RecId)
-        #        return false;
-        #
-        #    while select hojaGastosLine
-        #    index hint index1
-        #    where hojaGastosLine.HojaGastosId == this.HojaGastosId
-        #       && hojaGastosLine.UserId        == this.UserId
-        #    {
-        #        if (purchParameters.INDProjIdVarious &&
-        #            (hojaGastosLine.ProjIdHornos == purchParameters.INDProjIdVarious ||
-        #             hojaGastosLine.ProjId       == purchParameters.INDProjIdVarious))
-        #        {
-        #            //MMS - Ajustes CRM - 2026.08.21
-        #            // Una linea historica contaminada fuerza VARIOS sin bloquear su correccion o borrado.
-        #            hasLines             = true;
-        #            hasDifferentProjects = true;
-        #            continue;
-        #        }
-        #
-        #        lineProjectId = CRMHojaGastosLine::resolveRealProjectId(hojaGastosLine.ProjIdHornos);
-        #
-        #        if (hojaGastosLine.ProjIdHornos && !lineProjectId)
-        #        {
-        #            //MMS - Ajustes CRM - 2026.08.21
-        #            // Un proyecto historico inexistente se representa como una inconsistencia de cabecera.
-        #            hasLines             = true;
-        #            hasDifferentProjects = true;
-        #            continue;
-        #        }
-        #
-        #        if (!hasLines)
-        #        {
-        #            commonProjectId = lineProjectId;
-        #            hasLines = true;
-        #        }
-        #        else if (lineProjectId != commonProjectId)
-        #        {
-        #            hasDifferentProjects = true;
-        #        }
-        #    }
-        #
-        #    if (!hasLines)
-        #    {
-        #        calculatedProjectId = '';
-        #    }
-        #    else if (hasDifferentProjects)
-        #    {
-        #        if (!purchParameters.INDProjIdVarious)
-        #        {
-        #            warning("Configure INDProjIdVarious para representar hojas con proyectos distintos.");
-        #            calculatedProjectId = '';
-        #        }
-        #        else
-        #        {
-        #            calculatedProjectId = purchParameters.INDProjIdVarious;
-        #        }
-        #    }
-        #    else
-        #    {
-        #        calculatedProjectId = commonProjectId;
-        #    }
-        #
-        #    if (this.ProjId != calculatedProjectId)
-        #    {
-        #        this.ProjId = calculatedProjectId;
-        #        return true;
-        #    }
-        #
-        #    return false;
-        #}
-        #
-      ENDSOURCE
       SOURCE #markHeaderVariousFromLine
         #//MMS - Ajustes CRM - 2026.08.21
         #// Mantiene sincronizados los agregados de proyecto y reembolso de cabecera.
@@ -3015,35 +2923,6 @@ Formatversion: 1
         #
         #    if (mustUpdate)
         #        this.doUpdate();
-        #}
-        #
-      ENDSOURCE
-      SOURCE #migrateVariousProjectMarker
-        #//MMS - Ajustes CRM - 2026.08.21
-        #// Migra solo los marcadores de cabecera despues de cambiar el parametro.
-        #static server int migrateVariousProjectMarker(ProjId _oldMarker, ProjId _newMarker)
-        #{
-        #    CRMHojaGastosTable header;
-        #    int                 updated;
-        #    ;
-        #
-        #    if (!_oldMarker || _oldMarker == _newMarker)
-        #        return 0;
-        #
-        #    if (!_newMarker)
-        #        throw error("El nuevo marcador de varios proyectos es obligatorio.");
-        #
-        #    ttsbegin;
-        #    while select forupdate header
-        #        where header.ProjId == _oldMarker
-        #    {
-        #        header.ProjId = _newMarker;
-        #        header.doUpdate();
-        #        updated++;
-        #    }
-        #    ttscommit;
-        #
-        #    return updated;
         #}
         #
       ENDSOURCE
@@ -3106,6 +2985,87 @@ Formatversion: 1
         #    this.CurrencyCode     = CompanyInfo::standardCurrency();
         #    this.ExchRate         = 100;
         #    this.ExchangeRateMode = INDExchangeRateMode::Manual;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #recalculateProjectFromLines
+        #//MMS - Ajustes CRM - 2026.08.24
+        #// Recalcula el proyecto de cabecera desde todas las lineas persistidas.
+        #boolean recalculateProjectFromLines()
+        #{
+        #    CRMHojaGastosLine hojaGastosLine;
+        #    PurchParameters   purchParameters = PurchParameters::find();
+        #    ProjId            commonProjectId;
+        #    ProjId            lineProjectId;
+        #    ProjId            calculatedProjectId;
+        #    boolean           hasLines;
+        #    boolean           hasDifferentProjects;
+        #    ;
+        #
+        #    if (!this.RecId)
+        #        return false;
+        #
+        #    while select hojaGastosLine
+        #    index hint index1
+        #    where hojaGastosLine.HojaGastosId == this.HojaGastosId
+        #       && hojaGastosLine.UserId        == this.UserId
+        #    {
+        #        if (purchParameters.INDProjIdVarious &&
+        #            (hojaGastosLine.ProjIdHornos == purchParameters.INDProjIdVarious ||
+        #             hojaGastosLine.ProjId       == purchParameters.INDProjIdVarious))
+        #        {
+        #            //MMS - Ajustes CRM - 2026.08.24
+        #            // Una linea historica contaminada fuerza VARIOS sin bloquear su correccion o borrado.
+        #            hasLines             = true;
+        #            hasDifferentProjects = true;
+        #            continue;
+        #        }
+        #
+        #        lineProjectId = CRMHojaGastosLine::resolveRealProjectId(hojaGastosLine.ProjIdHornos);
+        #
+        #        if (hojaGastosLine.ProjIdHornos && !lineProjectId)
+        #        {
+        #            //MMS - Ajustes CRM - 2026.08.24
+        #            // Un proyecto historico inexistente se representa como una inconsistencia de cabecera.
+        #            hasLines             = true;
+        #            hasDifferentProjects = true;
+        #            continue;
+        #        }
+        #
+        #        if (!hasLines)
+        #        {
+        #            commonProjectId = lineProjectId;
+        #            hasLines = true;
+        #        }
+        #        else if (lineProjectId != commonProjectId)
+        #        {
+        #            hasDifferentProjects = true;
+        #        }
+        #    }
+        #
+        #    if (!hasLines)
+        #    {
+        #        calculatedProjectId = '';
+        #    }
+        #    else if (hasDifferentProjects)
+        #    {
+        #        if (!purchParameters.INDProjIdVarious)
+        #            throw error("Configure INDProjIdVarious para representar hojas con proyectos distintos.");
+        #
+        #            calculatedProjectId = purchParameters.INDProjIdVarious;
+        #        }
+        #    else
+        #    {
+        #        calculatedProjectId = commonProjectId;
+        #    }
+        #
+        #    if (this.ProjId != calculatedProjectId)
+        #    {
+        #        this.ProjId = calculatedProjectId;
+        #        return true;
+        #    }
+        #
+        #    return false;
         #}
         #
       ENDSOURCE
@@ -3986,6 +3946,15 @@ Formatversion: 1
         #    this.updateSearchKey();//IND_MMS - PROYECTO API - 2025.11.10
         #    this.normalizeReimbursementCurrencyDefaults(); //MMS - Ajustes CRM - 2026.06.26
         #
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Bloquea cambios programaticos a un proyecto no elegible; doUpdate queda para agregados derivados.
+        #    if (this.ProjId != tableOrig.ProjId &&
+        #        this.ProjId &&
+        #        !CRMHojaGastosLine::resolveEligibleProjectId(this.ProjId))
+        #    {
+        #        throw error(strFmt("El proyecto %1 no existe, esta cerrado, esta reservado o no permite imputar gastos.", this.ProjId));
+        #    }
+        #
         #    this.NecesariaHGImpresa = this.NecesitaHGFisica();//this.createdBy == "APIAX" ? NoYes::No : NoYes::Yes; //IJL.26/05/26
         #    this.MostrarParaPago    = this.MostrarParaPago(); //IJL.29/05/26
         #
@@ -4275,8 +4244,10 @@ Formatversion: 1
         #public boolean validateWrite()
         #{
         #    boolean ret;
+        #    boolean projectChanged;
         #
         #    ProjTable       projTable, projTableOrig; //IJL.09/10/23
+        #    ProjId          eligibleProjectId;
         #    ;
         #
         #    //MMS - Ajustes CRM - 2026.06.26
@@ -4286,16 +4257,29 @@ Formatversion: 1
         #    //IJL.09/10/23
         #    projTableOrig   = ProjTable::find(this.orig().ProjId);
         #    projTable       = ProjTable::find(this.ProjId);
+        #    projectChanged  = this.ProjId != this.orig().ProjId;
+        #
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Valida solo cambios explicitos y conserva proyectos historicos sin modificar.
+        #    if (projectChanged && this.ProjId)
+        #        eligibleProjectId = CRMHojaGastosLine::resolveEligibleProjectId(this.ProjId);
         #
         #    ret = super();
         #
         #    //IJL.09/10/23
+        #    if (projectChanged)
+        #    {
         #    ret = ret && ProjTable::PermitirCambioProyecto(projTableOrig.ProjId, projTable.ProjId);
         #    if (! ret)
         #        return false;
+        #    }
         #
-        #    if (this.ProjId && !this.isVariousProjectDefault() && this.ProjId != PurchParameters::find().INDProjIdVarious && !ProjTable::find(this.ProjId).INDPermitirImputarGastos){
+        #    if (projectChanged && this.ProjId && !this.isVariousProjectDefault() && this.ProjId != PurchParameters::find().INDProjIdVarious && !ProjTable::find(this.ProjId).INDPermitirImputarGastos){
         #        ret = checkFailed(strfmt("El proyecto %1 no permite la imputación de gastos", this.ProjId));
+        #    }
+        #    else if (projectChanged && this.ProjId && !eligibleProjectId)
+        #    {
+        #        ret = checkFailed(strFmt("El proyecto %1 no existe, esta cerrado, esta reservado o no permite imputar gastos.", this.ProjId));
         #    }
         #
         #    return ret;
@@ -4672,6 +4656,35 @@ Formatversion: 1
         #    sysTableLookup.parmQuery(query);
         #    sysTableLookup.performFormLookup();
         #}
+      ENDSOURCE
+      SOURCE #migrateVariousProjectMarker
+        #//MMS - Ajustes CRM - 2026.08.21
+        #// Migra solo los marcadores de cabecera despues de cambiar el parametro.
+        #static server int migrateVariousProjectMarker(ProjId _oldMarker, ProjId _newMarker)
+        #{
+        #    CRMHojaGastosTable header;
+        #    int                 updated;
+        #    ;
+        #
+        #    if (!_oldMarker || _oldMarker == _newMarker)
+        #        return 0;
+        #
+        #    if (!_newMarker)
+        #        throw error("El nuevo marcador de varios proyectos es obligatorio.");
+        #
+        #    ttsbegin;
+        #    while select forupdate header
+        #        where header.ProjId == _oldMarker
+        #    {
+        #        header.ProjId = _newMarker;
+        #        header.doUpdate();
+        #        updated++;
+        #    }
+        #    ttscommit;
+        #
+        #    return updated;
+        #}
+        #
       ENDSOURCE
       SOURCE #RechazarHojaDeGastosFromForm
         #static void RechazarHojaDeGastosFromForm(CRMHojaGastosTable  _hojaGastosTable,

@@ -1,4 +1,4 @@
-# IND_CRM_API MCP Endpoints (actualizado 2026-07-29)
+# IND_CRM_API MCP Endpoints (actualizado 2026-08-24)
 
 Fuentes: `.codex/ENDPOINTS.md` + colecciones Postman activas de DEV y PROD.
 Objetivo: documentacion detallada para exponer la API via MCP (tools con JSON Schema).
@@ -131,7 +131,7 @@ Endpoints
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
   - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].projIdProvided`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
-  - `lines[].projIdProvided=true` conserva un proyecto explicito, incluido `""`; `false` u omitido sin `lines[].projId` delega en `defaultProjectForNewLine` de AX. Si no se envia el flag, la presencia de `lines[].projId` mantiene compatibilidad con clientes anteriores.
+  - `lines[].projIdProvided=true` conserva un proyecto explicito, incluido `""`; `false` u omitido sin `lines[].projId` delega en `defaultProjectForNewLine` de AX. Ese default usa solo el proyecto elegible de cabecera; cabecera vacia, con `PurchParameters.INDProjIdVarious` o con un proyecto inelegible deja la linea sin proyecto. Si no se envia el flag, la presencia de `lines[].projId` mantiene compatibilidad con clientes anteriores.
   - `reimbursableExpense`: en escritura de cabecera, el enum AX `INDReimbursableExpense` solo admite `0 Yes` y `1 No`; `2 Both` es derivado de lineas mixtas y solo se conserva en respuestas y filtros. En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 Yes` y `1 No`; el valor por defecto es `Yes`.
 
 ### Tool: crm_expensesheets_fuel_price_km
@@ -145,7 +145,7 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
 - Respuesta (header) incluye: `userId`, `userName`, `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `axCreatedDate`, `reimbursableExpense`, `totalAmountCurrency`, `totalAmountMST`, `totalGrossAmountMST`, `totalReimbursableAmount`, `defaultLineProjId`
-- `defaultLineProjId` es el proyecto real predeterminado para una nueva linea y queda `null` con contratos AX anteriores a la posicion 21.
+- `defaultLineProjId` es el proyecto elegible de cabecera para una nueva linea. Queda vacio con cabecera vacia, con `PurchParameters.INDProjIdVarious` o con proyecto inelegible, y queda `null` con contratos AX anteriores a la posicion 21.
 - Nota totales: `totalAmountCurrency`/`totalAmount` y `totalAmountMST` conservan los totales contables legacy. `totalGrossAmountMST` es el bruto company/MST y no se filtra por reembolso ni Visa; `totalReimbursableAmount` es el reembolso company/MST, incluye solo `ReimbursableExpense=Yes`, no consulta Visa y usa `totalAmountMST` como fallback con AX legacy.
 - Nota JSON: Web API serializa las propiedades en PascalCase; los consumidores JavaScript deben usar `TotalGrossAmountMST`, `TotalReimbursableAmount` y `ReimbursableAmount`.
 - Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja.
@@ -159,10 +159,10 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `projIdProvided`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye o `1 No` excluye; `2 Both` no se admite en escritura)
-- Proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Si se omite el flag, un `projId` no nulo se considera explicito para mantener clientes anteriores.
+- Proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Todo valor no vacio debe ser un proyecto elegible: AX rechaza `PurchParameters.INDProjIdVarious`, proyectos inexistentes, cerrados o no imputables. Si se omite el flag, un `projId` no nulo se considera explicito para mantener clientes anteriores.
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 - Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
-- Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. Si una linea guardada difiere en proyecto o estado de reembolso, AX marca la cabecera con `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`; este ultimo valor sigue disponible en respuestas y filtros.
+- Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. AX agrega `ProjIdHornos` y el estado de reembolso de todas las lineas: si coinciden adopta el valor comun; si difieren, incluso por vacio en proyecto, usa `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`. Una diferencia aislada entre `ProjId` y `ProjIdHornos` no activa el marcador de proyecto.
 
 ### Tool: crm_expensesheets_propagate_currency_defaults
 - HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate`
@@ -194,9 +194,9 @@ Endpoints
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
 - Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `projIdProvided` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
-- Proyecto: `projIdProvided=false` conserva el proyecto actual de la linea; `true` aplica `projId`, incluido `""`. Si se omite el flag, se conserva la semantica legacy: un `projId` no vacio es explicito; sin valor se hereda la cabecera salvo que sea el marcador varios, caso en el que se conserva la linea.
+- Proyecto: `projIdProvided=false` conserva el proyecto actual de la linea; `true` aplica `projId`, incluido `""`. Si se omite el flag, se conserva la semantica legacy: un `projId` no vacio es explicito; sin valor usa solo el proyecto elegible de cabecera. Cabecera vacia, con `PurchParameters.INDProjIdVarious` o inelegible conserva el proyecto actual de la linea.
 - Nota: si `currencyCode` de linea difiere de la divisa de reembolso de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa. Si ambas divisas coinciden, editar `amountMST` no recalcula `exchRate`.
-- Nota: `reimbursableExpense` de linea admite `0 Yes` para incluir `AmountMST` y `1 No` para excluirlo. Si difiere de cabecera, AX marca cabecera como `Both`.
+- Nota: `reimbursableExpense` de linea admite `0 Yes` para incluir `AmountMST` y `1 No` para excluirlo. AX adopta el valor comun cuando todas las lineas coinciden y marca la cabecera como `Both` cuando existen lineas `Yes` y `No`.
 
 ### Tool: crm_expensesheets_delete_line
 - HTTP: DELETE `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
@@ -279,7 +279,7 @@ Endpoints
     - Opcional: `selectionMode` (`selected` por defecto, `filtered`)
     - En `selected`: `ticketIds[]` obligatorio
     - En `filtered`: `filters` obligatorio (`searchKey`, `filter`, `createdDateFrom`, `createdDateTo`, `currencyCode`, `gastoType`, `processedByAI`) y `excludedIds[]` opcional
-    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2`, usa el `projId` de la hoja destino para la linea generada y soporta resultado parcial.
+    - Regla: en `filtered` reutiliza la misma resolucion server-side que `tickets/link/list`; la vinculacion final reutiliza `createExpenseSheet` en modo `2`, usa el proyecto de cabecera solo cuando es elegible (en otro caso deja la linea sin proyecto) y soporta resultado parcial.
   - Respuesta data: `expenseSheetId`, `requestedCount`, `linkedCount`, `skippedCount`, `failedCount`, `linkedTicketIds`, `skipped[]`, `failed[]`.
 
 ### Tool: crm_expensesheets_tickets_update

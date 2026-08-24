@@ -1229,7 +1229,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// </summary>
         /// <remarks>
         /// projIdProvided=false preserves the stored line project and true applies projId, including an empty value.
-        /// When omitted, AX keeps the legacy behavior: a non-empty projId is explicit, otherwise the header project is inherited unless it is the various marker.
+        /// When omitted, AX keeps the legacy behavior: a non-empty projId is explicit; otherwise AX uses only an eligible header project and preserves the stored line for an empty, mixed or ineligible header.
         /// </remarks>
         [HttpPut, Route("{hojaGastosId}/lines/{lineRecId}")]
         [ResponseType(typeof(IndApiResponse<object>))]

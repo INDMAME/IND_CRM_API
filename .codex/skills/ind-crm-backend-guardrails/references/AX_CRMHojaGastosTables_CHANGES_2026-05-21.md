@@ -1,5 +1,15 @@
 # AX CRMHojaGastos Tables Changes - 2026-05-21
 
+> Historical note (superseded for project and reimbursement aggregation on 2026-08-24):
+> do not implement the older comparison against the current header described below.
+> The active rule compares all persisted line `ProjIdHornos` values: a common value,
+> including empty, becomes the header value; any difference, including empty versus
+> non-empty, becomes `PurchParameters.INDProjIdVarious`. A difference only in hidden
+> `ProjId` does not create the marker. Reimbursement likewise derives the common line
+> value or `INDReimbursableExpense::Both` for a real Yes/No mixture. See
+> `AX_CRMHojaGastosLine_CHANGES_2026-08-21.md`,
+> `AX_CRMHojaGastosTable_CHANGES_2026-08-21.md` and `ENDPOINTS.md`.
+
 ## Objective
 
 Add reusable table helpers for expense sheet multi-currency line handling, project propagation, and reimbursable-expense propagation.
@@ -35,8 +45,8 @@ Add reusable table helpers for expense sheet multi-currency line handling, proje
 - Updated line insert/update/validateWrite/modifiedField paths to use the new line normalization helper.
 - Updated line currency validation so manual lines can use a currency different from the header default.
 - Updated saved line synchronization so a line currency different from the header marks `CRMHojaGastosTable.CurrencyCode` with `INDDefaultParameters.CRMCurrencyVarios`.
-- Updated saved line synchronization so a line `ProjId` or `ProjIdHornos` different from the header marks `CRMHojaGastosTable.ProjId` with `PurchParameters.INDProjIdVarious`.
-- Updated saved line synchronization so a line `ReimbursableExpense` different from the header marks `CRMHojaGastosTable.ReimbursableExpense` with `INDReimbursableExpense::Both`.
+- Current project synchronization recalculates the header from every persisted line `ProjIdHornos`: a common value, including empty, becomes the header value; any difference becomes `PurchParameters.INDProjIdVarious`.
+- Current reimbursement synchronization derives the common line `ReimbursableExpense` value and uses `INDReimbursableExpense::Both` only when persisted lines contain both Yes and No.
 - Updated line defaulting so the header "various" currency marker is not copied into line currency or used for `AmountMST`.
 - Updated line defaulting so header `INDReimbursableExpense::Both` is treated as a mixed marker and is not copied into line `ReimbursableExpense`.
 - Updated line insert/update so currency data is validated in direct AX/API writes, not only in form `validateWrite`.

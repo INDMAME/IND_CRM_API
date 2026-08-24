@@ -12,7 +12,7 @@ flowchart TD
   Entry --> React["ExpenseSheetLineDetailPage<br/>useExpenseSheetLineDetailState"]
   React --> Mode{Crear o editar?}
 
-  Mode -->|Crear| Defaults["Preparar borrador de alta<br/>fecha=hoy; Qty=1; reembolsable=Si<br/>proyecto de cabecera; primero divisa de empresa<br/>alternativa: divisa de cabecera; ExchRate=100"]
+  Mode -->|Crear| Defaults["Preparar borrador de alta<br/>fecha=hoy; Qty=1; reembolsable=Si<br/>proyecto elegible de cabecera o vacio<br/>primero divisa de empresa; alternativa: cabecera; ExchRate=100"]
   Mode -->|Editar| Load["Cargar la hoja y la linea persistidas"]
   Load --> Lock{Edicion bloqueada?}
   Lock -->|Politica de la hoja o Voucher| ReadOnly["Mantener la linea en modo consulta"]
@@ -89,12 +89,12 @@ flowchart TD
 
   CreateValid -->|No| AxError["Revertir y devolver error de validacion AX"]
   UpdateValid -->|No| AxError
-  CreateValid -->|Si| Insert["CRMHojaGastosLine.insert<br/>normalizeCurrencyAmounts<br/>recalculateReimbursableAmount<br/>validar divisa; persistir; asignar proyecto"]
-  UpdateValid -->|Si| Update["CRMHojaGastosLine.update<br/>recalcular Amount si cambian Qty/Price<br/>normalizar divisa y reembolso; persistir<br/>asignar proyecto y actualizar coste de proyecto"]
+  CreateValid -->|Si| Insert["CRMHojaGastosLine.insert<br/>validar proyecto elegible y divisa<br/>normalizar importes y reembolso<br/>persistir; asignar proyecto"]
+  UpdateValid -->|Si| Update["CRMHojaGastosLine.update<br/>validar un cambio de proyecto<br/>normalizar importes y reembolso; persistir<br/>asignar proyecto y actualizar coste de proyecto"]
   Insert --> TicketCheck{FileId presente y sincronizacion permitida?}
   Update --> TicketCheck
   TicketCheck -->|Si| TicketSync["CRMHojaGastosLine.syncLinkedTicket<br/>copiar campos monetarios al ticket<br/>exactamente una linea que no sea Adjustment: copiar Qty/Price<br/>en otro caso: sincronizar linea Adjustment"]
-  TicketCheck -->|No| HeaderSync["CRMHojaGastosLine.syncHojaGastosTable<br/>marcar proyecto como varios cuando proceda<br/>recalcular el estado de reembolso de la cabecera"]
+  TicketCheck -->|No| HeaderSync["CRMHojaGastosTable.markHeaderVariousFromLine<br/>agregar proyecto comun, vacio o VARIOS<br/>recalcular el estado de reembolso de la cabecera"]
   TicketSync --> HeaderSync
   HeaderSync --> Commit["INDCRMExpenseSheetService<br/>actualizar estado del ticket cuando corresponda<br/>ttscommit"]
   Commit --> Success["El controlador devuelve IndApiResponse + TraceId<br/>HTTP 201 al crear o HTTP 200 al editar"]
@@ -112,7 +112,7 @@ flowchart TD
 
 | Campo modificado | Comportamiento inmediato en el navegador |
 | --- | --- |
-| Linea nueva | Usa la fecha de hoy, cantidad `1`, reembolsable `Si`, el proyecto de cabecera y la divisa predeterminada de la empresa, con la divisa de cabecera como alternativa. |
+| Linea nueva | Usa la fecha de hoy, cantidad `1`, reembolsable `Si` y la divisa predeterminada de la empresa, con la divisa de cabecera como alternativa. Solo precarga el proyecto elegible de cabecera; cabecera vacia, `VARIOS` o inelegible deja el proyecto vacio. |
 | Tipo o fecha con tipo `Km` | Carga el precio por kilometro correspondiente a la fecha y deja `Price` en modo consulta. |
 | `Qty` o `Price` | Calcula `Amount = Qty x Price` y despues recalcula `AmountMST`, salvo cuando se conserva un `AmountMST` manual en la divisa de empresa. |
 | `Amount` | Mantiene `Qty`, obtiene `Price = Amount / Qty` y despues recalcula `AmountMST`, con la misma excepcion del valor manual en divisa de empresa. |
@@ -147,12 +147,17 @@ normaliza antes de persistir:
 | API | `CreateExpenseSheetRequest`, `UpdateExpenseSheetLineRequest`, `CrmExpenseSheetsController`, `BaseCrmController` |
 | Puente AX | `IND_AxSessionScopeHandler`, `AxaptaSessionManager`, `AxaptaComSession`, Business Connector COM |
 | XPO del servicio AX | `INDCRMExpenseSheetService.createExpenseSheet`, `updateExpenseSheetLine`, `validateExpenseSheetLineForApi` |
-| XPO de tabla AX | `CRMHojaGastosLine.insert`, `update`, `CalcAmount`, `normalizeCurrencyAmounts`, `recalculateReimbursableAmount`, `syncLinkedTicket`, `syncHojaGastosTable` |
+| XPO de tabla AX | `CRMHojaGastosLine.insert`, `update`, `CalcAmount`, `normalizeCurrencyAmounts`, `recalculateReimbursableAmount`, `syncLinkedTicket`; `CRMHojaGastosTable.defaultProjectForNewLine`, `markHeaderVariousFromLine` |
 
 No existe un servicio de dominio intermedio para lineas de gasto en la API de
 estos dos comandos. `CrmExpenseSheetsController` valida el DTO, construye los
 contenedores AX y llama directamente al servicio XPO estatico mediante la
 sesion COM.
+
+En las altas y ediciones manuales, `insert()` y `update()` invocan directamente
+`markHeaderVariousFromLine()` despues de sincronizar el ticket cuando procede.
+`syncHojaGastosTable()` se conserva como wrapper para recorridos de ticket que
+entran por `doUpdate()`; no es el paso de agregacion de este flujo manual.
 
 `IND_AxSessionScopeHandler` abre el ambito de la solicitud antes de ejecutar
 los controles del controlador y lo cierra desde `finally`. Por tanto, los

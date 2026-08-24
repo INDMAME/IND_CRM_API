@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: CLS
 
-; Navision Axapta Class: INDCRMExpenseSheetService descargados en Jueves 06/08/2026
+; Navision Axapta Class: INDCRMExpenseSheetService descargados en Lunes 24/08/2026
 ; --------------------------------------------------------------------------------
   CLSVERSION 1
   
@@ -1119,8 +1119,8 @@ Formatversion: 1
         #                    }
         #                    else
         #                    {
-        #                        //MMS - Ajustes CRM - 2026.08.21
-        #                        // Sustituye resolveRealProjectId(header.ProjId) por el default estricto de ultima linea.
+        #                        //MMS - Ajustes CRM - 2026.08.24
+        #                        // Usa solo el proyecto elegible de cabecera; vacio y VARIOS no se precargan.
         #                        resolvedLineProjId = header.defaultProjectForNewLine();
         #                    }
         #
@@ -5594,12 +5594,12 @@ Formatversion: 1
         #            }
         #
         #            //MMS - Ajustes CRM - 2026.08.24
-        #            // Conserva la herencia historica cuando el contenedor no incluye la posicion 17.
+        #            // El contrato heredado usa solo el proyecto elegible de cabecera.
         #            if (legacyProjectContract && !projId)
         #            {
-        #                if (!header.isVariousProjectDefault())
-        #                    projId = header.ProjId;
-        #                else
+        #                projId = header.defaultProjectForNewLine();
+        #
+        #                if (!projId)
         #                    projectProvided = false;
         #            }
         #

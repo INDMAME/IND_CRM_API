@@ -1,6 +1,6 @@
 flowchart TD
   Start([Abrir una linea de hoja de gastos]) --> Mode{Crear o editar?}
-  Mode -->|Crear| Defaults["Preparar valores iniciales<br/>fecha de hoy; cantidad 1; proyecto de la hoja<br/>divisa de empresa, con la hoja como alternativa"]
+  Mode -->|Crear| Defaults["Preparar valores iniciales<br/>fecha de hoy; cantidad 1; proyecto valido de la hoja o vacio<br/>divisa de empresa, con la hoja como alternativa"]
   Mode -->|Editar| Load["Cargar los valores guardados"]
   Load --> Locked{Se puede editar?}
   Locked -->|Hoja bloqueada| ReadOnly["Mostrar la linea en modo consulta"]

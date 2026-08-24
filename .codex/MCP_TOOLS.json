@@ -748,7 +748,7 @@
                                                                                                                                                         },
                                                                                                                                             "projIdProvided":  {
                                                                                                                                                                     "type":  "boolean",
-                                                                                                                                                                    "description":  "True aplica projId como valor explicito, incluido vacio; false u omitido sin projId delega en defaultProjectForNewLine de AX."
+                                                                                                                                                                    "description":  "True aplica projId como valor explicito, incluido vacio; false u omitido sin projId usa solo el proyecto elegible de cabecera y deja la linea sin proyecto cuando la cabecera esta vacia, es varios o no es elegible."
                                                                                                                                                                 },
                                                                                                                                              "fileId":  {
                                                                                                                                                             "type":  "string"
@@ -1383,7 +1383,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_update_line",
-                      "description":  "Actualiza linea de hoja de gastos. ReimbursableExpense Yes=0 incluye AmountMST y No=1 lo excluye. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. Si el indicador difiere de cabecera, AX marca cabecera como Both.",
+                      "description":  "Actualiza linea de hoja de gastos. ReimbursableExpense Yes=0 incluye AmountMST y No=1 lo excluye. Si currencyCode difiere de la divisa de reembolso de cabecera, enviar exchRate o amountMST; si coincide, amountMST no recalcula exchRate. AX usa el valor comun cuando todas las lineas coinciden y marca cabecera como Both cuando existen lineas Yes y No.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1462,7 +1462,7 @@
                                                                                                         },
                                                                                              "projIdProvided":  {
                                                                                                                     "type":  "boolean",
-                                                                                                                    "description":  "False conserva el proyecto actual de la linea; true aplica projId, incluido un valor vacio. Si se omite, un projId no vacio es explicito; sin valor se hereda la cabecera salvo que use el marcador varios."
+                                                                                                                    "description":  "False conserva el proyecto actual de la linea; true aplica projId, incluido un valor vacio. Si se omite, un projId no vacio es explicito; sin valor usa solo el proyecto elegible de cabecera y conserva la linea cuando la cabecera esta vacia, es varios o no es elegible."
                                                                                                                 },
                                                                                              "fileId":  {
                                                                                                             "type":  "string"

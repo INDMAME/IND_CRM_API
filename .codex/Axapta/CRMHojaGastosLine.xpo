@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : CRMHojaGastosLine unloaded at Jueves 06/08/2026
+; Navision Axapta Table : CRMHojaGastosLine unloaded at Lunes 24/08/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -1575,7 +1575,7 @@ Formatversion: 1
         #}
       ENDSOURCE
       SOURCE #delete
-        #//MMS - Ajustes CRM - 2026.08.21
+        #//MMS - Ajustes CRM - 2026.08.24
         #// Mantiene los valores derivados de cabecera despues de borrar una linea.
         #public void delete()
         #{
@@ -1595,7 +1595,7 @@ Formatversion: 1
         #            mustUpdate = true;
         #
         #        if (mustUpdate)
-        #            hojaGastosTable.doUpdate();
+        #        hojaGastosTable.doUpdate();
         #    }
         #    ttscommit;
         #}
@@ -1766,52 +1766,6 @@ Formatversion: 1
         #}
         #
       ENDSOURCE
-      SOURCE #resolveRealProjectId
-        #//MMS - Ajustes CRM - 2026.08.21
-        #// Devuelve un proyecto real o vacio si el valor esta reservado o no existe.
-        #static ProjId resolveRealProjectId(ProjId _projId)
-        #{
-        #    PurchParameters purchParameters = PurchParameters::find();
-        #    ProjTable        projTable;
-        #    ;
-        #
-        #    if (!_projId ||
-        #        (purchParameters.INDProjIdVarious &&
-        #         _projId == purchParameters.INDProjIdVarious))
-        #        return '';
-        #
-        #    projTable = ProjTable::find(_projId);
-        #
-        #    return projTable.RecId ? projTable.ProjId : '';
-        #}
-        #
-      ENDSOURCE
-      SOURCE #resolveEligibleProjectId
-        #//MMS - Ajustes CRM - 2026.08.21
-        #// Aplica la misma regla de elegibilidad que el catalogo de proyectos de gastos.
-        #static ProjId resolveEligibleProjectId(ProjId _projId)
-        #{
-        #    ProjId    resolvedProjectId;
-        #    ProjTable projTable;
-        #    ;
-        #
-        #    resolvedProjectId = CRMHojaGastosLine::resolveRealProjectId(_projId);
-        #
-        #    if (!resolvedProjectId)
-        #        return '';
-        #
-        #    projTable = ProjTable::find(resolvedProjectId);
-        #
-        #    if (!projTable.INDPermitirImputarGastos ||
-        #        projTable.INDTransDateCierreCostes != dateNull())
-        #    {
-        #        return '';
-        #    }
-        #
-        #    return projTable.ProjId;
-        #}
-        #
-      ENDSOURCE
       SOURCE #InitFromHojaGastosTable
         #void InitFromHojaGastosTable()
         #{
@@ -1866,10 +1820,10 @@ Formatversion: 1
         #    this.AmountMST          = 0;
         #    this.Currency           = _hojaGastosLine.Currency;
         #    this.Week               = _hojaGastosLine.Week;
-        #    this.ProjIdHornos       = CRMHojaGastosLine::resolveRealProjectId(_hojaGastosLine.ProjIdHornos);
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Precarga solo el proyecto elegible de cabecera; vacio y VARIOS no se heredan.
+        #    this.ProjIdHornos       = '';
         #
-        #    //MMS - Ajustes CRM - 2026.08.21
-        #    // Usa la ultima linea persistida en lugar de la fila seleccionada en el formulario.
         #    if (this.HojaGastosTable())
         #        this.ProjIdHornos = this.HojaGastosTable().defaultProjectForNewLine();
         #    this.DisciplinaId       = "";
@@ -1928,6 +1882,14 @@ Formatversion: 1
         #    boolean amountMSTWasProvided;    //MMS - Divisa desde línea - 2026.05.21
         #    CRMHojaGastosTable hojaGastosTable;
         #    ;
+        #
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Impide insertar una linea con un proyecto reservado, inexistente, cerrado o no imputable.
+        #    if (this.ProjIdHornos &&
+        #        !CRMHojaGastosLine::resolveEligibleProjectId(this.ProjIdHornos))
+        #    {
+        #        throw error(strFmt("El proyecto %1 no existe, esta cerrado, esta reservado o no permite imputar gastos.", this.ProjIdHornos));
+        #    }
         #
         #    //MMS - Ajustes CRM - 2026.08.21
         #    // Bloquea la cabecera antes de cambiar la linea para serializar los recalculos.
@@ -2664,6 +2626,15 @@ Formatversion: 1
         #    CRMHojaGastosTable hojaGastosTable;
         #    ;
         #
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Bloquea cambios programaticos y conserva proyectos historicos cuando no se modifican.
+        #    if (this.ProjIdHornos != this.orig().ProjIdHornos &&
+        #        this.ProjIdHornos &&
+        #        !CRMHojaGastosLine::resolveEligibleProjectId(this.ProjIdHornos))
+        #    {
+        #        throw error(strFmt("El proyecto %1 no existe, esta cerrado, esta reservado o no permite imputar gastos.", this.ProjIdHornos));
+        #    }
+        #
         #    //MMS - Ajustes CRM - 2026.08.21
         #    // Bloquea la cabecera antes de cambiar la linea para serializar los recalculos.
         #    ttsbegin;
@@ -2775,13 +2746,16 @@ Formatversion: 1
         #
         #        case FieldNum(CRMHojaGastosLine, ProjIdHornos):
         #
-        #            //IJL.09/10/23
-        #            ret = ProjTable::PermitirCambioProyecto(projTableOrig.ProjId, projTable.ProjId);
-        #            if (! ret)
-        #                return false;
-        #
         #            //MMS - Ajustes CRM - 2026.08.24
-        #            // Keep historical projects when the value is unchanged.
+        #            // Conserva proyectos historicos si el valor no cambia.
+        #            if (!this.RecId || this.ProjIdHornos != this.orig().ProjIdHornos)
+        #            {
+        #                ret = ret && ProjTable::PermitirCambioProyecto(projTableOrig.ProjId, projTable.ProjId);
+        #                if (!ret)
+        #                    return false;
+        #            }
+        #
+        #            // Rechaza proyectos inelegibles al crear la linea o cambiar su proyecto.
         #            if (this.ProjIdHornos &&
         #                (!this.RecId || this.ProjIdHornos != this.orig().ProjIdHornos) &&
         #                !CRMHojaGastosLine::resolveEligibleProjectId(this.ProjIdHornos))
@@ -2828,6 +2802,7 @@ Formatversion: 1
         #
         #    return ret;
         #}
+        #
       ENDSOURCE
       SOURCE #validateWrite
         #public boolean validateWrite()
@@ -2849,11 +2824,14 @@ Formatversion: 1
         #    {
         #        ret = checkFailed("El marcador de varios proyectos no se puede guardar en una linea de gastos.");
         #    }
-        #    //IJL.23/01/14.
-        #    else if (this.ProjIdHornos && !ProjTable::find(this.ProjIdHornos).INDPermitirImputarGastos){
+        #    //MMS - Ajustes CRM - 2026.08.24
+        #    // Permite editar otros campos si un proyecto historico deja de ser imputable o desaparece.
+        #    else if (this.ProjIdHornos &&
+        #             (!this.RecId || this.ProjIdHornos != this.orig().ProjIdHornos) &&
+        #             !ProjTable::find(this.ProjIdHornos).INDPermitirImputarGastos){
         #        ret = checkFailed(strfmt("El proyecto %1 no permite la imputación de gastos", this.ProjIdHornos));
         #    }
-        #    //MMS - Ajustes CRM - 2026.08.21
+        #    //MMS - Ajustes CRM - 2026.08.24
         #    // Rechaza un proyecto cerrado nuevo y conserva las lineas historicas sin cambios.
         #    else if (this.ProjIdHornos &&
         #             (!this.RecId || this.ProjIdHornos != this.orig().ProjIdHornos) &&
@@ -2973,6 +2951,52 @@ Formatversion: 1
         #    where CRMHojaGastosLine.FileId   == _id;
         #
         #    return CRMHojaGastosLine;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #resolveEligibleProjectId
+        #//MMS - Ajustes CRM - 2026.08.21
+        #// Aplica la misma regla de elegibilidad que el catalogo de proyectos de gastos.
+        #static ProjId resolveEligibleProjectId(ProjId _projId)
+        #{
+        #    ProjId    resolvedProjectId;
+        #    ProjTable projTable;
+        #    ;
+        #
+        #    resolvedProjectId = CRMHojaGastosLine::resolveRealProjectId(_projId);
+        #
+        #    if (!resolvedProjectId)
+        #        return '';
+        #
+        #    projTable = ProjTable::find(resolvedProjectId);
+        #
+        #    if (!projTable.INDPermitirImputarGastos ||
+        #        projTable.INDTransDateCierreCostes != dateNull())
+        #    {
+        #        return '';
+        #    }
+        #
+        #    return projTable.ProjId;
+        #}
+        #
+      ENDSOURCE
+      SOURCE #resolveRealProjectId
+        #//MMS - Ajustes CRM - 2026.08.21
+        #// Devuelve un proyecto real o vacio si el valor esta reservado o no existe.
+        #static ProjId resolveRealProjectId(ProjId _projId)
+        #{
+        #    PurchParameters purchParameters = PurchParameters::find();
+        #    ProjTable        projTable;
+        #    ;
+        #
+        #    if (!_projId ||
+        #        (purchParameters.INDProjIdVarious &&
+        #         _projId == purchParameters.INDProjIdVarious))
+        #        return '';
+        #
+        #    projTable = ProjTable::find(_projId);
+        #
+        #    return projTable.RecId ? projTable.ProjId : '';
         #}
         #
       ENDSOURCE

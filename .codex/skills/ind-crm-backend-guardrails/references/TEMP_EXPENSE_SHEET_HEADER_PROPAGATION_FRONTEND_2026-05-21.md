@@ -2,6 +2,14 @@
 
 Date: 2026-05-21
 
+> Superseded project/reimbursement aggregation note (2026-08-24): do not use the
+> older "line differs from header" rules below as implementation guidance. AX now
+> derives the header from all persisted `ProjIdHornos` values: a common value,
+> including empty, is copied to the header; any difference, including empty versus
+> non-empty, produces `PurchParameters.INDProjIdVarious`. Hidden `ProjId` alone does
+> not produce the marker. Reimbursement derives the common Yes/No value or `Both`
+> only when both values exist. The current contract is documented in `ENDPOINTS.md`.
+
 ## Scope
 
 This note documents the new explicit propagation behavior for CRM expense sheet header defaults.
@@ -26,9 +34,9 @@ It does not propagate those values to existing lines.
 AX no longer blocks line-level currency changes just because the header has a currency default.
 When a saved line uses a currency different from the header, AX sets `CRMHojaGastosTable.CurrencyCode` to `INDDefaultParameters.CRMCurrencyVarios`.
 
-The same rule applies to projects. When a saved line `ProjId` or `ProjIdHornos` differs from the header `ProjId`, AX sets the header `ProjId` to `PurchParameters.INDProjIdVarious`.
+Project aggregation does not compare a line against the previous header. AX recalculates the header from all persisted line `ProjIdHornos` values: a common value, including empty, becomes the header value; any difference becomes `PurchParameters.INDProjIdVarious`.
 
-The same rule applies to reimbursable expense. When a saved line `reimbursableExpense` differs from the header, AX sets the header `reimbursableExpense` to `INDReimbursableExpense::Both`.
+Reimbursable-expense aggregation follows the same all-lines model. A common Yes or No becomes the header value; `INDReimbursableExpense::Both` is used only when persisted lines contain both values.
 
 The frontend should treat those header values as "mixed values" markers. They are not values to push back into lines.
 
@@ -149,8 +157,8 @@ In the Axapta form, propagation is interactive:
 - Header `projId` changes ask whether to update line projects.
 - Header `reimbursableExpense` changes ask whether to update line reimbursable value.
 - Line currency changes can mark the header currency as `CRMCurrencyVarios` instead of blocking the line save.
-- Line project changes can mark the header project as `PurchParameters.INDProjIdVarious` instead of blocking the line save.
-- Line reimbursable changes can mark the header reimbursable value as `Both` instead of blocking the line save.
+- Line project changes recalculate the header across all persisted `ProjIdHornos` values; differences, including empty versus non-empty, produce `PurchParameters.INDProjIdVarious`.
+- Line reimbursable changes recalculate the header across all persisted lines; a real Yes/No mixture produces `Both`.
 
 ## Important Non-Scope
 
