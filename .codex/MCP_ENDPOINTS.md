@@ -130,7 +130,8 @@ Endpoints
   - `description`, `currencyCode` (requeridos cuando `mode=0|1`)
   - `lines` (requerido cuando `mode=0|2`)
   - `lines[].transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`
-  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
+  - Opcionales: `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `reimbursableExpense`, `lines[].projId`, `lines[].projIdProvided`, `lines[].internacional`, `lines[].fileId`, `lines[].reimbursableExpense`, `lines[].currencyCode`, `lines[].amountMST`, `lines[].exchRate`
+  - `lines[].projIdProvided=true` conserva un proyecto explicito, incluido `""`; `false` u omitido sin `lines[].projId` delega en `defaultProjectForNewLine` de AX. Si no se envia el flag, la presencia de `lines[].projId` mantiene compatibilidad con clientes anteriores.
   - `reimbursableExpense`: en escritura de cabecera, el enum AX `INDReimbursableExpense` solo admite `0 Yes` y `1 No`; `2 Both` es derivado de lineas mixtas y solo se conserva en respuestas y filtros. En `lines[]`, `INDReimbursableExpenseLines` admite solo `0 Yes` y `1 No`; el valor por defecto es `Yes`.
 
 ### Tool: crm_expensesheets_fuel_price_km
@@ -143,7 +144,8 @@ Endpoints
 - HTTP: GET `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Respuesta (header) incluye: `userId`, `userName`, `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `axCreatedDate`, `reimbursableExpense`, `totalAmountCurrency`, `totalAmountMST`, `totalGrossAmountMST`, `totalReimbursableAmount`
+- Respuesta (header) incluye: `userId`, `userName`, `expenseSheetStatus`, `estadoComentarios`, `exchangeRateMode`, `createdDate`, `axCreatedDate`, `reimbursableExpense`, `totalAmountCurrency`, `totalAmountMST`, `totalGrossAmountMST`, `totalReimbursableAmount`, `defaultLineProjId`
+- `defaultLineProjId` es el proyecto real predeterminado para una nueva linea y queda `null` con contratos AX anteriores a la posicion 21.
 - Nota totales: `totalAmountCurrency`/`totalAmount` y `totalAmountMST` conservan los totales contables legacy. `totalGrossAmountMST` es el bruto company/MST y no se filtra por reembolso ni Visa; `totalReimbursableAmount` es el reembolso company/MST, incluye solo `ReimbursableExpense=Yes`, no consulta Visa y usa `totalAmountMST` como fallback con AX legacy.
 - Nota JSON: Web API serializa las propiedades en PascalCase; los consumidores JavaScript deben usar `TotalGrossAmountMST`, `TotalReimbursableAmount` y `ReimbursableAmount`.
 - Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja.
@@ -156,7 +158,8 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye o `1 No` excluye; `2 Both` no se admite en escritura)
+- Body: `description`; opcionales: `currencyCode` (compatibilidad legacy), `projId`, `projIdProvided`, `exchRate`, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios`, `reimbursableExpense` (`0 Yes` incluye o `1 No` excluye; `2 Both` no se admite en escritura)
+- Proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Si se omite el flag, un `projId` no nulo se considera explicito para mantener clientes anteriores.
 - Regla: si se envia `estadoComentarios`, se deben enviar tambien `expenseSheetStatus` y `exchangeRateMode`.
 - Nota: no propaga cambios a lineas; usar los endpoints explicitos de propagacion.
 - Nota: la divisa de cabecera permanece local y no se convierte en un marcador multimoneda. Si una linea guardada difiere en proyecto o estado de reembolso, AX marca la cabecera con `PurchParameters.INDProjIdVarious` o `INDReimbursableExpense::Both`; este ultimo valor sigue disponible en respuestas y filtros.
@@ -174,8 +177,8 @@ Endpoints
 - HTTP: POST `/api/crm/expensesheets/{hojaGastosId}/project-default/propagate`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`
-- Propaga `projId` de cabecera a `projId` y `projIdHornos` de lineas existentes y rehace la asignacion de proyecto.
-- AX bloquea si `projId` de cabecera es `PurchParameters.INDProjIdVarious`, si falta `projId` o si la hoja tiene Voucher.
+- Body opcional: `{ "projId": "PROYECTO", "projIdProvided": true }`. Un objetivo explicito, incluido `""`, se aplica atomicamente a cabecera y lineas. Un `projId` presente sin flag tambien es explicito por compatibilidad; sin objetivo o con `projIdProvided=false` se usa el proyecto ya guardado en cabecera.
+- AX bloquea el marcador `PurchParameters.INDProjIdVarious`, la ausencia de proyecto en modo legacy o una hoja con Voucher.
 - Routing: `hojaGastosId` excluye el literal `tickets`.
 
 ### Tool: crm_expensesheets_propagate_reimbursable_expense
@@ -190,7 +193,8 @@ Endpoints
 - HTTP: PUT `/api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}`
 - Auth: Bearer token
 - Headers: `Authorization`, `X-IND-Company`, `X-IND-AxUserId`, `Content-Type: application/json`
-- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
+- Body: `transDate` (`DDMMYYYY` o `DD.MM.YYYY`), `typeValue`, `description`, `qty`, `price`, `internacional` (opcional), `fileId` (opcional), `projId` (opcional), `projIdProvided` (opcional), `reimbursableExpense` (opcional), `currencyCode` (opcional), `amountMST` (opcional), `exchRate` (opcional)
+- Proyecto: `projIdProvided=false` conserva el proyecto actual de la linea; `true` aplica `projId`, incluido `""`. Si se omite el flag, se conserva la semantica legacy: un `projId` no vacio es explicito; sin valor se hereda la cabecera salvo que sea el marcador varios, caso en el que se conserva la linea.
 - Nota: si `currencyCode` de linea difiere de la divisa de reembolso de cabecera, enviar `exchRate` o `amountMST`; AX no reutiliza la tasa de cabecera para otra divisa. Si ambas divisas coinciden, editar `amountMST` no recalcula `exchRate`.
 - Nota: `reimbursableExpense` de linea admite `0 Yes` para incluir `AmountMST` y `1 No` para excluirlo. Si difiere de cabecera, AX marca cabecera como `Both`.
 

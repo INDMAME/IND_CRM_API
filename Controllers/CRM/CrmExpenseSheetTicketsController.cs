@@ -875,6 +875,7 @@ namespace IND_CRM_API.Controllers.CRM
                             linkedTicketDetail,
                             traceId,
                             quickCreateForm.ProjectId,
+                            quickCreateForm.ProjectProvided,
                             true,
                             out var linkMessage,
                             out var linkStatus))
@@ -1467,7 +1468,18 @@ namespace IND_CRM_API.Controllers.CRM
                         continue;
                     }
 
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, false, out var linkMessage, out var linkStatus))
+                    if (!TryLinkTicketToExpenseSheet(
+                            ax,
+                            company,
+                            axUserId,
+                            expenseSheetId,
+                            ticketDetail,
+                            traceId,
+                            targetInfo.ProjId,
+                            false,
+                            false,
+                            out var linkMessage,
+                            out var linkStatus))
                     {
                         if (IsTicketAlreadyLinkedMessage(linkMessage))
                         {
@@ -3197,6 +3209,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string Comentario { get; set; }
             public string ExistingHojaGastosId { get; set; }
             public string ProjectId { get; set; }
+            public bool ProjectProvided { get; set; }
         }
 
         // Minimal create result reused by the quick-create orchestration.
@@ -3518,10 +3531,13 @@ namespace IND_CRM_API.Controllers.CRM
                 imageBytes.Length,
                 "Multipart leido correctamente.");
 
-            // Prefer the standard CRM ProjId field while keeping the previous projectId alias.
-            var projectId = (await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false) ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(projectId))
-                projectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim();
+            // Prefer the standard CRM ProjId field and preserve an explicitly empty value.
+            var standardProjectId = await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false);
+            var legacyProjectId = standardProjectId == null
+                ? await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false)
+                : null;
+            var projectProvided = standardProjectId != null || legacyProjectId != null;
+            var projectId = (standardProjectId ?? legacyProjectId ?? string.Empty).Trim();
 
             return new QuickCreateFormReadResult
             {
@@ -3535,7 +3551,8 @@ namespace IND_CRM_API.Controllers.CRM
                 Description = await ReadFormFieldAsync(provider, "description").ConfigureAwait(false),
                 Comentario = await ReadFormFieldAsync(provider, "comentario").ConfigureAwait(false),
                 ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
-                ProjectId = projectId
+                ProjectId = projectId,
+                ProjectProvided = projectProvided
             };
         }
 
@@ -6590,6 +6607,7 @@ namespace IND_CRM_API.Controllers.CRM
             ExpenseSheetTicketDetailDto ticketDetail,
             string traceId,
             string projectId,
+            bool projectProvided,
             bool fallbackMissingCurrencyValues,
             out string message,
             out HttpStatusCode status)
@@ -6632,8 +6650,10 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
             lineCon.Append(1m);
             lineCon.Append(totalAmountCurrency ?? 0m);
-            lineCon.Append((projectId ?? string.Empty).Trim());
+            lineCon.Append(projectProvided ? (projectId ?? string.Empty).Trim() : string.Empty);
             AppendLinkedTicketLineCurrencyFields(lineCon, ticketDetail, fallbackMissingCurrencyValues);
+            // Position 13 preserves omitted versus explicitly empty project for createExpenseSheet.
+            lineCon.Append(ToAxBool(projectProvided));
             linesCon.Append(lineCon);
             rootCon.Append(linesCon);
 
@@ -6695,7 +6715,7 @@ namespace IND_CRM_API.Controllers.CRM
             return true;
         }
 
-        // Appends non-EUR currency fields when linking a ticket into an expense sheet line.
+        // Appends stable create positions 9-12 and fills currency values only when required.
         private static void AppendLinkedTicketLineCurrencyFields(
             IAxaptaContainer lineCon,
             ExpenseSheetTicketDetailDto ticketDetail,
@@ -6704,24 +6724,22 @@ namespace IND_CRM_API.Controllers.CRM
             if (lineCon == null || ticketDetail == null)
                 return;
 
-            var currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
-            if (string.IsNullOrWhiteSpace(currencyCode) ||
-                string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (!fallbackMissingCurrencyValues)
-                return;
-
-            var amountMST = NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST) ?? QuickCreateInsertFallbackAmount;
-            var exchRate = NormalizePositiveCurrencyValue(ticketDetail.ExchRate) ?? QuickCreateInsertFallbackAmount;
-
             const string noOptionalValueToken = "null";
+            var currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            var includeCurrencyValues = fallbackMissingCurrencyValues &&
+                !string.IsNullOrWhiteSpace(currencyCode) &&
+                !string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase);
+            var amountMST = includeCurrencyValues
+                ? NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST) ?? QuickCreateInsertFallbackAmount
+                : (decimal?)null;
+            var exchRate = includeCurrencyValues
+                ? NormalizePositiveCurrencyValue(ticketDetail.ExchRate) ?? QuickCreateInsertFallbackAmount
+                : (decimal?)null;
+
             lineCon.Append(noOptionalValueToken);
-            lineCon.Append(currencyCode);
-            lineCon.Append(amountMST);
-            lineCon.Append(exchRate);
+            lineCon.Append(includeCurrencyValues ? currencyCode : string.Empty);
+            lineCon.Append(amountMST.HasValue ? (object)amountMST.Value : noOptionalValueToken);
+            lineCon.Append(exchRate.HasValue ? (object)exchRate.Value : noOptionalValueToken);
         }
 
         // Returns only positive currency values because AX rejects empty or zero conversion data.

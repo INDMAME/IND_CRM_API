@@ -743,12 +743,16 @@
                                                                                                                                             "internacional":  {
                                                                                                                                                                   "type":  "boolean"
                                                                                                                                                               },
-                                                                                                                                            "projId":  {
-                                                                                                                                                           "type":  "string"
-                                                                                                                                                       },
-                                                                                                                                            "fileId":  {
-                                                                                                                                                           "type":  "string"
-                                                                                                                                                       },
+                                                                                                                                             "projId":  {
+                                                                                                                                                            "type":  "string"
+                                                                                                                                                        },
+                                                                                                                                            "projIdProvided":  {
+                                                                                                                                                                    "type":  "boolean",
+                                                                                                                                                                    "description":  "True aplica projId como valor explicito, incluido vacio; false u omitido sin projId delega en defaultProjectForNewLine de AX."
+                                                                                                                                                                },
+                                                                                                                                             "fileId":  {
+                                                                                                                                                            "type":  "string"
+                                                                                                                                                        },
                                                                                                                                             "reimbursableExpense":  {
                                                                                                                                                                         "type":  "integer",
                                                                                                                                                                         "description":  "INDReimbursableExpenseLines: 0 Yes incluye AmountMST, 1 No excluye y deja ReimbursableAmount en cero.",
@@ -1040,6 +1044,10 @@
                                                                                              "projId":  {
                                                                                                             "type":  "string"
                                                                                                         },
+                                                                                             "projIdProvided":  {
+                                                                                                                    "type":  "boolean",
+                                                                                                                    "description":  "False conserva el proyecto actual bajo bloqueo AX; true aplica projId, incluido un valor vacio. Si se omite, un projId no nulo se considera explicito por compatibilidad."
+                                                                                                                },
                                                                                              "exchRate":  {
                                                                                                               "type":  "number"
                                                                                                           },
@@ -1105,6 +1113,7 @@
                                                         "description":  "Gastos",
                                                         "currencyCode":  "EUR",
                                                         "projId":  "",
+                                                        "projIdProvided":  true,
                                                         "exchRate":  1,
                                                         "expenseSheetStatus":  0,
                                                         "exchangeRateMode":  0,
@@ -1208,7 +1217,7 @@
                   },
                   {
                       "name":  "crm_expensesheets_propagate_project_default",
-                      "description":  "Propaga el proyecto de cabecera a las lineas existentes de una hoja de gastos. No aplica si la cabecera esta marcada con PurchParameters.INDProjIdVarious.",
+                      "description":  "Propaga atomicamente un proyecto objetivo a cabecera y lineas. Sin body usa el proyecto actual de cabecera; no aplica al marcador PurchParameters.INDProjIdVarious.",
                       "inputSchema":  {
                                           "type":  "object",
                                           "properties":  {
@@ -1223,10 +1232,14 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
                                                                                                                   },
-                                                                                                "X-IND-AxUserId":  {
-                                                                                                                       "type":  "string",
-                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
-                                                                                                                   }
+                                                                                                 "X-IND-AxUserId":  {
+                                                                                                                        "type":  "string",
+                                                                                                                        "description":  "AX user id from /api/auth/entra/context."
+                                                                                                                    },
+                                                                                                 "Content-Type":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Content type for the optional body."
+                                                                                                                    }
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
@@ -1246,6 +1259,20 @@
                                                                                            "hojaGastosId"
                                                                                        ],
                                                                           "additionalProperties":  false
+                                                                      },
+                                                             "body":  {
+                                                                          "type":  "object",
+                                                                          "properties":  {
+                                                                                             "projId":  {
+                                                                                                            "type":  "string",
+                                                                                                            "description":  "Proyecto objetivo. Un valor vacio es valido cuando projIdProvided es true."
+                                                                                                        },
+                                                                                             "projIdProvided":  {
+                                                                                                                    "type":  "boolean",
+                                                                                                                    "description":  "True aplica projId. Un projId presente sin flag tambien es explicito por compatibilidad; false u omitido sin projId usa la cabecera actual."
+                                                                                                                }
+                                                                                         },
+                                                                          "additionalProperties":  false
                                                                       }
                                                          },
                                           "required":  [
@@ -1258,21 +1285,27 @@
                                      "method":  "POST",
                                      "path":  "/api/crm/expensesheets/{hojaGastosId}/project-default/propagate",
                                      "auth":  "bearer",
-                                     "requiredHeaders":  [
-                                                             "Authorization",
-                                                             "X-IND-Company",
-                                                             "X-IND-AxUserId"
-                                                         ]
+                                      "requiredHeaders":  [
+                                                              "Authorization",
+                                                              "X-IND-Company",
+                                                              "X-IND-AxUserId"
+                                                          ],
+                                     "contentType":  "application/json"
                                  },
                       "examples":  [
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
-                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "Content-Type":  "application/json"
                                                        },
                                            "path":  {
                                                         "hojaGastosId":  "009998"
+                                                    },
+                                           "body":  {
+                                                        "projId":  "PRJ-001",
+                                                        "projIdProvided":  true
                                                     }
                                        }
                                    ]
@@ -1427,6 +1460,10 @@
                                                                                              "projId":  {
                                                                                                             "type":  "string"
                                                                                                         },
+                                                                                             "projIdProvided":  {
+                                                                                                                    "type":  "boolean",
+                                                                                                                    "description":  "False conserva el proyecto actual de la linea; true aplica projId, incluido un valor vacio. Si se omite, un projId no vacio es explicito; sin valor se hereda la cabecera salvo que use el marcador varios."
+                                                                                                                },
                                                                                              "fileId":  {
                                                                                                             "type":  "string"
                                                                                                         },
@@ -1497,6 +1534,7 @@
                                                         "price":  30.0,
                                                         "internacional":  false,
                                                         "projId":  "",
+                                                        "projIdProvided":  true,
                                                         "fileId":  "",
                                                         "reimbursableExpense":  0,
                                                         "currencyCode":  "EUR",

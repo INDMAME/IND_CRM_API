@@ -45,6 +45,9 @@ namespace IND_CRM_API.Contracts.Responses
 
         /// <summary>Total payable to the employee in company currency/MST; only lines marked ReimbursableExpense=Yes are included.</summary>
         public decimal? TotalReimbursableAmount { get; set; }
+
+        /// <summary>Valid project default for a newly created line; null when an older AX contract does not provide it.</summary>
+        public string DefaultLineProjId { get; set; }
     }
 
     /// <summary>

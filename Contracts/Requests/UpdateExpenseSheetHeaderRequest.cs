@@ -16,6 +16,12 @@ namespace IND_CRM_API.Contracts.Requests
         public string projId { get; set; }
 
         /// <summary>
+        /// Distinguishes an omitted project from an explicit value, including an empty value.
+        /// When omitted, a non-null projId keeps the legacy explicit-update behavior.
+        /// </summary>
+        public bool? projIdProvided { get; set; }
+
+        /// <summary>
         /// Numeric AX enum value for INDExpenseSheetStatus. Resolve active options through /api/crm/enums.
         /// </summary>
         public int? expenseSheetStatus { get; set; }

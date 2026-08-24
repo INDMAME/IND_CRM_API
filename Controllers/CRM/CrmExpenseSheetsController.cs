@@ -170,6 +170,7 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         var lineCon = ax.CreateContainer();
                         var normalizedDate = NormalizeApiDateToAxYmd(line.transDate);
+                        var projectProvided = line.projIdProvided ?? (line.projId != null);
 
                         lineCon.Append(normalizedDate);
                         lineCon.Append(line.typeValue ?? 0);
@@ -178,13 +179,16 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.fileId?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        lineCon.Append(line.projId?.Trim() ?? string.Empty);
+                        lineCon.Append(projectProvided ? (line.projId?.Trim() ?? string.Empty) : string.Empty);
                         AppendLineOptionalFields(
                             lineCon,
                             line.reimbursableExpense,
                             line.currencyCode,
                             line.amountMST,
-                            line.exchRate);
+                            line.exchRate,
+                            forceStablePositions: true);
+                        // Position 13 is create-only and preserves omitted versus explicit empty project.
+                        lineCon.Append(ToAxBool(projectProvided));
 
                         linesCon.Append(lineCon);
                     }
@@ -697,7 +701,8 @@ namespace IND_CRM_API.Controllers.CRM
         /// Updates the header data of an expense sheet.
         /// </summary>
         /// <remarks>
-        /// Optional header fields: expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
+        /// Optional header fields: projIdProvided, expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
+        /// projIdProvided=false preserves the project stored by AX. When omitted, a non-null projId is explicit for legacy clients.
         /// Header reimbursableExpense accepts only writable values Yes (0) and No (1); Both (2) is derived from mixed lines.
         /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
@@ -780,17 +785,19 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
                     $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} actorAxUserId={ToLogValue(actorAxUserId)} " +
+                    $"projIdProvided={(body.projIdProvided.HasValue ? body.projIdProvided.Value.ToString() : "<null>")} " +
                     $"estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
+                var projectProvided = body.projIdProvided ?? (body.projId != null);
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
-                con.Append(body.projId?.Trim() ?? string.Empty);
+                con.Append(projectProvided ? (body.projId?.Trim() ?? string.Empty) : string.Empty);
                 AppendUpdateHeaderOptionalFields(
                     con,
                     body.expenseSheetStatus,
@@ -798,6 +805,8 @@ namespace IND_CRM_API.Controllers.CRM
                     body.estadoComentarios,
                     body.reimbursableExpense,
                     actorAxUserId);
+                // Position 13 lets AX preserve the project under the same header lock.
+                con.Append(ToAxBool(projectProvided));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -970,11 +979,14 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Propagates current header project to all existing lines.
+        /// Atomically propagates a project target to the header and all existing lines.
         /// </summary>
         /// <remarks>
         /// The web client must ask for user confirmation before calling this endpoint.
-        /// AX blocks the operation when the header project is the configured "various" marker.
+        /// With no body, AX preserves the legacy behavior and reads the current header project.
+        /// With projIdProvided=true, projId is the explicit target and may be empty.
+        /// When the flag is omitted, a non-null projId remains explicit for legacy clients.
+        /// AX blocks the configured "various" marker.
         /// </remarks>
         [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/project-default/propagate")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
@@ -983,7 +995,9 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult PropagateExpenseSheetProjectDefault(string hojaGastosId)
+        public IHttpActionResult PropagateExpenseSheetProjectDefault(
+            string hojaGastosId,
+            [FromBody] PropagateExpenseSheetProjectDefaultRequest body = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
@@ -995,6 +1009,9 @@ namespace IND_CRM_API.Controllers.CRM
             var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
             if (userError != null)
                 return userError;
+
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
@@ -1030,6 +1047,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
+                var projectProvided = body?.projIdProvided ?? (body?.projId != null);
+                con.Append(projectProvided ? (body?.projId?.Trim() ?? string.Empty) : string.Empty);
+                con.Append(ToAxBool(projectProvided));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1207,6 +1227,10 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Updates one expense sheet line.
         /// </summary>
+        /// <remarks>
+        /// projIdProvided=false preserves the stored line project and true applies projId, including an empty value.
+        /// When omitted, AX keeps the legacy behavior: a non-empty projId is explicit, otherwise the header project is inherited unless it is the various marker.
+        /// </remarks>
         [HttpPut, Route("{hojaGastosId}/lines/{lineRecId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -1227,6 +1251,9 @@ namespace IND_CRM_API.Controllers.CRM
             var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
             if (userError != null)
                 return userError;
+
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
@@ -1285,7 +1312,10 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} " +
+                    $"user={username} axUserId={axUserId} " +
+                    $"projIdProvided={(body.projIdProvided.HasValue ? body.projIdProvided.Value.ToString() : "<null>")} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -1295,6 +1325,10 @@ namespace IND_CRM_API.Controllers.CRM
                 // Axapta COM container is sensitive to Int64 values; send RecId as numeric text.
                 con.Append(lineRecId.ToString(CultureInfo.InvariantCulture));
 
+                // Keep staged rollouts safe because older AX versions treat position 12 as authoritative.
+                var projectIdForAx = body.projIdProvided == false
+                    ? string.Empty
+                    : body.projId?.Trim() ?? string.Empty;
                 var normalizedDate = NormalizeApiDateToAxYmd(body.transDate);
                 con.Append(normalizedDate);
                 con.Append(body.typeValue ?? 0);
@@ -1303,13 +1337,17 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.fileId?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                con.Append(body.projId?.Trim() ?? string.Empty);
+                con.Append(projectIdForAx);
                 AppendLineOptionalFields(
                     con,
                     body.reimbursableExpense,
                     body.currencyCode,
                     body.amountMST,
-                    body.exchRate);
+                    body.exchRate,
+                    forceStablePositions: true);
+                //MMS - Solo anade la posicion 17 cuando el cliente declara una intencion nueva - 2026.08.24
+                if (body.projIdProvided.HasValue)
+                    con.Append(ToAxBool(body.projIdProvided.Value));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -2071,7 +2109,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Appends optional update-header fields without shifting the legacy estadoComentarios slot.
+        // Materializes update-header positions 8-12 before the project intent flag at position 13.
         private static void AppendUpdateHeaderOptionalFields(
             IAxaptaContainer container,
             int? expenseSheetStatus,
@@ -2083,38 +2121,22 @@ namespace IND_CRM_API.Controllers.CRM
             if (container == null)
                 return;
 
-            var hasEstadoComentarios = estadoComentarios != null;
-            var hasActorAxUserId = !string.IsNullOrWhiteSpace(actorAxUserId);
-            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios && !reimbursableExpense.HasValue && !hasActorAxUserId)
-                return;
-
             const string noOptionalValueToken = "null";
-
-            if (expenseSheetStatus.HasValue)
-                container.Append(expenseSheetStatus.Value);
-            else
-                container.Append(noOptionalValueToken);
-
-            if (exchangeRateMode.HasValue || hasEstadoComentarios || reimbursableExpense.HasValue || hasActorAxUserId)
-            {
-                if (exchangeRateMode.HasValue)
-                    container.Append(exchangeRateMode.Value);
-                else
-                    container.Append(noOptionalValueToken);
-
-                if (hasEstadoComentarios)
-                    container.Append(estadoComentarios.Trim());
-                else if (reimbursableExpense.HasValue || hasActorAxUserId)
-                    container.Append(noOptionalValueToken);
-
-                if (reimbursableExpense.HasValue)
-                    container.Append(reimbursableExpense.Value);
-                else if (hasActorAxUserId)
-                    container.Append(noOptionalValueToken);
-
-                if (hasActorAxUserId)
-                    container.Append(actorAxUserId.Trim());
-            }
+            container.Append(expenseSheetStatus.HasValue
+                ? (object)expenseSheetStatus.Value
+                : noOptionalValueToken);
+            container.Append(exchangeRateMode.HasValue
+                ? (object)exchangeRateMode.Value
+                : noOptionalValueToken);
+            container.Append(estadoComentarios != null
+                ? (object)estadoComentarios.Trim()
+                : noOptionalValueToken);
+            container.Append(reimbursableExpense.HasValue
+                ? (object)reimbursableExpense.Value
+                : noOptionalValueToken);
+            container.Append(!string.IsNullOrWhiteSpace(actorAxUserId)
+                ? (object)actorAxUserId.Trim()
+                : noOptionalValueToken);
         }
 
         // Reads optional forwarding headers without making them part of the public body contract.
@@ -2143,13 +2165,18 @@ namespace IND_CRM_API.Controllers.CRM
             int? reimbursableExpense,
             string currencyCode,
             decimal? amountMST,
-            decimal? exchRate)
+            decimal? exchRate,
+            bool forceStablePositions = false)
         {
             if (container == null)
                 return;
 
             var hasCurrencyCode = !string.IsNullOrWhiteSpace(currencyCode);
-            if (!reimbursableExpense.HasValue && !hasCurrencyCode && !amountMST.HasValue && !exchRate.HasValue)
+            if (!forceStablePositions &&
+                !reimbursableExpense.HasValue &&
+                !hasCurrencyCode &&
+                !amountMST.HasValue &&
+                !exchRate.HasValue)
                 return;
 
             const string noOptionalValueToken = "null";
@@ -2826,7 +2853,8 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // Current (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
+            // Current (21): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount [21]DefaultLineProjId
+            // Previous (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
             // Previous (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
             // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
             // Current (16): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName
@@ -2946,6 +2974,7 @@ namespace IND_CRM_API.Controllers.CRM
             detail.TotalReimbursableAmount = headerExtras.Count >= 20
                 ? ToDecimal(headerExtras[19])
                 : detail.TotalAmountMST;
+            detail.DefaultLineProjId = headerExtras.Count >= 21 ? headerExtras[20] : null;
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)

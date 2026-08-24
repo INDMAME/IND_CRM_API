@@ -176,6 +176,7 @@
     <Compile Include="App_Start\IND_AxSessionScopeHandler.cs" />
     <Compile Include="Contracts\Requests\CreateActivityRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetRequest.cs" />
+    <Compile Include="Contracts\Requests\PropagateExpenseSheetProjectDefaultRequest.cs" />
     <Compile Include="Contracts\Requests\CreateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\AskExpenseSheetsAiRequest.cs" />
     <Compile Include="Contracts\Requests\BulkLinkExpenseSheetTicketsRequest.cs" />
