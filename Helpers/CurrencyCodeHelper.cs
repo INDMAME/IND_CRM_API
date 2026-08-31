@@ -74,6 +74,7 @@ namespace IND_CRM_API.Helpers
             new KeyValuePair<string, string>("CA$", "CAD"),
             new KeyValuePair<string, string>("R$", "BRL"),
             new KeyValuePair<string, string>("S/", "PEN"),
+            new KeyValuePair<string, string>("\u20AB", "VND"),
             new KeyValuePair<string, string>("\u20AC", "EUR"),
             new KeyValuePair<string, string>("\u00A3", "GBP"),
             new KeyValuePair<string, string>("\u00A5", "JPY"),

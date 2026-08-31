@@ -288,8 +288,12 @@ namespace IND_CRM_API.Services
             }
 
             var safeFileName = string.IsNullOrWhiteSpace(fileName) ? "ticket" : fileName.Trim();
-            var promptText = BuildStructuredOcrPayloadPromptText(profile);
             var requestOptions = BuildRequestOptions(profile, null);
+            var useGroupedVndCorrection = IsGroupedVndQuickCreateCorrectionEligible(
+                receiptAnalysis,
+                requestOptions.DraftProfile);
+            var promptText = BuildStructuredOcrPayloadPromptText(profile, useGroupedVndCorrection);
+            var structuredOcrJson = BuildStructuredOcrJsonForProfile(receiptAnalysis, requestOptions.DraftProfile);
             HttpResponseMessage response = null;
             string responseBody = null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -304,11 +308,11 @@ namespace IND_CRM_API.Services
                 {
                     attempt++;
 
-                    var payloadJson = BuildTextPayloadJson(promptText, receiptAnalysis.PromptJson, safeFileName, requestOptions);
+                    var payloadJson = BuildTextPayloadJson(promptText, structuredOcrJson, safeFileName, requestOptions);
                     var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
 
                     _logger.Log(
-                        $"[OPENAI-NORMALIZE] Receipt normalization request attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} ocrBytes={Encoding.UTF8.GetByteCount(receiptAnalysis.PromptJson)} payloadBytes={payloadBytes} fileName={safeFileName}",
+                        $"[OPENAI-NORMALIZE] Receipt normalization request attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} maxOut={requestOptions.MaxOutputTokens} requestedTier={requestOptions.ServiceTier ?? "auto"} cacheKey={(string.IsNullOrWhiteSpace(requestOptions.PromptCacheKey) ? "na" : requestOptions.PromptCacheKey)} ocrBytes={Encoding.UTF8.GetByteCount(structuredOcrJson)} payloadBytes={payloadBytes} fileName={safeFileName}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     response?.Dispose();
@@ -396,13 +400,16 @@ namespace IND_CRM_API.Services
                     }
 
                     ApplyCurrencyFallbackFromOcr(extracted, receiptAnalysis);
-                    ApplySingleLineTotalFallbackFromOcr(extracted, receiptAnalysis);
+                    ApplySingleLineTotalFallbackFromOcr(
+                        extracted,
+                        receiptAnalysis,
+                        requestOptions.DraftProfile == ExpenseTicketDraftProfile.QuickCreate);
                     extracted.gastoType = ResolveDraftGastoType(extracted.gastoType, extracted.lines);
 
                     var successMetrics = TryReadResponseMetrics(responseBody);
                     var normalizedJson = BuildNormalizedDraftJson(extracted, requestOptions.DraftProfile);
                     _logger.Log(
-                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} inputCurrency={ToMetricText(receiptAnalysis.CurrencyCode)} outputCurrency={ToMetricText(extracted.currencyCode)} rawCurrency={ToMetricText(extracted.RawCurrency)} normalizedJsonChars={normalizedJson.Length}",
+                        $"[OPENAI-NORMALIZE] Receipt normalization completed ms={sw.ElapsedMilliseconds} attempts={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} profile={requestOptions.ProfileTag} model={requestOptions.Model} requestedTier={requestOptions.ServiceTier ?? "auto"} reasoningEffort={requestOptions.ReasoningEffort ?? "na"} actualTier={successMetrics.ActualServiceTier ?? "na"} inputTokens={ToMetricText(successMetrics.InputTokens)} cachedTokens={ToMetricText(successMetrics.CachedTokens)} outputTokens={ToMetricText(successMetrics.OutputTokens)} reasoningTokens={ToMetricText(successMetrics.ReasoningTokens)} totalTokens={ToMetricText(successMetrics.TotalTokens)} inputCurrency={ToMetricText(receiptAnalysis.CurrencyCode)} outputCurrency={ToMetricText(extracted.currencyCode)} rawCurrency={ToMetricText(extracted.RawCurrency)} groupedVndPromptApplied={useGroupedVndCorrection} normalizedJsonChars={normalizedJson.Length}",
                         AxaptaSessionManager.LogLevel.Info);
 
                     return new OpenAITicketNormalizationResult
@@ -920,19 +927,80 @@ namespace IND_CRM_API.Services
                 : BuildFullDraftPayloadPromptText();
         }
 
-        private static string BuildStructuredOcrPayloadPromptText(ExpenseTicketDraftProfile profile)
+        private static string BuildStructuredOcrPayloadPromptText(
+            ExpenseTicketDraftProfile profile,
+            bool includeGroupedVndRule)
         {
-            return
-                @"Recibiras un JSON OCR compacto de Azure Document Intelligence.
+            var instructions = @"Recibiras un JSON OCR compacto de Azure Document Intelligence.
 - Tu tarea es convertir ese JSON al contrato CRM.
 - Responde SOLO JSON valido.
 - Usa el OCR como fuente principal.
 - El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fecha, hora y moneda.
-- Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
+- Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).";
+
+            if (includeGroupedVndRule)
+            {
+                instructions += Environment.NewLine +
+                    "- El campo totals.total ya contiene el total VND corregido. Para VND (simbolo Unicode U+20AB), 82.000 significa 82000 VND, no 82 VND.";
+            }
+
+            instructions += @"
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
-- Prioriza exactitud estructural y salida breve."
-                .Trim() + Environment.NewLine + BuildPayloadPromptText(profile);
+- Prioriza exactitud estructural y salida breve.";
+
+            return instructions.Trim() + Environment.NewLine + BuildPayloadPromptText(profile);
+        }
+
+        // Limits grouped VND projection and prompt guidance to the accepted quick-create shape.
+        private static bool IsGroupedVndQuickCreateCorrectionEligible(
+            AzureReceiptAnalysisResult receiptAnalysis,
+            ExpenseTicketDraftProfile profile)
+        {
+            return receiptAnalysis != null &&
+                   profile == ExpenseTicketDraftProfile.QuickCreate &&
+                   receiptAnalysis.ItemCount == 0 &&
+                   receiptAnalysis.CorrectedGroupedVndTotalAmount.HasValue &&
+                   receiptAnalysis.CorrectedGroupedVndTotalAmount.Value > 0m &&
+                   receiptAnalysis.CorrectedGroupedVndSourceAmount.HasValue &&
+                   receiptAnalysis.CorrectedGroupedVndSourceAmount.Value > 0m;
+        }
+
+        // Projects the corrected total into the OpenAI input only for the guarded quick-create flow.
+        private static string BuildStructuredOcrJsonForProfile(
+            AzureReceiptAnalysisResult receiptAnalysis,
+            ExpenseTicketDraftProfile profile)
+        {
+            if (!IsGroupedVndQuickCreateCorrectionEligible(receiptAnalysis, profile))
+                return receiptAnalysis?.PromptJson;
+
+            var correctedAmount = receiptAnalysis.CorrectedGroupedVndTotalAmount.Value;
+
+            try
+            {
+                var projected = JObject.Parse(receiptAnalysis.PromptJson);
+                var totals = projected["totals"] as JObject;
+                if (totals == null)
+                    return receiptAnalysis.PromptJson;
+
+                var rawCurrency = string.IsNullOrWhiteSpace(receiptAnalysis.RawCurrency)
+                    ? "VND"
+                    : receiptAnalysis.RawCurrency;
+                projected["currencyCode"] = "VND";
+                projected["rawCurrency"] = rawCurrency;
+                totals["total"] = new JObject
+                {
+                    ["amount"] = correctedAmount,
+                    ["currencyCode"] = "VND",
+                    ["rawCurrency"] = rawCurrency
+                };
+
+                return JsonConvert.SerializeObject(projected);
+            }
+            catch (JsonException)
+            {
+                return receiptAnalysis.PromptJson;
+            }
         }
 
         private static string BuildFullDraftPayloadPromptText()
@@ -1280,10 +1348,16 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(draft.Warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
         }
 
-        private static void ApplySingleLineTotalFallbackFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
+        private static void ApplySingleLineTotalFallbackFromOcr(
+            ExpenseSheetDraftResponse draft,
+            AzureReceiptAnalysisResult receiptAnalysis,
+            bool allowGroupedVndCorrection = false)
         {
             var totalAmount = receiptAnalysis?.TotalAmount;
             if (draft == null || !totalAmount.HasValue || totalAmount.Value <= 0m)
+                return;
+
+            if (allowGroupedVndCorrection && TryApplySingleLineGroupedVndTotal(draft, receiptAnalysis))
                 return;
 
             if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
@@ -1315,6 +1389,57 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(
                 draft.Warnings,
                 "No se detectaron lineas de detalle; se genero una linea unica con el total del ticket.");
+        }
+
+        // Applies an authoritative grouped VND total only to the exact quick-create failure shape.
+        private static bool TryApplySingleLineGroupedVndTotal(
+            ExpenseSheetDraftResponse draft,
+            AzureReceiptAnalysisResult receiptAnalysis)
+        {
+            var correctedAmount = receiptAnalysis?.CorrectedGroupedVndTotalAmount;
+            var sourceAmount = receiptAnalysis?.CorrectedGroupedVndSourceAmount;
+            if (draft == null ||
+                receiptAnalysis == null ||
+                receiptAnalysis.ItemCount != 0 ||
+                !correctedAmount.HasValue ||
+                correctedAmount.Value <= 0m ||
+                !sourceAmount.HasValue ||
+                sourceAmount.Value <= 0m ||
+                draft.lines == null ||
+                draft.lines.Count != 1)
+            {
+                return false;
+            }
+
+            var line = draft.lines[0];
+            if (line == null ||
+                !line.qty.HasValue ||
+                line.qty.Value != 1m ||
+                !line.price.HasValue ||
+                line.price.Value <= 0m)
+            {
+                return false;
+            }
+
+            var lineAmount = line.price.Value;
+            if (lineAmount != sourceAmount.Value && lineAmount != correctedAmount.Value)
+                return false;
+
+            draft.currencyCode = "VND";
+            draft.RawCurrency = string.IsNullOrWhiteSpace(receiptAnalysis.RawCurrency)
+                ? "VND"
+                : receiptAnalysis.RawCurrency;
+            line.qty = 1m;
+            line.price = correctedAmount.Value;
+
+            if (lineAmount != correctedAmount.Value)
+            {
+                draft.Warnings = EnsureWarnings(
+                    draft.Warnings,
+                    "Se corrigio un total VND con separadores de miles usando el campo Total del OCR.");
+            }
+
+            return true;
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)

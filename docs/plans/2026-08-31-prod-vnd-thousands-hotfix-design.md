@@ -23,8 +23,9 @@ Azure Document Intelligence preserves `82.000 ₫` in `Total.content`, but proje
 2. Read only the semantic Azure `Total.content` field for the correction.
 3. Accept only an integer made of strict three-digit groups when VND evidence is present, for example `82.000`, `82,000`, or `1.234.567`.
 4. Remove the grouping separators and verify that the corrected amount is consistent with the structured Azure value by powers of 1000.
-5. Before quick-create maps the draft to `body.lines`, replace a single positive model line with the authoritative corrected VND total when the receipt has no item breakdown.
-6. Add a prompt rule explaining VND thousands semantics as defense in depth. The deterministic correction remains authoritative.
+5. Carry the corrected amount separately while preserving the shared `TotalAmount` and `PromptJson` with Azure's structured source value.
+6. Only for an eligible quick-create receipt with no item breakdown, project the corrected total into the OpenAI JSON and add a prompt rule explaining the already-proven VND grouping semantics.
+7. Before quick-create maps the draft to `body.lines`, replace exactly one positive model line with the authoritative corrected VND total. Rejected cases and full-draft keep the original prompt and amount.
 
 The API validation that requires a positive `amountMST` remains unchanged.
 

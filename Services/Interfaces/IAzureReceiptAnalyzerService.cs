@@ -24,6 +24,10 @@ namespace IND_CRM_API.Services.Interfaces
         public string CurrencyCode { get; set; }
         public string RawCurrency { get; set; }
         public decimal? TotalAmount { get; set; }
+        /// <summary>Authoritative VND total recovered from strict grouping in the semantic Total field.</summary>
+        public decimal? CorrectedGroupedVndTotalAmount { get; set; }
+        /// <summary>Structured Azure amount that was proven to be truncated by a power of 1000.</summary>
+        public decimal? CorrectedGroupedVndSourceAmount { get; set; }
         public int ItemCount { get; set; }
         public List<string> Warnings { get; set; }
         public List<string> CurrencyHints { get; set; }

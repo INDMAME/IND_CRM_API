@@ -111,7 +111,9 @@ namespace IND_CRM_API.Services
                                 var directResult = TryBuildAnalysisResult(responseBody);
                                 if (directResult != null)
                                 {
-                                    _logger.Log($"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount}", AxaptaSessionManager.LogLevel.Info);
+                                    _logger.Log(
+                                        $"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount} total={ToLogDecimal(directResult.TotalAmount)} currencyCode={ToLogValue(directResult.CurrencyCode)} groupedVndTotal={ToLogDecimal(directResult.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(directResult.CorrectedGroupedVndSourceAmount)}",
+                                        AxaptaSessionManager.LogLevel.Info);
                                     return directResult;
                                 }
 
@@ -151,7 +153,7 @@ namespace IND_CRM_API.Services
                                                     "empty-result");
 
                                             _logger.Log(
-                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
+                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} groupedVndTotal={ToLogDecimal(result.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(result.CorrectedGroupedVndSourceAmount)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
                                                 AxaptaSessionManager.LogLevel.Info);
                                             return result;
                                         }
@@ -221,13 +223,50 @@ namespace IND_CRM_API.Services
             var receiptContent = analyzeResult["content"]?.ToString();
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
+            var correctedGroupedVndTotalAmount = TryReadCorrectedGroupedVndTotal(
+                analyzeResult,
+                out var correctedGroupedVndSourceAmount,
+                out var groupedVndRawCurrency,
+                out var rejectedGroupedVndCurrencyCode);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
-            var fallbackTotalAmount = ReadProjectedAmount(totalToken) ?? TryExtractTotalAmountFromReceiptContent(receiptContent);
+            AddDistinct(currencyHints, groupedVndRawCurrency);
+            var structuredTotalCurrencyCode = CurrencyCodeHelper.NormalizeToIso4217(
+                ReadProjectedCurrencyCode(totalToken));
+            var hasVndHint = currencyHints.Any(hint => string.Equals(
+                CurrencyCodeHelper.NormalizeToIso4217(hint),
+                "VND",
+                StringComparison.OrdinalIgnoreCase));
+            var protectedCurrencyCode = !correctedGroupedVndTotalAmount.HasValue &&
+                                        hasVndHint &&
+                                        !string.IsNullOrWhiteSpace(structuredTotalCurrencyCode) &&
+                                        !string.Equals(structuredTotalCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase)
+                ? structuredTotalCurrencyCode
+                : rejectedGroupedVndCurrencyCode;
+            if (!string.IsNullOrWhiteSpace(protectedCurrencyCode))
+            {
+                currencyHints.RemoveAll(hint => string.Equals(
+                    CurrencyCodeHelper.NormalizeToIso4217(hint),
+                    "VND",
+                    StringComparison.OrdinalIgnoreCase));
+                AddDistinct(currencyHints, protectedCurrencyCode);
+            }
+            var resolvedCurrencyCode = correctedGroupedVndTotalAmount.HasValue
+                ? "VND"
+                : !string.IsNullOrWhiteSpace(protectedCurrencyCode)
+                    ? protectedCurrencyCode
+                    : ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
+            var resolvedRawCurrency = correctedGroupedVndTotalAmount.HasValue
+                ? groupedVndRawCurrency
+                : !string.IsNullOrWhiteSpace(protectedCurrencyCode)
+                    ? protectedCurrencyCode
+                    : ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            var fallbackTotalAmount = ReadProjectedAmount(totalToken)
+                ?? TryExtractTotalAmountFromReceiptContent(receiptContent);
             var effectiveTotalToken = totalToken;
             if ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) && fallbackTotalAmount.HasValue)
+            {
                 effectiveTotalToken = BuildFallbackMoneyToken(fallbackTotalAmount.Value, resolvedCurrencyCode, resolvedRawCurrency);
+            }
             var projected = new JObject
             {
                 ["source"] = "azure-document-intelligence",
@@ -265,6 +304,8 @@ namespace IND_CRM_API.Services
                 CurrencyCode = resolvedCurrencyCode,
                 RawCurrency = resolvedRawCurrency,
                 TotalAmount = fallbackTotalAmount,
+                CorrectedGroupedVndTotalAmount = correctedGroupedVndTotalAmount,
+                CorrectedGroupedVndSourceAmount = correctedGroupedVndSourceAmount,
                 ItemCount = items.Count,
                 Warnings = new List<string>(),
                 CurrencyHints = currencyHints
@@ -484,6 +525,133 @@ namespace IND_CRM_API.Services
 
             if (decimal.TryParse(amountToken.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
+
+            return null;
+        }
+
+        // Returns a corrected VND total only when the first semantic Total field proves the grouping error.
+        private static decimal? TryReadCorrectedGroupedVndTotal(
+            JObject analyzeResult,
+            out decimal? structuredSourceAmount,
+            out string rawCurrency,
+            out string rejectedCurrencyCode)
+        {
+            structuredSourceAmount = null;
+            rawCurrency = null;
+            rejectedCurrencyCode = null;
+
+            var documents = analyzeResult?["documents"] as JArray;
+            if (documents == null || documents.Count == 0 || !(documents[0] is JObject firstDocument))
+                return null;
+
+            var totalField = firstDocument["fields"]?["Total"] as JObject;
+            var contentToken = totalField?["content"];
+            if (contentToken == null || contentToken.Type != JTokenType.String)
+                return null;
+
+            var totalContent = contentToken.Value<string>();
+            if (string.IsNullOrWhiteSpace(totalContent))
+                return null;
+
+            var structuredAmountToken = totalField["valueCurrency"]?["amount"]
+                ?? totalField["valueNumber"]
+                ?? totalField["valueInteger"];
+            if (structuredAmountToken == null ||
+                (structuredAmountToken.Type != JTokenType.Float && structuredAmountToken.Type != JTokenType.Integer))
+            {
+                return null;
+            }
+
+            var structuredAmount = structuredAmountToken.Value<decimal>();
+            if (structuredAmount <= 0m)
+                return null;
+
+            var containsDongSymbol = totalContent.IndexOf('\u20AB') >= 0;
+            var containsVndToken = Regex.IsMatch(
+                totalContent,
+                @"\bVND\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var structuredCurrencyRaw = totalField["valueCurrency"]?["currencyCode"]?.ToString()?.Trim();
+            var structuredCurrencyCode = string.Equals(structuredCurrencyRaw, "VND", StringComparison.OrdinalIgnoreCase)
+                ? "VND"
+                : null;
+            if (!string.IsNullOrWhiteSpace(structuredCurrencyRaw) &&
+                string.IsNullOrWhiteSpace(structuredCurrencyCode))
+            {
+                var normalizedRejectedCurrency = CurrencyCodeHelper.NormalizeToIso4217(structuredCurrencyRaw);
+                if ((containsDongSymbol || containsVndToken) &&
+                    !string.IsNullOrWhiteSpace(normalizedRejectedCurrency) &&
+                    !string.Equals(normalizedRejectedCurrency, "VND", StringComparison.OrdinalIgnoreCase))
+                {
+                    rejectedCurrencyCode = normalizedRejectedCurrency;
+                }
+
+                return null;
+            }
+
+            var contentCurrencyCodes = CurrencyCodeHelper.ExtractHints(totalContent)
+                .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var conflictingContentCurrencyCode = contentCurrencyCodes
+                .FirstOrDefault(code => !string.Equals(code, "VND", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(conflictingContentCurrencyCode))
+            {
+                if (containsDongSymbol || containsVndToken)
+                    rejectedCurrencyCode = conflictingContentCurrencyCode;
+
+                return null;
+            }
+
+            if (!string.Equals(structuredCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase) &&
+                !containsDongSymbol &&
+                !containsVndToken)
+            {
+                return null;
+            }
+
+            var groupedMatch = Regex.Match(
+                totalContent,
+                @"^\s*(?:(?:VND|\u20AB)\s*)?(?<amount>[1-9][0-9]{0,2}(?<separator>[.,])[0-9]{3}(?:\k<separator>[0-9]{3})*)(?:\s*(?:VND|\u20AB))?\s*$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!groupedMatch.Success)
+                return null;
+
+            var groupedText = groupedMatch.Groups["amount"].Value;
+            var normalizedText = groupedText.Replace(".", string.Empty).Replace(",", string.Empty);
+            if (!decimal.TryParse(normalizedText, NumberStyles.None, CultureInfo.InvariantCulture, out var groupedAmount) ||
+                groupedAmount <= 0m)
+            {
+                return null;
+            }
+
+            var separatorCount = groupedText.Count(ch => ch == '.' || ch == ',');
+            var scaledStructuredAmount = structuredAmount;
+            for (int scale = 0; scale <= separatorCount; scale++)
+            {
+                if (scaledStructuredAmount == groupedAmount)
+                {
+                    if (scale == 0)
+                        return null;
+
+                    structuredSourceAmount = structuredAmount;
+                    rawCurrency = containsDongSymbol ? "\u20AB" : "VND";
+                    return groupedAmount;
+                }
+
+                if (scale == separatorCount)
+                    break;
+
+                try
+                {
+                    scaledStructuredAmount = checked(scaledStructuredAmount * 1000m);
+                }
+                catch (OverflowException)
+                {
+                    return null;
+                }
+            }
 
             return null;
         }
