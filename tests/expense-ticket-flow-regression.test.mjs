@@ -141,6 +141,11 @@ const tryApplyTicketFromIACoreSource = sourceBetween(
   "private bool TryApplyTicketFromIACore(",
   "// Resolves ticket creation mode with backward-compatible default.",
 );
+const resolveTicketIaCurrencyAmountsSource = sourceBetween(
+  controllerSource,
+  "private bool TryResolveTicketIaCurrencyAmounts(",
+  "// Uses the ticket transaction date as the exchange-rate date when available.",
+);
 const linkedTicketCurrencyFieldsSource = sourceBetween(
   controllerSource,
   "private static void AppendLinkedTicketLineCurrencyFields(",
@@ -1218,6 +1223,30 @@ test("strict BRL without ExchRate fails before the AX create call", () => {
   assert.match(
     resolveLinkedTicketCurrencyFieldsSource,
     /var missingFields\s*=\s*[\s\S]{0,500}!exchRate\.HasValue[\s\S]{0,500}message\s*=[\s\S]{0,500}return false;/,
+  );
+});
+
+test("ticket IA keeps the strict positive amountMST gate", () => {
+  assert.match(
+    resolveTicketIaCurrencyAmountsSource,
+    /amountMST\s*=\s*Math\.Round\(totalAmount \* providerResult\.Rate,[\s\S]{0,200}if \(!amountMST\.HasValue \|\| amountMST\.Value <= 0m\)/,
+  );
+  const positiveGatePosition = resolveTicketIaCurrencyAmountsSource.indexOf(
+    "if (!amountMST.HasValue || amountMST.Value <= 0m)",
+  );
+  const validationFieldPosition = resolveTicketIaCurrencyAmountsSource.indexOf(
+    'Field = "amountMST"',
+    positiveGatePosition,
+  );
+  const rejectionPosition = resolveTicketIaCurrencyAmountsSource.indexOf(
+    "return false;",
+    validationFieldPosition,
+  );
+  assert.ok(
+    positiveGatePosition >= 0 &&
+      validationFieldPosition > positiveGatePosition &&
+      rejectionPosition > validationFieldPosition,
+    "Non-positive calculated amountMST must still be rejected before success",
   );
 });
 

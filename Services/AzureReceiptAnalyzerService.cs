@@ -207,10 +207,15 @@ namespace IND_CRM_API.Services
                 return null;
 
             var documents = analyzeResult["documents"] as JArray;
-            var firstDocument = documents?.OfType<JObject>().FirstOrDefault();
+            var firstDocument = documents != null && documents.Count > 0
+                ? documents[0] as JObject
+                : null;
             var fields = firstDocument?["fields"] as JObject;
             var items = BuildCompactItems(fields?["Items"]);
-            var totalToken = ProjectMoneyField(fields?["Total"] as JObject);
+            var totalField = fields?["Total"] as JObject;
+            var totalContent = totalField?["content"]?.ToString();
+            var authoritativeVndTotalAmount = TryExtractUnambiguousVndGroupedTotal(totalContent);
+            var totalToken = ProjectMoneyField(totalField);
             var subtotalToken = ProjectMoneyField(fields?["Subtotal"] as JObject);
             var taxToken = ProjectMoneyField(fields?["TotalTax"] as JObject);
             var tipToken = ProjectMoneyField(fields?["Tip"] as JObject);
@@ -222,19 +227,34 @@ namespace IND_CRM_API.Services
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            var resolvedCurrencyCode = authoritativeVndTotalAmount.HasValue
+                ? "VND"
+                : ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
+            var resolvedRawCurrency = authoritativeVndTotalAmount.HasValue
+                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent)) ?? "VND"
+                : ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            if (authoritativeVndTotalAmount.HasValue)
+                currencyHints = new List<string> { resolvedRawCurrency };
+
             var structuredTotalAmount = ReadProjectedAmount(totalToken);
             var explicitTextTotalAmount = TryExtractExplicitTotalAmountFromReceiptContent(receiptContent);
             var structuredTotalWasOverridden =
+                !authoritativeVndTotalAmount.HasValue &&
                 explicitTextTotalAmount.HasValue &&
                 structuredTotalAmount.HasValue &&
                 Math.Abs(explicitTextTotalAmount.Value - structuredTotalAmount.Value) > 0.02m;
-            var fallbackTotalAmount = structuredTotalAmount.HasValue
+            var fallbackTotalAmount = authoritativeVndTotalAmount ?? (structuredTotalAmount.HasValue
                 ? (structuredTotalWasOverridden ? explicitTextTotalAmount : structuredTotalAmount)
-                : (explicitTextTotalAmount ?? TryExtractTotalAmountFromReceiptContent(receiptContent));
+                : (explicitTextTotalAmount ?? TryExtractTotalAmountFromReceiptContent(receiptContent)));
             var effectiveTotalToken = totalToken;
-            if (fallbackTotalAmount.HasValue &&
+            if (authoritativeVndTotalAmount.HasValue)
+            {
+                effectiveTotalToken = BuildFallbackMoneyToken(
+                    authoritativeVndTotalAmount.Value,
+                    resolvedCurrencyCode,
+                    resolvedRawCurrency);
+            }
+            else if (fallbackTotalAmount.HasValue &&
                 ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) || structuredTotalWasOverridden))
             {
                 effectiveTotalToken = BuildFallbackMoneyToken(fallbackTotalAmount.Value, resolvedCurrencyCode, resolvedRawCurrency);
@@ -276,6 +296,7 @@ namespace IND_CRM_API.Services
                 CurrencyCode = resolvedCurrencyCode,
                 RawCurrency = resolvedRawCurrency,
                 TotalAmount = fallbackTotalAmount,
+                HasAuthoritativeVndTotal = authoritativeVndTotalAmount.HasValue,
                 ItemCount = items.Count,
                 Warnings = new List<string>(),
                 CurrencyHints = currencyHints
@@ -497,6 +518,43 @@ namespace IND_CRM_API.Services
                 return parsed;
 
             return null;
+        }
+
+        //MMS - Normalizes only unambiguous grouped VND integers from the first document Total content - 2026.08.31
+        private static decimal? TryExtractUnambiguousVndGroupedTotal(string totalContent)
+        {
+            if (string.IsNullOrWhiteSpace(totalContent) || totalContent.IndexOf('$') >= 0)
+                return null;
+
+            var normalizedCurrencies = CurrencyCodeHelper.ExtractHints(totalContent)
+                .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (normalizedCurrencies.Count != 1 ||
+                !string.Equals(normalizedCurrencies[0], "VND", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var groupedAmounts = Regex.Matches(
+                totalContent,
+                @"(?<![\d.,+\-])(?<amount>\d{1,3}(?<separator>[.,])\d{3}(?:\k<separator>\d{3})*)(?![\d.,+\-])",
+                RegexOptions.CultureInvariant);
+            if (groupedAmounts.Count != 1)
+                return null;
+
+            var groupedAmount = groupedAmounts[0];
+            var amountText = groupedAmount.Groups["amount"].Value;
+            var separator = groupedAmount.Groups["separator"].Value;
+            var remainingContent = totalContent.Remove(groupedAmount.Index, groupedAmount.Length);
+            if (remainingContent.Any(ch => char.IsDigit(ch) || "+-()".IndexOf(ch) >= 0))
+                return null;
+
+            var normalizedAmount = amountText.Replace(separator, string.Empty);
+            return decimal.TryParse(normalizedAmount, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0m
+                ? parsed
+                : (decimal?)null;
         }
 
         // Returns the best payable, plain-total, or generic amount candidate from OCR text.
