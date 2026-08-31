@@ -129,7 +129,9 @@ function New-AzureTotalAnalysis {
         [Parameter(Mandatory = $true)]
         [decimal]$StructuredAmount,
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$StructuredCurrency,
+        [string]$StructuredCurrencySymbol,
         [Parameter(Mandatory = $true)]
         [string]$ReceiptContent,
         [bool]$LeadingNullDocument = $false
@@ -140,15 +142,22 @@ function New-AzureTotalAnalysis {
         throw "TryBuildAnalysisResult was not found."
     }
 
+    $valueCurrency = @{
+        amount = $StructuredAmount
+    }
+    if (-not [string]::IsNullOrWhiteSpace($StructuredCurrency)) {
+        $valueCurrency.currencyCode = $StructuredCurrency
+    }
+    if (-not [string]::IsNullOrWhiteSpace($StructuredCurrencySymbol)) {
+        $valueCurrency.currencySymbol = $StructuredCurrencySymbol
+    }
+
     $totalDocument = @{
         docType = "receipt.generic"
         fields = @{
             Total = @{
                 content = $TotalContent
-                valueCurrency = @{
-                    amount = $StructuredAmount
-                    currencyCode = $StructuredCurrency
-                }
+                valueCurrency = $valueCurrency
             }
         }
     }
@@ -208,6 +217,37 @@ try {
     Assert-Equal -Actual ([decimal]$vndCodeAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "The VND code in Total.content must support comma-grouped integers."
     Assert-Equal -Actual $vndCodeAnalysis.CurrencyCode -Expected "VND" -Message "The VND code in Total.content must be authoritative over structured currency metadata."
 
+    $splitVndAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "82.000" `
+        -StructuredAmount 17 `
+        -StructuredCurrency "VND" `
+        -ReceiptContent "TOTAL 82.000"
+    Assert-Equal -Actual ([decimal]$splitVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "VND metadata on the Total field must qualify its grouped Total.content integer."
+    Assert-Equal -Actual $splitVndAnalysis.CurrencyCode -Expected "VND" -Message "VND metadata on the Total field must remain explicit currency evidence."
+
+    $splitVndSymbolAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "82.000" `
+        -StructuredAmount 91 `
+        -StructuredCurrency "" `
+        -StructuredCurrencySymbol $vndSymbol `
+        -ReceiptContent "TOTAL 82.000"
+    Assert-Equal -Actual ([decimal]$splitVndSymbolAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "The VND symbol metadata on the Total field must qualify its grouped Total.content integer."
+    Assert-Equal -Actual $splitVndSymbolAnalysis.RawCurrency -Expected $vndSymbol -Message "The Total field VND symbol must remain the raw currency evidence."
+
+    $conflictingTotalMetadataAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "82.000" `
+        -StructuredAmount 82 `
+        -StructuredCurrency "VND" `
+        -StructuredCurrencySymbol '$' `
+        -ReceiptContent "MERCHANT"
+    Assert-Equal -Actual ([decimal]$conflictingTotalMetadataAnalysis.TotalAmount) -Expected ([decimal]82) -Message "Conflicting Total currency metadata must not activate VND grouped-integer normalization."
+
     foreach ($concatenatedVndContent in @("82.000VND", "VND82.000")) {
         $concatenatedVndAnalysis = New-AzureTotalAnalysis `
             -AnalyzerType $analyzerType `
@@ -241,7 +281,10 @@ try {
     foreach ($unchangedCase in @(
         @{ Name = "EUR"; TotalContent = "82.000 EUR"; Currency = "EUR"; ReceiptContent = "MERCHANT" },
         @{ Name = "USD"; TotalContent = "82,000 USD"; Currency = "USD"; ReceiptContent = "MERCHANT" },
+        @{ Name = "EUR content with VND metadata"; TotalContent = "82.000 EUR"; Currency = "VND"; ReceiptContent = "MERCHANT" },
         @{ Name = "currencyless"; TotalContent = "82.000"; Currency = "EUR"; ReceiptContent = "TOTAL 82.000 VND" },
+        @{ Name = "global VND only"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 VND" },
+        @{ Name = "no currency evidence"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "MERCHANT" },
         @{ Name = "mixed separators"; TotalContent = "82.000,000 VND"; Currency = "VND"; ReceiptContent = "MERCHANT" },
         @{ Name = "competing currencies"; TotalContent = "82.000 VND EUR"; Currency = "EUR"; ReceiptContent = "MERCHANT" },
         @{ Name = "extra numeric evidence"; TotalContent = "82.000 VND 2"; Currency = "VND"; ReceiptContent = "MERCHANT" },

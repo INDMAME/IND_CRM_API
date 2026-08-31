@@ -151,7 +151,7 @@ namespace IND_CRM_API.Services
                                                     "empty-result");
 
                                             _logger.Log(
-                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
+                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} authoritativeVnd={(result.HasAuthoritativeVndTotal ? 1 : 0)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
                                                 AxaptaSessionManager.LogLevel.Info);
                                             return result;
                                         }
@@ -214,7 +214,13 @@ namespace IND_CRM_API.Services
             var items = BuildCompactItems(fields?["Items"]);
             var totalField = fields?["Total"] as JObject;
             var totalContent = totalField?["content"]?.ToString();
-            var authoritativeVndTotalAmount = TryExtractUnambiguousVndGroupedTotal(totalContent);
+            var totalValueCurrency = totalField?["valueCurrency"] as JObject;
+            var totalCurrencyCode = totalValueCurrency?["currencyCode"]?.ToString();
+            var totalCurrencySymbol = totalValueCurrency?["currencySymbol"]?.ToString();
+            var authoritativeVndTotalAmount = TryExtractUnambiguousVndGroupedTotal(
+                totalContent,
+                totalCurrencyCode,
+                totalCurrencySymbol);
             var totalToken = ProjectMoneyField(totalField);
             var subtotalToken = ProjectMoneyField(fields?["Subtotal"] as JObject);
             var taxToken = ProjectMoneyField(fields?["TotalTax"] as JObject);
@@ -231,7 +237,7 @@ namespace IND_CRM_API.Services
                 ? "VND"
                 : ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = authoritativeVndTotalAmount.HasValue
-                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent)) ?? "VND"
+                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent, totalCurrencyCode, totalCurrencySymbol)) ?? "VND"
                 : ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
             if (authoritativeVndTotalAmount.HasValue)
                 currencyHints = new List<string> { resolvedRawCurrency };
@@ -408,6 +414,7 @@ namespace IND_CRM_API.Services
             {
                 var rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(
                     valueCurrency["currencyCode"]?.ToString(),
+                    valueCurrency["currencySymbol"]?.ToString(),
                     field["content"]?.ToString()));
                 return new JObject
                 {
@@ -520,8 +527,10 @@ namespace IND_CRM_API.Services
             return null;
         }
 
-        //MMS - Normalizes only unambiguous grouped VND integers from the first document Total content - 2026.08.31
-        private static decimal? TryExtractUnambiguousVndGroupedTotal(string totalContent)
+        //MMS - Normalizes grouped VND integers using only content and currency metadata from the first Total field - 2026.08.31
+        private static decimal? TryExtractUnambiguousVndGroupedTotal(
+            string totalContent,
+            params string[] totalCurrencyMetadata)
         {
             if (string.IsNullOrWhiteSpace(totalContent) || totalContent.IndexOf('$') >= 0)
                 return null;
@@ -531,6 +540,18 @@ namespace IND_CRM_API.Services
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            if (normalizedCurrencies.Count == 0 && totalCurrencyMetadata != null)
+            {
+                if (totalCurrencyMetadata.Any(value => !string.IsNullOrWhiteSpace(value) && value.IndexOf('$') >= 0))
+                    return null;
+
+                normalizedCurrencies = totalCurrencyMetadata
+                    .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
             if (normalizedCurrencies.Count != 1 ||
                 !string.Equals(normalizedCurrencies[0], "VND", StringComparison.OrdinalIgnoreCase))
             {
