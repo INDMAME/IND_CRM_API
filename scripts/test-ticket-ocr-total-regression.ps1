@@ -238,6 +238,37 @@ try {
     Assert-Equal -Actual ([decimal]$splitVndSymbolAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "The VND symbol metadata on the Total field must qualify its grouped Total.content integer."
     Assert-Equal -Actual $splitVndSymbolAnalysis.RawCurrency -Expected $vndSymbol -Message "The Total field VND symbol must remain the raw currency evidence."
 
+    $globalVndSymbolAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "82.000" `
+        -StructuredAmount 82 `
+        -StructuredCurrency "" `
+        -ReceiptContent "TOTAL PAID`n82.000`n$vndSymbol`n`$ CASH"
+    Assert-Equal -Actual ([decimal]$globalVndSymbolAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "A unique receipt-level VND symbol must qualify the grouped first-document Total.content integer."
+    Assert-Equal -Actual $globalVndSymbolAnalysis.CurrencyCode -Expected "VND" -Message "A unique receipt-level VND symbol must resolve explicitly to ISO-4217 VND."
+    Assert-Equal -Actual $globalVndSymbolAnalysis.RawCurrency -Expected $vndSymbol -Message "The qualifying receipt-level VND symbol must remain the raw currency evidence."
+
+    $globalVndCodeAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "82.000" `
+        -StructuredAmount 82 `
+        -StructuredCurrency "" `
+        -ReceiptContent "TOTAL PAID 91.000 VND"
+    Assert-Equal -Actual ([decimal]$globalVndCodeAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "A unique receipt-level VND code may qualify the first-document Total.content integer but must not supply its number."
+
+    $extractVndGroupedTotalMethod = $analyzerType.GetMethod("TryExtractUnambiguousVndGroupedTotal", $flags)
+    if ($null -eq $extractVndGroupedTotalMethod) {
+        throw "TryExtractUnambiguousVndGroupedTotal was not found."
+    }
+    foreach ($ambiguousDollarEvidence in @('TOTAL $82.000 VND', 'TOTAL 82.000 VND $', 'PAYMENT $ CARD VND')) {
+        $ambiguousDollarResult = $extractVndGroupedTotalMethod.Invoke(
+            $null,
+            [object[]]@("82.000", $ambiguousDollarEvidence, $null))
+        Assert-Equal -Actual ($null -eq $ambiguousDollarResult) -Expected $true -Message "A global dollar sign outside the Cash payment marker must block VND grouped-integer normalization."
+    }
+
     $conflictingTotalMetadataAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
         -Flags $flags `
@@ -282,9 +313,18 @@ try {
         @{ Name = "EUR"; TotalContent = "82.000 EUR"; Currency = "EUR"; ReceiptContent = "MERCHANT" },
         @{ Name = "USD"; TotalContent = "82,000 USD"; Currency = "USD"; ReceiptContent = "MERCHANT" },
         @{ Name = "EUR content with VND metadata"; TotalContent = "82.000 EUR"; Currency = "VND"; ReceiptContent = "MERCHANT" },
-        @{ Name = "currencyless"; TotalContent = "82.000"; Currency = "EUR"; ReceiptContent = "TOTAL 82.000 VND" },
-        @{ Name = "global VND only"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 VND" },
+        @{ Name = "Total EUR metadata overrides global VND"; TotalContent = "82.000"; Currency = "EUR"; ReceiptContent = "TOTAL 82.000 VND" },
+        @{ Name = "global EUR only"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 EUR" },
+        @{ Name = "global USD only"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 USD" },
+        @{ Name = "global VND with EUR"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 VND EUR" },
+        @{ Name = "global VND with USD"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "TOTAL 82.000 VND USD" },
+        @{ Name = "global VND with explicit US dollar symbol"; TotalContent = "82.000"; Currency = ""; ReceiptContent = 'TOTAL 82.000 VND US$' },
+        @{ Name = "global VND with bare dollar"; TotalContent = "82.000"; Currency = ""; ReceiptContent = 'CURRENCY VND $' },
+        @{ Name = "global VND with dollar card marker"; TotalContent = "82.000"; Currency = ""; ReceiptContent = 'PAYMENT VND $ CARD' },
+        @{ Name = "global VND with unknown Total metadata"; TotalContent = "82.000"; Currency = "unknown"; ReceiptContent = "TOTAL 82.000 VND" },
+        @{ Name = "ambiguous Total metadata"; TotalContent = "82.000"; Currency = "VND EUR"; ReceiptContent = "MERCHANT" },
         @{ Name = "no currency evidence"; TotalContent = "82.000"; Currency = ""; ReceiptContent = "MERCHANT" },
+        @{ Name = "global VND with ambiguous amount"; TotalContent = "82.000,00"; Currency = ""; ReceiptContent = "CURRENCY VND" },
         @{ Name = "mixed separators"; TotalContent = "82.000,000 VND"; Currency = "VND"; ReceiptContent = "MERCHANT" },
         @{ Name = "competing currencies"; TotalContent = "82.000 VND EUR"; Currency = "EUR"; ReceiptContent = "MERCHANT" },
         @{ Name = "extra numeric evidence"; TotalContent = "82.000 VND 2"; Currency = "VND"; ReceiptContent = "MERCHANT" },
@@ -306,11 +346,11 @@ try {
     $alreadyCorrectVndAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
         -Flags $flags `
-        -TotalContent "82.000 VND" `
+        -TotalContent "82.000" `
         -StructuredAmount 82000 `
-        -StructuredCurrency "VND" `
+        -StructuredCurrency "" `
         -ReceiptContent "TOTAL 82.000 VND"
-    Assert-Equal -Actual ([decimal]$alreadyCorrectVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "An already-correct VND amount must not be multiplied again."
+    Assert-Equal -Actual ([decimal]$alreadyCorrectVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "An already-correct amount qualified by unique receipt-level VND evidence must not be multiplied again."
 
     $ungroupedCorrectVndAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -389,14 +429,14 @@ try {
     }
 
     $vndDraft = New-DraftFromJson -NormalizerType $normalizerType -Flags $flags -Price 82 -ModelTotal 82 -CurrencyCode "VND"
-    $reconcileMethod.Invoke($null, [object[]]@($vndDraft, $vndSymbolAnalysis)) | Out-Null
+    $reconcileMethod.Invoke($null, [object[]]@($vndDraft, $globalVndSymbolAnalysis)) | Out-Null
     Assert-Equal -Actual ([decimal]$vndDraft.totalAmount) -Expected ([decimal]82000) -Message "The corrected VND OCR total must replace the model total."
     Assert-Equal -Actual $vndDraft.lines.Count -Expected 2 -Message "VND reconciliation must add one deterministic adjustment line."
     Assert-Equal -Actual ([decimal]$vndDraft.lines[0].price) -Expected ([decimal]82) -Message "VND reconciliation must not multiply every source line."
     Assert-Equal -Actual (Get-DraftLinesTotal -Draft $vndDraft) -Expected ([decimal]82000) -Message "VND draft lines must reconcile to the corrected OCR total."
 
     $vndLineCountAfterFirstReconciliation = $vndDraft.lines.Count
-    $reconcileMethod.Invoke($null, [object[]]@($vndDraft, $vndSymbolAnalysis)) | Out-Null
+    $reconcileMethod.Invoke($null, [object[]]@($vndDraft, $globalVndSymbolAnalysis)) | Out-Null
     Assert-Equal -Actual $vndDraft.lines.Count -Expected $vndLineCountAfterFirstReconciliation -Message "Repeating VND reconciliation must be idempotent."
     Assert-Equal -Actual ([decimal]$vndDraft.lines[0].price) -Expected ([decimal]82) -Message "Idempotent reconciliation must preserve the original line amount."
     Assert-Equal -Actual (Get-DraftLinesTotal -Draft $vndDraft) -Expected ([decimal]82000) -Message "Idempotent VND reconciliation must preserve the corrected total."
@@ -413,7 +453,7 @@ try {
     Assert-Equal -Actual $vndUpdateRequest.lines.Count -Expected 2 -Message "The update request must preserve the deterministic VND reconciliation."
 
     $vndToleranceDraft = New-DraftFromJson -NormalizerType $normalizerType -Flags $flags -Price 81999.99 -ModelTotal 81999.99 -CurrencyCode "VND"
-    $reconcileMethod.Invoke($null, [object[]]@($vndToleranceDraft, $vndSymbolAnalysis)) | Out-Null
+    $reconcileMethod.Invoke($null, [object[]]@($vndToleranceDraft, $globalVndSymbolAnalysis)) | Out-Null
     Assert-Equal -Actual (Get-DraftLinesTotal -Draft $vndToleranceDraft) -Expected ([decimal]82000) -Message "Authoritative VND reconciliation must not retain the legacy two-cent tolerance."
     $vndToleranceArguments = [object[]]@($vndToleranceDraft, "", "ticket.jpg", "jpg", "Ticket regression", "VND", "", $null, $false)
     $vndToleranceRequest = $buildUpdateRequestMethod.Invoke($null, $vndToleranceArguments)

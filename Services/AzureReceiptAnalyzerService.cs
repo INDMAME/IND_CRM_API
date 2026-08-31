@@ -214,11 +214,13 @@ namespace IND_CRM_API.Services
             var items = BuildCompactItems(fields?["Items"]);
             var totalField = fields?["Total"] as JObject;
             var totalContent = totalField?["content"]?.ToString();
+            var receiptContent = analyzeResult["content"]?.ToString();
             var totalValueCurrency = totalField?["valueCurrency"] as JObject;
             var totalCurrencyCode = totalValueCurrency?["currencyCode"]?.ToString();
             var totalCurrencySymbol = totalValueCurrency?["currencySymbol"]?.ToString();
             var authoritativeVndTotalAmount = TryExtractUnambiguousVndGroupedTotal(
                 totalContent,
+                receiptContent,
                 totalCurrencyCode,
                 totalCurrencySymbol);
             var totalToken = ProjectMoneyField(totalField);
@@ -229,7 +231,6 @@ namespace IND_CRM_API.Services
             var merchantName = ReadFieldScalar(fields?["MerchantName"] as JObject);
             var merchantAddress = ReadFieldScalar(fields?["MerchantAddress"] as JObject);
             var merchantPhone = ReadFieldScalar(fields?["MerchantPhoneNumber"] as JObject);
-            var receiptContent = analyzeResult["content"]?.ToString();
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
@@ -237,7 +238,7 @@ namespace IND_CRM_API.Services
                 ? "VND"
                 : ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
             var resolvedRawCurrency = authoritativeVndTotalAmount.HasValue
-                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent, totalCurrencyCode, totalCurrencySymbol)) ?? "VND"
+                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent, totalCurrencyCode, totalCurrencySymbol, receiptContent)) ?? "VND"
                 : ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
             if (authoritativeVndTotalAmount.HasValue)
                 currencyHints = new List<string> { resolvedRawCurrency };
@@ -527,9 +528,10 @@ namespace IND_CRM_API.Services
             return null;
         }
 
-        //MMS - Normalizes grouped VND integers using only content and currency metadata from the first Total field - 2026.08.31
+        //MMS - Uses receipt-wide VND evidence only to qualify the grouped amount from the first Total field - 2026.08.31
         private static decimal? TryExtractUnambiguousVndGroupedTotal(
             string totalContent,
+            string receiptContent,
             params string[] totalCurrencyMetadata)
         {
             if (string.IsNullOrWhiteSpace(totalContent) || totalContent.IndexOf('$') >= 0)
@@ -540,12 +542,30 @@ namespace IND_CRM_API.Services
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (normalizedCurrencies.Count == 0 && totalCurrencyMetadata != null)
+            var totalMetadataValues = (totalCurrencyMetadata ?? new string[0])
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+            if (normalizedCurrencies.Count == 0 && totalMetadataValues.Count > 0)
             {
-                if (totalCurrencyMetadata.Any(value => !string.IsNullOrWhiteSpace(value) && value.IndexOf('$') >= 0))
+                if (totalMetadataValues.Any(value => value.IndexOf('$') >= 0))
                     return null;
 
-                normalizedCurrencies = totalCurrencyMetadata
+                normalizedCurrencies = totalMetadataValues
+                    .SelectMany(CurrencyCodeHelper.ExtractHints)
+                    .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (normalizedCurrencies.Count == 0)
+                    return null;
+            }
+
+            if (normalizedCurrencies.Count == 0)
+            {
+                if (HasAmbiguousReceiptDollarEvidence(receiptContent))
+                    return null;
+
+                normalizedCurrencies = CurrencyCodeHelper.ExtractHints(receiptContent)
                     .Select(CurrencyCodeHelper.NormalizeToIso4217)
                     .Where(value => !string.IsNullOrWhiteSpace(value))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -576,6 +596,20 @@ namespace IND_CRM_API.Services
             return decimal.TryParse(normalizedAmount, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0m
                 ? parsed
                 : (decimal?)null;
+        }
+
+        //MMS - Treats the receipt's dollar Cash icon as non-currency and rejects every other global dollar sign - 2026.08.31
+        private static bool HasAmbiguousReceiptDollarEvidence(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent) || receiptContent.IndexOf('$') < 0)
+                return false;
+
+            var withoutCashPaymentMarkers = Regex.Replace(
+                receiptContent,
+                @"(?<![\p{L}\p{N}])\$\s*CASH\b",
+                string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return withoutCashPaymentMarkers.IndexOf('$') >= 0;
         }
 
         // Returns the best payable, plain-total, or generic amount candidate from OCR text.
