@@ -55,6 +55,7 @@ namespace IND_CRM_API.Services
         private const string QuickCreateReasoningEffortSettingKey = "OpenAI:ExpenseTicketQuickCreateReasoningEffort";
 
         private const int DefaultGastoTypeValue = 8;
+        private const string GroupedVndAdjustmentDescription = "AJUSTE AL TOTAL OCR";
         private static readonly string CrmGastoTypePromptCatalog = BuildCrmGastoTypePromptCatalog();
         private static readonly int TimeoutSeconds = ReadTimeoutFromConfig();
         private static readonly int MaxImageBytes = ReadMaxImageBytesFromConfig();
@@ -959,11 +960,8 @@ namespace IND_CRM_API.Services
         {
             return receiptAnalysis != null &&
                    profile == ExpenseTicketDraftProfile.QuickCreate &&
-                   receiptAnalysis.ItemCount == 0 &&
                    receiptAnalysis.CorrectedGroupedVndTotalAmount.HasValue &&
-                   receiptAnalysis.CorrectedGroupedVndTotalAmount.Value > 0m &&
-                   receiptAnalysis.CorrectedGroupedVndSourceAmount.HasValue &&
-                   receiptAnalysis.CorrectedGroupedVndSourceAmount.Value > 0m;
+                   receiptAnalysis.CorrectedGroupedVndTotalAmount.Value > 0m;
         }
 
         // Projects the corrected total into the OpenAI input only for the guarded quick-create flow.
@@ -1353,11 +1351,14 @@ namespace IND_CRM_API.Services
             AzureReceiptAnalysisResult receiptAnalysis,
             bool allowGroupedVndCorrection = false)
         {
-            var totalAmount = receiptAnalysis?.TotalAmount;
-            if (draft == null || !totalAmount.HasValue || totalAmount.Value <= 0m)
+            if (draft == null)
                 return;
 
-            if (allowGroupedVndCorrection && TryApplySingleLineGroupedVndTotal(draft, receiptAnalysis))
+            if (allowGroupedVndCorrection && TryReconcileGroupedVndTotal(draft, receiptAnalysis))
+                return;
+
+            var totalAmount = receiptAnalysis?.TotalAmount;
+            if (!totalAmount.HasValue || totalAmount.Value <= 0m)
                 return;
 
             if (draft.lines != null && draft.lines.Any(line => line != null && (line.qty ?? 0m) > 0m && (line.price ?? 0m) > 0m))
@@ -1391,55 +1392,146 @@ namespace IND_CRM_API.Services
                 "No se detectaron lineas de detalle; se genero una linea unica con el total del ticket.");
         }
 
-        // Applies an authoritative grouped VND total only to the exact quick-create failure shape.
-        private static bool TryApplySingleLineGroupedVndTotal(
+        // Reconciles authoritative VND totals without scaling the original draft lines.
+        private static bool TryReconcileGroupedVndTotal(
             ExpenseSheetDraftResponse draft,
             AzureReceiptAnalysisResult receiptAnalysis)
         {
             var correctedAmount = receiptAnalysis?.CorrectedGroupedVndTotalAmount;
-            var sourceAmount = receiptAnalysis?.CorrectedGroupedVndSourceAmount;
             if (draft == null ||
                 receiptAnalysis == null ||
-                receiptAnalysis.ItemCount != 0 ||
                 !correctedAmount.HasValue ||
-                correctedAmount.Value <= 0m ||
-                !sourceAmount.HasValue ||
-                sourceAmount.Value <= 0m ||
-                draft.lines == null ||
-                draft.lines.Count != 1)
+                correctedAmount.Value <= 0m)
             {
                 return false;
             }
-
-            var line = draft.lines[0];
-            if (line == null ||
-                !line.qty.HasValue ||
-                line.qty.Value != 1m ||
-                !line.price.HasValue ||
-                line.price.Value <= 0m)
-            {
-                return false;
-            }
-
-            var lineAmount = line.price.Value;
-            if (lineAmount != sourceAmount.Value && lineAmount != correctedAmount.Value)
-                return false;
 
             draft.currencyCode = "VND";
             draft.RawCurrency = string.IsNullOrWhiteSpace(receiptAnalysis.RawCurrency)
                 ? "VND"
                 : receiptAnalysis.RawCurrency;
-            line.qty = 1m;
-            line.price = correctedAmount.Value;
 
-            if (lineAmount != correctedAmount.Value)
+            var sourceLines = draft.lines ?? new List<CreateExpenseSheetLineRequest>();
+            var originalLines = sourceLines
+                .Where(line => IsValidGroupedVndLine(line) && !IsGroupedVndAdjustmentLine(line))
+                .ToList();
+            var fallbackTypeValue = draft.gastoType.HasValue && IsValidAxEnumValue(draft.gastoType.Value)
+                ? draft.gastoType.Value
+                : DefaultGastoTypeValue;
+            var fallbackTransDate = ResolveGroupedVndLineTransDate(draft);
+
+            if (originalLines.Count == 0)
             {
-                draft.Warnings = EnsureWarnings(
+                draft.lines = new List<CreateExpenseSheetLineRequest>
+                {
+                    BuildGroupedVndTotalLine(
+                        ResolveSingleLineFallbackDescription(draft, fallbackTypeValue),
+                        correctedAmount.Value,
+                        fallbackTypeValue,
+                        fallbackTransDate,
+                        draft.projId)
+                };
+                draft.Warnings = EnsureUniqueWarning(
                     draft.Warnings,
-                    "Se corrigio un total VND con separadores de miles usando el campo Total del OCR.");
+                    "No se detectaron lineas validas; se genero una linea unica con el total VND del OCR.");
+                return true;
+            }
+
+            draft.lines = originalLines;
+            var originalTotal = originalLines.Sum(CalculateGroupedVndLineTotal);
+            var difference = correctedAmount.Value - originalTotal;
+            if (difference != 0m)
+            {
+                draft.lines.Add(BuildGroupedVndTotalLine(
+                    GroupedVndAdjustmentDescription,
+                    difference,
+                    fallbackTypeValue,
+                    fallbackTransDate,
+                    draft.projId));
+                draft.Warnings = EnsureUniqueWarning(
+                    draft.Warnings,
+                    "La suma de lineas no coincidia con el total VND del OCR; se agrego una linea de ajuste.");
             }
 
             return true;
+        }
+
+        // Keeps only lines whose signed total can be persisted by quick-create.
+        private static bool IsValidGroupedVndLine(CreateExpenseSheetLineRequest line)
+        {
+            if (line == null || !line.price.HasValue || line.price.Value == 0m)
+                return false;
+
+            var qty = line.qty ?? 0m;
+            if (qty < 0m)
+                return false;
+
+            return qty > 0m || (qty == 0m && line.price.Value < 0m);
+        }
+
+        // Identifies the server-owned adjustment so repeated reconciliation replaces it instead of duplicating it.
+        private static bool IsGroupedVndAdjustmentLine(CreateExpenseSheetLineRequest line)
+        {
+            return line != null && string.Equals(
+                (line.description ?? string.Empty).Trim(),
+                GroupedVndAdjustmentDescription,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Calculates line totals with the same signed-discount semantics as quick-create.
+        private static decimal CalculateGroupedVndLineTotal(CreateExpenseSheetLineRequest line)
+        {
+            var qty = line?.qty ?? 0m;
+            var price = line?.price ?? 0m;
+            return qty == 0m && price < 0m ? price : qty * price;
+        }
+
+        // Builds either a positive total line or a zero-quantity negative adjustment.
+        private static CreateExpenseSheetLineRequest BuildGroupedVndTotalLine(
+            string description,
+            decimal amount,
+            int typeValue,
+            string transDate,
+            string projId)
+        {
+            return new CreateExpenseSheetLineRequest
+            {
+                transDate = transDate,
+                typeValue = typeValue,
+                description = description,
+                internacional = false,
+                fileId = null,
+                qty = amount < 0m ? 0m : 1m,
+                price = amount,
+                projId = projId
+            };
+        }
+
+        // Reuses a detected line date and falls back to the normalized draft date.
+        private static string ResolveGroupedVndLineTransDate(ExpenseSheetDraftResponse draft)
+        {
+            var lineTransDate = draft?.lines?
+                .FirstOrDefault(line => line != null && !string.IsNullOrWhiteSpace(line.transDate))?
+                .transDate;
+            return string.IsNullOrWhiteSpace(lineTransDate) ? draft?.transDate : lineTransDate;
+        }
+
+        // Keeps repeated VND reconciliation idempotent for warnings as well as lines.
+        private static List<string> EnsureUniqueWarning(List<string> existing, string warning)
+        {
+            var normalizedWarning = (warning ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedWarning))
+                return existing;
+
+            if (existing != null && existing.Any(value => string.Equals(
+                (value ?? string.Empty).Trim(),
+                normalizedWarning,
+                StringComparison.OrdinalIgnoreCase)))
+            {
+                return existing;
+            }
+
+            return EnsureWarnings(existing, normalizedWarning);
         }
 
         private static string TryExtractOpenAiPayloadJson(string responseBody)

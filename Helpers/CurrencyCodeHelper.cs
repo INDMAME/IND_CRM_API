@@ -13,6 +13,9 @@ namespace IND_CRM_API.Helpers
     internal static class CurrencyCodeHelper
     {
         private static readonly Regex IsoTokenRegex = new Regex(@"\b[A-Z]{3}\b", RegexOptions.Compiled);
+        private static readonly Regex VndTokenRegex = new Regex(
+            @"(?<![A-Za-z])VND(?![A-Za-z])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static readonly Dictionary<string, string> TextMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -109,6 +112,9 @@ namespace IND_CRM_API.Helpers
                     return token;
             }
 
+            if (VndTokenRegex.IsMatch(trimmed))
+                return "VND";
+
             var folded = FoldToAsciiLetters(trimmed);
             foreach (var mapping in TextMappings.OrderByDescending(m => m.Key.Length))
             {
@@ -142,6 +148,9 @@ namespace IND_CRM_API.Helpers
                 if (IsoCurrencyCodes.Contains(match.Value))
                     AddDistinct(results, match.Value);
             }
+
+            if (VndTokenRegex.IsMatch(trimmed))
+                AddDistinct(results, "VND");
 
             var folded = FoldToAsciiLetters(trimmed);
             foreach (var mapping in TextMappings.OrderByDescending(m => m.Key.Length))

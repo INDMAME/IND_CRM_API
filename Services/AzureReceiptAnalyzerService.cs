@@ -112,7 +112,7 @@ namespace IND_CRM_API.Services
                                 if (directResult != null)
                                 {
                                     _logger.Log(
-                                        $"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount} total={ToLogDecimal(directResult.TotalAmount)} currencyCode={ToLogValue(directResult.CurrencyCode)} groupedVndTotal={ToLogDecimal(directResult.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(directResult.CorrectedGroupedVndSourceAmount)}",
+                                        $"[AZDOCS] AnalyzeReceipt completed-direct ms={sw.ElapsedMilliseconds} items={directResult.ItemCount} total={ToLogDecimal(directResult.TotalAmount)} currencyCode={ToLogValue(directResult.CurrencyCode)} authoritativeVnd={(directResult.CorrectedGroupedVndTotalAmount.HasValue ? 1 : 0)} groupedVndTotal={ToLogDecimal(directResult.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(directResult.CorrectedGroupedVndSourceAmount)}",
                                         AxaptaSessionManager.LogLevel.Info);
                                     return directResult;
                                 }
@@ -153,7 +153,7 @@ namespace IND_CRM_API.Services
                                                     "empty-result");
 
                                             _logger.Log(
-                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} groupedVndTotal={ToLogDecimal(result.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(result.CorrectedGroupedVndSourceAmount)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
+                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} authoritativeVnd={(result.CorrectedGroupedVndTotalAmount.HasValue ? 1 : 0)} groupedVndTotal={ToLogDecimal(result.CorrectedGroupedVndTotalAmount)} groupedVndSource={ToLogDecimal(result.CorrectedGroupedVndSourceAmount)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
                                                 AxaptaSessionManager.LogLevel.Info);
                                             return result;
                                         }
@@ -209,7 +209,9 @@ namespace IND_CRM_API.Services
                 return null;
 
             var documents = analyzeResult["documents"] as JArray;
-            var firstDocument = documents?.OfType<JObject>().FirstOrDefault();
+            var firstDocument = documents != null && documents.Count > 0
+                ? documents[0] as JObject
+                : null;
             var fields = firstDocument?["fields"] as JObject;
             var items = BuildCompactItems(fields?["Items"]);
             var totalToken = ProjectMoneyField(fields?["Total"] as JObject);
@@ -417,6 +419,7 @@ namespace IND_CRM_API.Services
             {
                 var rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(
                     valueCurrency["currencyCode"]?.ToString(),
+                    valueCurrency["currencySymbol"]?.ToString(),
                     field["content"]?.ToString()));
                 return new JObject
                 {
@@ -529,7 +532,7 @@ namespace IND_CRM_API.Services
             return null;
         }
 
-        // Returns a corrected VND total only when the first semantic Total field proves the grouping error.
+        // Reads the grouped amount only from the first semantic Total field and uses other OCR text only as currency evidence.
         private static decimal? TryReadCorrectedGroupedVndTotal(
             JObject analyzeResult,
             out decimal? structuredSourceAmount,
@@ -553,62 +556,56 @@ namespace IND_CRM_API.Services
             if (string.IsNullOrWhiteSpace(totalContent))
                 return null;
 
-            var structuredAmountToken = totalField["valueCurrency"]?["amount"]
-                ?? totalField["valueNumber"]
-                ?? totalField["valueInteger"];
-            if (structuredAmountToken == null ||
-                (structuredAmountToken.Type != JTokenType.Float && structuredAmountToken.Type != JTokenType.Integer))
-            {
-                return null;
-            }
-
-            var structuredAmount = structuredAmountToken.Value<decimal>();
-            if (structuredAmount <= 0m)
-                return null;
-
-            var containsDongSymbol = totalContent.IndexOf('\u20AB') >= 0;
-            var containsVndToken = Regex.IsMatch(
-                totalContent,
-                @"\bVND\b",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            var structuredCurrencyRaw = totalField["valueCurrency"]?["currencyCode"]?.ToString()?.Trim();
-            var structuredCurrencyCode = string.Equals(structuredCurrencyRaw, "VND", StringComparison.OrdinalIgnoreCase)
-                ? "VND"
+            var structuredAmount = ReadFieldNumber(totalField);
+            structuredSourceAmount = structuredAmount.HasValue && structuredAmount.Value > 0m
+                ? structuredAmount
                 : null;
-            if (!string.IsNullOrWhiteSpace(structuredCurrencyRaw) &&
-                string.IsNullOrWhiteSpace(structuredCurrencyCode))
+
+            var receiptContent = analyzeResult?["content"]?.ToString();
+            if (totalContent.IndexOf('$') >= 0 ||
+                HasAmbiguousReceiptDollarEvidence(receiptContent))
+                return null;
+
+            var contentCurrencyCodes = ExtractNormalizedCurrencyCodes(totalContent);
+            var totalValueCurrency = totalField["valueCurrency"] as JObject;
+            var totalCurrencyMetadata = new[]
             {
-                var normalizedRejectedCurrency = CurrencyCodeHelper.NormalizeToIso4217(structuredCurrencyRaw);
-                if ((containsDongSymbol || containsVndToken) &&
-                    !string.IsNullOrWhiteSpace(normalizedRejectedCurrency) &&
-                    !string.Equals(normalizedRejectedCurrency, "VND", StringComparison.OrdinalIgnoreCase))
+                totalValueCurrency?["currencyCode"]?.ToString(),
+                totalValueCurrency?["currencySymbol"]?.ToString()
+            }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .ToList();
+
+            if (contentCurrencyCodes.Count > 0)
+            {
+                if (!IsExclusiveVndCurrency(contentCurrencyCodes))
                 {
-                    rejectedCurrencyCode = normalizedRejectedCurrency;
+                    rejectedCurrencyCode = contentCurrencyCodes.Count == 1
+                        ? contentCurrencyCodes[0]
+                        : null;
+                    return null;
                 }
 
-                return null;
+                rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent));
             }
-
-            var contentCurrencyCodes = CurrencyCodeHelper.ExtractHints(totalContent)
-                .Select(CurrencyCodeHelper.NormalizeToIso4217)
-                .Where(code => !string.IsNullOrWhiteSpace(code))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var conflictingContentCurrencyCode = contentCurrencyCodes
-                .FirstOrDefault(code => !string.Equals(code, "VND", StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrWhiteSpace(conflictingContentCurrencyCode))
+            else if (totalCurrencyMetadata.Count > 0)
             {
-                if (containsDongSymbol || containsVndToken)
-                    rejectedCurrencyCode = conflictingContentCurrencyCode;
+                if (!TryValidateVndTotalMetadata(totalCurrencyMetadata, out rejectedCurrencyCode))
+                    return null;
 
-                return null;
+                rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalCurrencyMetadata.ToArray()));
             }
-
-            if (!string.Equals(structuredCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase) &&
-                !containsDongSymbol &&
-                !containsVndToken)
+            else
             {
-                return null;
+                if (HasUnknownReceiptCurrencySymbol(receiptContent))
+                    return null;
+
+                var receiptCurrencyCodes = ExtractNormalizedCurrencyCodes(receiptContent);
+                if (!IsExclusiveVndCurrency(receiptCurrencyCodes))
+                    return null;
+
+                rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(receiptContent));
             }
 
             var groupedMatch = Regex.Match(
@@ -626,34 +623,125 @@ namespace IND_CRM_API.Services
                 return null;
             }
 
-            var separatorCount = groupedText.Count(ch => ch == '.' || ch == ',');
-            var scaledStructuredAmount = structuredAmount;
-            for (int scale = 0; scale <= separatorCount; scale++)
+            if (structuredSourceAmount.HasValue && structuredSourceAmount.Value == groupedAmount)
+                return null;
+
+            rawCurrency = ReadNonEmpty(rawCurrency) ?? "VND";
+            return groupedAmount;
+        }
+
+        // Normalizes all recognized currency evidence in a single OCR scope.
+        private static List<string> ExtractNormalizedCurrencyCodes(string value)
+        {
+            return CurrencyCodeHelper.ExtractHints(value)
+                .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        // Requires an exact VND-only currency set.
+        private static bool IsExclusiveVndCurrency(ICollection<string> currencyCodes)
+        {
+            return currencyCodes != null &&
+                   currencyCodes.Count == 1 &&
+                   string.Equals(currencyCodes.First(), "VND", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Rejects unknown or conflicting Total metadata instead of falling back to receipt-wide evidence.
+        private static bool TryValidateVndTotalMetadata(
+            IEnumerable<string> metadataValues,
+            out string rejectedCurrencyCode)
+        {
+            rejectedCurrencyCode = null;
+            var values = (metadataValues ?? Enumerable.Empty<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+            if (values.Count == 0)
+                return true;
+
+            var metadataCurrencyCodes = new List<string>();
+            foreach (var value in values)
             {
-                if (scaledStructuredAmount == groupedAmount)
-                {
-                    if (scale == 0)
-                        return null;
+                if (value.IndexOf('$') >= 0)
+                    return false;
 
-                    structuredSourceAmount = structuredAmount;
-                    rawCurrency = containsDongSymbol ? "\u20AB" : "VND";
-                    return groupedAmount;
-                }
+                if (!TryReadStrictCurrencyMetadata(value, out var valueCurrencyCodes))
+                    return false;
 
-                if (scale == separatorCount)
-                    break;
-
-                try
+                foreach (var currencyCode in valueCurrencyCodes)
                 {
-                    scaledStructuredAmount = checked(scaledStructuredAmount * 1000m);
-                }
-                catch (OverflowException)
-                {
-                    return null;
+                    if (!metadataCurrencyCodes.Any(existing => string.Equals(
+                        existing,
+                        currencyCode,
+                        StringComparison.OrdinalIgnoreCase)))
+                    {
+                        metadataCurrencyCodes.Add(currencyCode);
+                    }
                 }
             }
 
-            return null;
+            if (IsExclusiveVndCurrency(metadataCurrencyCodes))
+                return true;
+
+            rejectedCurrencyCode = metadataCurrencyCodes.Count == 1
+                ? metadataCurrencyCodes[0]
+                : null;
+            return false;
+        }
+
+        // Requires the complete metadata value to be one recognized code, symbol, or currency name.
+        private static bool TryReadStrictCurrencyMetadata(
+            string value,
+            out List<string> currencyCodes)
+        {
+            currencyCodes = new List<string>();
+            var trimmed = (value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+                return false;
+
+            var rawHints = CurrencyCodeHelper.ExtractHints(trimmed);
+            if (!rawHints.Any(hint => string.Equals(hint, trimmed, StringComparison.OrdinalIgnoreCase)))
+                return false;
+
+            currencyCodes = rawHints
+                .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return currencyCodes.Count > 0;
+        }
+
+        // Ignores only the standalone Cash payment marker and rejects every other dollar sign.
+        private static bool HasAmbiguousReceiptDollarEvidence(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent) || receiptContent.IndexOf('$') < 0)
+                return false;
+
+            var withoutCashPaymentMarkers = Regex.Replace(
+                receiptContent,
+                @"(?<![\p{L}\p{N}])\$\s*CASH\b",
+                string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return withoutCashPaymentMarkers.IndexOf('$') >= 0;
+        }
+
+        // Rejects receipt-wide currency symbols that the existing ISO helper cannot identify.
+        private static bool HasUnknownReceiptCurrencySymbol(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent))
+                return false;
+
+            foreach (var value in receiptContent)
+            {
+                if (value == '$' || CharUnicodeInfo.GetUnicodeCategory(value) != UnicodeCategory.CurrencySymbol)
+                    continue;
+
+                if (ExtractNormalizedCurrencyCodes(value.ToString()).Count == 0)
+                    return true;
+            }
+
+            return false;
         }
 
         private static decimal? TryExtractTotalAmountFromReceiptContent(string receiptContent)

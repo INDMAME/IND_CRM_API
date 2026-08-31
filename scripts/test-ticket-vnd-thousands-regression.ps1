@@ -61,7 +61,8 @@ function New-AzureReceiptJson {
         [string]$TotalContent,
         [Parameter(Mandatory = $true)]
         [decimal]$StructuredAmount,
-        [string]$StructuredCurrencyCode
+        [string]$StructuredCurrencyCode,
+        [string]$StructuredCurrencySymbol
     )
 
     $valueCurrency = @{
@@ -69,6 +70,9 @@ function New-AzureReceiptJson {
     }
     if (-not [string]::IsNullOrWhiteSpace($StructuredCurrencyCode)) {
         $valueCurrency.currencyCode = $StructuredCurrencyCode
+    }
+    if (-not [string]::IsNullOrWhiteSpace($StructuredCurrencySymbol)) {
+        $valueCurrency.currencySymbol = $StructuredCurrencySymbol
     }
 
     return @{
@@ -100,14 +104,16 @@ function Get-ReceiptAnalysis {
         [string]$TotalContent,
         [Parameter(Mandatory = $true)]
         [decimal]$StructuredAmount,
-        [string]$StructuredCurrencyCode
+        [string]$StructuredCurrencyCode,
+        [string]$StructuredCurrencySymbol
     )
 
     $json = New-AzureReceiptJson `
         -ReceiptText $ReceiptText `
         -TotalContent $TotalContent `
         -StructuredAmount $StructuredAmount `
-        -StructuredCurrencyCode $StructuredCurrencyCode
+        -StructuredCurrencyCode $StructuredCurrencyCode `
+        -StructuredCurrencySymbol $StructuredCurrencySymbol
 
     return $BuildAnalysisMethod.Invoke($null, [object[]]@([string]$json))
 }
@@ -163,12 +169,33 @@ function Invoke-TotalFallback {
     $Method.Invoke($null, [object[]]@($Draft, $Analysis)) | Out-Null
 }
 
+function Get-DraftLinesTotal {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Draft
+    )
+
+    [decimal]$total = 0
+    foreach ($line in @($Draft.lines)) {
+        if ($null -eq $line) {
+            continue
+        }
+
+        [decimal]$qty = if ($null -eq $line.qty) { 0 } else { $line.qty }
+        [decimal]$price = if ($null -eq $line.price) { 0 } else { $line.price }
+        $total += if ($qty -eq 0 -and $price -lt 0) { $price } else { $qty * $price }
+    }
+
+    return $total
+}
+
 $assemblyDirectory = Split-Path -Parent $AssemblyPath
 Push-Location $assemblyDirectory
 try {
     $assembly = [Reflection.Assembly]::LoadFrom($AssemblyPath)
     $analyzerType = $assembly.GetType("IND_CRM_API.Services.AzureReceiptAnalyzerService", $true)
     $normalizerType = $assembly.GetType("IND_CRM_API.Services.IND_OpenAiExpenseTicketDraftService", $true)
+    $controllerType = $assembly.GetType("IND_CRM_API.Controllers.CRM.CrmExpenseSheetTicketsController", $true)
     $currencyHelperType = $assembly.GetType("IND_CRM_API.Helpers.CurrencyCodeHelper", $true)
     $draftType = $assembly.GetType("IND_CRM_API.Contracts.Responses.ExpenseSheetDraftResponse", $true)
     $lineType = $assembly.GetType("IND_CRM_API.Contracts.Requests.CreateExpenseSheetLineRequest", $true)
@@ -206,6 +233,11 @@ try {
         throw "BuildStructuredOcrPayloadPromptText was not found."
     }
 
+    $buildUpdateRequestMethod = $controllerType.GetMethod("BuildQuickCreateUpdateRequestFromDraft", $privateStatic)
+    if ($null -eq $buildUpdateRequestMethod) {
+        throw "BuildQuickCreateUpdateRequestFromDraft was not found."
+    }
+
     $normalizeCurrencyMethod = $currencyHelperType.GetMethod("NormalizeToIso4217", $publicStatic)
     if ($null -eq $normalizeCurrencyMethod) {
         throw "NormalizeToIso4217 was not found."
@@ -223,6 +255,36 @@ try {
     Assert-Equal -Actual ([decimal]$vndAnalysis.TotalAmount) -Expected ([decimal]82) -Message "The shared OCR result must preserve the structured Azure amount."
     Assert-Equal -Actual ([decimal]$vndAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "The grouped VND correction must be carried separately."
     Assert-Equal -Actual ([decimal]$vndAnalysis.CorrectedGroupedVndSourceAmount) -Expected ([decimal]82) -Message "The VND correction must retain its structured source amount."
+
+    $splitGlobalVndAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText ("Total Paid`n82.000`n{0}`n`$ Cash" -f $dongSymbol) `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82)
+    Assert-Equal -Actual ([decimal]$splitGlobalVndAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "Receipt-wide VND evidence must qualify only the grouped amount from Total.content."
+    Assert-Equal -Actual $splitGlobalVndAnalysis.CurrencyCode -Expected "VND" -Message "Receipt-wide dong evidence must resolve to VND."
+
+    $globalDifferentNumberAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "Total Paid 91.000 VND" `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]91)
+    Assert-Equal -Actual ([decimal]$globalDifferentNumberAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "The corrected number must come only from Total.content."
+
+    $metadataSymbolAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "Total Paid 82.000" `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencySymbol $dongSymbol
+    Assert-Equal -Actual ([decimal]$metadataSymbolAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "The Total currencySymbol metadata must qualify VND."
+
+    $zeroStructuredAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "Total Paid 82.000 VND" `
+        -TotalContent "82.000 VND" `
+        -StructuredAmount ([decimal]0)
+    Assert-Equal -Actual ([decimal]$zeroStructuredAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "A non-authoritative structured zero must not block the Total.content value."
 
     $vndPrompt = $vndAnalysis.PromptJson | ConvertFrom-Json
     Assert-Equal -Actual ([decimal]$vndPrompt.totals.total.amount) -Expected ([decimal]82) -Message "The shared prompt must preserve the structured Azure total."
@@ -252,12 +314,30 @@ try {
     Assert-Equal -Actual ([decimal]$fullDraftOcr.totals.total.amount) -Expected ([decimal]82) -Message "The full-draft OCR input must retain the structured Azure total."
 
     $vndDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82) -CurrencyCode "EUR"
-    $applyCurrencyFallbackMethod.Invoke($null, [object[]]@($vndDraft, $vndAnalysis)) | Out-Null
-    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $vndDraft -Analysis $vndAnalysis
+    $applyCurrencyFallbackMethod.Invoke($null, [object[]]@($vndDraft, $splitGlobalVndAnalysis)) | Out-Null
+    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $vndDraft -Analysis $splitGlobalVndAnalysis
     Assert-Equal -Actual $vndDraft.currencyCode -Expected "VND" -Message "The authoritative correction must replace the model currency."
-    Assert-Equal -Actual $vndDraft.lines.Count -Expected 1 -Message "The VND correction must keep a single draft line."
-    Assert-Equal -Actual ([decimal]$vndDraft.lines[0].qty) -Expected ([decimal]1) -Message "The corrected VND line must use quantity one."
-    Assert-Equal -Actual ([decimal]$vndDraft.lines[0].price) -Expected ([decimal]82000) -Message "The corrected VND line must use the authoritative total."
+    Assert-Equal -Actual $vndDraft.lines.Count -Expected 2 -Message "VND reconciliation must add at most one deterministic adjustment line."
+    Assert-Equal -Actual ([decimal]$vndDraft.lines[0].qty) -Expected ([decimal]1) -Message "VND reconciliation must preserve the original quantity."
+    Assert-Equal -Actual ([decimal]$vndDraft.lines[0].price) -Expected ([decimal]82) -Message "VND reconciliation must not scale the original line."
+    Assert-Equal -Actual ([decimal]$vndDraft.lines[1].price) -Expected ([decimal]81918) -Message "The VND adjustment must reconcile the exact grouped total."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $vndDraft) -Expected ([decimal]82000) -Message "The reconciled VND lines must sum to the authoritative total."
+
+    $vndWarningCount = @($vndDraft.Warnings).Count
+    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $vndDraft -Analysis $splitGlobalVndAnalysis
+    Assert-Equal -Actual $vndDraft.lines.Count -Expected 2 -Message "Repeated VND reconciliation must not duplicate the adjustment line."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $vndDraft) -Expected ([decimal]82000) -Message "Repeated VND reconciliation must be idempotent."
+    Assert-Equal -Actual @($vndDraft.Warnings).Count -Expected $vndWarningCount -Message "Repeated VND reconciliation must not duplicate warnings."
+
+    $buildUpdateArguments = [object[]]@($vndDraft, "", "ticket.jpg", "jpg", "Ticket regression", "VND", "", $null, $false)
+    $vndUpdateRequest = $buildUpdateRequestMethod.Invoke($null, $buildUpdateArguments)
+    Assert-Equal -Actual ([decimal]$vndUpdateRequest.totalAmount) -Expected ([decimal]82000) -Message "UpdateExpenseSheetTicketFromIARequest must use the reconciled VND total."
+    Assert-Equal -Actual $vndUpdateRequest.lines.Count -Expected 2 -Message "The update request must preserve the deterministic VND adjustment."
+
+    $zeroStructuredDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82) -CurrencyCode "EUR"
+    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $zeroStructuredDraft -Analysis $zeroStructuredAnalysis
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $zeroStructuredDraft) -Expected ([decimal]82000) -Message "VND reconciliation must not depend on the structured Azure amount."
+    Assert-Equal -Actual $zeroStructuredDraft.currencyCode -Expected "VND" -Message "The authoritative Total.content correction must set VND."
 
     $alreadyCorrectedDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82000) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $alreadyCorrectedDraft -Analysis $vndAnalysis
@@ -272,7 +352,8 @@ try {
     $normalizedVndJson = [string]$buildNormalizedJsonMethod.Invoke($null, [object[]]@($vndDraft, $quickCreateProfile))
     $normalizedVndDraft = $normalizedVndJson | ConvertFrom-Json
     Assert-Equal -Actual $normalizedVndDraft.currencyCode -Expected "VND" -Message "Normalized JSON must preserve VND."
-    Assert-Equal -Actual ([decimal]$normalizedVndDraft.lines[0].price) -Expected ([decimal]82000) -Message "Normalized JSON must preserve the corrected VND price."
+    Assert-Equal -Actual ([decimal]$normalizedVndDraft.lines[0].price) -Expected ([decimal]82) -Message "Normalized JSON must preserve the original VND line."
+    Assert-Equal -Actual ([decimal]$normalizedVndDraft.lines[1].price) -Expected ([decimal]81918) -Message "Normalized JSON must preserve the VND adjustment."
 
     $commaAnalysis = Get-ReceiptAnalysis `
         -BuildAnalysisMethod $buildAnalysisMethod `
@@ -304,6 +385,7 @@ try {
         -StructuredAmount ([decimal]1234.56) `
         -StructuredCurrencyCode "EUR"
     Assert-Equal -Actual ([decimal]$eurAnalysis.TotalAmount) -Expected ([decimal]1234.56) -Message "EUR decimal formatting must remain unchanged."
+    Assert-Null -Actual $eurAnalysis.CorrectedGroupedVndTotalAmount -Message "EUR must never receive the VND correction."
 
     $noCurrencyAnalysis = Get-ReceiptAnalysis `
         -BuildAnalysisMethod $buildAnalysisMethod `
@@ -327,21 +409,114 @@ try {
         -TotalContent ("82.000 {0}" -f $dongSymbol) `
         -StructuredAmount ([decimal]82) `
         -StructuredCurrencyCode "EUR"
-    Assert-Equal -Actual ([decimal]$conflictingCurrencyAnalysis.TotalAmount) -Expected ([decimal]82) -Message "A conflicting structured currency must disable the VND correction."
-    Assert-Null -Actual $conflictingCurrencyAnalysis.CorrectedGroupedVndTotalAmount -Message "A conflicting structured currency must not carry a correction marker."
-    Assert-Equal -Actual $conflictingCurrencyAnalysis.CurrencyCode -Expected "EUR" -Message "A conflicting structured currency must remain authoritative."
-    Assert-Equal -Actual $conflictingCurrencyAnalysis.RawCurrency -Expected "EUR" -Message "A conflicting raw currency must remain authoritative."
-    Assert-Equal -Actual ([string]::Join("|", $conflictingCurrencyAnalysis.CurrencyHints)) -Expected "EUR" -Message "A rejected VND hint must not compete with the structured currency."
+    Assert-Equal -Actual ([decimal]$conflictingCurrencyAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "Explicit VND in Total.content must take precedence over lower-level metadata."
+    Assert-Equal -Actual $conflictingCurrencyAnalysis.CurrencyCode -Expected "VND" -Message "Total.content currency must remain authoritative."
 
-    foreach ($invalidStructuredCurrency in @("XXX", "VND EUR")) {
+    foreach ($invalidStructuredCurrency in @("XXX", "VND EUR", "VND XXX")) {
         $invalidStructuredCurrencyAnalysis = Get-ReceiptAnalysis `
             -BuildAnalysisMethod $buildAnalysisMethod `
             -ReceiptText ("TOTAL 82.000 {0}" -f $dongSymbol) `
-            -TotalContent ("82.000 {0}" -f $dongSymbol) `
+            -TotalContent "82.000" `
             -StructuredAmount ([decimal]82) `
             -StructuredCurrencyCode $invalidStructuredCurrency
         Assert-Equal -Actual ([decimal]$invalidStructuredCurrencyAnalysis.TotalAmount) -Expected ([decimal]82) -Message "An invalid structured currency must preserve the source amount."
         Assert-Null -Actual $invalidStructuredCurrencyAnalysis.CorrectedGroupedVndTotalAmount -Message "An invalid structured currency must disable correction."
+    }
+
+    $unknownCodeWithDongSymbolAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText ("TOTAL 82.000 {0}" -f $dongSymbol) `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencyCode "XXX" `
+        -StructuredCurrencySymbol $dongSymbol
+    Assert-Null -Actual $unknownCodeWithDongSymbolAnalysis.CorrectedGroupedVndTotalAmount -Message "Unknown Total currency metadata must block a VND fallback."
+
+    $vndCodeWithUnknownSymbolAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "TOTAL 82.000 VND" `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencyCode "VND" `
+        -StructuredCurrencySymbol ([char]0x00A4).ToString()
+    Assert-Null -Actual $vndCodeWithUnknownSymbolAnalysis.CorrectedGroupedVndTotalAmount -Message "Unknown Total currency symbols must block a VND correction."
+
+    $contaminatedDongSymbolAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText ("TOTAL 82.000 {0}" -f $dongSymbol) `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencySymbol ("{0} {1}" -f $dongSymbol, ([char]0x00A4))
+    Assert-Null -Actual $contaminatedDongSymbolAnalysis.CorrectedGroupedVndTotalAmount -Message "Contaminated Total currency metadata must fail closed."
+
+    $vndCodeWithEurSymbolAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "TOTAL 82.000 VND" `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencyCode "VND" `
+        -StructuredCurrencySymbol ([char]0x20AC).ToString()
+    Assert-Null -Actual $vndCodeWithEurSymbolAnalysis.CorrectedGroupedVndTotalAmount -Message "Contradictory Total currency metadata must block a VND correction."
+
+    $globalCurrencyConflicts = @(
+        @{ Receipt = "TOTAL 82.000 VND EUR"; Name = "EUR" },
+        @{ Receipt = "TOTAL 82.000 VND USD"; Name = "USD" },
+        @{ Receipt = "TOTAL 82.000 VND US`$"; Name = "US dollar" },
+        @{ Receipt = "TOTAL 82.000 VND `$"; Name = "standalone dollar" },
+        @{ Receipt = "TOTAL 82.000 VND `$ CARD"; Name = "dollar card marker" },
+        @{ Receipt = ("TOTAL 82.000 VND {0}" -f ([char]0x00A4)); Name = "unknown currency symbol" }
+    )
+    foreach ($case in $globalCurrencyConflicts) {
+        $analysis = Get-ReceiptAnalysis `
+            -BuildAnalysisMethod $buildAnalysisMethod `
+            -ReceiptText $case.Receipt `
+            -TotalContent "82.000" `
+            -StructuredAmount ([decimal]82)
+        Assert-Null -Actual $analysis.CorrectedGroupedVndTotalAmount -Message ("A global {0} conflict must block the VND fallback." -f $case.Name)
+    }
+
+    foreach ($mixedTotalContent in @("82.000 VND EUR", "82.000 VND USD")) {
+        $analysis = Get-ReceiptAnalysis `
+            -BuildAnalysisMethod $buildAnalysisMethod `
+            -ReceiptText ("TOTAL {0}" -f $mixedTotalContent) `
+            -TotalContent $mixedTotalContent `
+            -StructuredAmount ([decimal]82)
+        Assert-Null -Actual $analysis.CorrectedGroupedVndTotalAmount -Message "Competing currencies inside Total.content must block the correction."
+    }
+
+    foreach ($lowerPriorityCurrency in @("EUR", "USD")) {
+        $analysis = Get-ReceiptAnalysis `
+            -BuildAnalysisMethod $buildAnalysisMethod `
+            -ReceiptText ("TOTAL 82.000 VND {0}" -f $lowerPriorityCurrency) `
+            -TotalContent "82.000 VND" `
+            -StructuredAmount ([decimal]82)
+        Assert-Equal -Actual ([decimal]$analysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "Total.content must outrank non-dollar global currency evidence."
+    }
+
+    $metadataPriorityAnalysis = Get-ReceiptAnalysis `
+        -BuildAnalysisMethod $buildAnalysisMethod `
+        -ReceiptText "TOTAL 82.000 VND EUR" `
+        -TotalContent "82.000" `
+        -StructuredAmount ([decimal]82) `
+        -StructuredCurrencyCode "VND"
+    Assert-Equal -Actual ([decimal]$metadataPriorityAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "Valid Total metadata must outrank non-dollar global currency evidence."
+
+    foreach ($ambiguousDollarReceipt in @("TOTAL 82.000 VND US`$", "TOTAL 82.000 VND `$", "TOTAL 82.000 VND `$ CARD")) {
+        $analysis = Get-ReceiptAnalysis `
+            -BuildAnalysisMethod $buildAnalysisMethod `
+            -ReceiptText $ambiguousDollarReceipt `
+            -TotalContent "82.000 VND" `
+            -StructuredAmount ([decimal]82)
+        Assert-Null -Actual $analysis.CorrectedGroupedVndTotalAmount -Message "Ambiguous global dollar evidence must block even explicit VND in Total.content."
+    }
+
+    foreach ($totalContentWithDollar in @("`$82.000 VND", "82.000 VND `$", "82.000 VND `$ CARD", "US`$ 82.000 VND")) {
+        $analysis = Get-ReceiptAnalysis `
+            -BuildAnalysisMethod $buildAnalysisMethod `
+            -ReceiptText ("TOTAL {0}" -f $totalContentWithDollar) `
+            -TotalContent $totalContentWithDollar `
+            -StructuredAmount ([decimal]82)
+        Assert-Null -Actual $analysis.CorrectedGroupedVndTotalAmount -Message "Dollar evidence in Total.content must always block the VND correction."
     }
 
     $nonLocalCurrencyAnalysis = Get-ReceiptAnalysis `
@@ -349,8 +524,8 @@ try {
         -ReceiptText ("Currency {0}`nTOTAL 82.000" -f $dongSymbol) `
         -TotalContent "82.000" `
         -StructuredAmount ([decimal]82)
-    Assert-Equal -Actual ([decimal]$nonLocalCurrencyAnalysis.TotalAmount) -Expected ([decimal]82) -Message "VND evidence outside Total.content must not trigger scaling."
-    Assert-Null -Actual $nonLocalCurrencyAnalysis.CorrectedGroupedVndTotalAmount -Message "Non-local VND evidence must not carry a correction marker."
+    Assert-Equal -Actual ([decimal]$nonLocalCurrencyAnalysis.TotalAmount) -Expected ([decimal]82) -Message "The shared OCR result must preserve the structured amount."
+    Assert-Equal -Actual ([decimal]$nonLocalCurrencyAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "Unambiguous receipt-wide VND evidence may qualify Total.content as a last resort."
 
     $nonLocalStructuredEurAnalysis = Get-ReceiptAnalysis `
         -BuildAnalysisMethod $buildAnalysisMethod `
@@ -393,13 +568,18 @@ try {
         -StructuredAmount ([decimal]82.50) `
         -StructuredCurrencyCode "USD"
     Assert-Equal -Actual ([decimal]$usdAnalysis.TotalAmount) -Expected ([decimal]82.50) -Message "USD decimal formatting must remain unchanged."
+    Assert-Null -Actual $usdAnalysis.CorrectedGroupedVndTotalAmount -Message "USD must never receive the VND correction."
 
     $ambiguousCases = @(
         @{ Content = ("1.234,567 {0}" -f $dongSymbol); Source = [decimal]1234.567; Name = "mixed separators" },
         @{ Content = ("82.000,50 {0}" -f $dongSymbol); Source = [decimal]82000.50; Name = "decimal suffix" },
         @{ Content = ("-82.000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "signed amount" },
+        @{ Content = ("+82.000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "positive sign" },
+        @{ Content = ("(82.000) {0}" -f $dongSymbol); Source = [decimal]82; Name = "accounting format" },
         @{ Content = ("082.000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "leading zero" },
-        @{ Content = ("82 000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "space grouping" }
+        @{ Content = ("82 000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "space grouping" },
+        @{ Content = ("82.000 {0} 91" -f $dongSymbol); Source = [decimal]82; Name = "additional digits" },
+        @{ Content = ("82.000 91.000 {0}" -f $dongSymbol); Source = [decimal]82; Name = "multiple grouped amounts" }
     )
     foreach ($case in $ambiguousCases) {
         $analysis = Get-ReceiptAnalysis `
@@ -416,17 +596,17 @@ try {
         -ReceiptText ("TOTAL 82.000 {0}" -f $dongSymbol) `
         -TotalContent ("82.000 {0}" -f $dongSymbol) `
         -StructuredAmount ([decimal]83)
-    Assert-Equal -Actual ([decimal]$ratioMismatchAnalysis.TotalAmount) -Expected ([decimal]83) -Message "A non-power-of-1000 mismatch must not be corrected."
-    Assert-Null -Actual $ratioMismatchAnalysis.CorrectedGroupedVndTotalAmount -Message "A ratio mismatch must not carry a correction marker."
+    Assert-Equal -Actual ([decimal]$ratioMismatchAnalysis.TotalAmount) -Expected ([decimal]83) -Message "The structured amount remains telemetry and must not supply the corrected number."
+    Assert-Equal -Actual ([decimal]$ratioMismatchAnalysis.CorrectedGroupedVndTotalAmount) -Expected ([decimal]82000) -Message "The authoritative number must come exclusively from Total.content."
     $isRatioMismatchEligible = [bool]$groupedVndEligibilityMethod.Invoke($null, [object[]]@($ratioMismatchAnalysis, $quickCreateProfile))
-    Assert-Equal -Actual $isRatioMismatchEligible -Expected $false -Message "A ratio mismatch must not enable the VND prompt rule."
+    Assert-Equal -Actual $isRatioMismatchEligible -Expected $true -Message "Structured-number disagreement must not override authoritative Total.content."
     $ratioMismatchPrompt = [string]$buildStructuredPromptMethod.Invoke($null, [object[]]@($quickCreateProfile, $isRatioMismatchEligible))
-    if ($ratioMismatchPrompt.Contains("totals.total ya contiene el total VND corregido")) {
-        throw "A rejected VND case must not include the grouped VND prompt rule."
+    if (-not $ratioMismatchPrompt.Contains("totals.total ya contiene el total VND corregido")) {
+        throw "An authoritative VND case must retain the defensive prompt rule."
     }
     $ratioMismatchOcrJson = [string]$buildStructuredOcrJsonMethod.Invoke($null, [object[]]@($ratioMismatchAnalysis, $quickCreateProfile))
     $ratioMismatchOcr = $ratioMismatchOcrJson | ConvertFrom-Json
-    Assert-Equal -Actual ([decimal]$ratioMismatchOcr.totals.total.amount) -Expected ([decimal]83) -Message "A rejected VND case must retain its original prompt total."
+    Assert-Equal -Actual ([decimal]$ratioMismatchOcr.totals.total.amount) -Expected ([decimal]82000) -Message "Quick-create must receive the authoritative number from Total.content."
 
     $fullDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $fullDraft -Analysis $vndAnalysis -AllowGroupedVndCorrection $false
@@ -440,13 +620,15 @@ try {
 
     $quickCreateMissingPrice = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]0) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $quickCreateMissingPrice -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$quickCreateMissingPrice.lines[0].price) -Expected ([decimal]82) -Message "A missing model price must not authorize VND scaling."
-    Assert-Equal -Actual $quickCreateMissingPrice.currencyCode -Expected "EUR" -Message "A missing model price must retain the draft currency."
+    Assert-Equal -Actual $quickCreateMissingPrice.lines.Count -Expected 1 -Message "Invalid model lines must be replaced by one authoritative total line."
+    Assert-Equal -Actual ([decimal]$quickCreateMissingPrice.lines[0].price) -Expected ([decimal]82000) -Message "A missing model price must reconcile to the authoritative VND total."
+    Assert-Equal -Actual $quickCreateMissingPrice.currencyCode -Expected "VND" -Message "An authoritative total must set VND."
 
     $quantityMissingPriceDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]0) -Qty ([decimal]2) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $quantityMissingPriceDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$quantityMissingPriceDraft.lines[0].price) -Expected ([decimal]82) -Message "A missing price with quantity two must not authorize VND scaling."
-    Assert-Equal -Actual $quantityMissingPriceDraft.currencyCode -Expected "EUR" -Message "A missing price with quantity two must retain the draft currency."
+    Assert-Equal -Actual $quantityMissingPriceDraft.lines.Count -Expected 1 -Message "An invalid quantity line must be replaced by one authoritative total line."
+    Assert-Equal -Actual ([decimal]$quantityMissingPriceDraft.lines[0].price) -Expected ([decimal]82000) -Message "A missing price with quantity two must reconcile to the VND total."
+    Assert-Equal -Actual $quantityMissingPriceDraft.currencyCode -Expected "VND" -Message "The reconciled draft must use VND."
 
     $multiInvalidDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]0) -CurrencyCode "EUR"
     $secondInvalidLine = [Activator]::CreateInstance($lineType)
@@ -455,37 +637,47 @@ try {
     $secondInvalidLine.price = [decimal]0
     $multiInvalidDraft.lines.Add($secondInvalidLine)
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $multiInvalidDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual $multiInvalidDraft.lines.Count -Expected 1 -Message "The legacy fallback may still collapse invalid lines."
-    Assert-Equal -Actual ([decimal]$multiInvalidDraft.lines[0].price) -Expected ([decimal]82) -Message "Multiple invalid model lines must not authorize VND scaling."
-    Assert-Equal -Actual $multiInvalidDraft.currencyCode -Expected "EUR" -Message "Multiple invalid model lines must retain the draft currency."
+    Assert-Equal -Actual $multiInvalidDraft.lines.Count -Expected 1 -Message "Multiple invalid lines must become one authoritative total line."
+    Assert-Equal -Actual ([decimal]$multiInvalidDraft.lines[0].price) -Expected ([decimal]82000) -Message "Multiple invalid model lines must reconcile to the VND total."
+    Assert-Equal -Actual $multiInvalidDraft.currencyCode -Expected "VND" -Message "The reconciled invalid draft must use VND."
 
     $itemizedDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82) -CurrencyCode "EUR"
     $vndAnalysis.ItemCount = 1
     $isItemizedEligible = [bool]$groupedVndEligibilityMethod.Invoke($null, [object[]]@($vndAnalysis, $quickCreateProfile))
-    Assert-Equal -Actual $isItemizedEligible -Expected $false -Message "An itemized receipt must not enable the VND correction."
+    Assert-Equal -Actual $isItemizedEligible -Expected $true -Message "Item presence must not suppress an authoritative Total.content correction."
     $itemizedPrompt = [string]$buildStructuredPromptMethod.Invoke($null, [object[]]@($quickCreateProfile, $isItemizedEligible))
-    if ($itemizedPrompt.Contains("totals.total ya contiene el total VND corregido")) {
-        throw "An itemized receipt prompt must not include the grouped VND rule."
+    if (-not $itemizedPrompt.Contains("totals.total ya contiene el total VND corregido")) {
+        throw "An itemized authoritative VND receipt must include the guarded prompt rule."
     }
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $itemizedDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$itemizedDraft.lines[0].price) -Expected ([decimal]82) -Message "An itemized receipt must not receive the single-line correction."
-    Assert-Equal -Actual $itemizedDraft.currencyCode -Expected "EUR" -Message "An itemized receipt must retain the model currency."
+    Assert-Equal -Actual $itemizedDraft.lines.Count -Expected 2 -Message "Itemized lines must be preserved and reconciled with one adjustment."
+    Assert-Equal -Actual ([decimal]$itemizedDraft.lines[0].price) -Expected ([decimal]82) -Message "The itemized line must not be multiplied."
+    Assert-Equal -Actual ([decimal]$itemizedDraft.lines[1].price) -Expected ([decimal]81918) -Message "The itemized difference must be explicit."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $itemizedDraft) -Expected ([decimal]82000) -Message "The itemized lines must reconcile exactly."
+    Assert-Equal -Actual $itemizedDraft.currencyCode -Expected "VND" -Message "The itemized authoritative receipt must use VND."
 
     $itemizedMissingPrice = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]0) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $itemizedMissingPrice -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$itemizedMissingPrice.lines[0].price) -Expected ([decimal]82) -Message "An itemized fallback must use the original structured amount."
-    Assert-Equal -Actual $itemizedMissingPrice.currencyCode -Expected "EUR" -Message "An itemized fallback must retain its currency."
+    Assert-Equal -Actual $itemizedMissingPrice.lines.Count -Expected 1 -Message "An invalid itemized line must become one total line."
+    Assert-Equal -Actual ([decimal]$itemizedMissingPrice.lines[0].price) -Expected ([decimal]82000) -Message "An invalid itemized line must use the authoritative VND total."
+    Assert-Equal -Actual $itemizedMissingPrice.currencyCode -Expected "VND" -Message "The itemized fallback must use VND."
     $vndAnalysis.ItemCount = 0
 
     $quantityDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82) -Qty ([decimal]2) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $quantityDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$quantityDraft.lines[0].price) -Expected ([decimal]82) -Message "A line with quantity other than one must not be corrected."
+    Assert-Equal -Actual $quantityDraft.lines.Count -Expected 2 -Message "A non-unit quantity must be preserved with one adjustment."
+    Assert-Equal -Actual ([decimal]$quantityDraft.lines[0].price) -Expected ([decimal]82) -Message "The quantity line price must not be multiplied."
     Assert-Equal -Actual ([decimal]$quantityDraft.lines[0].qty) -Expected ([decimal]2) -Message "The VND correction must not rewrite an explicit quantity."
+    Assert-Equal -Actual ([decimal]$quantityDraft.lines[1].price) -Expected ([decimal]81836) -Message "The quantity line difference must reconcile exactly."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $quantityDraft) -Expected ([decimal]82000) -Message "The quantity draft must sum to the authoritative total."
 
     $unrelatedAmountDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]83) -CurrencyCode "EUR"
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $unrelatedAmountDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual ([decimal]$unrelatedAmountDraft.lines[0].price) -Expected ([decimal]83) -Message "An unrelated model amount must not be corrected."
-    Assert-Equal -Actual $unrelatedAmountDraft.currencyCode -Expected "EUR" -Message "An unrelated model amount must retain its currency."
+    Assert-Equal -Actual $unrelatedAmountDraft.lines.Count -Expected 2 -Message "An unrelated line must be preserved with one deterministic adjustment."
+    Assert-Equal -Actual ([decimal]$unrelatedAmountDraft.lines[0].price) -Expected ([decimal]83) -Message "An unrelated model amount must not be multiplied."
+    Assert-Equal -Actual ([decimal]$unrelatedAmountDraft.lines[1].price) -Expected ([decimal]81917) -Message "The unrelated-line difference must be explicit."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $unrelatedAmountDraft) -Expected ([decimal]82000) -Message "The unrelated-line draft must reconcile exactly."
+    Assert-Equal -Actual $unrelatedAmountDraft.currencyCode -Expected "VND" -Message "The reconciled draft must use VND."
 
     $multiLineDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]40)
     $secondLine = [Activator]::CreateInstance($lineType)
@@ -494,8 +686,38 @@ try {
     $secondLine.price = [decimal]42
     $multiLineDraft.lines.Add($secondLine)
     Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $multiLineDraft -Analysis $vndAnalysis
-    Assert-Equal -Actual $multiLineDraft.lines.Count -Expected 2 -Message "A multi-line VND draft must not be collapsed automatically."
-    Assert-Equal -Actual ([decimal]$multiLineDraft.lines[0].price) -Expected ([decimal]40) -Message "A multi-line VND draft must not be scaled automatically."
+    Assert-Equal -Actual $multiLineDraft.lines.Count -Expected 3 -Message "A multi-line VND draft must preserve both lines and add one adjustment."
+    Assert-Equal -Actual ([decimal]$multiLineDraft.lines[0].price) -Expected ([decimal]40) -Message "The first VND line must not be scaled."
+    Assert-Equal -Actual ([decimal]$multiLineDraft.lines[1].price) -Expected ([decimal]42) -Message "The second VND line must not be scaled."
+    Assert-Equal -Actual ([decimal]$multiLineDraft.lines[2].price) -Expected ([decimal]81918) -Message "The multi-line difference must be explicit."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $multiLineDraft) -Expected ([decimal]82000) -Message "The multi-line draft must reconcile exactly."
+
+    $multiLineWarningCount = @($multiLineDraft.Warnings).Count
+    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $multiLineDraft -Analysis $vndAnalysis
+    Assert-Equal -Actual $multiLineDraft.lines.Count -Expected 3 -Message "Repeated multi-line reconciliation must replace, not duplicate, its adjustment."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $multiLineDraft) -Expected ([decimal]82000) -Message "Repeated multi-line reconciliation must remain exact."
+    Assert-Equal -Actual @($multiLineDraft.Warnings).Count -Expected $multiLineWarningCount -Message "Repeated multi-line reconciliation must keep warning state stable."
+
+    $overTotalDraft = New-SingleLineDraft -DraftType $draftType -LineType $lineType -Price ([decimal]82000.01) -CurrencyCode "EUR"
+    Invoke-TotalFallback -Method $applyTotalFallbackMethod -Draft $overTotalDraft -Analysis $vndAnalysis
+    Assert-Equal -Actual $overTotalDraft.lines.Count -Expected 2 -Message "An over-total draft must add one signed adjustment."
+    Assert-Equal -Actual ([decimal]$overTotalDraft.lines[1].qty) -Expected ([decimal]0) -Message "A negative adjustment must use zero quantity."
+    Assert-Equal -Actual ([decimal]$overTotalDraft.lines[1].price) -Expected ([decimal]-0.01) -Message "A negative adjustment must preserve its signed difference."
+    Assert-Equal -Actual (Get-DraftLinesTotal -Draft $overTotalDraft) -Expected ([decimal]82000) -Message "The signed adjustment must reconcile exactly."
+
+    $controllerSourcePath = Join-Path $repoRoot "Controllers\CRM\CrmExpenseSheetTicketsController.cs"
+    $controllerSource = [System.IO.File]::ReadAllText($controllerSourcePath)
+    if (-not $controllerSource.Contains("amountMST = Math.Round(totalAmount * providerResult.Rate, 2, MidpointRounding.AwayFromZero);")) {
+        throw "The production amountMST calculation changed unexpectedly."
+    }
+    if (-not $controllerSource.Contains("if (!amountMST.HasValue || amountMST.Value <= 0m)")) {
+        throw "The strict amountMST > 0 validation changed unexpectedly."
+    }
+    if (-not $controllerSource.Contains("amountMST calculado debe ser mayor que cero.")) {
+        throw "The strict amountMST validation message changed unexpectedly."
+    }
+    $sampleAmountMst = [Math]::Round(([decimal]82000 * [decimal]0.000033), 2, [MidpointRounding]::AwayFromZero)
+    Assert-Equal -Actual $sampleAmountMst -Expected ([decimal]2.71) -Message "A positive VND conversion must remain positive after rounding."
 
     Write-Host "PASS ticket VND thousands regression"
 }
