@@ -40,6 +40,21 @@ function Assert-Equal {
     }
 }
 
+function Get-AuthoritativeVndFlag {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Analysis
+    )
+
+    $propertyFlags = [Reflection.BindingFlags]"Instance,NonPublic,Public"
+    $property = $Analysis.GetType().GetProperty("HasAuthoritativeVndTotal", $propertyFlags)
+    if ($null -eq $property) {
+        throw "HasAuthoritativeVndTotal was not found."
+    }
+
+    return [bool]$property.GetValue($Analysis)
+}
+
 function Get-DraftLineTotal {
     param($Line)
 
@@ -125,9 +140,11 @@ function New-AzureTotalAnalysis {
         [Parameter(Mandatory = $true)]
         [Reflection.BindingFlags]$Flags,
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$TotalContent,
         [Parameter(Mandatory = $true)]
-        [decimal]$StructuredAmount,
+        [AllowNull()]
+        [object]$StructuredAmount,
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
         [string]$StructuredCurrency,
@@ -142,8 +159,9 @@ function New-AzureTotalAnalysis {
         throw "TryBuildAnalysisResult was not found."
     }
 
-    $valueCurrency = @{
-        amount = $StructuredAmount
+    $valueCurrency = @{}
+    if ($null -ne $StructuredAmount) {
+        $valueCurrency.amount = [decimal]$StructuredAmount
     }
     if (-not [string]::IsNullOrWhiteSpace($StructuredCurrency)) {
         $valueCurrency.currencyCode = $StructuredCurrency
@@ -206,6 +224,7 @@ try {
         -ReceiptContent "TOTAL 91.000 EUR"
     Assert-Equal -Actual ([decimal]$vndSymbolAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "The VND symbol in Total.content must make a grouped integer authoritative."
     Assert-Equal -Actual $vndSymbolAnalysis.CurrencyCode -Expected "VND" -Message "The VND symbol must resolve explicitly to ISO-4217 VND."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $vndSymbolAnalysis) -Expected $true -Message "A grouped VND amount from Total.content must be marked authoritative."
 
     $vndCodeAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -223,9 +242,10 @@ try {
         -TotalContent "82.000" `
         -StructuredAmount 17 `
         -StructuredCurrency "VND" `
-        -ReceiptContent "TOTAL 82.000"
+        -ReceiptContent "TOTAL 91.000 EUR"
     Assert-Equal -Actual ([decimal]$splitVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "VND metadata on the Total field must qualify its grouped Total.content integer."
-    Assert-Equal -Actual $splitVndAnalysis.CurrencyCode -Expected "VND" -Message "VND metadata on the Total field must remain explicit currency evidence."
+    Assert-Equal -Actual $splitVndAnalysis.CurrencyCode -Expected "VND" -Message "VND metadata on the Total field must take priority over conflicting receipt-wide currency evidence."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $splitVndAnalysis) -Expected $true -Message "VND Total metadata must authorize only the grouped number from Total.content."
 
     $splitVndSymbolAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -248,6 +268,7 @@ try {
     Assert-Equal -Actual ([decimal]$globalVndSymbolAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "A unique receipt-level VND symbol must qualify the grouped first-document Total.content integer."
     Assert-Equal -Actual $globalVndSymbolAnalysis.CurrencyCode -Expected "VND" -Message "A unique receipt-level VND symbol must resolve explicitly to ISO-4217 VND."
     Assert-Equal -Actual $globalVndSymbolAnalysis.RawCurrency -Expected $vndSymbol -Message "The qualifying receipt-level VND symbol must remain the raw currency evidence."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $globalVndSymbolAnalysis) -Expected $true -Message "A standalone Cash marker must not invalidate otherwise unique receipt-wide VND evidence."
 
     $globalVndCodeAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -257,6 +278,95 @@ try {
         -StructuredCurrency "" `
         -ReceiptContent "TOTAL PAID 91.000 VND"
     Assert-Equal -Actual ([decimal]$globalVndCodeAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "A unique receipt-level VND code may qualify the first-document Total.content integer but must not supply its number."
+
+    $globalVndNumericDistractionAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "" `
+        -StructuredAmount 82 `
+        -StructuredCurrency "" `
+        -ReceiptContent "TOTAL 91000 VND"
+    Assert-Equal -Actual ([decimal]$globalVndNumericDistractionAnalysis.TotalAmount) -Expected ([decimal]82) -Message "Receipt-level VND evidence must never replace the numeric value projected by the first-document Total field."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $globalVndNumericDistractionAnalysis) -Expected $false -Message "A structured Total amount without numeric Total.content must not be marked as an authoritative VND correction."
+
+    $globalVndWithoutTotalAmountAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "" `
+        -StructuredAmount $null `
+        -StructuredCurrency "" `
+        -ReceiptContent "TOTAL 91000 VND"
+    Assert-Equal -Actual ($null -eq $globalVndWithoutTotalAmountAnalysis.TotalAmount) -Expected $true -Message "Receipt-level VND evidence must not supply a number when the first-document Total field has none."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $globalVndWithoutTotalAmountAnalysis) -Expected $false -Message "Receipt-level VND evidence alone must not create an authoritative VND correction."
+
+    $totalContentEurOverGlobalVndAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "12,10 EUR" `
+        -StructuredAmount $null `
+        -StructuredCurrency "VND" `
+        -ReceiptContent "CURRENCY VND`nTOTAL 12,10 EUR"
+    Assert-Equal -Actual ([decimal]$totalContentEurOverGlobalVndAnalysis.TotalAmount) -Expected ([decimal]12.10) -Message "Clear EUR evidence in Total.content must preserve the existing receipt-text total fallback."
+    Assert-Equal -Actual $totalContentEurOverGlobalVndAnalysis.CurrencyCode -Expected "EUR" -Message "Total.content currency must take priority over conflicting Total metadata and receipt-wide VND evidence."
+
+    $totalMetadataEurOverGlobalVndAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "12,10" `
+        -StructuredAmount $null `
+        -StructuredCurrency "EUR" `
+        -ReceiptContent "CURRENCY VND`nTOTAL 12,10"
+    Assert-Equal -Actual ([decimal]$totalMetadataEurOverGlobalVndAnalysis.TotalAmount) -Expected ([decimal]12.10) -Message "Clear EUR Total metadata must preserve the existing receipt-text total fallback."
+    Assert-Equal -Actual $totalMetadataEurOverGlobalVndAnalysis.CurrencyCode -Expected "EUR" -Message "Total metadata currency must take priority over receipt-wide VND evidence."
+
+    $totalContentUsdOverGlobalVndAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "12.10 USD" `
+        -StructuredAmount $null `
+        -StructuredCurrency "" `
+        -ReceiptContent "CURRENCY VND`nTOTAL 12.10 USD"
+    Assert-Equal -Actual ([decimal]$totalContentUsdOverGlobalVndAnalysis.TotalAmount) -Expected ([decimal]12.10) -Message "Clear USD evidence in Total.content must preserve the existing receipt-text total fallback."
+    Assert-Equal -Actual $totalContentUsdOverGlobalVndAnalysis.CurrencyCode -Expected "USD" -Message "Total.content USD must take priority over receipt-wide VND evidence."
+
+    $totalMetadataUsdSymbolOverGlobalVndAnalysis = New-AzureTotalAnalysis `
+        -AnalyzerType $analyzerType `
+        -Flags $flags `
+        -TotalContent "12.10" `
+        -StructuredAmount $null `
+        -StructuredCurrency "USD" `
+        -StructuredCurrencySymbol '$' `
+        -ReceiptContent "CURRENCY VND`nTOTAL 12.10"
+    Assert-Equal -Actual ([decimal]$totalMetadataUsdSymbolOverGlobalVndAnalysis.TotalAmount) -Expected ([decimal]12.10) -Message "Clear USD Total metadata must preserve the existing receipt-text total fallback even with its dollar symbol."
+    Assert-Equal -Actual $totalMetadataUsdSymbolOverGlobalVndAnalysis.CurrencyCode -Expected "USD" -Message "Explicit USD Total metadata must take priority over receipt-wide VND evidence."
+
+    foreach ($blockedGlobalVndCase in @(
+        @{ Name = "conflicting global currency"; Metadata = ""; ReceiptContent = "TOTAL 91000 VND EUR" },
+        @{ Name = "unknown Total metadata"; Metadata = "unknown"; ReceiptContent = "TOTAL 91000 VND" },
+        @{ Name = "ambiguous global dollar"; Metadata = ""; ReceiptContent = 'TOTAL 91000 VND $' }
+    )) {
+        $blockedGlobalVndAnalysis = New-AzureTotalAnalysis `
+            -AnalyzerType $analyzerType `
+            -Flags $flags `
+            -TotalContent "" `
+            -StructuredAmount $null `
+            -StructuredCurrency $blockedGlobalVndCase.Metadata `
+            -ReceiptContent $blockedGlobalVndCase.ReceiptContent
+        Assert-Equal -Actual ($null -eq $blockedGlobalVndAnalysis.TotalAmount) -Expected $true -Message "$($blockedGlobalVndCase.Name) must block receipt-wide text from supplying a numeric VND total."
+        Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $blockedGlobalVndAnalysis) -Expected $false -Message "$($blockedGlobalVndCase.Name) must not create an authoritative VND correction."
+    }
+
+    foreach ($unknownCurrencyToken in @("XXX", "xxx")) {
+        $unknownTotalCurrencyAnalysis = New-AzureTotalAnalysis `
+            -AnalyzerType $analyzerType `
+            -Flags $flags `
+            -TotalContent "82.000 $unknownCurrencyToken" `
+            -StructuredAmount 82 `
+            -StructuredCurrency "" `
+            -ReceiptContent "CURRENCY VND"
+        Assert-Equal -Actual ([decimal]$unknownTotalCurrencyAnalysis.TotalAmount) -Expected ([decimal]82) -Message "An unknown currency-like token in Total.content must block global VND qualification."
+        Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $unknownTotalCurrencyAnalysis) -Expected $false -Message "An unknown Total.content currency must not create an authoritative VND correction."
+    }
 
     $extractVndGroupedTotalMethod = $analyzerType.GetMethod("TryExtractUnambiguousVndGroupedTotal", $flags)
     if ($null -eq $extractVndGroupedTotalMethod) {
@@ -299,6 +409,7 @@ try {
         -ReceiptContent "MERCHANT" `
         -LeadingNullDocument $true
     Assert-Equal -Actual ($null -eq $ignoredSecondDocumentAnalysis.TotalAmount) -Expected $true -Message "Only analyzeResult.documents[0] may authorize the OCR total."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $ignoredSecondDocumentAnalysis) -Expected $false -Message "A later document must never create an authoritative VND correction."
 
     $multiGroupVndAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -341,6 +452,7 @@ try {
             -StructuredCurrency $unchangedCase.Currency `
             -ReceiptContent $unchangedCase.ReceiptContent
         Assert-Equal -Actual ([decimal]$analysisCase.TotalAmount) -Expected ([decimal]82) -Message "$($unchangedCase.Name) must not activate VND grouped-integer normalization."
+        Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $analysisCase) -Expected $false -Message "$($unchangedCase.Name) must not be marked as an authoritative VND correction."
     }
 
     $alreadyCorrectVndAnalysis = New-AzureTotalAnalysis `
@@ -351,6 +463,7 @@ try {
         -StructuredCurrency "" `
         -ReceiptContent "TOTAL 82.000 VND"
     Assert-Equal -Actual ([decimal]$alreadyCorrectVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "An already-correct amount qualified by unique receipt-level VND evidence must not be multiplied again."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $alreadyCorrectVndAnalysis) -Expected $true -Message "An already-correct grouped VND total remains authoritative and idempotent."
 
     $ungroupedCorrectVndAnalysis = New-AzureTotalAnalysis `
         -AnalyzerType $analyzerType `
@@ -360,6 +473,7 @@ try {
         -StructuredCurrency "VND" `
         -ReceiptContent "MERCHANT"
     Assert-Equal -Actual ([decimal]$ungroupedCorrectVndAnalysis.TotalAmount) -Expected ([decimal]82000) -Message "An ungrouped correct VND amount must remain unchanged."
+    Assert-Equal -Actual (Get-AuthoritativeVndFlag -Analysis $ungroupedCorrectVndAnalysis) -Expected $false -Message "An ungrouped VND amount must not be marked as a grouped-integer correction."
 
     $receiptText = "IMPORTE BASE IMPONIBLE 10,00`nIVA 21% 2,10`nTOTAL 12,10"
     $extractedTotal = [decimal]$extractMethod.Invoke($null, [object[]]@($receiptText))
@@ -428,7 +542,14 @@ try {
         throw "ReconcileDraftTotalFromOcr was not found."
     }
 
-    $vndDraft = New-DraftFromJson -NormalizerType $normalizerType -Flags $flags -Price 82 -ModelTotal 82 -CurrencyCode "VND"
+    $currencyFallbackMethod = $normalizerType.GetMethod("ApplyCurrencyFallbackFromOcr", $flags)
+    if ($null -eq $currencyFallbackMethod) {
+        throw "ApplyCurrencyFallbackFromOcr was not found."
+    }
+
+    $vndDraft = New-DraftFromJson -NormalizerType $normalizerType -Flags $flags -Price 82 -ModelTotal 82 -CurrencyCode "EUR"
+    $currencyFallbackMethod.Invoke($null, [object[]]@($vndDraft, $globalVndSymbolAnalysis)) | Out-Null
+    Assert-Equal -Actual $vndDraft.currencyCode -Expected "VND" -Message "An authoritative OCR VND total must override a conflicting model currency before reconciliation."
     $reconcileMethod.Invoke($null, [object[]]@($vndDraft, $globalVndSymbolAnalysis)) | Out-Null
     Assert-Equal -Actual ([decimal]$vndDraft.totalAmount) -Expected ([decimal]82000) -Message "The corrected VND OCR total must replace the model total."
     Assert-Equal -Actual $vndDraft.lines.Count -Expected 2 -Message "VND reconciliation must add one deterministic adjustment line."
@@ -465,6 +586,7 @@ try {
     $structuredPrompt = [string]$structuredPromptMethod.Invoke($null, [object[]]@($quickCreateProfile))
     Assert-Equal -Actual $structuredPrompt.Contains("VND") -Expected $true -Message "The OCR prompt must include the VND semantic defense."
     Assert-Equal -Actual $structuredPrompt.Contains("separadores de miles") -Expected $true -Message "The OCR prompt must explain grouped VND integers."
+    Assert-Equal -Actual $structuredPrompt.Contains("no apliques esta regla a otras monedas") -Expected $true -Message "The OCR prompt must explicitly limit grouped-integer semantics to VND."
 
     $analysis = [Activator]::CreateInstance($analysisType)
     $analysis.TotalAmount = [decimal]121
