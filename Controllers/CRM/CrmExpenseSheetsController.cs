@@ -567,6 +567,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Hoja de gastos encontrada", typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado invalido o acceso denegado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -579,9 +580,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
-            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
-            if (userError != null)
-                return userError;
+            // Use only the actor established by the validated signed company context.
+            var viewerAxUserId = RequireValidatedSnapshotAxUserIdOrReturn403(out var viewerError, traceId);
+            if (viewerError != null)
+                return viewerError;
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
             {
@@ -606,13 +608,14 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} company={company} traceId={traceId}");
+                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} viewerAxUserId={viewerAxUserId} company={company} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(axUserId);
+                con.Append(viewerAxUserId);
                 con.Append(hojaGastosId.Trim());
+                con.Append(1);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -624,7 +627,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Logger.Log(
                         $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-response-unreadable " +
-                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} traceId={traceId}",
+                        $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
 
                     var errorResponse = new IndApiResponse<object>
@@ -644,7 +647,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = BuildActionError(message, traceId, out var status);
                     Logger.Log(
                         $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-validation-failed " +
-                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                        $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
                         $"axMessage={ToLogValue(message)} mappedStatus={(int)status} mappedErrorCode={ToLogValue(errorResponse.ErrorCode)} " +
                         $"axExtras={FormatAxExtrasForLog(extras)} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
@@ -676,7 +679,7 @@ namespace IND_CRM_API.Controllers.CRM
                 };
                 Logger.Log(
                     $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=allow reason=ax-detail-found " +
-                    $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                    $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
                     $"sheetUserId={ToLogValue(detail.UserId)} lineCount={(detail.Lines == null ? 0 : detail.Lines.Count)} traceId={traceId}");
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
