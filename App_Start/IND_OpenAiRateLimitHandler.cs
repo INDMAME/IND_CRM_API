@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
+using System.Security.Claims;
 
 namespace IND_CRM_API.App_Start
 {
@@ -22,6 +23,7 @@ namespace IND_CRM_API.App_Start
         private const string ExpenseSheetAskPath = "/api/ia/service/expensesheets/ask";
         private const string QuickCreateTicketPath = "/api/crm/expensesheets/tickets/quick-create";
         private const string TextFormattingPath = "/api/ia/service/text/format";
+        private const string HelpAskPath = "/api/ia/service/help/ask";
 
         private const string SpeechMaxRequestsSettingKey = "OpenAI:RateLimitSpeechMaxRequests";
         private const string SpeechWindowSecondsSettingKey = "OpenAI:RateLimitSpeechWindowSeconds";
@@ -32,6 +34,14 @@ namespace IND_CRM_API.App_Start
         private const string MaxConcurrentPerUserSettingKey = "OpenAI:RateLimitMaxConcurrentPerUser";
         private const string ValidationMultiplierSettingKey = "OpenAI:RateLimitValidationMultiplier";
         private const string RateLimitEnabledSettingKey = "OpenAI:RateLimitEnabled";
+        private const string AssistantQueryRateLimitEnabledSettingKey = "AssistantQueries:RateLimitEnabled";
+        private const string AssistantQueryMaxRequestsSettingKey = "AssistantQueries:RateLimitMaxRequests";
+        private const string AssistantQueryWindowSecondsSettingKey = "AssistantQueries:RateLimitWindowSeconds";
+        private const string AssistantQueryValidationMultiplierSettingKey = "AssistantQueries:RateLimitValidationMultiplier";
+        private const string HelpRateLimitEnabledSettingKey = "HelpAssistant:RateLimitEnabled";
+        private const string HelpMaxRequestsSettingKey = "HelpAssistant:RateLimitMaxRequests";
+        private const string HelpWindowSecondsSettingKey = "HelpAssistant:RateLimitWindowSeconds";
+        private const string HelpValidationMultiplierSettingKey = "HelpAssistant:RateLimitValidationMultiplier";
 
         private const int DefaultSpeechMaxRequests = 5;
         private const int DefaultSpeechWindowSeconds = 300;
@@ -42,6 +52,19 @@ namespace IND_CRM_API.App_Start
         private const int DefaultMaxConcurrentPerUser = 1;
         private const int DefaultValidationMultiplier = 1;
         private const bool DefaultRateLimitEnabled = true;
+        private const int DefaultAssistantQueryMaxRequests = 30;
+        private const int DefaultAssistantQueryWindowSeconds = 900;
+        private const int DefaultAssistantQueryValidationMultiplier = 1;
+
+        private static readonly int AssistantQueryMaxRequests = ReadPositiveIntFromConfig(
+            AssistantQueryMaxRequestsSettingKey,
+            HelpMaxRequestsSettingKey,
+            DefaultAssistantQueryMaxRequests);
+
+        private static readonly TimeSpan AssistantQueryWindow = TimeSpan.FromSeconds(ReadPositiveIntFromConfig(
+            AssistantQueryWindowSecondsSettingKey,
+            HelpWindowSecondsSettingKey,
+            DefaultAssistantQueryWindowSeconds));
 
         private static readonly EndpointLimit SpeechLimit = new EndpointLimit(
             "speech",
@@ -58,8 +81,8 @@ namespace IND_CRM_API.App_Start
         private static readonly EndpointLimit ExpenseSheetAskLimit = new EndpointLimit(
             "expensesheets-ask",
             NormalizePath(ExpenseSheetAskPath),
-            ReadPositiveIntFromConfig(ExpenseMaxRequestsSettingKey, DefaultExpenseMaxRequests),
-            TimeSpan.FromSeconds(ReadPositiveIntFromConfig(ExpenseWindowSecondsSettingKey, DefaultExpenseWindowSeconds)));
+            AssistantQueryMaxRequests,
+            AssistantQueryWindow);
 
         private static readonly EndpointLimit QuickCreateTicketLimit = new EndpointLimit(
             "ticket-quick-create",
@@ -75,6 +98,12 @@ namespace IND_CRM_API.App_Start
                 TextFormattingWindowSecondsSettingKey,
                 DefaultTextFormattingWindowSeconds)));
 
+        private static readonly EndpointLimit HelpAskLimit = new EndpointLimit(
+            "crm-help-ask",
+            NormalizePath(HelpAskPath),
+            AssistantQueryMaxRequests,
+            AssistantQueryWindow);
+
         private readonly ConcurrentDictionary<string, RateWindowState> _rateWindows =
             new ConcurrentDictionary<string, RateWindowState>(StringComparer.OrdinalIgnoreCase);
 
@@ -84,33 +113,59 @@ namespace IND_CRM_API.App_Start
         private readonly IAxLogger _logger;
         private readonly int _maxConcurrentPerUser;
         private readonly int _validationMultiplier;
+        private readonly int _assistantQueryValidationMultiplier;
         private readonly bool _isEnabled;
+        private readonly bool _isAssistantQueryEnabled;
+        private readonly bool _isHelpEnabled;
+        private readonly bool _isHelpFeatureEnabled;
 
         public IND_OpenAiRateLimitHandler(IAxLogger logger)
         {
             _logger = logger ?? new FileAxLogger();
             _maxConcurrentPerUser = ReadPositiveIntFromConfig(MaxConcurrentPerUserSettingKey, DefaultMaxConcurrentPerUser);
             _validationMultiplier = ReadPositiveIntFromConfig(ValidationMultiplierSettingKey, DefaultValidationMultiplier);
+            _assistantQueryValidationMultiplier = ReadPositiveIntFromConfig(
+                AssistantQueryValidationMultiplierSettingKey,
+                HelpValidationMultiplierSettingKey,
+                DefaultAssistantQueryValidationMultiplier);
             _isEnabled = ReadBoolFromConfig(RateLimitEnabledSettingKey, DefaultRateLimitEnabled);
+            _isAssistantQueryEnabled = ReadBoolFromConfig(AssistantQueryRateLimitEnabledSettingKey, true);
+            _isHelpEnabled = ReadBoolFromConfig(HelpRateLimitEnabledSettingKey, true);
+            _isHelpFeatureEnabled = AppSettingsHelper.GetBoolSetting(
+                "HelpAssistant:Enabled",
+                false,
+                "INDCRM_HELP_ENABLED");
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (!_isEnabled)
-                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
-
             if (!TryResolveEndpoint(request, out var endpoint))
                 return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            var isHelpEndpoint = ReferenceEquals(endpoint, HelpAskLimit);
+            var isAssistantQueryEndpoint = isHelpEndpoint || ReferenceEquals(endpoint, ExpenseSheetAskLimit);
+            if (isHelpEndpoint && !_isHelpFeatureEnabled)
+                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (isAssistantQueryEndpoint)
+            {
+                if (!_isAssistantQueryEnabled || (isHelpEndpoint && !_isHelpEnabled))
+                    return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            else if (!_isEnabled)
+            {
+                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
 
             var userKey = ResolveUserKey(request);
             if (string.IsNullOrWhiteSpace(userKey))
                 return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            var logUser = isAssistantQueryEndpoint ? "redacted" : userKey;
 
             if (!TryAcquireConcurrency(userKey, out var activeCount))
             {
                 var traceId = Guid.NewGuid().ToString("N");
                 _logger.Log(
-                    $"[AI-LIMIT] Concurrent limit exceeded user={userKey} endpoint={endpoint.Name} active={activeCount} max={_maxConcurrentPerUser} traceId={traceId}",
+                    $"[AI-LIMIT] Concurrent limit exceeded user={logUser} endpoint={endpoint.Name} active={activeCount} max={_maxConcurrentPerUser} traceId={traceId}",
                     AxaptaSessionManager.LogLevel.Warning);
 
                 return BuildTooManyRequestsResponse(
@@ -123,22 +178,35 @@ namespace IND_CRM_API.App_Start
 
             try
             {
-                if (!TryConsumeRequest(userKey, endpoint, out var retryAfterSeconds, out var effectiveMaxRequests))
+                // Keeps chatbot query throttling independent from shared OpenAI tests.
+                var validationMultiplier = isAssistantQueryEndpoint
+                    ? _assistantQueryValidationMultiplier
+                    : _validationMultiplier;
+                if (!TryConsumeRequest(
+                    userKey,
+                    endpoint,
+                    validationMultiplier,
+                    out var retryAfterSeconds,
+                    out var effectiveMaxRequests))
                 {
                     var traceId = Guid.NewGuid().ToString("N");
                     _logger.Log(
-                        $"[AI-LIMIT] Rate limit exceeded user={userKey} endpoint={endpoint.Name} configuredMaxRequests={endpoint.MaxRequests} effectiveMaxRequests={effectiveMaxRequests} validationMultiplier={_validationMultiplier} windowSeconds={(int)endpoint.Window.TotalSeconds} retryAfterSeconds={retryAfterSeconds} traceId={traceId}",
+                        $"[AI-LIMIT] Rate limit exceeded user={logUser} endpoint={endpoint.Name} configuredMaxRequests={endpoint.MaxRequests} effectiveMaxRequests={effectiveMaxRequests} validationMultiplier={validationMultiplier} windowSeconds={(int)endpoint.Window.TotalSeconds} retryAfterSeconds={retryAfterSeconds} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
 
-                    var limitMessage = _validationMultiplier > 1
-                        ? $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos (modo pruebas x{_validationMultiplier})."
-                        : $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos.";
+                    var limitMessage = isAssistantQueryEndpoint
+                        ? BuildAssistantQueryRateLimitMessage(retryAfterSeconds)
+                        : validationMultiplier > 1
+                            ? $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos (modo pruebas x{validationMultiplier})."
+                            : $"Se excedio el limite de {effectiveMaxRequests} solicitudes en {(int)endpoint.Window.TotalMinutes} minutos.";
 
                     return BuildTooManyRequestsResponse(
                         request,
                         traceId,
                         limitMessage,
-                        IndErrorCodes.AiRateLimitExceeded,
+                        isAssistantQueryEndpoint
+                            ? IndErrorCodes.AssistantQueryRateLimitExceeded
+                            : IndErrorCodes.AiRateLimitExceeded,
                         retryAfterSeconds);
                 }
 
@@ -150,12 +218,17 @@ namespace IND_CRM_API.App_Start
             }
         }
 
-        private bool TryConsumeRequest(string userKey, EndpointLimit endpoint, out int retryAfterSeconds, out int effectiveMaxRequests)
+        private bool TryConsumeRequest(
+            string userKey,
+            EndpointLimit endpoint,
+            int validationMultiplier,
+            out int retryAfterSeconds,
+            out int effectiveMaxRequests)
         {
             var nowUtc = DateTime.UtcNow;
             var key = userKey + "|" + endpoint.Name;
             var state = _rateWindows.GetOrAdd(key, _ => new RateWindowState(nowUtc));
-            effectiveMaxRequests = GetEffectiveMaxRequests(endpoint.MaxRequests);
+            effectiveMaxRequests = GetEffectiveMaxRequests(endpoint.MaxRequests, validationMultiplier);
 
             lock (state.SyncRoot)
             {
@@ -182,13 +255,23 @@ namespace IND_CRM_API.App_Start
             }
         }
 
-        private int GetEffectiveMaxRequests(int configuredMaxRequests)
+        private static int GetEffectiveMaxRequests(int configuredMaxRequests, int validationMultiplier)
         {
-            if (_validationMultiplier <= 1)
+            if (validationMultiplier <= 1)
                 return configuredMaxRequests;
 
-            var effective = (int)Math.Ceiling((double)configuredMaxRequests / _validationMultiplier);
+            var effective = (int)Math.Ceiling((double)configuredMaxRequests / validationMultiplier);
             return effective <= 0 ? 1 : effective;
+        }
+
+        /// <summary>
+        /// Builds a clear assistant query limit message using the remaining server wait time.
+        /// </summary>
+        private static string BuildAssistantQueryRateLimitMessage(int retryAfterSeconds)
+        {
+            var retryAfterMinutes = Math.Max(1, (int)Math.Ceiling(retryAfterSeconds / 60d));
+            var minuteLabel = retryAfterMinutes == 1 ? "minuto" : "minutos";
+            return $"Se ha superado el límite de consultas. Por favor, vuelva a intentarlo dentro de {retryAfterMinutes} {minuteLabel}.";
         }
 
         private bool TryAcquireConcurrency(string userKey, out int activeCount)
@@ -251,6 +334,12 @@ namespace IND_CRM_API.App_Start
                 return true;
             }
 
+            if (string.Equals(path, HelpAskLimit.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                endpoint = HelpAskLimit;
+                return true;
+            }
+
             return false;
         }
 
@@ -260,7 +349,11 @@ namespace IND_CRM_API.App_Start
             if (principal?.Identity?.IsAuthenticated != true)
                 return null;
 
-            var name = principal.Identity.Name;
+            string name = null;
+            if (principal is ClaimsPrincipal claims)
+                name = claims.FindFirst("oid")?.Value ?? claims.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? claims.FindFirst("sub")?.Value;
+            if (string.IsNullOrWhiteSpace(name))
+                name = principal.Identity.Name;
             if (string.IsNullOrWhiteSpace(name))
                 return null;
 
@@ -293,18 +386,38 @@ namespace IND_CRM_API.App_Start
 
         private static int ReadPositiveIntFromConfig(string key, int defaultValue)
         {
+            return TryReadPositiveIntFromConfig(key, out var value) ? value : defaultValue;
+        }
+
+        /// <summary>
+        /// Reads a primary assistant setting while preserving the legacy CRM help fallback.
+        /// </summary>
+        private static int ReadPositiveIntFromConfig(string key, string fallbackKey, int defaultValue)
+        {
+            return TryReadPositiveIntFromConfig(key, out var value)
+                ? value
+                : ReadPositiveIntFromConfig(fallbackKey, defaultValue);
+        }
+
+        /// <summary>
+        /// Tries to read one positive integer without accepting unresolved placeholders.
+        /// </summary>
+        private static bool TryReadPositiveIntFromConfig(string key, out int value)
+        {
+            value = 0;
             try
             {
-                var value = AppSettingsHelper.GetSetting(key);
-                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
-                    return parsed;
+                var configuredValue = AppSettingsHelper.GetSetting(key);
+                return int.TryParse(
+                    configuredValue,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out value) && value > 0;
             }
             catch
             {
-                // Ignore and use default value.
+                return false;
             }
-
-            return defaultValue;
         }
 
         private static bool ReadBoolFromConfig(string key, bool defaultValue)

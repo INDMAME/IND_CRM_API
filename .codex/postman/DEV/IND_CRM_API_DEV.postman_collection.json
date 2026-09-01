@@ -2994,7 +2994,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 0,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
+                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"projIdProvided\": true,\n      \"reimbursableExpense\": 0,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets",
@@ -3036,7 +3036,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 2,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 2\n}"
+                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"projIdProvided\": true,\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 0\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/009998",
@@ -3119,8 +3119,16 @@
                                                                      {
                                                                          "key":  "X-IND-AxUserId",
                                                                          "value":  "{{axUserId}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
                                                                      }
                                                                  ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"projId\": \"PRJ-001\",\n  \"projIdProvided\": true\n}"
+                                                               },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/009998/project-default/propagate",
                                                                   "host":  [
@@ -3135,7 +3143,7 @@
                                                                                "propagate"
                                                                            ]
                                                               },
-                                                      "description":  "Propaga el proyecto de cabecera a projId y projIdHornos de las lineas existentes. La web debe pedir confirmacion antes de llamarlo."
+                                                      "description":  "Aplica atomicamente un proyecto objetivo a cabecera y lineas. Sin body usa el proyecto actual de cabecera. La web debe pedir confirmacion antes de llamarlo."
                                                   },
                                       "response":  [
 
@@ -3203,7 +3211,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 0,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
+                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"projIdProvided\": true,\n  \"reimbursableExpense\": 0,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",
@@ -3444,6 +3452,8 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovalRequestedStatus\", 0);",
+                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
+                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3452,7 +3462,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApprovalRequested - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
+                                                                                                     "    reimbursableExpense: reimbursableExpense",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -3573,6 +3583,8 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovedStatus\", 0);",
+                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
+                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3581,7 +3593,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApproved - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
+                                                                                                     "    reimbursableExpense: reimbursableExpense",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -4056,7 +4068,7 @@
                      },
                      {
                          "key":  "expenseNotificationReimbursableExpense",
-                         "value":  "2",
+                         "value":  "0",
                          "type":  "string"
                      },
                      {

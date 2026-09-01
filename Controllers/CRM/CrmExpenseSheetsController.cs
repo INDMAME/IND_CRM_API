@@ -46,7 +46,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int LineReimbursableExpenseYesValue = 0;
         private const int LineReimbursableExpenseNoValue = 1;
         private const string AxEnumNumericValidationMessage = "Debe ser un valor numerico de enum AX mayor o igual que 0. Consulte /api/crm/enums para las opciones activas.";
-        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera debe ser un valor de INDReimbursableExpense: 0=Yes, 1=No, 2=Both. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
+        private const string HeaderReimbursableExpenseValidationMessage = "reimbursableExpense de cabecera solo admite valores editables de INDReimbursableExpense: 0=Yes, 1=No. El valor 2=Both es derivado y solo se admite en respuestas y filtros. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpense.";
         private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=Yes, 1=No. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
@@ -79,6 +79,7 @@ namespace IND_CRM_API.Controllers.CRM
         /// - mode 2: existingHojaGastosId is required and lines must include at least one line.
         /// currencyCode/exchRate on the header are legacy defaults for new lines; AX keeps header reimbursement currency local.
         /// Optional header enums: expenseSheetStatus, exchangeRateMode and reimbursableExpense.
+        /// Header reimbursableExpense accepts only writable values Yes (0) and No (1); Both (2) is derived from mixed lines.
         /// </remarks>
         [HttpPost, Route("")]
         [ResponseType(typeof(IndApiResponse<object>))]
@@ -169,6 +170,7 @@ namespace IND_CRM_API.Controllers.CRM
                     {
                         var lineCon = ax.CreateContainer();
                         var normalizedDate = NormalizeApiDateToAxYmd(line.transDate);
+                        var projectProvided = line.projIdProvided ?? (line.projId != null);
 
                         lineCon.Append(normalizedDate);
                         lineCon.Append(line.typeValue ?? 0);
@@ -177,13 +179,16 @@ namespace IND_CRM_API.Controllers.CRM
                         lineCon.Append(line.fileId?.Trim() ?? string.Empty);
                         lineCon.Append(line.qty ?? 0m);
                         lineCon.Append(line.price ?? 0m);
-                        lineCon.Append(line.projId?.Trim() ?? string.Empty);
+                        lineCon.Append(projectProvided ? (line.projId?.Trim() ?? string.Empty) : string.Empty);
                         AppendLineOptionalFields(
                             lineCon,
                             line.reimbursableExpense,
                             line.currencyCode,
                             line.amountMST,
-                            line.exchRate);
+                            line.exchRate,
+                            forceStablePositions: true);
+                        // Position 13 is create-only and preserves omitted versus explicit empty project.
+                        lineCon.Append(ToAxBool(projectProvided));
 
                         linesCon.Append(lineCon);
                     }
@@ -562,6 +567,7 @@ namespace IND_CRM_API.Controllers.CRM
         [ResponseType(typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Hoja de gastos encontrada", typeof(IndPagedResponse<ExpenseSheetDetailDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado invalido o acceso denegado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
@@ -574,9 +580,10 @@ namespace IND_CRM_API.Controllers.CRM
             if (companyError != null)
                 return companyError;
 
-            var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
-            if (userError != null)
-                return userError;
+            // Use only the actor established by the validated signed company context.
+            var viewerAxUserId = RequireValidatedSnapshotAxUserIdOrReturn403(out var viewerError, traceId);
+            if (viewerError != null)
+                return viewerError;
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
             {
@@ -601,13 +608,14 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} company={company} traceId={traceId}");
+                Logger.Log($"[API-IN] GetExpenseSheet hojaGastosId={hojaGastosId} user={username} viewerAxUserId={viewerAxUserId} company={company} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
                 con.Append(company);
-                con.Append(axUserId);
+                con.Append(viewerAxUserId);
                 con.Append(hojaGastosId.Trim());
+                con.Append(1);
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -619,7 +627,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Logger.Log(
                         $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-response-unreadable " +
-                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} traceId={traceId}",
+                        $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
 
                     var errorResponse = new IndApiResponse<object>
@@ -639,7 +647,7 @@ namespace IND_CRM_API.Controllers.CRM
                     var errorResponse = BuildActionError(message, traceId, out var status);
                     Logger.Log(
                         $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=deny reason=ax-validation-failed " +
-                        $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                        $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
                         $"axMessage={ToLogValue(message)} mappedStatus={(int)status} mappedErrorCode={ToLogValue(errorResponse.ErrorCode)} " +
                         $"axExtras={FormatAxExtrasForLog(extras)} traceId={traceId}",
                         AxaptaSessionManager.LogLevel.Warning);
@@ -671,7 +679,7 @@ namespace IND_CRM_API.Controllers.CRM
                 };
                 Logger.Log(
                     $"[EXPENSE-AUTHZ-DETAIL] gate=CrmExpenseSheetsController.GetExpenseSheet result=allow reason=ax-detail-found " +
-                    $"company={ToLogValue(company)} axUserId={ToLogValue(axUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
+                    $"company={ToLogValue(company)} viewerAxUserId={ToLogValue(viewerAxUserId)} hojaGastosId={ToLogValue(hojaGastosId)} " +
                     $"sheetUserId={ToLogValue(detail.UserId)} lineCount={(detail.Lines == null ? 0 : detail.Lines.Count)} traceId={traceId}");
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
@@ -696,7 +704,9 @@ namespace IND_CRM_API.Controllers.CRM
         /// Updates the header data of an expense sheet.
         /// </summary>
         /// <remarks>
-        /// Optional header fields: expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
+        /// Optional header fields: projIdProvided, expenseSheetStatus, exchangeRateMode, estadoComentarios and reimbursableExpense.
+        /// projIdProvided=false preserves the project stored by AX. When omitted, a non-null projId is explicit for legacy clients.
+        /// Header reimbursableExpense accepts only writable values Yes (0) and No (1); Both (2) is derived from mixed lines.
         /// If estadoComentarios is provided, expenseSheetStatus and exchangeRateMode are required.
         /// </remarks>
         // Prevent collision with ticket resource prefix (/api/crm/expensesheets/tickets).
@@ -739,7 +749,7 @@ namespace IND_CRM_API.Controllers.CRM
                     validationErrors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = AxEnumNumericValidationMessage });
                 if (body.exchangeRateMode.HasValue && body.exchangeRateMode.Value < 0)
                     validationErrors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
-                if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
+                if (body.reimbursableExpense.HasValue && !IsValidWritableHeaderReimbursableExpense(body.reimbursableExpense.Value))
                 {
                     validationErrors.Add(new IndValidationError
                     {
@@ -778,17 +788,19 @@ namespace IND_CRM_API.Controllers.CRM
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
                     $"reimbursableExpense={ToLogValue(body.reimbursableExpense)} actorAxUserId={ToLogValue(actorAxUserId)} " +
+                    $"projIdProvided={(body.projIdProvided.HasValue ? body.projIdProvided.Value.ToString() : "<null>")} " +
                     $"estadoComentariosLength={(body.estadoComentarios ?? string.Empty).Length} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
+                var projectProvided = body.projIdProvided ?? (body.projId != null);
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
                 con.Append(body.description?.Trim() ?? string.Empty);
                 con.Append(body.currencyCode?.Trim() ?? string.Empty);
                 con.Append(body.exchRate ?? 0m);
-                con.Append(body.projId?.Trim() ?? string.Empty);
+                con.Append(projectProvided ? (body.projId?.Trim() ?? string.Empty) : string.Empty);
                 AppendUpdateHeaderOptionalFields(
                     con,
                     body.expenseSheetStatus,
@@ -796,6 +808,8 @@ namespace IND_CRM_API.Controllers.CRM
                     body.estadoComentarios,
                     body.reimbursableExpense,
                     actorAxUserId);
+                // Position 13 lets AX preserve the project under the same header lock.
+                con.Append(ToAxBool(projectProvided));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -968,11 +982,14 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Propagates current header project to all existing lines.
+        /// Atomically propagates a project target to the header and all existing lines.
         /// </summary>
         /// <remarks>
         /// The web client must ask for user confirmation before calling this endpoint.
-        /// AX blocks the operation when the header project is the configured "various" marker.
+        /// With no body, AX preserves the legacy behavior and reads the current header project.
+        /// With projIdProvided=true, projId is the explicit target and may be empty.
+        /// When the flag is omitted, a non-null projId remains explicit for legacy clients.
+        /// AX blocks the configured "various" marker.
         /// </remarks>
         [HttpPost, Route("{hojaGastosId:regex(^(?![Tt][Ii][Cc][Kk][Ee][Tt][Ss]$).+)}/project-default/propagate")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetPropagationResultDto>))]
@@ -981,7 +998,9 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Hoja de gastos no encontrada", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
-        public IHttpActionResult PropagateExpenseSheetProjectDefault(string hojaGastosId)
+        public IHttpActionResult PropagateExpenseSheetProjectDefault(
+            string hojaGastosId,
+            [FromBody] PropagateExpenseSheetProjectDefaultRequest body = null)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
@@ -993,6 +1012,9 @@ namespace IND_CRM_API.Controllers.CRM
             var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
             if (userError != null)
                 return userError;
+
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
@@ -1028,6 +1050,9 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(hojaGastosId.Trim());
+                var projectProvided = body?.projIdProvided ?? (body?.projId != null);
+                con.Append(projectProvided ? (body?.projId?.Trim() ?? string.Empty) : string.Empty);
+                con.Append(ToAxBool(projectProvided));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1205,6 +1230,10 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Updates one expense sheet line.
         /// </summary>
+        /// <remarks>
+        /// projIdProvided=false preserves the stored line project and true applies projId, including an empty value.
+        /// When omitted, AX keeps the legacy behavior: a non-empty projId is explicit; otherwise AX uses only an eligible header project and preserves the stored line for an empty, mixed or ineligible header.
+        /// </remarks>
         [HttpPut, Route("{hojaGastosId}/lines/{lineRecId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
@@ -1225,6 +1254,9 @@ namespace IND_CRM_API.Controllers.CRM
             var axUserId = RequireAxUserIdOrReturn422(out var userError, traceId, IndErrorCodes.CrmExpenseSheetMissingFields);
             if (userError != null)
                 return userError;
+
+            if (!ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
 
             if (string.IsNullOrWhiteSpace(hojaGastosId))
                 validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
@@ -1283,7 +1315,10 @@ namespace IND_CRM_API.Controllers.CRM
             try
             {
                 var username = GetAuthenticatedUsername();
-                Logger.Log($"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
+                Logger.Log(
+                    $"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} " +
+                    $"user={username} axUserId={axUserId} " +
+                    $"projIdProvided={(body.projIdProvided.HasValue ? body.projIdProvided.Value.ToString() : "<null>")} traceId={traceId}");
 
                 var ax = _sessionManager.GetAxInstanceForUser(username);
                 var con = ax.CreateContainer();
@@ -1293,6 +1328,10 @@ namespace IND_CRM_API.Controllers.CRM
                 // Axapta COM container is sensitive to Int64 values; send RecId as numeric text.
                 con.Append(lineRecId.ToString(CultureInfo.InvariantCulture));
 
+                // Keep staged rollouts safe because older AX versions treat position 12 as authoritative.
+                var projectIdForAx = body.projIdProvided == false
+                    ? string.Empty
+                    : body.projId?.Trim() ?? string.Empty;
                 var normalizedDate = NormalizeApiDateToAxYmd(body.transDate);
                 con.Append(normalizedDate);
                 con.Append(body.typeValue ?? 0);
@@ -1301,13 +1340,17 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(body.fileId?.Trim() ?? string.Empty);
                 con.Append(body.qty ?? 0m);
                 con.Append(body.price ?? 0m);
-                con.Append(body.projId?.Trim() ?? string.Empty);
+                con.Append(projectIdForAx);
                 AppendLineOptionalFields(
                     con,
                     body.reimbursableExpense,
                     body.currencyCode,
                     body.amountMST,
-                    body.exchRate);
+                    body.exchRate,
+                    forceStablePositions: true);
+                //MMS - Solo anade la posicion 17 cuando el cliente declara una intencion nueva - 2026.08.24
+                if (body.projIdProvided.HasValue)
+                    con.Append(ToAxBool(body.projIdProvided.Value));
 
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
@@ -1362,6 +1405,58 @@ namespace IND_CRM_API.Controllers.CRM
                 LogOut(HttpStatusCode.InternalServerError);
                 return Content(HttpStatusCode.InternalServerError, response);
             }
+        }
+
+        /// <summary>
+        /// Associates an existing ticket with a persisted expense sheet line.
+        /// </summary>
+        /// <remarks>
+        /// The operation is idempotent when the same ticket is already associated.
+        /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
+        /// AX requires an editable Draft sheet owned by the signed actor and validates ticket eligibility and association uniqueness.
+        /// </remarks>
+        /// <param name="hojaGastosId">Expense sheet identifier.</param>
+        /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
+        /// <param name="body">Ticket identifier to associate.</param>
+        [HttpPut, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Ticket asociado a la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX, actor no propietario o permiso insuficiente", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja, linea o ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Asociacion incompatible o estado no editable", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o ticket no elegible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult LinkExpenseSheetLineTicket(
+            string hojaGastosId,
+            long lineRecId,
+            [FromBody] LinkExpenseSheetLineTicketRequest body)
+        {
+            return ChangeExpenseSheetLineTicketAssociation(hojaGastosId, lineRecId, body, true);
+        }
+
+        /// <summary>
+        /// Removes the ticket association from a persisted expense sheet line.
+        /// </summary>
+        /// <remarks>
+        /// The operation does not delete the expense line, ticket, or ticket image.
+        /// AX receives the owner from X-IND-AxUserId and the viewer from the validated signed context snapshot.
+        /// AX requires an editable Draft sheet owned by the signed actor and returns whether the association changed.
+        /// </remarks>
+        /// <param name="hojaGastosId">Expense sheet identifier.</param>
+        /// <param name="lineRecId">Non-zero persisted expense sheet line identifier; AX can return negative temporary identifiers.</param>
+        [HttpDelete, Route("{hojaGastosId}/lines/{lineRecId:long}/ticket")]
+        [ResponseType(typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Ticket desvinculado de la linea", typeof(IndApiResponse<ExpenseSheetLineTicketResultDto>))]
+        [SwaggerResponse(HttpStatusCode.Forbidden, "Contexto firmado sin actor AX, actor no propietario o permiso insuficiente", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.NotFound, "Hoja o linea no encontrada", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Estado no editable o asociacion incompatible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse((HttpStatusCode)422, "Errores de validacion o regla de negocio", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
+        public IHttpActionResult UnlinkExpenseSheetLineTicket(string hojaGastosId, long lineRecId)
+        {
+            return ChangeExpenseSheetLineTicketAssociation(hojaGastosId, lineRecId, null, false);
         }
 
         /// <summary>
@@ -1712,7 +1807,7 @@ namespace IND_CRM_API.Controllers.CRM
                 errors.Add(new IndValidationError { Field = "exchangeRateMode", Message = AxEnumNumericValidationMessage });
             if (body.exchangeRateMode.HasValue && !body.expenseSheetStatus.HasValue)
                 errors.Add(new IndValidationError { Field = "expenseSheetStatus", Message = "expenseSheetStatus es obligatorio cuando se envia exchangeRateMode." });
-            if (body.reimbursableExpense.HasValue && !IsValidHeaderReimbursableExpense(body.reimbursableExpense.Value))
+            if (body.reimbursableExpense.HasValue && !IsValidWritableHeaderReimbursableExpense(body.reimbursableExpense.Value))
             {
                 errors.Add(new IndValidationError
                 {
@@ -1898,11 +1993,17 @@ namespace IND_CRM_API.Controllers.CRM
             return expenseSheetStatus >= 0;
         }
 
-        // Validates the header enum INDReimbursableExpense: Yes, No and Both.
-        private static bool IsValidHeaderReimbursableExpense(int reimbursableExpense)
+        //MMS - Validates writable header states; Both remains derived and read-only. - 2026.08.03
+        private static bool IsValidWritableHeaderReimbursableExpense(int reimbursableExpense)
         {
             return reimbursableExpense == HeaderReimbursableExpenseYesValue ||
-                   reimbursableExpense == HeaderReimbursableExpenseNoValue ||
+                   reimbursableExpense == HeaderReimbursableExpenseNoValue;
+        }
+
+        // Validates header filter states, including the derived mixed value.
+        private static bool IsValidHeaderReimbursableExpenseFilter(int reimbursableExpense)
+        {
+            return IsValidWritableHeaderReimbursableExpense(reimbursableExpense) ||
                    reimbursableExpense == HeaderReimbursableExpenseBothValue;
         }
 
@@ -1931,7 +2032,7 @@ namespace IND_CRM_API.Controllers.CRM
         // Standard enum normalization: invalid values are treated as null.
         private static int? NormalizeReimbursableExpenseOrNull(int? reimbursableExpense)
         {
-            if (!reimbursableExpense.HasValue || !IsValidHeaderReimbursableExpense(reimbursableExpense.Value))
+            if (!reimbursableExpense.HasValue || !IsValidHeaderReimbursableExpenseFilter(reimbursableExpense.Value))
                 return null;
 
             return reimbursableExpense.Value;
@@ -2011,7 +2112,7 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Appends optional update-header fields without shifting the legacy estadoComentarios slot.
+        // Materializes update-header positions 8-12 before the project intent flag at position 13.
         private static void AppendUpdateHeaderOptionalFields(
             IAxaptaContainer container,
             int? expenseSheetStatus,
@@ -2023,38 +2124,22 @@ namespace IND_CRM_API.Controllers.CRM
             if (container == null)
                 return;
 
-            var hasEstadoComentarios = estadoComentarios != null;
-            var hasActorAxUserId = !string.IsNullOrWhiteSpace(actorAxUserId);
-            if (!expenseSheetStatus.HasValue && !exchangeRateMode.HasValue && !hasEstadoComentarios && !reimbursableExpense.HasValue && !hasActorAxUserId)
-                return;
-
             const string noOptionalValueToken = "null";
-
-            if (expenseSheetStatus.HasValue)
-                container.Append(expenseSheetStatus.Value);
-            else
-                container.Append(noOptionalValueToken);
-
-            if (exchangeRateMode.HasValue || hasEstadoComentarios || reimbursableExpense.HasValue || hasActorAxUserId)
-            {
-                if (exchangeRateMode.HasValue)
-                    container.Append(exchangeRateMode.Value);
-                else
-                    container.Append(noOptionalValueToken);
-
-                if (hasEstadoComentarios)
-                    container.Append(estadoComentarios.Trim());
-                else if (reimbursableExpense.HasValue || hasActorAxUserId)
-                    container.Append(noOptionalValueToken);
-
-                if (reimbursableExpense.HasValue)
-                    container.Append(reimbursableExpense.Value);
-                else if (hasActorAxUserId)
-                    container.Append(noOptionalValueToken);
-
-                if (hasActorAxUserId)
-                    container.Append(actorAxUserId.Trim());
-            }
+            container.Append(expenseSheetStatus.HasValue
+                ? (object)expenseSheetStatus.Value
+                : noOptionalValueToken);
+            container.Append(exchangeRateMode.HasValue
+                ? (object)exchangeRateMode.Value
+                : noOptionalValueToken);
+            container.Append(estadoComentarios != null
+                ? (object)estadoComentarios.Trim()
+                : noOptionalValueToken);
+            container.Append(reimbursableExpense.HasValue
+                ? (object)reimbursableExpense.Value
+                : noOptionalValueToken);
+            container.Append(!string.IsNullOrWhiteSpace(actorAxUserId)
+                ? (object)actorAxUserId.Trim()
+                : noOptionalValueToken);
         }
 
         // Reads optional forwarding headers without making them part of the public body contract.
@@ -2083,13 +2168,18 @@ namespace IND_CRM_API.Controllers.CRM
             int? reimbursableExpense,
             string currencyCode,
             decimal? amountMST,
-            decimal? exchRate)
+            decimal? exchRate,
+            bool forceStablePositions = false)
         {
             if (container == null)
                 return;
 
             var hasCurrencyCode = !string.IsNullOrWhiteSpace(currencyCode);
-            if (!reimbursableExpense.HasValue && !hasCurrencyCode && !amountMST.HasValue && !exchRate.HasValue)
+            if (!forceStablePositions &&
+                !reimbursableExpense.HasValue &&
+                !hasCurrencyCode &&
+                !amountMST.HasValue &&
+                !exchRate.HasValue)
                 return;
 
             const string noOptionalValueToken = "null";
@@ -2326,6 +2416,260 @@ namespace IND_CRM_API.Controllers.CRM
             return value.HasValue && value.Value ? 1 : 0;
         }
 
+        // MMS - Keeps the owner separate from the signed actor for ticket links. - 2026.08.04
+        private IHttpActionResult ChangeExpenseSheetLineTicketAssociation(
+            string hojaGastosId,
+            long lineRecId,
+            LinkExpenseSheetLineTicketRequest body,
+            bool linkTicket)
+        {
+            var traceId = Guid.NewGuid().ToString("N");
+            var validationErrors = new List<IndValidationError>();
+            var operationName = linkTicket ? "LinkExpenseSheetLineTicket" : "UnlinkExpenseSheetLineTicket";
+
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var viewerAxUserId = RequireValidatedSnapshotAxUserIdOrReturn403(out var viewerError, traceId);
+            if (viewerError != null)
+                return viewerError;
+
+            var ownerAxUserId = RequireAxUserIdOrReturn422(
+                out var userError,
+                traceId,
+                IndErrorCodes.CrmExpenseSheetLineTicketMissingFields);
+            if (userError != null)
+                return userError;
+
+            if (linkTicket && !ModelState.IsValid)
+                AddModelStateErrors(validationErrors);
+
+            if (string.IsNullOrWhiteSpace(hojaGastosId))
+                validationErrors.Add(new IndValidationError { Field = "hojaGastosId", Message = "hojaGastosId es obligatorio." });
+
+            AddLineRecIdValidation(validationErrors, lineRecId);
+
+            if (linkTicket)
+            {
+                if (body == null)
+                {
+                    validationErrors.Add(new IndValidationError { Field = "body", Message = "Se requiere el cuerpo de la peticion." });
+                }
+                else if (string.IsNullOrWhiteSpace(body.fileId))
+                {
+                    validationErrors.Add(new IndValidationError { Field = "fileId", Message = "fileId es obligatorio." });
+                }
+            }
+
+            if (validationErrors.Any())
+            {
+                return Content((HttpStatusCode)422, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error de validacion.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetLineTicketMissingFields,
+                    Errors = validationErrors,
+                    Data = null,
+                    TraceId = traceId
+                });
+            }
+
+            void LogOut(HttpStatusCode statusCode)
+            {
+                Logger.Log($"[API-OUT] {operationName} {(int)statusCode} traceId={traceId}");
+            }
+
+            if (!string.Equals(ownerAxUserId.Trim(), viewerAxUserId.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                var forbiddenResponse = BuildExpenseSheetLineTicketError(
+                    "FORBIDDEN",
+                    "Solo el propietario de la hoja puede vincular o desvincular tickets.",
+                    traceId,
+                    out var forbiddenStatus);
+                LogOut(forbiddenStatus);
+                return Content(forbiddenStatus, forbiddenResponse);
+            }
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                var cleanHojaGastosId = hojaGastosId.Trim();
+                var cleanFileId = linkTicket ? body.fileId.Trim() : string.Empty;
+                Logger.Log(
+                    $"[API-IN] {operationName} hojaGastosId={cleanHojaGastosId} lineRecId={lineRecId} " +
+                    $"fileId={(linkTicket ? cleanFileId : "-")} user={username} ownerAxUserId={ownerAxUserId} " +
+                    $"viewerAxUserId={viewerAxUserId} traceId={traceId}");
+
+                var ax = _sessionManager.GetAxInstanceForUser(username);
+                var con = ax.CreateContainer();
+                con.Append(company);
+                con.Append(ownerAxUserId);
+                con.Append(viewerAxUserId);
+                con.Append(cleanHojaGastosId);
+                con.Append(lineRecId.ToString(CultureInfo.InvariantCulture));
+                if (linkTicket)
+                    con.Append(cleanFileId);
+
+                var axMethod = linkTicket ? "linkExpenseSheetLineTicket" : "unlinkExpenseSheetLineTicket";
+                object resultObj = ax.CallStaticClassMethod("INDCRMExpenseSheetService", axMethod, con);
+
+                if (!TryReadHeader(resultObj as IAxaptaContainer, out var success, out var message, out var extras, out _) ||
+                    (success && (extras == null || extras.Count < 6)))
+                {
+                    var malformedResponse = new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Error al procesar la respuesta de AX.",
+                        ErrorCode = IndErrorCodes.AxComError,
+                        Data = null,
+                        TraceId = traceId
+                    };
+                    LogOut(HttpStatusCode.InternalServerError);
+                    return Content(HttpStatusCode.InternalServerError, malformedResponse);
+                }
+
+                var reasonCode = extras != null && extras.Count > 0
+                    ? (extras[0] ?? string.Empty).Trim().ToUpperInvariant()
+                    : string.Empty;
+                if (!success || !string.IsNullOrWhiteSpace(reasonCode))
+                {
+                    var errorResponse = BuildExpenseSheetLineTicketError(reasonCode, message, traceId, out var status);
+                    LogOut(status);
+                    return Content(status, errorResponse);
+                }
+
+                var data = MapExpenseSheetLineTicketResult(
+                    cleanHojaGastosId,
+                    lineRecId,
+                    cleanFileId,
+                    extras);
+                var okResponse = new IndApiResponse<ExpenseSheetLineTicketResultDto>
+                {
+                    Success = true,
+                    Message = string.IsNullOrWhiteSpace(message)
+                        ? (linkTicket ? "Ticket asociado correctamente." : "Ticket desvinculado correctamente.")
+                        : message,
+                    ErrorCode = null,
+                    Errors = null,
+                    Data = data,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.OK);
+                return Ok(okResponse);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] {operationName}: {ex}");
+                var response = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Error interno del servidor.",
+                    ErrorCode = ex is COMException ? IndErrorCodes.AxComError : IndErrorCodes.InternalError,
+                    Data = null,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.InternalServerError);
+                return Content(HttpStatusCode.InternalServerError, response);
+            }
+        }
+
+        // Maps the stable AX reason code to the existing API envelope.
+        private static IndApiResponse<object> BuildExpenseSheetLineTicketError(
+            string reasonCode,
+            string message,
+            string traceId,
+            out HttpStatusCode status)
+        {
+            var normalizedReasonCode = (reasonCode ?? string.Empty).Trim().ToUpperInvariant();
+            var errorCode = IndErrorCodes.CrmExpenseSheetLineTicketBusinessRule;
+            var fallbackMessage = "AX rechazo la operacion por una regla de negocio.";
+            status = (HttpStatusCode)422;
+
+            switch (normalizedReasonCode)
+            {
+                case "NOT_FOUND":
+                    status = HttpStatusCode.NotFound;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketNotFound;
+                    fallbackMessage = "No se encontro la hoja, la linea o el ticket indicado.";
+                    break;
+                case "FORBIDDEN":
+                    status = HttpStatusCode.Forbidden;
+                    errorCode = IndErrorCodes.AuthForbidden;
+                    fallbackMessage = "El usuario actual no puede modificar la hoja del propietario indicado.";
+                    break;
+                case "CONFLICT":
+                    status = HttpStatusCode.Conflict;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketConflict;
+                    fallbackMessage = "La linea o el ticket ya tiene una asociacion incompatible.";
+                    break;
+                case "INVALID_STATE":
+                    status = HttpStatusCode.Conflict;
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketInvalidState;
+                    fallbackMessage = "El estado actual no permite cambiar la asociacion del ticket.";
+                    break;
+                case "INVALID_TICKET":
+                    errorCode = IndErrorCodes.CrmExpenseSheetLineTicketInvalidTicket;
+                    fallbackMessage = "El ticket no cumple las reglas necesarias para la asociacion.";
+                    break;
+                case "ERROR":
+                    status = HttpStatusCode.InternalServerError;
+                    errorCode = IndErrorCodes.InternalError;
+                    fallbackMessage = "AX no pudo completar la operacion.";
+                    break;
+            }
+
+            return new IndApiResponse<object>
+            {
+                Success = false,
+                Message = string.IsNullOrWhiteSpace(message) ? fallbackMessage : message,
+                ErrorCode = errorCode,
+                Data = null,
+                TraceId = traceId
+            };
+        }
+
+        // Maps buildHeader extras without changing the public response when AX repeats an idempotent request.
+        private static ExpenseSheetLineTicketResultDto MapExpenseSheetLineTicketResult(
+            string requestedHojaGastosId,
+            long requestedLineRecId,
+            string requestedFileId,
+            List<string> extras)
+        {
+            var hojaGastosId = requestedHojaGastosId ?? string.Empty;
+            var lineRecId = requestedLineRecId;
+            var fileId = requestedFileId ?? string.Empty;
+            int? ticketStatus = null;
+            var changed = false;
+
+            if (extras != null)
+            {
+                if (extras.Count > 1 && !string.IsNullOrWhiteSpace(extras[1]))
+                    hojaGastosId = extras[1].Trim();
+
+                if (extras.Count > 2 && TryToLong(extras[2], out var returnedLineRecId))
+                    lineRecId = returnedLineRecId;
+
+                if (extras.Count > 3)
+                    fileId = (extras[3] ?? string.Empty).Trim();
+
+                if (extras.Count > 4)
+                    ticketStatus = ToInt(extras[4]);
+
+                if (extras.Count > 5)
+                    changed = ToBool(extras[5]);
+            }
+
+            return new ExpenseSheetLineTicketResultDto
+            {
+                HojaGastosId = hojaGastosId,
+                LineRecId = lineRecId,
+                FileId = fileId,
+                TicketStatus = ticketStatus,
+                Changed = changed
+            };
+        }
+
         // Reads a header and optional lines container from AX.
         private static bool TryReadHeader(IAxaptaContainer root, out bool success, out string message, out List<string> extras, out IAxaptaContainer linesCon)
         {
@@ -2512,7 +2856,8 @@ namespace IND_CRM_API.Controllers.CRM
                 return null;
 
             // AX detail header mapping:
-            // Current (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
+            // Current (21): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount [21]DefaultLineProjId
+            // Previous (20): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate [19]TotalGrossAmountMST [20]TotalReimbursableAmount
             // Previous (18): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST [18]AxCreatedDate
             // Current (17): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName [17]TotalAmountMST
             // Current (16): [1]HojaGastosId [2]Description [3]ExpenseSheetStatus [4]EstadoComentarios [5]UserId [6]CurrencyCode [7]TotalAmountCurrency [8]ExchRate [9]ExchangeRateMode [10]ProjId [11]Voucher [12]CreatedDate [13]ReimbursableExpense [14]UserName [15]OwnerAxUserId [16]OwnerName
@@ -2632,6 +2977,7 @@ namespace IND_CRM_API.Controllers.CRM
             detail.TotalReimbursableAmount = headerExtras.Count >= 20
                 ? ToDecimal(headerExtras[19])
                 : detail.TotalAmountMST;
+            detail.DefaultLineProjId = headerExtras.Count >= 21 ? headerExtras[20] : null;
 
             var lineCount = AxContainerReadHelper.SafeLength(linesCon);
             for (int i = 1; i <= lineCount; i++)

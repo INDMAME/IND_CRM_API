@@ -36,6 +36,12 @@ namespace IND_CRM_API.App_Start
                 ? "unknown"
                 : string.Format("{0} {1}", request.Method, request.RequestUri?.AbsolutePath ?? string.Empty);
             var user = request?.GetRequestContext()?.Principal?.Identity?.Name ?? string.Empty;
+            var requestPath = request?.RequestUri?.AbsolutePath ?? string.Empty;
+            var isHelpRequest = requestPath.StartsWith("/api/help", StringComparison.OrdinalIgnoreCase) ||
+                                requestPath.StartsWith("/api/ia/service/help", StringComparison.OrdinalIgnoreCase);
+            var logCompany = isHelpRequest ? "redacted" : company;
+            var logAxUserId = isHelpRequest ? "redacted" : axUserId;
+            var logUser = isHelpRequest ? "redacted" : user;
             var contentType = request?.Content?.Headers?.ContentType?.MediaType ?? string.Empty;
             var contentLength = request?.Content?.Headers?.ContentLength?.ToString() ?? "0";
             var boundary = IndRequestDiagnosticsHelper.GetMultipartBoundary(request?.Content) ?? string.Empty;
@@ -45,7 +51,7 @@ namespace IND_CRM_API.App_Start
             _logger.Log(
                 $"[API-PIPE-IN] timestamp={DateTime.UtcNow:o} correlationId={correlationId} traceId={traceId} " +
                 $"method={request?.Method?.Method ?? "UNKNOWN"} path={request?.RequestUri?.AbsolutePath ?? string.Empty} " +
-                $"company={company} axUserId={axUserId} authenticatedUser={user} contentLength={contentLength} " +
+                $"company={logCompany} axUserId={logAxUserId} authenticatedUser={logUser} contentLength={contentLength} " +
                 $"contentType={contentType} multipartBoundary={boundary}");
 
             var preRouteData = TryResolveRouteData(request);

@@ -1,0 +1,138 @@
+classDiagram
+direction LR
+
+class UserInfo {
+  <<sistema AX>>
+  +Id
+  +Name
+  +Company
+}
+
+class SysUserInfo {
+  <<sistema AX>>
+  +Id
+  +Language
+}
+
+class INDCiasPermitidas {
+  <<global>>
+  +RecId
+  +UserId
+  +CiaId
+  +INDRecIdMex
+}
+
+class INDWebUserEntraIdentity {
+  <<global>>
+  +RecId
+  +AppCode
+  +UserId
+  +EntraOID
+}
+
+class INDWebApp {
+  <<global>>
+  +RecId
+  +AppCode
+  +Description
+  +IsActive
+}
+
+class INDWebModule {
+  <<global>>
+  +RecId
+  +AppCode
+  +ModuleCode
+  +Description
+  +IsActive
+}
+
+class INDWebModuleAccessLevel {
+  <<global>>
+  +RecId
+  +RefRecIdCiaPermitida
+  +AppCode
+  +ModuleCode
+  +AccessRights
+  +DataVisibilityMode
+  +MutationPolicy
+  +HierarchyDepth
+  +CreatedDate
+  +CreatedBy
+  +ModifiedDate
+  +ModifiedBy
+}
+
+class INDModuleDataVisibilityTarget {
+  <<global>>
+  +RecId
+  +INDWebModuleAccessLevel
+  +TargetPersonAlias
+  +TargetAction
+  +TargetScope
+  +ValidFrom
+  +ValidTo
+  +ReasonText
+}
+
+class INDPersonaTable {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +Alias
+  +Name
+  +UserId
+  +RefRecIdCRM
+  +Email
+  +Blocked
+  +AllowSelfManagement
+}
+
+class INDModuleDataVisibilityHierarchyLine {
+  <<por empresa>>
+  +DATAAREAID
+  +RecId
+  +ParentPersonAlias
+  +ChildPersonAlias
+  +ValidFrom
+  +ValidTo
+  +ReasonText
+}
+
+class CRMUsuarioTable {
+  <<por empresa, referencia>>
+  +DATAAREAID
+  +RecId
+  +UserId
+  +AxaptaUserId
+}
+
+note for UserInfo "Nombre y empresa predeterminada del usuario AX. Estructura completa pendiente de AOT."
+note for SysUserInfo "Identidad e idioma AX. Es la tabla nombrada por las relaciones XPO."
+note for INDCiasPermitidas "Empresa autorizada por usuario. Clave logica UserId + CiaId."
+note for INDWebUserEntraIdentity "Entra OID asociado al usuario AX por aplicacion. Dato sensible."
+note for INDWebApp "Catalogo de aplicaciones. AppCode es clave logica pendiente de validar en AOT."
+note for INDWebModule "Catalogo de modulos. Clave logica AppCode + ModuleCode."
+note for INDWebModuleAccessLevel "Permiso almacenado por empresa, aplicacion y modulo."
+note for INDModuleDataVisibilityTarget "Excepcion manual de visibilidad. La empresa se hereda del permiso."
+note for INDPersonaTable "Puente por empresa entre alias, usuario AX y usuario CRM. UserId admite duplicados."
+note for INDModuleDataVisibilityHierarchyLine "Jerarquia de aliases por empresa y periodo de vigencia."
+note for CRMUsuarioTable "Referencia al usuario funcional CRM dentro de la empresa."
+
+UserInfo ..> SysUserInfo : mismo principal AX / correspondencia fisica pendiente
+SysUserInfo "1" --> "0..*" INDCiasPermitidas : Id = UserId
+SysUserInfo "1" --> "0..*" INDWebUserEntraIdentity : Id = UserId
+INDWebApp --> INDWebUserEntraIdentity : AppCode / clave logica
+INDWebApp --> INDWebModule : AppCode / clave logica
+INDCiasPermitidas "1" --> "0..*" INDWebModuleAccessLevel : RecId = RefRecIdCiaPermitida
+INDWebApp --> INDWebModuleAccessLevel : AppCode / clave logica
+INDWebModule "1" --> "0..*" INDWebModuleAccessLevel : AppCode + ModuleCode
+INDWebModuleAccessLevel "1" --> "0..*" INDModuleDataVisibilityTarget : RecId
+
+INDCiasPermitidas "0..*" --> "0..*" INDPersonaTable : UserId / CiaId = DATAAREAID
+INDWebUserEntraIdentity "0..*" --> "0..*" INDPersonaTable : UserId / contexto de empresa
+SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolucion X++
+INDModuleDataVisibilityTarget "0..*" --> "1" INDPersonaTable : TargetPersonAlias = Alias / empresa via permiso
+INDModuleDataVisibilityHierarchyLine "0..*" --> "1" INDPersonaTable : ParentPersonAlias = Alias
+INDModuleDataVisibilityHierarchyLine "0..*" --> "1" INDPersonaTable : ChildPersonAlias = Alias
+CRMUsuarioTable "1" --> "0..*" INDPersonaTable : RecId = RefRecIdCRM + DATAAREAID

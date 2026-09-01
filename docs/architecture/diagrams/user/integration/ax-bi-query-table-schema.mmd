@@ -1,0 +1,28 @@
+flowchart LR
+  Identity["<b>Identidad del usuario</b><br/>UserInfo / SysUserInfo<br/>INDWebUserEntraIdentity<br/><br/>Relaciona el acceso Entra con el usuario AX"]
+  Companies["<b>Empresas permitidas</b><br/>INDCiasPermitidas<br/><br/>Indica en que empresas puede trabajar"]
+  Modules["<b>Aplicaciones y modulos</b><br/>INDWebApp / INDWebModule<br/>INDWebModuleAccessLevel<br/><br/>Define acceso y reglas de visibilidad"]
+  Visibility["<b>Personas visibles</b><br/>INDPersonaTable<br/>INDModuleDataVisibilityTarget<br/>INDModuleDataVisibilityHierarchyLine<br/><br/>Resuelve identidad, jerarquia y excepciones"]
+  Employee["<b>Empleado CRM por empresa</b><br/>CRMUsuarioTable<br/><br/>Aporta propietario y valores iniciales de gastos"]
+  Managers["<b>Jefes y subordinados</b><br/>CRMUsuarioSubordinadoTable<br/><br/>Determina consulta y aprobacion de hojas"]
+  Sheet["<b>Cabecera de hoja</b><br/>CRMHojaGastosTable<br/><br/>Guarda propietario, estado, periodo y divisa"]
+  Line["<b>Lineas de gasto</b><br/>CRMHojaGastosLine<br/><br/>Guarda fecha, tipo, importes, reembolso y proyecto"]
+  Ticket["<b>Ticket opcional</b><br/>INDTicketInfoTable<br/><br/>Aporta el justificante asociado mediante FileId"]
+
+  Identity --> Companies
+  Companies --> Modules
+  Identity --> Visibility
+  Modules --> Visibility
+  Visibility --> Employee
+  Employee --> Managers
+  Employee --> Sheet
+  Managers --> Sheet
+  Sheet --> Line
+  Line -. FileId .-> Ticket
+
+  classDef access fill:#e8f0fe,stroke:#315d9c,color:#10233f
+  classDef people fill:#eef7e9,stroke:#4d7a36,color:#193016
+  classDef expenses fill:#fff4df,stroke:#a66b17,color:#3d2708
+  class Identity,Companies,Modules access
+  class Visibility,Employee,Managers people
+  class Sheet,Line,Ticket expenses

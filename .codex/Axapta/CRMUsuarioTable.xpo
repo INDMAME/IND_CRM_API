@@ -3,7 +3,7 @@ Formatversion: 1
 
 ***Element: DBT
 
-; Navision Axapta Table : CRMUsuarioTable unloaded at Jueves 30/07/2026
+; Navision Axapta Table : CRMUsuarioTable unloaded at Jueves 06/08/2026
 ; --------------------------------------------------------------------------------
   TABLEVERSION 1
   
@@ -1382,7 +1382,7 @@ Formatversion: 1
         #
         #    persona = INDPersonaTable::findByCRM(this.RecId);
         #
-        #    // Evita consultar la jerarquia de aprobacion cuando la persona permite autogestion.
+        #    // Evita consultar la jerarquia cuando la persona permite autogestion.
         #    if (persona.RecId && persona.AllowSelfManagement == NoYes::Yes && _soloAprobadoresHojaGastos)
         #    {
         #        return "AUTOGESTIONADO";

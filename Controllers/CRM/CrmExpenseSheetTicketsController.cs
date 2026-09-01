@@ -36,6 +36,7 @@ namespace IND_CRM_API.Controllers.CRM
         private const int ModeCreateHeaderOnly = 1;
         private const int ModeAddLinesToExisting = 2;
         private const int TicketStatusValueForLinking = 0;
+        private const int TicketStatusValueAssigned = 1;
         private const int MaxPageSize = 50;
         private const string BulkSelectionModeSelected = "selected";
         private const string BulkSelectionModeFiltered = "filtered";
@@ -874,7 +875,7 @@ namespace IND_CRM_API.Controllers.CRM
                             linkedTicketDetail,
                             traceId,
                             quickCreateForm.ProjectId,
-                            true,
+                            quickCreateForm.ProjectProvided,
                             out var linkMessage,
                             out var linkStatus))
                     {
@@ -1435,63 +1436,102 @@ namespace IND_CRM_API.Controllers.CRM
 
                 foreach (var ticketId in requestedTicketIds)
                 {
-                    if (!string.IsNullOrWhiteSpace(terminalSheetReason))
-                    {
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = ticketId,
-                            reason = terminalSheetReason
-                        });
-                        continue;
-                    }
+                    var ticketCurrencyCode = string.Empty;
+                    var ticketResult = "failed";
+                    var ticketReason = "Ticket processing did not complete.";
 
-                    if (!TryGetExpenseSheetTicketDetail(ax, company, axUserId, ticketId, traceId, out var ticketDetail, out var ticketMessage, out var ticketStatus))
+                    try
                     {
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        if (!string.IsNullOrWhiteSpace(terminalSheetReason))
                         {
-                            ticketId = ticketId,
-                            reason = NormalizeIssueReason(ticketMessage, ticketStatus == HttpStatusCode.NotFound ? "Ticket not found." : "Ticket could not be loaded.")
-                        });
-                        continue;
-                    }
-
-                    var skipReason = GetBulkLinkSkipReason(ticketDetail);
-                    if (!string.IsNullOrWhiteSpace(skipReason))
-                    {
-                        result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
-                        {
-                            ticketId = ticketId,
-                            reason = skipReason
-                        });
-                        continue;
-                    }
-
-                    if (!TryLinkTicketToExpenseSheet(ax, company, axUserId, expenseSheetId, ticketDetail, traceId, targetInfo.ProjId, false, out var linkMessage, out var linkStatus))
-                    {
-                        if (IsTicketAlreadyLinkedMessage(linkMessage))
-                        {
-                            result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            ticketReason = terminalSheetReason;
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
                             {
                                 ticketId = ticketId,
-                                reason = NormalizeIssueReason(linkMessage, "Ticket is already linked to an expense sheet.")
+                                reason = ticketReason
                             });
                             continue;
                         }
 
-                        var normalizedFailure = NormalizeIssueReason(linkMessage, "Ticket could not be linked.");
-                        result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                        if (!TryGetExpenseSheetTicketDetail(ax, company, axUserId, ticketId, traceId, out var ticketDetail, out var ticketMessage, out var ticketStatus))
                         {
-                            ticketId = ticketId,
-                            reason = normalizedFailure
-                        });
+                            ticketReason = NormalizeIssueReason(
+                                ticketMessage,
+                                ticketStatus == HttpStatusCode.NotFound ? "Ticket not found." : "Ticket could not be loaded.");
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+                            continue;
+                        }
 
-                        if (IsTerminalExpenseSheetLinkError(linkMessage, linkStatus))
-                            terminalSheetReason = normalizedFailure;
+                        ticketCurrencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
 
-                        continue;
+                        var skipReason = GetBulkLinkSkipReason(ticketDetail);
+                        if (!string.IsNullOrWhiteSpace(skipReason))
+                        {
+                            ticketResult = "skipped";
+                            ticketReason = skipReason;
+                            result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+                            continue;
+                        }
+
+                        if (!TryLinkTicketToExpenseSheet(
+                                ax,
+                                company,
+                                axUserId,
+                                expenseSheetId,
+                                ticketDetail,
+                                traceId,
+                                targetInfo.ProjId,
+                                false,
+                                out var linkMessage,
+                                out var linkStatus))
+                        {
+                            if (IsTicketAlreadyLinkedMessage(linkMessage))
+                            {
+                                ticketResult = "skipped";
+                                ticketReason = NormalizeIssueReason(linkMessage, "Ticket is already linked to an expense sheet.");
+                                result.skipped.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                                {
+                                    ticketId = ticketId,
+                                    reason = ticketReason
+                                });
+                                continue;
+                            }
+
+                            ticketReason = NormalizeIssueReason(linkMessage, "Ticket could not be linked.");
+                            result.failed.Add(new ExpenseSheetTicketBulkLinkIssueDto
+                            {
+                                ticketId = ticketId,
+                                reason = ticketReason
+                            });
+
+                            if (IsTerminalExpenseSheetLinkError(linkMessage, linkStatus))
+                                terminalSheetReason = ticketReason;
+
+                            continue;
+                        }
+
+                        ticketResult = "linked";
+                        ticketReason = NormalizeIssueReason(linkMessage, "Ticket linked.");
+                        result.linkedTicketIds.Add(ticketId);
                     }
-
-                    result.linkedTicketIds.Add(ticketId);
+                    finally
+                    {
+                        LogBulkLinkTicketResult(
+                            traceId,
+                            expenseSheetId,
+                            ticketId,
+                            ticketCurrencyCode,
+                            ticketResult,
+                            ticketReason);
+                    }
                 }
 
                 result.linkedCount = result.linkedTicketIds.Count;
@@ -2513,11 +2553,16 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Elimina la imagen asociada al ticket en Azure Blob y limpia DocuRef en AX.
         /// </summary>
+        /// <remarks>
+        /// Primero limpia DocuRef mediante la proteccion atomica de AX y despues intenta eliminar el blob.
+        /// Si el ticket esta Assigned responde 409 sin tocar el blob. BlobDeleted puede ser false si el blob no existia o no pudo eliminarse.
+        /// </remarks>
         [HttpDelete, Route("{fileId}/file")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Archivo del ticket eliminado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket o archivo no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "El ticket esta asignado a una linea de gastos", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteExpenseSheetTicketFile(string fileId)
@@ -2568,6 +2613,19 @@ namespace IND_CRM_API.Controllers.CRM
                     return Content(getStatus, getError);
                 }
 
+                if (existingTicket.Status == TicketStatusValueAssigned)
+                {
+                    LogOut(HttpStatusCode.Conflict);
+                    return Content(HttpStatusCode.Conflict, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se puede eliminar la imagen de un ticket asignado a una linea de gastos.",
+                        ErrorCode = IndErrorCodes.CrmExpenseSheetTicketAssigned,
+                        Data = null,
+                        TraceId = traceId
+                    });
+                }
+
                 if (string.IsNullOrWhiteSpace(existingTicket.UrlFile) && string.IsNullOrWhiteSpace(existingTicket.FileName))
                 {
                     LogOut(HttpStatusCode.NotFound);
@@ -2581,12 +2639,7 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
-                var blobDeleted = false;
-                if (!string.IsNullOrWhiteSpace(existingTicket.UrlFile))
-                {
-                    blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(existingTicket.UrlFile);
-                }
-
+                // MMS - Clears AX under lock before the best-effort blob deletion. - 2026.08.04
                 if (!TryUpdateTicketFromExisting(
                         ax,
                         company,
@@ -2600,8 +2653,24 @@ namespace IND_CRM_API.Controllers.CRM
                         out var updateError,
                         out var updateStatus))
                 {
+                    updateStatus = NormalizeAssignedTicketDeleteStatus(updateError, updateStatus);
                     LogOut(updateStatus);
                     return Content(updateStatus, updateError);
+                }
+
+                var blobDeleted = false;
+                if (!string.IsNullOrWhiteSpace(existingTicket.UrlFile))
+                {
+                    try
+                    {
+                        blobDeleted = _ticketBlobStorage.DeleteTicketFileByUrl(existingTicket.UrlFile);
+                    }
+                    catch (Exception blobDeleteEx)
+                    {
+                        Logger.Log(
+                            $"[WARN] DeleteExpenseSheetTicketFile AX cleanup succeeded but blob deletion failed: " +
+                            $"{blobDeleteEx.Message} traceId={traceId}");
+                    }
                 }
 
                 LogOut(HttpStatusCode.OK);
@@ -2663,11 +2732,16 @@ namespace IND_CRM_API.Controllers.CRM
         /// <summary>
         /// Elimina ticket completo o una linea granular de ticket.
         /// </summary>
+        /// <remarks>
+        /// La eliminacion completa devuelve 409 si el ticket sigue vinculado a una linea de gastos.
+        /// La eliminacion granular mediante lineRecId conserva sus reglas actuales.
+        /// </remarks>
         [HttpDelete, Route("{fileId}")]
         [ResponseType(typeof(IndApiResponse<object>))]
         [SwaggerOperation(Tags = new[] { "Tickets de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Eliminacion aplicada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket no encontrado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.Conflict, "Ticket completo vinculado a una linea de gastos", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteExpenseSheetTicket(string fileId, [FromUri] long? lineRecId = null)
@@ -2742,6 +2816,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!success)
                 {
                     var error = BuildTicketActionError(message, traceId, out var status);
+                    if (!lineRecId.HasValue)
+                        status = NormalizeAssignedTicketDeleteStatus(error, status);
                     LogOut(status);
                     return Content(status, error);
                 }
@@ -3160,6 +3236,7 @@ namespace IND_CRM_API.Controllers.CRM
             public string Comentario { get; set; }
             public string ExistingHojaGastosId { get; set; }
             public string ProjectId { get; set; }
+            public bool ProjectProvided { get; set; }
         }
 
         // Minimal create result reused by the quick-create orchestration.
@@ -3481,10 +3558,13 @@ namespace IND_CRM_API.Controllers.CRM
                 imageBytes.Length,
                 "Multipart leido correctamente.");
 
-            // Prefer the standard CRM ProjId field while keeping the previous projectId alias.
-            var projectId = (await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false) ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(projectId))
-                projectId = (await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false) ?? string.Empty).Trim();
+            // Prefer the standard CRM ProjId field and preserve an explicitly empty value.
+            var standardProjectId = await ReadFormFieldAsync(provider, "projId").ConfigureAwait(false);
+            var legacyProjectId = standardProjectId == null
+                ? await ReadFormFieldAsync(provider, "projectId").ConfigureAwait(false)
+                : null;
+            var projectProvided = standardProjectId != null || legacyProjectId != null;
+            var projectId = (standardProjectId ?? legacyProjectId ?? string.Empty).Trim();
 
             return new QuickCreateFormReadResult
             {
@@ -3498,7 +3578,8 @@ namespace IND_CRM_API.Controllers.CRM
                 Description = await ReadFormFieldAsync(provider, "description").ConfigureAwait(false),
                 Comentario = await ReadFormFieldAsync(provider, "comentario").ConfigureAwait(false),
                 ExistingHojaGastosId = (await ReadFormFieldAsync(provider, "existingHojaGastosId").ConfigureAwait(false) ?? string.Empty).Trim(),
-                ProjectId = projectId
+                ProjectId = projectId,
+                ProjectProvided = projectProvided
             };
         }
 
@@ -6074,6 +6155,20 @@ namespace IND_CRM_API.Controllers.CRM
             return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
         }
 
+        // Keeps structured ticket outcomes single-line and bounded.
+        private static string ToBoundedLogValue(string value)
+        {
+            const int maxLength = 240;
+            var normalized = ToLogValue(value)
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Replace('\t', ' ');
+
+            return normalized.Length <= maxLength
+                ? normalized
+                : normalized.Substring(0, maxLength);
+        }
+
         // Formats string length for logs so null and empty JSON payloads are distinguishable.
         private static string ToLogLength(string value)
         {
@@ -6394,6 +6489,21 @@ namespace IND_CRM_API.Controllers.CRM
             return string.IsNullOrWhiteSpace(message) ? fallback : message.Trim();
         }
 
+        // Logs one bounded outcome for each ticket requested by the bulk-link operation.
+        private void LogBulkLinkTicketResult(
+            string traceId,
+            string expenseSheetId,
+            string ticketId,
+            string currencyCode,
+            string result,
+            string reason)
+        {
+            Logger.Log(
+                $"[EXPENSE-TICKET-BULK-LINK] traceId={ToBoundedLogValue(traceId)} " +
+                $"sheetId={ToBoundedLogValue(expenseSheetId)} ticketId={ToBoundedLogValue(ticketId)} " +
+                $"currency={ToBoundedLogValue(currencyCode)} result={ToBoundedLogValue(result)} reason={ToBoundedLogValue(reason)}");
+        }
+
         // Returns a skip reason when a ticket is not eligible for bulk linking.
         private static string GetBulkLinkSkipReason(ExpenseSheetTicketDetailDto ticketDetail)
         {
@@ -6403,15 +6513,8 @@ namespace IND_CRM_API.Controllers.CRM
             if (!ticketDetail.Status.HasValue || ticketDetail.Status.Value != TicketStatusValueForLinking)
                 return "Ticket is not available for linking.";
 
-            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
-            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
-                return "Ticket total amount must be greater than zero.";
-
             if (!ticketDetail.GastoType.HasValue || !IsValidGastoType(ticketDetail.GastoType.Value))
                 return "Ticket gastoType is not valid for linking.";
-
-            if (string.IsNullOrWhiteSpace(ticketDetail.CurrencyCode))
-                return "Ticket currencyCode is empty.";
 
             if (!TryNormalizeAnyDateToAxYmd(ticketDetail.TransDate, out _))
                 return "Ticket transDate is not valid.";
@@ -6553,27 +6656,22 @@ namespace IND_CRM_API.Controllers.CRM
             ExpenseSheetTicketDetailDto ticketDetail,
             string traceId,
             string projectId,
-            bool fallbackMissingCurrencyValues,
+            bool projectProvided,
             out string message,
             out HttpStatusCode status)
         {
             message = string.Empty;
             status = HttpStatusCode.OK;
 
-            if (ticketDetail == null)
+            if (!TryResolveLinkedTicketCurrencyFields(
+                    ticketDetail,
+                    out var totalAmountCurrency,
+                    out var currencyCode,
+                    out var amountMST,
+                    out var exchRate,
+                    out message))
             {
                 status = (HttpStatusCode)422;
-                message = "Ticket data is empty.";
-                return false;
-            }
-
-            var totalAmountCurrency = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
-            if (!totalAmountCurrency.HasValue || totalAmountCurrency.Value <= 0m)
-            {
-                status = (HttpStatusCode)422;
-                message = totalAmountCurrency.HasValue && totalAmountCurrency.Value < 0m
-                    ? TicketNegativeTotalValidationMessage
-                    : "Ticket total amount must be greater than zero.";
                 return false;
             }
 
@@ -6594,9 +6692,11 @@ namespace IND_CRM_API.Controllers.CRM
             lineCon.Append(ToAxBool(false));
             lineCon.Append((ticketDetail.FileId ?? string.Empty).Trim());
             lineCon.Append(1m);
-            lineCon.Append(totalAmountCurrency ?? 0m);
-            lineCon.Append((projectId ?? string.Empty).Trim());
-            AppendLinkedTicketLineCurrencyFields(lineCon, ticketDetail, fallbackMissingCurrencyValues);
+            lineCon.Append(totalAmountCurrency);
+            lineCon.Append(projectProvided ? (projectId ?? string.Empty).Trim() : string.Empty);
+            AppendLinkedTicketLineCurrencyFields(lineCon, currencyCode, amountMST, exchRate);
+            // Position 13 preserves omitted versus explicitly empty project for createExpenseSheet.
+            lineCon.Append(ToAxBool(projectProvided));
             linesCon.Append(lineCon);
             rootCon.Append(linesCon);
 
@@ -6658,33 +6758,79 @@ namespace IND_CRM_API.Controllers.CRM
             return true;
         }
 
-        // Appends non-EUR currency fields when linking a ticket into an expense sheet line.
-        private static void AppendLinkedTicketLineCurrencyFields(
-            IAxaptaContainer lineCon,
+        // Resolves and validates the monetary snapshot before any AX container or call is created.
+        private static bool TryResolveLinkedTicketCurrencyFields(
             ExpenseSheetTicketDetailDto ticketDetail,
-            bool fallbackMissingCurrencyValues)
+            out decimal totalAmountCurrency,
+            out string currencyCode,
+            out decimal? amountMST,
+            out decimal? exchRate,
+            out string message)
         {
-            if (lineCon == null || ticketDetail == null)
-                return;
+            totalAmountCurrency = 0m;
+            currencyCode = string.Empty;
+            amountMST = null;
+            exchRate = null;
+            message = string.Empty;
 
-            var currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
-            if (string.IsNullOrWhiteSpace(currencyCode) ||
-                string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase))
+            if (ticketDetail == null)
             {
-                return;
+                message = "Ticket data is empty.";
+                return false;
             }
 
-            if (!fallbackMissingCurrencyValues)
+            var originalTotalAmount = ticketDetail.TotalAmountCurrency ?? ticketDetail.TotalAmount;
+            if (!originalTotalAmount.HasValue || originalTotalAmount.Value <= 0m)
+            {
+                message = originalTotalAmount.HasValue && originalTotalAmount.Value < 0m
+                    ? TicketNegativeTotalValidationMessage
+                    : "Ticket total amount must be greater than zero.";
+                return false;
+            }
+
+            totalAmountCurrency = originalTotalAmount.Value;
+            currencyCode = (ticketDetail.CurrencyCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(currencyCode))
+            {
+                message = "Ticket currencyCode is empty.";
+                return false;
+            }
+
+            if (string.Equals(currencyCode, ExpenseSheetLocalCurrencyCode, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            amountMST = NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST);
+            exchRate = NormalizePositiveCurrencyValue(ticketDetail.ExchRate);
+            if (amountMST.HasValue && exchRate.HasValue)
+                return true;
+
+            var missingFields = !amountMST.HasValue && !exchRate.HasValue
+                ? "AmountMST and ExchRate"
+                : !amountMST.HasValue ? "AmountMST" : "ExchRate";
+            message = $"Ticket {currencyCode} requires positive {missingFields} values before linking.";
+            return false;
+        }
+
+        // Appends stable create positions 9-12 from an already validated monetary snapshot.
+        private static void AppendLinkedTicketLineCurrencyFields(
+            IAxaptaContainer lineCon,
+            string currencyCode,
+            decimal? amountMST,
+            decimal? exchRate)
+        {
+            if (lineCon == null)
                 return;
 
-            var amountMST = NormalizePositiveCurrencyValue(ticketDetail.TotalAmountMST ?? ticketDetail.AmountMST) ?? QuickCreateInsertFallbackAmount;
-            var exchRate = NormalizePositiveCurrencyValue(ticketDetail.ExchRate) ?? QuickCreateInsertFallbackAmount;
-
             const string noOptionalValueToken = "null";
+            var isForeignCurrency = !string.Equals(
+                currencyCode,
+                ExpenseSheetLocalCurrencyCode,
+                StringComparison.OrdinalIgnoreCase);
+
             lineCon.Append(noOptionalValueToken);
-            lineCon.Append(currencyCode);
-            lineCon.Append(amountMST);
-            lineCon.Append(exchRate);
+            lineCon.Append(isForeignCurrency ? currencyCode : string.Empty);
+            lineCon.Append(amountMST.HasValue ? (object)amountMST.Value : noOptionalValueToken);
+            lineCon.Append(exchRate.HasValue ? (object)exchRate.Value : noOptionalValueToken);
         }
 
         // Returns only positive currency values because AX rejects empty or zero conversion data.
@@ -6693,6 +6839,28 @@ namespace IND_CRM_API.Controllers.CRM
             return value.HasValue && value.Value > 0m
                 ? value.Value
                 : (decimal?)null;
+        }
+
+        // Converts the existing assigned-ticket business error to a delete conflict without changing other actions.
+        private static HttpStatusCode NormalizeAssignedTicketDeleteStatus(
+            IndApiResponse<object> error,
+            HttpStatusCode currentStatus)
+        {
+            if (error == null)
+                return currentStatus;
+
+            var normalizedMessage = (error.Message ?? string.Empty).ToLowerInvariant();
+            var isAssignedConflict = string.Equals(
+                                         error.ErrorCode,
+                                         IndErrorCodes.CrmExpenseSheetTicketAssigned,
+                                         StringComparison.Ordinal) ||
+                                     normalizedMessage.Contains("asignad") ||
+                                     normalizedMessage.Contains("vinculad");
+            if (!isAssignedConflict)
+                return currentStatus;
+
+            error.ErrorCode = IndErrorCodes.CrmExpenseSheetTicketAssigned;
+            return HttpStatusCode.Conflict;
         }
 
         // Builds a standard error response for ticket actions.
