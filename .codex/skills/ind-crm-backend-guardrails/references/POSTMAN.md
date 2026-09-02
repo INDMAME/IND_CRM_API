@@ -1,117 +1,38 @@
-# IND_CRM_API Postman
+# Postman de IND_CRM_API
 
-Colecciones
-- DEV activa: `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json`
-- DEV versionada local: `.codex/Postman/DEV/IND_CRM_API V06.postman_collection.json`
-- PROD activa: `.codex/postman/PROD/IND_CRM_API V31.postman_collection.json`
-- PROD copia raiz actual: `.codex/postman/IND_CRM_API V31.postman_collection.json`
-- Prompt frontend visitas/jerarquia: `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`
-- Prompt frontend totales hojas/tickets: `.codex/postman/DEV/CRM_EXPENSE_TOTALS_FRONTEND_PROMPT.md`
-- Historial PROD: `.codex/Postman/PROD/`
-- Historial soporte PROD: `Notes/PROD/`
+## Fuentes vigentes
 
-Ambiente (variables sugeridas)
-- `baseUrl` = `https://dev.insertec.biz:2083`
-- `baseUrl` PROD = `https://crm.insertec.biz:7776`
-- `tokenId` = token JWT vigente
-- `companyId` = compania obtenida desde Entra Context
-- `defaultCompanyId` = compania por defecto devuelta por Entra Context
-- `axUserId` = usuario AX obtenido desde Entra Context
-- `contextToken` = token firmado de contexto devuelto por Entra Context
-- `contextVersion` = version monotona del snapshot de permisos
-- `permissionsRevision` = revision estable del snapshot de permisos
-- `contextIssuedUtc` = fecha UTC de emision del contexto
-- `contextExpiresUtc` = fecha UTC de expiracion del contexto
-- `availableCompaniesJson` = JSON con las companias disponibles devueltas por Entra Context
-- `fileId` = se autocompleta desde respuestas de tickets
-- `expenseSheetId` = hoja de gastos destino para pruebas de vinculacion bulk
-- `lineRecId` = se autocompleta desde respuestas de lineas de tickets
-- `ticketImagePath` = ruta local para pruebas de upload en multipart (opcional)
-- `ticketUrlFile` = URL del blob cargado (se autocompleta desde upload)
-- `ticketFileName` = nombre final del archivo del ticket (autocompletado)
-- `persistedTicketFileId` = fileId de ticket creado por `expensefromticket` cuando `persistTicket=true`
-- `lastTraceId` = ultimo traceId retornado por API (autocompletado)
-- `expenseNotificationSheetId` = hoja editable usada para probar notificaciones de hojas de gasto desde CRM API
-- `expenseNotificationDescription` = descripcion enviada en el PUT de prueba de notificacion
-- `expenseNotificationCurrencyCode` = divisa enviada en el PUT de prueba; por defecto usa `defaultCurrencyCode`
-- `expenseNotificationApprovalRequestedStatus` = valor AX que representa solicitud de aprobacion; por defecto `1`
-- `expenseNotificationApprovedStatus` = valor AX que representa aprobado; por defecto `2`
-- `expenseNotificationUpdateRequestJson` = body generado por los requests de notificacion
-- `expenseNotificationLastTraceId` = ultimo traceId de las pruebas de notificacion
-- `quickCreateCompletedStage` = ultima etapa completada de `quick-create` (autocompletado)
-- `quickCreateHojaGastosId` = hoja vinculada por `quick-create` cuando aplica (autocompletado)
-- `quickCreateLinkedToSheet` = indica si `quick-create` vinculo el ticket a una hoja (autocompletado)
-- `quickCreateProcessedByAI` = indica si `quick-create` finalizo con datos IA aplicados (autocompletado)
-- `visibleOwnerAxUserId` = primer usuario AX visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
-- `visibleOwnerAlias` = primer alias visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
-- `visibleOwnerCanMutate` = `CanMutate` del primer usuario visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
-- `visibleOwnerMutationPolicy` = `MutationPolicy` del primer usuario visible devuelto por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
-- `visibleUsersTotal` = numero de usuarios visibles devueltos por `CRM Data Visibility / Get Visible Users - Visits` (autocompletado)
+| Entorno | Colección canónica | Copia operativa |
+|---|---|---|
+| DEV | `.codex/postman/DEV/IND_CRM_API V07.postman_collection.json` | `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json` y `Notes/DEV/IND_CRM_API V07.postman_collection.json` |
+| PROD | `.codex/postman/PROD/IND_CRM_API V31.postman_collection.json` | `.codex/postman/IND_CRM_API V31.postman_collection.json` y `Notes/PROD/IND_CRM_API V31.postman_collection.json` |
 
-Notas
-- La linea `PROD` conserva intacto el historico existente; la linea `DEV` arranca en `V01` basada en la `V30` mas reciente.
-- `PROD V31` se basa en la coleccion activa `DEV V06`, ajusta `baseUrl` a `https://crm.insertec.biz:7776` y conserva los headers automaticos de contexto Entra.
-- Todos los endpoints protegidos usan `Authorization: Bearer {{tokenId}}`.
-- Endpoints CRM usan `X-IND-Company: {{companyId}}`.
-- Endpoints CRM que envian userId a AX usan `X-IND-AxUserId: {{axUserId}}`.
-- La coleccion `DEV V06` inyecta automaticamente `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token` en endpoints `/api/crm/*`, `POST /api/ia/service/expensesheets/ask` y `POST /api/ia/service/expensefromticket`.
-- `Login` y `Entra Context` guardan automaticamente `companyId`, `defaultCompanyId`, `axUserId`, `defaultCurrencyCode`, `contextToken`, `contextVersion`, `permissionsRevision`, `contextIssuedUtc`, `contextExpiresUtc` y `availableCompaniesJson`.
-- `CRM Data Visibility / Get Visible Users - Visits` valida `INDControlDataVisibility` para `CRM / VISITAS_GESTION`, solo devuelve personas con usuario AX, guarda `visibleOwnerAxUserId` para filtrar `CRM Activities / List Activities (POST)` y expone `CanMutate` para habilitar update/delete en la web. Create no debe usarse para crear registros en nombre de subordinados.
-- Para adaptar el frontend de visitas, usar el prompt `.codex/postman/DEV/CRM_VISITS_DATA_VISIBILITY_FRONTEND_PROMPT.md`; indica no modificar Notion, planificar cambios por componentes/servicios y usar `visible-users` + `ownerAxUserId`.
-- Regla obligatoria de fechas en tickets y hojas de gastos: request acepta `DDMMYYYY` o `DD.MM.YYYY`; response devuelve siempre `DD.MM.YYYY` (`transDate`, `createdDateFrom`, `createdDateTo`, `createdDate`).
-- `POST /api/auth/entra/context` retorna `defaultCurrencyCode`, companias y `allowSelfManagement`.
-- Expense Sheets usa `lines[].fileId` (INDFileId) en lugar de `lines[].ticket`.
-- `PUT /api/crm/expensesheets/{hojaGastosId}` admite `projIdProvided`, `estadoComentarios` en body (posicion AX `_data[10]`) y `reimbursableExpense` (solo 0 Yes o 1 No), y cuando se envia `estadoComentarios` requiere `expenseSheetStatus` + `exchangeRateMode`. `projIdProvided=false` conserva el proyecto actual; `true` aplica `projId`, incluido vacio. `Both=2` es derivado y solo se admite en respuestas y filtros.
-- `PUT /api/crm/expensesheets/{hojaGastosId}` no propaga cambios a lineas. Para confirmar desde web, usar:
-  - `POST /api/crm/expensesheets/{hojaGastosId}/currency-defaults/propagate?recalculateAmountMST=true&force=false`
-  - `POST /api/crm/expensesheets/{hojaGastosId}/project-default/propagate`, con body opcional `{ "projId": "PROYECTO", "projIdProvided": true }` para aplicar el objetivo atomicamente a cabecera y lineas.
-  - `POST /api/crm/expensesheets/{hojaGastosId}/reimbursable-expense/propagate`
-- Expense Sheets admite `reimbursableExpense` en cabecera y lineas: `Yes=0` incluye `AmountMST` en el reembolso y `No=1` lo excluye dejando `ReimbursableAmount=0`; `Both=2` representa una cabecera mixta derivada y no se acepta en POST/PUT de cabecera. Las lineas tambien admiten `projIdProvided`, `currencyCode`, `amountMST` y `exchRate`; si `currencyCode` coincide con la divisa de reembolso, modificar `amountMST` no recalcula `exchRate`.
-- Tickets admite `amountMST` y `exchRate` en update de cabecera; si el ticket vinculado esta en la misma divisa de reembolso de la hoja, modificar `amountMST` no recalcula `exchRate`.
-- Si una linea cambia `reimbursableExpense` respecto a cabecera, AX marca cabecera como `Both`; el endpoint de propagacion no debe usarse con cabecera `Both`.
-- Delete de linea soporta `deleteMode` (0 LineOnly, 1 HeaderOnly alias de WholeSheet, 2 WholeSheet) y conserva `deleteWholeSheet` como legado.
-- La coleccion V21 incluye CRUD completo de tickets + endpoints de archivo:
-  - `POST /api/crm/expensesheets/tickets/{fileId}/file`
-  - `DELETE /api/crm/expensesheets/tickets/{fileId}/file`
-- Tickets:
-  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `processedByAI`.
-  - `PUT /api/crm/expensesheets/tickets/{fileId}` admite `processedByAI` en body.
-  - `GET /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/list` retornan `gastoType`.
-  - `GET /api/crm/expensesheets/tickets/{fileId}` retorna tambien `ocrJson` y `normalizedJson`.
-  - En `GET /api/crm/expensesheets/tickets/{fileId}`, cada `Lines[*]` agrega `ReimbursableExpense` (`int?`, `0=Yes`, `1=No`) y `ReimbursableAmount` (`decimal?`, divisa de la empresa) desde la `CRMHojaGastosLine` vinculada. Ambos quedan `null` con AX legacy o sin vinculacion unica. Son metadatos repetidos no sumables, no importes individuales de las lineas del ticket.
-  - `POST /api/crm/expensesheets/tickets/list` devuelve `FileId`, `Description`, `Status`, `ProcessedByAI`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName` y `GastoType`. `TotalAmount` queda como alias legacy de `TotalAmountCurrency`.
-  - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `gastoType`.
-  - `POST /api/crm/expensesheets/tickets`, `PUT /api/crm/expensesheets/tickets/{fileId}` y `POST /api/crm/expensesheets/tickets/{fileId}/ia` admiten `ocrJson` y `normalizedJson` como payload opcional de OCR/normalizacion.
-  - `POST /api/crm/expensesheets/tickets/list` admite `createdDateFrom` y `createdDateTo` (`DDMMYYYY` o `DD.MM.YYYY`) como filtros opcionales; `searchKey` es filtro preferido (se mantiene compatibilidad con `filter`) y la fecha de referencia es `ticketHeader.createdDate`.
-  - `POST /api/crm/expensesheets/tickets/list` admite filtro opcional `processedByAI` (`true|false`).
-  - `POST /api/crm/expensesheets/tickets/link/list` devuelve `FileId`, `Description`, `CurrencyCode`, `TotalAmount`, `TotalAmountCurrency`, `TotalAmountMST`, `TransDate`, `TicketDate`, `TicketTime`, `FileName`, `ProcessedByAI` y `GastoType`, con prefiltros fijos `Pending` y `totalAmount != 0`. `TotalAmount` queda como alias legacy de `TotalAmountCurrency`.
-  - `POST /api/crm/expensesheets/tickets/link/bulk` mantiene compatibilidad con `expenseSheetId` + `ticketIds[]` y ahora soporta `selectionMode=selected|filtered`, `filters` y `excludedIds`, reutilizando `createExpenseSheet` en modo `2` y devolviendo resultado parcial con `linked`, `skipped` y `failed`.
-  - `POST /api/crm/expensesheets/tickets/{fileId}/ia` aplica reemplazo total de lineas desde IA y marca `processedByAI`.
-  - `POST /api/crm/expensesheets/tickets/quick-create` acepta `multipart/form-data` con `ticketImage` y campos opcionales `currencyCode`, `description`, `comentario`, `existingHojaGastosId` y `projId` (`projectId` sigue como alias legacy); devuelve `completedStage` y `stepTraceIds` para trazar cada etapa.
-- `POST /api/ia/service/expensefromticket` soporta `persistTicket` y `ticketUrlFile` para persistir ticket en AX desde IA.
-- V23 agrega tests automatizados para:
-- V24 agrega tests automatizados para:
-  - `IA Services / ExpenseFromTicket` (persistencia desactivada).
-  - `IA Services / ExpenseFromTicket (persist=true)` (requiere `X-IND-Company` + `X-IND-AxUserId`) y valida `ticketCreation.processedByAI=true`.
-  - `Create Ticket - Header Only (mode 1)`.
-  - `Upload Ticket File (multipart)`.
-  - `Apply IA to Ticket (replace lines)`.
-  - `Get Ticket by FileId`.
-- V25 actualiza contratos de tickets con `gastoType` y filtros de fecha en `tickets/list` (ahora opcionales).
-- V26 normaliza contratos completos en request body para endpoints con payload JSON, alinea `tickets/list` al contrato reducido, agrega `tickets/link/list`, agrega `tickets/link/bulk` y mantiene `TransDate` basado en `ticketHeader.createdDate`.
-- V28 se basa en la V27 mas reciente, incorpora `tickets/quick-create` y documenta `ocrJson`/`normalizedJson` en contratos de tickets sin romper compatibilidad.
-- V02 de DEV incorpora el contexto firmado de Entra en headers automaticos y agrega `GET /api/mcp/tools`.
-- V03 de DEV actualiza `baseUrl` a `https://dev.insertec.biz:2083` para el nuevo despliegue publico separado por host y puerto.
-- V04 de DEV actualiza la coleccion activa con `projId` en contratos de lineas de hoja de gastos, alias `projId` para quick-create y ejemplos de tickets con `ticketDate`, `ticketTime`, `ocrJson`, `normalizedJson` y `fileExtension`.
-- V05 de DEV agrega `CRM Expense Sheets / Email Notifications` con:
-  - `Get Expense Sheet - Notification Baseline`
-  - `Notify Approval Requested - Update Status`
-  - `Notify Approved - Update Status`
-- Las pruebas V05/V06 quedan como historicas para validar el `PUT` de hojas de gasto. Desde 2026-05-27 el envio de emails de estado lo decide Axapta en `INDCRMExpenseSheetService`; Postman de `IND_CRM_API` solo confirma que el update llega a AX y no valida envio directo desde la API.
-- Desde 2026-06-09 el transporte AX/DLL de correo usa solo `SendMailEx`. El nuevo parametro opcional `attachmentFilePaths` contiene rutas absolutas staged separadas por `;`; las pruebas actuales de hojas de gastos lo envian vacio porque las notificaciones de estado no adjuntan ficheros.
-- V06 de DEV alinea las pruebas historicas con la regla actor-vs-owner:
-  - `X-IND-AxUserId: {{axUserId}}` es el `ActorAxUserId` que `IND_CRM_API` pasa a Axapta.
-  - Para esperar email real, usar una hoja cuyo propietario CRM sea distinto de `{{axUserId}}`; las hojas autogestionadas se saltan intencionadamente.
-  - La consola de Postman muestra `actorAxUserId` junto con el evento esperado.
-- DEV actual incorpora `reimbursableExpense` en contratos de hojas de gastos y los campos de linea `currencyCode`, `amountMST` y `exchRate`.
-- DEV actual mantiene `TotalAmountCurrency` y `TotalAmountMST` como totales contables legacy y agrega `TotalGrossAmountMST` y `TotalReimbursableAmount` en cabeceras y listados de hojas. Las lineas distinguen `Amount` original, `AmountMST` company y `ReimbursableAmount` reembolsable company; `ReimbursableExpense=Yes` copia `AmountMST` y `No` deja el derivado en cero. Visa no participa en el calculo y queda como espejo inverso legacy bloqueado. El JSON real usa PascalCase. La coleccion DEV activa no contiene response schemas para estos endpoints, por lo que no se crea una version nueva solo por esta ampliacion aditiva.
+Las copias de una misma versión deben ser idénticas byte a byte. Las versiones anteriores se conservan como snapshots de colección, no como documentación normativa.
+
+## Variables
+
+- `baseUrl`: host del entorno.
+- `tokenId`: bearer técnico obtenido en login/refresh.
+- `companyId`: empresa seleccionada y permitida.
+- `axUserId`: valor funcional devuelto por el contexto para contratos que aún lo requieren.
+- `entraOid`, `contextVersion`, `permissionsRevision`, `contextToken`: contexto firmado devuelto por `/api/auth/entra/context`.
+
+No guardar credenciales o tokens reales dentro de las colecciones versionadas.
+
+## Flujo de autenticación
+
+1. Ejecutar login y guardar `tokenId`.
+2. Solicitar el contexto Entra y guardar empresa, usuario AX y campos firmados.
+3. Los scripts de colección añaden las cabeceras de contexto a las rutas CRM correspondientes.
+4. Un `AUTH_CONTEXT_REQUIRED` o `AUTH_CONTEXT_STALE` exige renovar el contexto; `AUTH_FORBIDDEN` no se corrige cambiando cabeceras manualmente.
+
+## Contratos
+
+- El catálogo HTTP canónico es `.codex/ENDPOINTS.md`.
+- Las fechas de tickets y hojas aceptan `DDMMYYYY` o `DD.MM.YYYY`; las respuestas usan `DD.MM.YYYY`.
+- El GET de detalle de hoja usa el viewer del contexto firmado y no requiere `X-IND-AxUserId` para autorizar la lectura.
+- Cuando cambie un endpoint, actualizar en la misma intervención código, colección DEV vigente, pruebas de Postman y documentación contractual afectada.
+
+## Versionado
+
+Aplicar `.codex/postman/POSTMAN_VERSIONING.md`. No crear prompts Markdown auxiliares para trasladar cambios al frontend; el contrato se documenta en `ENDPOINTS.md` y el cambio coordinado se gestiona en el plan de trabajo/Git.

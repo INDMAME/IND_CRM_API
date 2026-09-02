@@ -4,18 +4,18 @@ flowchart TB
     User["<b>UserInfo</b><br/>Id, Name, Company<br/><i>Nombre y empresa predeterminada</i>"]
   end
 
-  subgraph GlobalAccess["Configuracion global - SaveDataPerCompany = No"]
-    Entra["<b>INDWebUserEntraIdentity</b><br/>UserId, AppCode, EntraOID<br/><i>Identidad Entra por aplicacion</i>"]
+  subgraph GlobalAccess["Configuración global - SaveDataPerCompany = No"]
+    Entra["<b>INDWebUserEntraIdentity</b><br/>UserId, AppCode, EntraOID<br/><i>Identidad Entra por aplicación</i>"]
     Companies["<b>INDCiasPermitidas</b><br/>RecId, UserId, CiaId<br/><i>Empresas permitidas por usuario</i>"]
-    App["<b>INDWebApp</b><br/>AppCode, Description, IsActive<br/><i>Catalogo de aplicaciones</i>"]
-    Module["<b>INDWebModule</b><br/>AppCode, ModuleCode, IsActive<br/><i>Catalogo de modulos por aplicacion</i>"]
+    App["<b>INDWebApp</b><br/>AppCode, Description, IsActive<br/><i>Catálogo de aplicaciones</i>"]
+    Module["<b>INDWebModule</b><br/>AppCode, ModuleCode, IsActive<br/><i>Catálogo de módulos por aplicación</i>"]
     Access["<b>INDWebModuleAccessLevel</b><br/>RefRecIdCiaPermitida, AppCode, ModuleCode<br/>AccessRights, DataVisibilityMode<br/><i>Permiso configurado</i>"]
     Target["<b>INDModuleDataVisibilityTarget</b><br/>INDWebModuleAccessLevel, TargetPersonAlias<br/>TargetAction, ValidFrom, ValidTo<br/><i>Excepciones manuales de visibilidad</i>"]
   end
 
   subgraph CompanyData["Identidad y gastos por empresa - unir con DATAAREAID"]
     Person["<b>INDPersonaTable</b><br/>RecId, Alias, UserId, RefRecIdCRM<br/><i>Puente persona, AX y CRM</i>"]
-    Hierarchy["<b>INDModuleDataVisibilityHierarchyLine</b><br/>ParentPersonAlias, ChildPersonAlias<br/>ValidFrom, ValidTo<br/><i>Jerarquia de visibilidad</i>"]
+    Hierarchy["<b>INDModuleDataVisibilityHierarchyLine</b><br/>ParentPersonAlias, ChildPersonAlias<br/>ValidFrom, ValidTo<br/><i>Jerarquía de visibilidad</i>"]
     CrmUser["<b>CRMUsuarioTable</b><br/>RecId, UserId, AxaptaUserId<br/>Division, CategoriaId, Bloqueado<br/><i>Empleado CRM y valores de gastos</i>"]
     Manager["<b>CRMUsuarioSubordinadoTable</b><br/>UserIdJefe, UserIdSubordinado<br/>ExcluirAprobacionHojaGastos<br/><i>Jefes y aprobadores directos</i>"]
     Sheet["<b>CRMHojaGastosTable</b><br/>HojaGastosId, UserId, ExpenseSheetStatus<br/>CurrencyCode, ExchangeRateMode, INDCreatedByUserId<br/><i>Cabecera y propietario de la hoja</i>"]

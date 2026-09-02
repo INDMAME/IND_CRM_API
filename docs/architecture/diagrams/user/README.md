@@ -1,17 +1,15 @@
-# User-level flow diagrams
+# Diagramas funcionales
 
-This folder contains user-friendly versions of the architecture diagrams. They
-explain what a CRM user or business stakeholder experiences without exposing
-implementation details such as controller names, DTO classes, COM calls, or
-service internals.
+Explican lo que experimenta una persona usuaria del CRM sin exponer nombres de
+controladores, clases DTO, llamadas COM ni otros detalles internos. Cada flujo
+indica al principio su fuente técnica; ambos deben actualizarse juntos.
 
-Each user-level diagram has a technical counterpart under
-`docs/architecture/diagrams/technical`. When one side changes, update the
-other side in the same work item.
+El mapa funcional para BI es una excepción deliberada: muestra nombres de
+tablas AX porque su objetivo es facilitar la trazabilidad entre conceptos de
+negocio y fuentes de datos. Fuera de ese mapa, los diagramas funcionales evitan
+identificadores técnicos internos.
 
-## Index
-
-| User-level document | User-level source | Technical source |
+| Documento funcional | Fuente Mermaid | Fuente técnica |
 | --- | --- | --- |
 | [expense-sheets.md](expenses/expense-sheets.md) | [expense-sheets.mmd](expenses/expense-sheets.mmd) | [expense-sheets-sequence.md](../technical/expenses/expense-sheets-sequence.md) |
 | [expense-sheet-line-create-edit-flow.md](expenses/expense-sheet-line-create-edit-flow.md) | [expense-sheet-line-create-edit-flow.mmd](expenses/expense-sheet-line-create-edit-flow.mmd) | [expense-sheet-line-create-edit-flow.md](../technical/expenses/expense-sheet-line-create-edit-flow.md) |
@@ -20,13 +18,10 @@ other side in the same work item.
 | [ai-audio-transcription.md](ai/ai-audio-transcription.md) | [ai-audio-transcription.mmd](ai/ai-audio-transcription.mmd) | [ai-audio-transcription-sequence.md](../technical/ai/ai-audio-transcription-sequence.md) |
 | [ticket-image-ai.md](ai/ticket-image-ai.md) | [ticket-image-ai.mmd](ai/ticket-image-ai.mmd) | [ticket-image-ai-sequence.md](../technical/ai/ticket-image-ai-sequence.md) |
 
-## Writing rules
+## Reglas de redacción
 
-- Explain the flow from the user's point of view.
-- Use business terms: user, screen, company, ticket, image, audio, review,
-  save, approve, error.
-- Avoid implementation terms unless they are visible to the user.
-- Keep the same business steps and decisions as the technical diagram.
-- Explain unavoidable technical terms in parentheses.
-- Keep labels short so Mermaid renders correctly in light and dark themes.
-- If a behavior is not proven from code, write `pendiente de validar`.
+- Describir el flujo desde el punto de vista de la persona usuaria.
+- Emplear lenguaje de negocio y explicar cualquier término técnico inevitable.
+- Mantener las mismas decisiones y pasos que en el diagrama técnico.
+- Usar etiquetas cortas compatibles con los temas claro y oscuro de Mermaid.
+- Marcar como `pendiente de validar` cualquier comportamiento sin evidencia.

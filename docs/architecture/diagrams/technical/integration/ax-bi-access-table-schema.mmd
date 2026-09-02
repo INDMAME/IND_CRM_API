@@ -107,31 +107,31 @@ class CRMUsuarioTable {
   +AxaptaUserId
 }
 
-note for UserInfo "Nombre y empresa predeterminada del usuario AX. Estructura completa pendiente de AOT."
+note for UserInfo "Nombre y empresa predeterminada del usuario AX. La estructura completa no está confirmada en AOT."
 note for SysUserInfo "Identidad e idioma AX. Es la tabla nombrada por las relaciones XPO."
-note for INDCiasPermitidas "Empresa autorizada por usuario. Clave logica UserId + CiaId."
-note for INDWebUserEntraIdentity "Entra OID asociado al usuario AX por aplicacion. Dato sensible."
-note for INDWebApp "Catalogo de aplicaciones. AppCode es clave logica pendiente de validar en AOT."
-note for INDWebModule "Catalogo de modulos. Clave logica AppCode + ModuleCode."
-note for INDWebModuleAccessLevel "Permiso almacenado por empresa, aplicacion y modulo."
-note for INDModuleDataVisibilityTarget "Excepcion manual de visibilidad. La empresa se hereda del permiso."
+note for INDCiasPermitidas "Empresa autorizada por usuario. Clave lógica UserId + CiaId."
+note for INDWebUserEntraIdentity "Entra OID asociado al usuario AX por aplicación. Dato sensible."
+note for INDWebApp "Catálogo de aplicaciones. AppCode es la clave lógica; su unicidad no está confirmada en AOT."
+note for INDWebModule "Catálogo de módulos. Clave lógica AppCode + ModuleCode."
+note for INDWebModuleAccessLevel "Permiso almacenado por empresa, aplicación y módulo."
+note for INDModuleDataVisibilityTarget "Excepción manual de visibilidad. La empresa se hereda del permiso."
 note for INDPersonaTable "Puente por empresa entre alias, usuario AX y usuario CRM. UserId admite duplicados."
-note for INDModuleDataVisibilityHierarchyLine "Jerarquia de aliases por empresa y periodo de vigencia."
+note for INDModuleDataVisibilityHierarchyLine "Jerarquía de aliases por empresa y período de vigencia."
 note for CRMUsuarioTable "Referencia al usuario funcional CRM dentro de la empresa."
 
-UserInfo ..> SysUserInfo : mismo principal AX / correspondencia fisica pendiente
+UserInfo ..> SysUserInfo : mismo principal AX / correspondencia física no confirmada
 SysUserInfo "1" --> "0..*" INDCiasPermitidas : Id = UserId
 SysUserInfo "1" --> "0..*" INDWebUserEntraIdentity : Id = UserId
-INDWebApp --> INDWebUserEntraIdentity : AppCode / clave logica
-INDWebApp --> INDWebModule : AppCode / clave logica
+INDWebApp --> INDWebUserEntraIdentity : AppCode / clave lógica
+INDWebApp --> INDWebModule : AppCode / clave lógica
 INDCiasPermitidas "1" --> "0..*" INDWebModuleAccessLevel : RecId = RefRecIdCiaPermitida
-INDWebApp --> INDWebModuleAccessLevel : AppCode / clave logica
+INDWebApp --> INDWebModuleAccessLevel : AppCode / clave lógica
 INDWebModule "1" --> "0..*" INDWebModuleAccessLevel : AppCode + ModuleCode
 INDWebModuleAccessLevel "1" --> "0..*" INDModuleDataVisibilityTarget : RecId
 
 INDCiasPermitidas "0..*" --> "0..*" INDPersonaTable : UserId / CiaId = DATAAREAID
 INDWebUserEntraIdentity "0..*" --> "0..*" INDPersonaTable : UserId / contexto de empresa
-SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolucion X++
+SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolución X++
 INDModuleDataVisibilityTarget "0..*" --> "1" INDPersonaTable : TargetPersonAlias = Alias / empresa via permiso
 INDModuleDataVisibilityHierarchyLine "0..*" --> "1" INDPersonaTable : ParentPersonAlias = Alias
 INDModuleDataVisibilityHierarchyLine "0..*" --> "1" INDPersonaTable : ChildPersonAlias = Alias

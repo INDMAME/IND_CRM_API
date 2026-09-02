@@ -1,11 +1,21 @@
-# Regla de versionado Postman
+# Versionado de Postman
 
-Cuando el usuario pida "genera un archivo postman" o solicite crear una nueva version del proyecto:
-- Mantener dos lineas separadas: `.codex/Postman/DEV` y `.codex/Postman/PROD`.
-- `PROD` conserva el historico y las snapshots productivas sin sobrescribir versiones anteriores.
-- `DEV` contiene la linea activa de trabajo y arranca en `V01` tras la separacion de entornos.
-- Cuando se cree una nueva version `DEV`, usa siempre la ultima coleccion de `.codex/Postman/DEV` como base e incrementa la version dentro de esa carpeta.
-- Si no existe aun una coleccion en `DEV`, usa la ultima de `PROD` como base de arranque.
-- Cuando una coleccion de `DEV` se promocione a `PROD`, copiarla a `.codex/Postman/PROD`, ajustar `baseUrl` a produccion si aplica y versionar sin sobrescribir el historico.
-- Mantener la copia de soporte sincronizada en `Notes/DEV` o `Notes/PROD`.
-- Actualiza el nombre de la collection y el `_postman_id`.
+## Líneas separadas
+
+- DEV vive en `.codex/postman/DEV` y PROD en `.codex/postman/PROD`.
+- Una versión DEV nueva parte de la versión DEV numerada más alta e incrementa su número.
+- Una promoción a PROD parte de la colección DEV aprobada, recibe el siguiente número PROD y ajusta únicamente la configuración pública del entorno.
+- Nunca sobrescribir una versión numerada anterior.
+
+## Copias operativas
+
+- La versión DEV vigente se refleja en `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json` y en `Notes/DEV`.
+- La versión PROD vigente se refleja en `.codex/postman/IND_CRM_API V<N>.postman_collection.json` y en `Notes/PROD`.
+- Las copias de la misma versión deben tener el mismo SHA-256 que su archivo canónico.
+
+## Reglas de contenido
+
+- Actualizar `info.name` y generar un `_postman_id` nuevo para una versión numerada nueva.
+- No incluir tokens, contraseñas, secretos ni datos personales reales.
+- Mantener variables y scripts de contexto firmados alineados con `.codex/ENDPOINTS.md`.
+- No crear prompts o bitácoras Markdown junto a una colección; el historial queda en las versiones JSON y en Git.

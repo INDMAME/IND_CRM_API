@@ -1,94 +1,94 @@
 sequenceDiagram
   autonumber
-  participant Ui as React ticket UI
-  participant Proxy as MVC ticket routes
+  participant Ui as Interfaz React de tickets
+  participant Proxy as Rutas MVC de tickets
   participant Client as ApiClientService
   participant Api as CrmExpenseSheetTicketsController
-  participant Guard as Base CRM guards
+  participant Guard as Protecciones base del CRM
   participant Bc as Business Connector COM
   participant Ax as INDCRMExpenseSheetService
   participant Blob as Azure Blob Storage
   participant Ocr as Document Intelligence
   participant Ai as OpenAI
 
-  Note over Ui,Ax: List and detail
+  Note over Ui,Ax: Lista y detalle
     Ui->>Proxy: POST /api/crm/expensesheets/tickets/list
-    Proxy->>Client: Ticket list request
-    Client->>Api: POST /api/crm/expensesheets/tickets/list<br/>Authorization + context headers
-    Api->>Guard: Validate token, company, AX user, context
-    Guard->>Bc: Open request AX session
+    Proxy->>Client: Solicita la lista de tickets
+    Client->>Api: POST /api/crm/expensesheets/tickets/list<br/>Authorization + cabeceras de contexto
+    Api->>Guard: Valida token, empresa, usuario AX y contexto
+    Guard->>Bc: Abre la sesión AX de la petición
     Bc->>Ax: getExpenseSheetTicketsList
-    Ax-->>Api: Ticket list DTOs
-    Api-->>Ui: IndPagedResponse(ticket list)
+    Ax-->>Api: DTO de la lista de tickets
+    Api-->>Ui: IndPagedResponse(lista de tickets)
 
     Ui->>Proxy: GET /api/crm/expensesheets/tickets/{fileId}
-    Proxy->>Client: Ticket detail request
+    Proxy->>Client: Solicita el detalle del ticket
     Client->>Api: GET /api/crm/expensesheets/tickets/{fileId}
-    Api->>Bc: Execute getExpenseSheetTicket
+    Api->>Bc: Ejecuta getExpenseSheetTicket
     Bc->>Ax: getExpenseSheetTicket
-    Ax-->>Api: Ticket detail DTO
-    Api-->>Ui: IndPagedResponse(ticket detail)
+    Ax-->>Api: DTO de detalle del ticket
+    Api-->>Ui: IndPagedResponse(detalle del ticket)
 
-  Note over Ui,Ax: Create, update, and line changes
+  Note over Ui,Ax: Alta, actualización y cambios de líneas
     Ui->>Proxy: POST /api/crm/expensesheets/tickets
-    Proxy->>Client: Create ticket DTO
+    Proxy->>Client: DTO de alta del ticket
     Client->>Api: POST /api/crm/expensesheets/tickets
-    Api->>Bc: Execute createExpenseSheetTicket
+    Api->>Bc: Ejecuta createExpenseSheetTicket
     Bc->>Ax: createExpenseSheetTicket
-    Ax-->>Api: Created ticket data
+    Ax-->>Api: Datos del ticket creado
     Api-->>Ui: IndApiResponse(object)
 
     Ui->>Proxy: PUT /api/crm/expensesheets/tickets/{fileId}
-    Proxy->>Client: Update ticket DTO
+    Proxy->>Client: DTO de actualización del ticket
     Client->>Api: PUT /api/crm/expensesheets/tickets/{fileId}
-    Api->>Bc: Execute updateExpenseSheetTicket
+    Api->>Bc: Ejecuta updateExpenseSheetTicket
     Bc->>Ax: updateExpenseSheetTicket
-    Ax-->>Api: Update result
+    Ax-->>Api: Resultado de la actualización
     Api-->>Ui: IndApiResponse(object)
 
-    Ui->>Proxy: POST, PUT, or DELETE ticket lines
-    Proxy->>Client: Ticket line DTO
+    Ui->>Proxy: POST, PUT o DELETE de líneas del ticket
+    Proxy->>Client: DTO de línea del ticket
     Client->>Api: /tickets/{fileId}/lines...
-    Api->>Bc: Execute line mutation
-    Bc->>Ax: create, update, or delete ticket line
-    Ax-->>Api: Mutation result
+    Api->>Bc: Ejecuta la modificación de línea
+    Bc->>Ax: Crea, actualiza o borra una línea
+    Ax-->>Api: Resultado de la modificación
     Api-->>Ui: IndApiResponse(object)
 
-  Note over Ui,Ai: Quick create and AI extraction
-    Ui->>Proxy: POST /api/crm/expensesheets/tickets/quick-create<br/>multipart file + optional sheet link
-    Proxy->>Client: Forward multipart request
+  Note over Ui,Ai: Alta rápida y extracción con IA
+    Ui->>Proxy: POST /api/crm/expensesheets/tickets/quick-create<br/>Archivo multipart + vinculación opcional
+    Proxy->>Client: Reenvía la petición multipart
     Client->>Api: POST quick-create
-    Api->>Guard: Validate token, company, AX user, context
-    Api->>Bc: Create provisional ticket
+    Api->>Guard: Valida token, empresa, usuario AX y contexto
+    Api->>Bc: Crea un ticket provisional
     Bc->>Ax: createExpenseSheetTicket
-    Api->>Blob: Upload ticket file
-    Api->>Blob: Create temporary OCR access
-    Api->>Ocr: Analyze receipt image
-    Ocr-->>Api: Extracted receipt fields
-    Api->>Ai: Normalize expense draft
-    Ai-->>Api: Draft expense lines and header
-    Api->>Bc: Apply AI result
+    Api->>Blob: Sube el archivo del ticket
+    Api->>Blob: Crea acceso temporal para OCR
+    Api->>Ocr: Analiza la imagen del justificante
+    Ocr-->>Api: Campos extraídos
+    Api->>Ai: Normaliza el borrador de gasto
+    Ai-->>Api: Cabecera y líneas propuestas
+    Api->>Bc: Aplica el resultado de IA
     Bc->>Ax: updateExpenseSheetTicketFromIA
-    opt Link to an existing expense sheet
-      Api->>Bc: Link selected tickets to sheet
-      Bc->>Ax: createExpenseSheet or link operation
+    opt Vincular a una hoja de gastos existente
+      Api->>Bc: Vincula los tickets seleccionados
+      Bc->>Ax: createExpenseSheet u operación de vinculación
     end
-    Api-->>Ui: IndApiResponse(quick-create result with step trace ids)
+    Api-->>Ui: IndApiResponse(resultado con trazas por paso)
 
-  Note over Ui,Ax: Explicit AI and linking
+  Note over Ui,Ax: IA y vinculación explícitas
     Ui->>Proxy: POST /api/crm/expensesheets/tickets/{fileId}/ia
-    Proxy->>Client: Apply AI request
-    Client->>Api: POST apply AI
-    Api->>Blob: Read ticket file or URL reference
-    Api->>Ocr: Analyze receipt
-    Api->>Ai: Normalize extraction
+    Proxy->>Client: Solicita aplicar IA
+    Client->>Api: POST para aplicar IA
+    Api->>Blob: Lee el archivo o su referencia URL
+    Api->>Ocr: Analiza el justificante
+    Api->>Ai: Normaliza la extracción
     Api->>Bc: updateExpenseSheetTicketFromIA
-    Bc->>Ax: Update ticket
+    Bc->>Ax: Actualiza el ticket
     Api-->>Ui: IndApiResponse(object)
 
-    Ui->>Proxy: POST /api/crm/expensesheets/tickets/link/list or /link/bulk
-    Proxy->>Client: Link request
-    Client->>Api: Link endpoints
-    Api->>Bc: Query or link tickets
-    Bc->>Ax: Ticket link operation
-    Api-->>Ui: IndPagedResponse or IndApiResponse
+    Ui->>Proxy: POST /api/crm/expensesheets/tickets/link/list o /link/bulk
+    Proxy->>Client: Solicita la vinculación
+    Client->>Api: Endpoints de vinculación
+    Api->>Bc: Consulta o vincula tickets
+    Bc->>Ax: Operación de vinculación
+    Api-->>Ui: IndPagedResponse o IndApiResponse

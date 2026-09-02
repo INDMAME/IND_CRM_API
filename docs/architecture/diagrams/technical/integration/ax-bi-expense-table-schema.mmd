@@ -140,16 +140,16 @@ class INDTicketInfoTable {
   +SearchKey
 }
 
-note for SysUserInfo "Usuario AX recibido por el servicio. Estructura completa pendiente de AOT."
+note for SysUserInfo "Usuario AX recibido por el servicio. La estructura completa no está confirmada en AOT."
 note for INDPersonaTable "Puente por empresa entre usuario AX y referencia CRM."
-note for CRMUsuarioTable "Empleado CRM y configuracion base usada al crear hojas."
-note for CRMUsuarioSubordinadoTable "Jefes directos y exclusion de aprobacion. Sin FK ni indice unico compuesto."
+note for CRMUsuarioTable "Empleado CRM y configuración base usada al crear hojas."
+note for CRMUsuarioSubordinadoTable "Jefes directos y exclusión de aprobación. Sin FK ni índice único compuesto."
 note for CRMHojaGastosTable "Una cabecera por hoja. UserId es el propietario funcional."
-note for CRMHojaGastosLine "Una linea de gasto. Es el grano monetario principal del BI."
+note for CRMHojaGastosLine "Una línea de gasto. Es el grano monetario principal del BI."
 note for INDTicketInfoTable "Ticket opcional relacionado por FileId."
 
-SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolucion X++
-SysUserInfo ..> CRMUsuarioTable : Id = AxaptaUserId / DATAAREAID / fallback heredado
+SysUserInfo ..> INDPersonaTable : Id = UserId / DATAAREAID / resolución X++
+SysUserInfo ..> CRMUsuarioTable : Id = AxaptaUserId / DATAAREAID / alternativa heredada
 CRMUsuarioTable "1" --> "0..*" INDPersonaTable : RecId = RefRecIdCRM + DATAAREAID
 CRMUsuarioTable "1" ..> "0..*" CRMUsuarioSubordinadoTable : DATAAREAID + UserIdJefe
 CRMUsuarioTable "1" ..> "0..*" CRMUsuarioSubordinadoTable : DATAAREAID + UserIdSubordinado

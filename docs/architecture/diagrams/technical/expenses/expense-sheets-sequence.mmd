@@ -1,65 +1,65 @@
 sequenceDiagram
   autonumber
-  participant Ui as React/Razor expense UI
-  participant Proxy as MVC expense routes
+  participant Ui as Interfaz de gastos React/Razor
+  participant Proxy as Rutas MVC de gastos
   participant Client as ApiClientService
   participant Api as CrmExpenseSheetsController
-  participant Guard as Base CRM guards
+  participant Guard as Protecciones base del CRM
   participant Bc as Business Connector COM
   participant Ax as INDCRMExpenseSheetService
-  participant Blob as Blob proxy or storage
+  participant Blob as Proxy o almacenamiento Blob
 
-  Note over Ui,Ax: Read operations
-    Ui->>Proxy: POST /api/crm/expensesheets/list<br/>filters, page, size
-    Proxy->>Client: List expense sheets
-    Client->>Api: POST /api/crm/expensesheets/list<br/>Authorization + context headers
-    Api->>Guard: Validate token, company, AX user, context
-    Guard->>Bc: Open request AX session
+  Note over Ui,Ax: Operaciones de lectura
+    Ui->>Proxy: POST /api/crm/expensesheets/list<br/>Filtros, página y tamaño
+    Proxy->>Client: Lista hojas de gastos
+    Client->>Api: POST /api/crm/expensesheets/list<br/>Authorization + cabeceras de contexto
+    Api->>Guard: Valida token, empresa, usuario AX y contexto
+    Guard->>Bc: Abre la sesión AX de la petición
     Bc->>Ax: getExpenseSheetsList
-    Ax-->>Bc: List result
-    Bc-->>Api: Mapped DTOs
+    Ax-->>Bc: Resultado de lista
+    Bc-->>Api: DTO mapeados
     Api-->>Client: IndPagedResponse(ExpenseSheetListItemDto)
-    Client-->>Proxy: Envelope
-    Proxy-->>Ui: JSON response
+    Client-->>Proxy: Envoltorio
+    Proxy-->>Ui: Respuesta JSON
 
     Ui->>Proxy: GET /api/crm/expensesheets/{hojaGastosId}
-    Proxy->>Client: Get detail
+    Proxy->>Client: Obtiene el detalle
     Client->>Api: GET /api/crm/expensesheets/{hojaGastosId}
-    Api->>Guard: Validate request context
-    Guard->>Bc: Open request AX session
+    Api->>Guard: Valida el contexto de la petición
+    Guard->>Bc: Abre la sesión AX de la petición
     Bc->>Ax: getExpenseSheet
     Ax-->>Api: IndPagedResponse(ExpenseSheetDetailDto)
-    Api-->>Ui: Detail envelope through client and proxy
+    Api-->>Ui: Detalle mediante cliente y proxy
 
-  Note over Ui,Ax: Mutations
+  Note over Ui,Ax: Modificaciones
     Ui->>Proxy: POST /api/crm/expensesheets
-    Proxy->>Client: Create request DTO
+    Proxy->>Client: DTO de creación
     Client->>Api: POST /api/crm/expensesheets
-    Api->>Guard: Validate token, company, AX user, context
-    Guard->>Bc: Open request AX session
+    Api->>Guard: Valida token, empresa, usuario AX y contexto
+    Guard->>Bc: Abre la sesión AX de la petición
     Bc->>Ax: createExpenseSheet
-    Ax-->>Api: Created or validation result
+    Ax-->>Api: Resultado de creación o validación
     Api-->>Ui: IndApiResponse(object)
 
     Ui->>Proxy: PUT /api/crm/expensesheets/{hojaGastosId}
-    Proxy->>Client: Header update DTO
+    Proxy->>Client: DTO de cambio de cabecera
     Client->>Api: PUT /api/crm/expensesheets/{hojaGastosId}
-    Api->>Bc: Execute updateExpenseSheetHeader
+    Api->>Bc: Ejecuta updateExpenseSheetHeader
     Bc->>Ax: updateExpenseSheetHeader
-    Ax-->>Api: Update result
+    Ax-->>Api: Resultado de la actualización
     Api-->>Ui: IndApiResponse(object)
 
-    Ui->>Proxy: PUT or DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}
-    Proxy->>Client: Line mutation DTO
-    Client->>Api: Line mutation endpoint
-    Api->>Bc: Execute updateExpenseSheetLine or deleteExpenseSheetLine
-    Bc->>Ax: Update or delete AX line
-    Ax-->>Api: Mutation result
+    Ui->>Proxy: PUT o DELETE /api/crm/expensesheets/{hojaGastosId}/lines/{lineRecId}
+    Proxy->>Client: DTO de cambio de línea
+    Client->>Api: Endpoint de modificación de línea
+    Api->>Bc: Ejecuta updateExpenseSheetLine o deleteExpenseSheetLine
+    Bc->>Ax: Actualiza o borra la línea AX
+    Ax-->>Api: Resultado de la modificación
     Api-->>Ui: IndApiResponse(object)
 
-  opt Delete sheet with related ticket files
-    Ui->>Proxy: Delete expense sheet
-    Proxy->>Blob: Delete linked preview or blob file if available
-    Proxy->>Client: Delete or update AX data
-    Note over Proxy,Blob: Exact production route is pendiente de validar.
+  opt Borrar hoja con archivos de ticket relacionados
+    Ui->>Proxy: Borra la hoja de gastos
+    Proxy->>Blob: Borra vista previa o archivo vinculado si existe
+    Proxy->>Client: Borra o actualiza datos AX
+    Note over Proxy,Blob: La ruta de producción para borrar<br/>archivos vinculados no está confirmada.
   end

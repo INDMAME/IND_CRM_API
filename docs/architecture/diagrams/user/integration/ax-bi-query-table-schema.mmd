@@ -1,12 +1,12 @@
 flowchart LR
   Identity["<b>Identidad del usuario</b><br/>UserInfo / SysUserInfo<br/>INDWebUserEntraIdentity<br/><br/>Relaciona el acceso Entra con el usuario AX"]
-  Companies["<b>Empresas permitidas</b><br/>INDCiasPermitidas<br/><br/>Indica en que empresas puede trabajar"]
-  Modules["<b>Aplicaciones y modulos</b><br/>INDWebApp / INDWebModule<br/>INDWebModuleAccessLevel<br/><br/>Define acceso y reglas de visibilidad"]
-  Visibility["<b>Personas visibles</b><br/>INDPersonaTable<br/>INDModuleDataVisibilityTarget<br/>INDModuleDataVisibilityHierarchyLine<br/><br/>Resuelve identidad, jerarquia y excepciones"]
+  Companies["<b>Empresas permitidas</b><br/>INDCiasPermitidas<br/><br/>Indica en qué empresas puede trabajar"]
+  Modules["<b>Aplicaciones y módulos</b><br/>INDWebApp / INDWebModule<br/>INDWebModuleAccessLevel<br/><br/>Define acceso y reglas de visibilidad"]
+  Visibility["<b>Personas visibles</b><br/>INDPersonaTable<br/>INDModuleDataVisibilityTarget<br/>INDModuleDataVisibilityHierarchyLine<br/><br/>Resuelve identidad, jerarquía y excepciones"]
   Employee["<b>Empleado CRM por empresa</b><br/>CRMUsuarioTable<br/><br/>Aporta propietario y valores iniciales de gastos"]
-  Managers["<b>Jefes y subordinados</b><br/>CRMUsuarioSubordinadoTable<br/><br/>Determina consulta y aprobacion de hojas"]
-  Sheet["<b>Cabecera de hoja</b><br/>CRMHojaGastosTable<br/><br/>Guarda propietario, estado, periodo y divisa"]
-  Line["<b>Lineas de gasto</b><br/>CRMHojaGastosLine<br/><br/>Guarda fecha, tipo, importes, reembolso y proyecto"]
+  Managers["<b>Jefes y subordinados</b><br/>CRMUsuarioSubordinadoTable<br/><br/>Determina consulta y aprobación de hojas"]
+  Sheet["<b>Cabecera de hoja</b><br/>CRMHojaGastosTable<br/><br/>Guarda propietario, estado, período y divisa"]
+  Line["<b>Líneas de gasto</b><br/>CRMHojaGastosLine<br/><br/>Guarda fecha, tipo, importes, reembolso y proyecto"]
   Ticket["<b>Ticket opcional</b><br/>INDTicketInfoTable<br/><br/>Aporta el justificante asociado mediante FileId"]
 
   Identity --> Companies

@@ -1,4 +1,4 @@
-﻿{
+{
     "version":  "1.0",
     "baseUrl":  "{{baseUrl}}",
     "tools":  [
@@ -530,15 +530,31 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
-                                                                                                "X-IND-Company":  {
-                                                                                                                      "type":  "string",
-                                                                                                                      "description":  "Required only when persistTicket=true."
-                                                                                                                  },
-                                                                                                "X-IND-AxUserId":  {
+                                                                                                 "X-IND-Company":  {
                                                                                                                        "type":  "string",
-                                                                                                                       "description":  "Required only when persistTicket=true."
-                                                                                                                   }
-                                                                                            },
+                                                                                                                       "description":  "Obligatoria solo cuando persistTicket=true."
+                                                                                                                   },
+                                                                                                 "X-IND-AxUserId":  {
+                                                                                                                        "type":  "string",
+                                                                                                                        "description":  "Obligatoria solo cuando persistTicket=true."
+                                                                                                                    },
+                                                                                                 "X-IND-EntraOid":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "OID de Microsoft Entra asociado al contexto firmado; obligatorio solo cuando persistTicket=true."
+                                                                                                                   },
+                                                                                                 "X-IND-Context-Version":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "Versión devuelta por /api/auth/entra/context; obligatoria solo cuando persistTicket=true."
+                                                                                                                   },
+                                                                                                 "X-IND-Permissions-Revision":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "Revisión de permisos devuelta por /api/auth/entra/context; obligatoria solo cuando persistTicket=true."
+                                                                                                                   },
+                                                                                                 "X-IND-Context-Token":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "description":  "Token de contexto funcional firmado; obligatorio solo cuando persistTicket=true."
+                                                                                                                    }
+                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization"
                                                                                           ],
@@ -588,7 +604,23 @@
                                                        },
                                            "body":  {
                                                         "ticketImage":  "\u003cbinary\u003e",
-                                                        "persistTicket":  false,
+                                                         "persistTicket":  false,
+                                                         "ticketUrlFile":  "https://\u003cblob-url\u003e"
+                                                     }
+                                       },
+                                       {
+                                           "headers":  {
+                                                           "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-Company":  "\u003ccompanyId\u003e",
+                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e"
+                                                       },
+                                           "body":  {
+                                                        "ticketImage":  "\u003cbinary\u003e",
+                                                        "persistTicket":  true,
                                                         "ticketUrlFile":  "https://\u003cblob-url\u003e"
                                                     }
                                        }
@@ -607,6 +639,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -614,6 +662,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company"
                                                                                           ],
                                                                              "additionalProperties":  false
@@ -630,6 +682,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company"
                                                          ]
                                  },
@@ -637,6 +693,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e"
                                                        }
                                        }
@@ -655,6 +715,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -670,6 +746,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -800,6 +880,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -810,6 +894,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -859,15 +947,30 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
                                                                                                                   },
-                                                                                                "X-IND-AxUserId":  {
-                                                                                                                       "type":  "string",
-                                                                                                                       "description":  "AX user id from /api/auth/entra/context."
-                                                                                                                   }
+                                                                                                 "X-IND-EntraOid":  {
+                                                                                                                        "type":  "string",
+                                                                                                                        "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                                    },
+                                                                                                 "X-IND-Context-Version":  {
+                                                                                                                                 "type":  "string",
+                                                                                                                                 "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                                             },
+                                                                                                 "X-IND-Permissions-Revision":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                                                 },
+                                                                                                 "X-IND-Context-Token":  {
+                                                                                                                               "type":  "string",
+                                                                                                                               "description":  "Token de contexto funcional firmado."
+                                                                                                                           }
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
-                                                                                              "X-IND-Company",
-                                                                                              "X-IND-AxUserId"
+                                                                                               "X-IND-Company",
+                                                                                               "X-IND-EntraOid",
+                                                                                               "X-IND-Context-Version",
+                                                                                               "X-IND-Permissions-Revision",
+                                                                                               "X-IND-Context-Token"
                                                                                           ],
                                                                              "additionalProperties":  false
                                                                          },
@@ -897,7 +1000,10 @@
                                      "requiredHeaders":  [
                                                              "Authorization",
                                                              "X-IND-Company",
-                                                             "X-IND-AxUserId"
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token"
                                                          ]
                                  },
                       "examples":  [
@@ -905,7 +1011,10 @@
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
-                                                           "X-IND-AxUserId":  "\u003caxUserId\u003e"
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e"
                                                        },
                                            "path":  {
                                                         "hojaGastosId":  "HS-001"
@@ -926,6 +1035,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -937,8 +1062,12 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
-                                                                                              "X-IND-Company",
-                                                                                              "X-IND-AxUserId"
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
+                                                                                               "X-IND-Company",
+                                                                                               "X-IND-AxUserId"
                                                                                           ],
                                                                              "additionalProperties":  false
                                                                          },
@@ -969,6 +1098,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -977,6 +1110,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -999,6 +1136,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1014,6 +1167,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -1092,6 +1249,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -1102,6 +1263,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -1136,6 +1301,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1147,6 +1328,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -1194,6 +1379,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -1202,6 +1391,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -1228,6 +1421,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1243,8 +1452,13 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
-                                                                                              "X-IND-AxUserId"
+                                                                                              "X-IND-AxUserId",
+                                                                                              "Content-Type"
                                                                                           ],
                                                                              "additionalProperties":  false
                                                                          },
@@ -1287,8 +1501,13 @@
                                      "auth":  "bearer",
                                       "requiredHeaders":  [
                                                               "Authorization",
+                                                              "X-IND-EntraOid",
+                                                              "X-IND-Context-Version",
+                                                              "X-IND-Permissions-Revision",
+                                                              "X-IND-Context-Token",
                                                               "X-IND-Company",
-                                                              "X-IND-AxUserId"
+                                                              "X-IND-AxUserId",
+                                                              "Content-Type"
                                                           ],
                                      "contentType":  "application/json"
                                  },
@@ -1296,6 +1515,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -1323,6 +1546,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1334,6 +1573,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -1364,6 +1607,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -1372,6 +1619,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -1394,6 +1645,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1409,6 +1676,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -1508,6 +1779,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -1518,6 +1793,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -1557,6 +1836,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1568,6 +1863,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -1625,6 +1924,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -1633,6 +1936,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -1659,6 +1966,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1674,6 +1997,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -1762,6 +2089,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -1772,6 +2103,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -1805,6 +2140,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1812,6 +2163,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company"
                                                                                           ],
                                                                              "additionalProperties":  false
@@ -1851,6 +2206,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company"
                                                          ]
                                  },
@@ -1858,6 +2217,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e"
                                                        },
                                            "query":  {
@@ -1930,6 +2293,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -1945,6 +2324,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2040,6 +2423,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2050,6 +2437,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -2089,6 +2480,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2100,6 +2507,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -2130,6 +2541,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -2138,6 +2553,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -2160,6 +2579,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2175,6 +2610,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2220,6 +2659,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2230,6 +2673,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -2256,6 +2703,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2271,6 +2734,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2360,6 +2827,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2370,6 +2841,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -2399,6 +2874,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2414,6 +2905,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2471,6 +2966,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2481,6 +2980,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "multipart/form-data"
@@ -2510,6 +3013,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2521,6 +3040,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -2551,6 +3074,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -2559,6 +3086,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -2581,6 +3112,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2592,6 +3139,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -2637,6 +3188,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -2645,6 +3200,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },
@@ -2670,6 +3229,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2685,6 +3260,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2740,6 +3319,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2750,6 +3333,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -2779,6 +3366,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2794,6 +3397,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId",
                                                                                               "Content-Type"
@@ -2856,6 +3463,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId",
                                                              "Content-Type"
@@ -2866,6 +3477,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e",
                                                            "Content-Type":  "application/json"
@@ -2896,6 +3511,22 @@
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "Bearer token. Format: Bearer \u003ctoken\u003e"
                                                                                                                   },
+                                                                                                "X-IND-EntraOid":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "OID de Microsoft Entra asociado al contexto firmado."
+                                                                                                },
+                                                                                                "X-IND-Context-Version":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Versión devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Permissions-Revision":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Revisión de permisos devuelta por /api/auth/entra/context."
+                                                                                                },
+                                                                                                "X-IND-Context-Token":  {
+                                                                                                                      "type":  "string",
+                                                                                                                      "description":  "Token de contexto funcional firmado."
+                                                                                                },
                                                                                                 "X-IND-Company":  {
                                                                                                                       "type":  "string",
                                                                                                                       "description":  "CompanyId header for CRM endpoints."
@@ -2907,6 +3538,10 @@
                                                                                             },
                                                                              "required":  [
                                                                                               "Authorization",
+                                                                                              "X-IND-EntraOid",
+                                                                                              "X-IND-Context-Version",
+                                                                                              "X-IND-Permissions-Revision",
+                                                                                              "X-IND-Context-Token",
                                                                                               "X-IND-Company",
                                                                                               "X-IND-AxUserId"
                                                                                           ],
@@ -2944,6 +3579,10 @@
                                      "auth":  "bearer",
                                      "requiredHeaders":  [
                                                              "Authorization",
+                                                             "X-IND-EntraOid",
+                                                             "X-IND-Context-Version",
+                                                             "X-IND-Permissions-Revision",
+                                                             "X-IND-Context-Token",
                                                              "X-IND-Company",
                                                              "X-IND-AxUserId"
                                                          ]
@@ -2952,6 +3591,10 @@
                                        {
                                            "headers":  {
                                                            "Authorization":  "Bearer \u003ctoken\u003e",
+                                                           "X-IND-EntraOid":  "\u003centraOid\u003e",
+                                                           "X-IND-Context-Version":  "\u003ccontextVersion\u003e",
+                                                           "X-IND-Permissions-Revision":  "\u003cpermissionsRevision\u003e",
+                                                           "X-IND-Context-Token":  "\u003ccontextToken\u003e",
                                                            "X-IND-Company":  "\u003ccompanyId\u003e",
                                                            "X-IND-AxUserId":  "\u003caxUserId\u003e"
                                                        },

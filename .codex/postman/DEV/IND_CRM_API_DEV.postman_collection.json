@@ -1,7 +1,7 @@
 ﻿{
     "info":  {
-                 "_postman_id":  "502d3b65-3db8-4bd4-aa59-94bad73dba5a",
-                 "name":  "IND_CRM_API DEV V06",
+                 "_postman_id":  "25f34fa0-ee5c-43d7-a880-a050742ae437",
+                 "name":  "IND_CRM_API DEV V07",
                  "description":  "Coleccion DEV V06. Mantiene baseUrl DEV https://dev.insertec.biz:2083 y alinea pruebas de notificaciones de hojas de gasto con la regla actor-vs-owner: X-IND-AxUserId/{{axUserId}} es ActorAxUserId para Axapta.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
                  "_exporter_id":  "12158298"
@@ -625,6 +625,242 @@
                  {
                      "name":  "IA Services",
                      "item":  [
+                                  {
+                                      "name":  "Text Formatting",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Format Text - 200",
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function () { pm.response.to.have.status(200); });",
+                                                                                                     "pm.test(\u0027Complete result is valid\u0027, function () { var json = pm.response.json(); pm.expect(json.Success).to.eql(true); pm.expect(json.Data.FormattedText).to.be.a(\u0027string\u0027).and.not.empty; pm.expect(json.Data.HasChanges).to.be.a(\u0027boolean\u0027); pm.expect(json.Data.Warnings).to.be.an(\u0027array\u0027); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json",
+                                                                                          "type":  "text"
+                                                                                      }
+                                                                                  ],
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"text\": \"hola hemos ablado con el cliente y emos acordado enviar la propuesta el 30/07\",\n  \"languageId\": \"auto\"\n}",
+                                                                                    "options":  {
+                                                                                                    "raw":  {
+                                                                                                                "language":  "json"
+                                                                                                            }
+                                                                                                }
+                                                                                },
+                                                                       "url":  {
+                                                                                   "raw":  "{{baseUrl}}/api/ia/service/text/format",
+                                                                                   "host":  [
+                                                                                                "{{baseUrl}}"
+                                                                                            ],
+                                                                                   "path":  [
+                                                                                                "api",
+                                                                                                "ia",
+                                                                                                "service",
+                                                                                                "text",
+                                                                                                "format"
+                                                                                            ]
+                                                                               },
+                                                                       "auth":  {
+                                                                                    "type":  "bearer",
+                                                                                    "bearer":  [
+                                                                                                   {
+                                                                                                       "key":  "token",
+                                                                                                       "value":  "{{tokenId}}",
+                                                                                                       "type":  "string"
+                                                                                                   }
+                                                                                               ]
+                                                                                }
+                                                                   },
+                                                       "response":  [
+
+                                                                    ]
+                                                   },
+                                                   {
+                                                       "name":  "Format Text - 422 Empty",
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 422\u0027, function () { pm.response.to.have.status(422); });",
+                                                                                                     "pm.test(\u0027Validation envelope is valid\u0027, function () { var json = pm.response.json(); pm.expect(json.Success).to.eql(false); pm.expect(json.ErrorCode).to.eql(\u0027VALIDATION_ERROR\u0027); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json",
+                                                                                          "type":  "text"
+                                                                                      }
+                                                                                  ],
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"text\": \"   \",\n  \"languageId\": \"es-ES\"\n}",
+                                                                                    "options":  {
+                                                                                                    "raw":  {
+                                                                                                                "language":  "json"
+                                                                                                            }
+                                                                                                }
+                                                                                },
+                                                                       "url":  {
+                                                                                   "raw":  "{{baseUrl}}/api/ia/service/text/format",
+                                                                                   "host":  [
+                                                                                                "{{baseUrl}}"
+                                                                                            ],
+                                                                                   "path":  [
+                                                                                                "api",
+                                                                                                "ia",
+                                                                                                "service",
+                                                                                                "text",
+                                                                                                "format"
+                                                                                            ]
+                                                                               },
+                                                                       "auth":  {
+                                                                                    "type":  "bearer",
+                                                                                    "bearer":  [
+                                                                                                   {
+                                                                                                       "key":  "token",
+                                                                                                       "value":  "{{tokenId}}",
+                                                                                                       "type":  "string"
+                                                                                                   }
+                                                                                               ]
+                                                                                }
+                                                                   },
+                                                       "response":  [
+
+                                                                    ]
+                                                   },
+                                                   {
+                                                       "name":  "Format Text - 401",
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 401\u0027, function () { pm.response.to.have.status(401); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json",
+                                                                                          "type":  "text"
+                                                                                      }
+                                                                                  ],
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"text\": \"Texto de prueba.\"\n}",
+                                                                                    "options":  {
+                                                                                                    "raw":  {
+                                                                                                                "language":  "json"
+                                                                                                            }
+                                                                                                }
+                                                                                },
+                                                                       "url":  {
+                                                                                   "raw":  "{{baseUrl}}/api/ia/service/text/format",
+                                                                                   "host":  [
+                                                                                                "{{baseUrl}}"
+                                                                                            ],
+                                                                                   "path":  [
+                                                                                                "api",
+                                                                                                "ia",
+                                                                                                "service",
+                                                                                                "text",
+                                                                                                "format"
+                                                                                            ]
+                                                                               },
+                                                                       "auth":  {
+                                                                                    "type":  "noauth"
+                                                                                }
+                                                                   },
+                                                       "response":  [
+
+                                                                    ]
+                                                   },
+                                                   {
+                                                       "name":  "Format Text - 429",
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 429 when the configured limit is exceeded\u0027, function () { pm.response.to.have.status(429); pm.expect(pm.response.headers.has(\u0027Retry-After\u0027)).to.eql(true); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json",
+                                                                                          "type":  "text"
+                                                                                      }
+                                                                                  ],
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"text\": \"Repetir esta peticion hasta superar el limite configurado.\",\n  \"languageId\": \"es\"\n}",
+                                                                                    "options":  {
+                                                                                                    "raw":  {
+                                                                                                                "language":  "json"
+                                                                                                            }
+                                                                                                }
+                                                                                },
+                                                                       "url":  {
+                                                                                   "raw":  "{{baseUrl}}/api/ia/service/text/format",
+                                                                                   "host":  [
+                                                                                                "{{baseUrl}}"
+                                                                                            ],
+                                                                                   "path":  [
+                                                                                                "api",
+                                                                                                "ia",
+                                                                                                "service",
+                                                                                                "text",
+                                                                                                "format"
+                                                                                            ]
+                                                                               },
+                                                                       "auth":  {
+                                                                                    "type":  "bearer",
+                                                                                    "bearer":  [
+                                                                                                   {
+                                                                                                       "key":  "token",
+                                                                                                       "value":  "{{tokenId}}",
+                                                                                                       "type":  "string"
+                                                                                                   }
+                                                                                               ]
+                                                                                }
+                                                                   },
+                                                       "response":  [
+
+                                                                    ]
+                                                   }
+                                               ]
+                                  },
                                   {
                                       "name":  "Expense Sheets AI Examples",
                                       "item":  [
@@ -1842,7 +2078,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"mode\": 0,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket restaurante\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 32.5,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Consumo cliente\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Menu ejecutivo\",\n      \"qty\": 1,\n      \"price\": 20,\n      \"totalAmount\": 20\n    },\n    {\n      \"description\": \"Bebida\",\n      \"qty\": 1,\n      \"price\": 12.5,\n      \"totalAmount\": 12.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"12:30:00\"\n}"
+                                                                                    "raw":  "{\n  \"mode\": 0,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket restaurante\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 32.5,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Consumo cliente\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Menu ejecutivo\",\n      \"qty\": 1,\n      \"price\": 20,\n      \"totalAmount\": 20\n    },\n    {\n      \"description\": \"Bebida\",\n      \"qty\": 1,\n      \"price\": 12.5,\n      \"totalAmount\": 12.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"12:30:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1915,7 +2151,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"mode\": 1,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket sin detalle\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 8,\n  \"totalAmount\": 15,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Solo cabecera\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"08:45:00\"\n}"
+                                                                                    "raw":  "{\n  \"mode\": 1,\n  \"existingFileId\": \"\",\n  \"description\": \"Ticket sin detalle\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 8,\n  \"totalAmount\": 15,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Solo cabecera\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"08:45:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets",
@@ -1995,8 +2231,7 @@
                                                                                                      "  pm.expect(success).to.eql(true);",
                                                                                                      "});",
                                                                                                      "",
-                                                                                                     "var items = j.Items || j.items || [];",
-                                                                                                     "var d = Array.isArray(items) \u0026\u0026 items.length \u003e 0 ? items[0] : {};",
+                                                                                                     "var d = j.data || j.Data || {};",
                                                                                                      "var fileId = d.FileId || d.fileId || \u0027\u0027;",
                                                                                                      "pm.test(\u0027Ticket has fileId\u0027, function () {",
                                                                                                      "  pm.expect(String(fileId || \u0027\u0027)).to.not.eql(\u0027\u0027);",
@@ -2025,40 +2260,6 @@
                                                                                                      "  var firstLineRecId = lines[0].RecId || lines[0].recId;",
                                                                                                      "  if (firstLineRecId) pm.collectionVariables.set(\u0027lineRecId\u0027, String(firstLineRecId));",
                                                                                                      "}",
-                                                                                                     "",
-                                                                                                     "pm.test(\u0027ReimbursableExpense is null or integer 0/1\u0027, function () {",
-                                                                                                     "  lines.forEach(function (line) {",
-                                                                                                     "    var value = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
-                                                                                                     "    pm.expect(value === null || (Number.isInteger(value) \u0026\u0026 (value === 0 || value === 1))).to.eql(true);",
-                                                                                                     "  });",
-                                                                                                     "});",
-                                                                                                     "",
-                                                                                                     "pm.test(\u0027ReimbursableAmount is null or number\u0027, function () {",
-                                                                                                     "  lines.forEach(function (line) {",
-                                                                                                     "    var value = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
-                                                                                                     "    pm.expect(value === null || typeof value === \u0027number\u0027).to.eql(true);",
-                                                                                                     "  });",
-                                                                                                     "});",
-                                                                                                     "",
-                                                                                                     "pm.test(\u0027Non-reimbursable lines have zero reimbursable amount\u0027, function () {",
-                                                                                                     "  lines.forEach(function (line) {",
-                                                                                                     "    var reimbursableExpense = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
-                                                                                                     "    var reimbursableAmount = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
-                                                                                                     "    if (reimbursableExpense === 1) pm.expect(reimbursableAmount).to.eql(0);",
-                                                                                                     "  });",
-                                                                                                     "});",
-                                                                                                     "",
-                                                                                                     "pm.test(\u0027Reimbursement metadata is consistent across ticket lines\u0027, function () {",
-                                                                                                     "  if (lines.length \u003c 2) return;",
-                                                                                                     "  var firstExpense = (lines[0].ReimbursableExpense !== undefined) ? lines[0].ReimbursableExpense : lines[0].reimbursableExpense;",
-                                                                                                     "  var firstAmount = (lines[0].ReimbursableAmount !== undefined) ? lines[0].ReimbursableAmount : lines[0].reimbursableAmount;",
-                                                                                                     "  lines.forEach(function (line) {",
-                                                                                                     "    var reimbursableExpense = (line.ReimbursableExpense !== undefined) ? line.ReimbursableExpense : line.reimbursableExpense;",
-                                                                                                     "    var reimbursableAmount = (line.ReimbursableAmount !== undefined) ? line.ReimbursableAmount : line.reimbursableAmount;",
-                                                                                                     "    pm.expect(reimbursableExpense).to.eql(firstExpense);",
-                                                                                                     "    pm.expect(reimbursableAmount).to.eql(firstAmount);",
-                                                                                                     "  });",
-                                                                                                     "});",
                                                                                                      "",
                                                                                                      "var traceId = j.traceId || j.TraceId;",
                                                                                                      "if (traceId) pm.collectionVariables.set(\u0027lastTraceId\u0027, String(traceId));"
@@ -2162,7 +2363,7 @@
                                                                                                 "list"
                                                                                             ]
                                                                                },
-                                                                       "description":  "Lista generica de tickets. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, Status, ProcessedByAI, CurrencyCode, TotalAmount, TotalAmountCurrency, TotalAmountMST, TransDate, FileName y GastoType. TotalAmount es alias legacy de TotalAmountCurrency."
+                                                                       "description":  "Lista generica de tickets. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, Status, ProcessedByAI, CurrencyCode, TotalAmount, TransDate, FileName y GastoType."
                                                                    },
                                                        "response":  [
 
@@ -2208,7 +2409,7 @@
                                                                                                 "list"
                                                                                             ]
                                                                                },
-                                                                       "description":  "Lista especifica para vinculacion. Sale prefiltrada por status Pending y totalAmount distinto de cero. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, CurrencyCode, TotalAmount, TotalAmountCurrency, TotalAmountMST, TransDate, FileName, ProcessedByAI y GastoType. TotalAmount es alias legacy de TotalAmountCurrency."
+                                                                       "description":  "Lista especifica para vinculacion. Sale prefiltrada por status Pending y totalAmount distinto de cero. Usa ticketHeader.createdDate como referencia para filtros de fecha y TransDate. Cada item devuelve FileId, Description, CurrencyCode, TotalAmount, TransDate, FileName, ProcessedByAI y GastoType."
                                                                    },
                                                        "response":  [
 
@@ -2330,7 +2531,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"description\": \"Ticket actualizado\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 37.5,\n  \"status\": 0,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Comentario update\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"processedByAI\": false,\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"13:15:00\"\n}"
+                                                                                    "raw":  "{\n  \"description\": \"Ticket actualizado\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 37.5,\n  \"status\": 0,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Comentario update\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"processedByAI\": false,\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"13:15:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}",
@@ -2420,7 +2621,7 @@
                                                                                   ],
                                                                        "body":  {
                                                                                     "mode":  "raw",
-                                                                                    "raw":  "{\n  \"description\": \"Cafe Teatre expense\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 11.7,\n  \"transDate\": \"02032026\",\n  \"comentario\": \"Procesado por IA\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Pinchos Patatas\",\n      \"qty\": 1.0,\n      \"price\": 7.2,\n      \"totalAmount\": 7.2\n    },\n    {\n      \"description\": \"Varios\",\n      \"qty\": 3.0,\n      \"price\": 1.5,\n      \"totalAmount\": 4.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"21:10:00\"\n}"
+                                                                                    "raw":  "{\n  \"description\": \"Cafe Teatre expense\",\n  \"currencyCode\": \"EUR\",\n  \"gastoType\": 5,\n  \"totalAmount\": 11.7,\n  \"transDate\": \"20260302\",\n  \"comentario\": \"Procesado por IA\",\n  \"urlFile\": \"{{ticketUrlFile}}\",\n  \"fileName\": \"\",\n  \"ocrJson\": \"\",\n  \"normalizedJson\": \"\",\n  \"fileExtension\": \"jpg\",\n  \"lines\": [\n    {\n      \"description\": \"Pinchos Patatas\",\n      \"qty\": 1.0,\n      \"price\": 7.2,\n      \"totalAmount\": 7.2\n    },\n    {\n      \"description\": \"Varios\",\n      \"qty\": 3.0,\n      \"price\": 1.5,\n      \"totalAmount\": 4.5\n    }\n  ],\n  \"ticketDate\": \"02.03.2026\",\n  \"ticketTime\": \"21:10:00\"\n}"
                                                                                 },
                                                                        "url":  {
                                                                                    "raw":  "{{baseUrl}}/api/crm/expensesheets/tickets/{{fileId}}/ia",
@@ -2994,7 +3195,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 0,\n  \"lines\": [\n    {\n      \"transDate\": \"02032026\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"projIdProvided\": true,\n      \"reimbursableExpense\": 0,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
+                                                                   "raw":  "{\n  \"userId\": \"{{axUserId}}\",\n  \"mode\": 0,\n  \"existingHojaGastosId\": \"\",\n  \"description\": \"Gastos visita\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"reimbursableExpense\": 2,\n  \"lines\": [\n    {\n      \"transDate\": \"20260302\",\n      \"typeValue\": 5,\n      \"description\": \"Comida\",\n      \"internacional\": false,\n      \"fileId\": \"\",\n      \"qty\": 1,\n      \"price\": 25.5,\n      \"projId\": \"\",\n      \"reimbursableExpense\": 1,\n      \"currencyCode\": \"EUR\",\n      \"amountMST\": 25.5,\n      \"exchRate\": 100\n    }\n  ]\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets",
@@ -3036,7 +3237,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"projIdProvided\": true,\n  \"expenseSheetStatus\": 0,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 0\n}"
+                                                                   "raw":  "{\n  \"description\": \"Gastos visita (actualizado)\",\n  \"currencyCode\": \"EUR\",\n  \"exchRate\": 1,\n  \"projId\": \"\",\n  \"expenseSheetStatus\": 2,\n  \"exchangeRateMode\": 0,\n  \"estadoComentarios\": \"ok\",\n  \"reimbursableExpense\": 2\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/009998",
@@ -3119,16 +3320,8 @@
                                                                      {
                                                                          "key":  "X-IND-AxUserId",
                                                                          "value":  "{{axUserId}}"
-                                                                     },
-                                                                     {
-                                                                         "key":  "Content-Type",
-                                                                         "value":  "application/json"
                                                                      }
                                                                  ],
-                                                      "body":  {
-                                                                   "mode":  "raw",
-                                                                   "raw":  "{\n  \"projId\": \"PRJ-001\",\n  \"projIdProvided\": true\n}"
-                                                               },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/009998/project-default/propagate",
                                                                   "host":  [
@@ -3143,7 +3336,7 @@
                                                                                "propagate"
                                                                            ]
                                                               },
-                                                      "description":  "Aplica atomicamente un proyecto objetivo a cabecera y lineas. Sin body usa el proyecto actual de cabecera. La web debe pedir confirmacion antes de llamarlo."
+                                                      "description":  "Propaga el proyecto de cabecera a projId y projIdHornos de las lineas existentes. La web debe pedir confirmacion antes de llamarlo."
                                                   },
                                       "response":  [
 
@@ -3211,7 +3404,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"transDate\": \"02032026\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"projIdProvided\": true,\n  \"reimbursableExpense\": 0,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
+                                                                   "raw":  "{\n  \"transDate\": \"20260302\",\n  \"typeValue\": 5,\n  \"description\": \"Comida (actualizado)\",\n  \"internacional\": false,\n  \"fileId\": \"\",\n  \"qty\": 1,\n  \"price\": 30.0,\n  \"projId\": \"PRJ-001\",\n  \"reimbursableExpense\": 1,\n  \"currencyCode\": \"EUR\",\n  \"amountMST\": 30.0,\n  \"exchRate\": 100\n}"
                                                                },
                                                       "url":  {
                                                                   "raw":  "{{baseUrl}}/api/crm/expensesheets/HS-001/lines/12345",
@@ -3297,7 +3490,7 @@
                                                                      }
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/fuel-price-km?transDate=18022026",
+                                                                  "raw":  "{{baseUrl}}/api/crm/expensesheets/fuel-price-km?transDate=20260218",
                                                                   "host":  [
                                                                                "{{baseUrl}}"
                                                                            ],
@@ -3310,7 +3503,7 @@
                                                                   "query":  [
                                                                                 {
                                                                                     "key":  "transDate",
-                                                                                    "value":  "18022026"
+                                                                                    "value":  "20260218"
                                                                                 }
                                                                             ]
                                                               }
@@ -3452,8 +3645,6 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovalRequestedStatus\", 0);",
-                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
-                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3462,7 +3653,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApprovalRequested - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: reimbursableExpense",
+                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -3583,8 +3774,6 @@
                                                                                                      "  if (!currencyCode) currencyCode = \"EUR\";",
                                                                                                      "",
                                                                                                      "  var targetStatus = numberVar(\"expenseNotificationApprovedStatus\", 0);",
-                                                                                                     "  var reimbursableExpense = numberVar(\"expenseNotificationReimbursableExpense\", 0);",
-                                                                                                     "  if (reimbursableExpense !== 0 \u0026\u0026 reimbursableExpense !== 1) reimbursableExpense = 0;",
                                                                                                      "  var requestBody = {",
                                                                                                      "    description: readVar(\"expenseNotificationDescription\", \"Postman expense notification test\"),",
                                                                                                      "    currencyCode: currencyCode,",
@@ -3593,7 +3782,7 @@
                                                                                                      "    expenseSheetStatus: targetStatus,",
                                                                                                      "    exchangeRateMode: numberVar(\"expenseNotificationExchangeRateMode\", 0),",
                                                                                                      "    estadoComentarios: readVar(\"expenseNotificationEstadoComentarios\", \"Postman notification smoke test\") + \" - ExpenseSheetApproved - \" + new Date().toISOString(),",
-                                                                                                     "    reimbursableExpense: reimbursableExpense",
+                                                                                                     "    reimbursableExpense: numberVar(\"expenseNotificationReimbursableExpense\", 2)",
                                                                                                      "  };",
                                                                                                      "",
                                                                                                      "  pm.collectionVariables.set(\"expenseNotificationUpdateRequestJson\", JSON.stringify(requestBody, null, 2));",
@@ -4068,7 +4257,7 @@
                      },
                      {
                          "key":  "expenseNotificationReimbursableExpense",
-                         "value":  "0",
+                         "value":  "2",
                          "type":  "string"
                      },
                      {
