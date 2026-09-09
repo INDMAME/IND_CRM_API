@@ -676,7 +676,8 @@ namespace IND_CRM_API.Controllers.System
         }
 
         // Mapeo defensivo del contenedor AX a DTOs tipados.
-        private EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
+        // Shared with destructive operations that recheck current AX permissions without renewing tokens.
+        internal static EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
         {
             var headerContainer = SafePeekContainer(root, 1);
             if (headerContainer == null)
@@ -723,7 +724,8 @@ namespace IND_CRM_API.Controllers.System
             return header;
         }
 
-        private List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
+        // Preserves every supported AX company row shape for authorization callers.
+        internal static List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
         {
             var companies = new List<EntraCompanyDto>();
             var companiesCon = SafePeekContainer(root, 2);
@@ -784,7 +786,7 @@ namespace IND_CRM_API.Controllers.System
             return companies;
         }
 
-        private List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
+        private static List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
         {
             var modules = new List<EntraModuleDto>();
             var count = SafeLength(modulesCon);

@@ -182,7 +182,8 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
   Nota JSON: Web API serializa las propiedades en PascalCase; en JavaScript usar `TotalGrossAmountMST`, `TotalReimbursableAmount` y `ReimbursableAmount`.
   Nota AX: `axCreatedDate` expone la fecha final adicional devuelta por el contrato AX y se normaliza a `DD.MM.YYYY`; actualmente refleja la misma fecha de creación que `createdDate`.
   Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja (`userId`). Se agrega al contrato de detalle como campo adicional compatible con clientes anteriores.
-  Campos de línea de la respuesta: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `reimbursableAmount`, `exchRate`, `totalAmountCurrency`, `totalAmountMST`.
+  Campos de línea de la respuesta: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `reimbursableAmount`, `exchRate`, `totalAmountCurrency`, `totalAmountMST`, `ticket`, `createdFromTicket`.
+  Origen digital: `CreatedFromTicket` en JSON expone `CRMHojaGastosLine.INDCreatedFromTicket`, añadido en la posición 17 de la fila AX; solo se marca `true` al crear la línea desde un ticket digital validado. La asociación posterior a una línea existente y los registros anteriores conservan `false`; no hay inferencia retroactiva. `null` indica contrato anterior o valor inválido. `Ticket` (posición 16) conserva el indicador heredado de justificante en papel y no decide la limpieza. Las posiciones 1–15 no cambian. Con metadatos de origen incompletos se conserva el borrado atómico de la hoja sin limpieza automática de tickets o blobs.
   Nota sobre líneas: `amount` y su alias `totalAmountCurrency` expresan el total en la divisa original de la línea; `amountMST` y su alias `totalAmountMST` expresan el total de empresa/MST; `reimbursableAmount` expresa la parte reembolsable de empresa/MST, copia `amountMST` con `ReimbursableExpense=Yes` y vale cero con `ReimbursableExpense=No`, independientemente de `VisaEmpresa`; queda nulo con contratos AX heredados. AX conserva `VisaEmpresa` bloqueado como espejo inverso de compatibilidad (`Yes` reembolsable -> Visa `No`; `No` reembolsable -> Visa `Yes`).
   Nota de enrutamiento: el literal `tickets` queda excluido de `hojaGastosId` para evitar colisión con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -408,6 +409,24 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
 ## Proyectos
 - GET /api/crm/projects/list?filter=...&page=1&pageSize=50 (Authorize + X-IND-Company)
   Nota: `page` y `pageSize` son obligatorios. Si no hay filtro, AX devuelve una lista vacía.
+
+## Borrado recuperable de hojas de gastos
+
+- DELETE `/api/crm/expensesheets/{hojaGastosId}/with-tickets`
+  Borra una hoja propia en borrador y completa la limpieza de sus tickets de origen confirmado.
+  Sin cuerpo. Requiere bearer, `X-IND-Company`, `X-IND-AxUserId`, `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token`.
+  El propietario debe coincidir con el actor AX del contexto firmado. No permite borrar hojas de subordinados, hojas contabilizadas o fuera de borrador.
+  Antes de borrar o consultar el progreso, API vuelve a leer el contexto vigente de AX y exige usuario y compañía activos y permiso `FullAccess` en `GASTOS_HOJA_GASTO`; un permiso revocado no permite continuar una limpieza pendiente.
+  Devuelve `IndApiResponse<ExpenseSheetDeletionProgressDto>` con `Exists`, `DeleteAttempted`, `SheetDeleted`, `Complete` y `MetadataAvailable`.
+  `200` confirma todas las etapas. `409 / CRM_EXPENSESHEET_CLEANUP_PENDING` indica que la hoja ya se eliminó y hay limpieza pendiente; repetir el mismo DELETE con el mismo usuario y empresa.
+  La API guarda el inventario antes de borrar, elimina cabecera y líneas en la transacción AX existente, después los tickets de origen y finalmente sus archivos. Las asociaciones manuales y los tickets compartidos con ellas se conservan.
+  El origen usa `CreatedFromTicket` (campo AX `INDCreatedFromTicket`), separado del indicador histórico `Ticket`. Si el contrato AX anterior no devuelve `CreatedFromTicket`, `MetadataAvailable=false`: se mantiene el borrado atómico histórico y se conservan todos los tickets y archivos. Los registros anteriores a la incorporación del indicador se conservan; no se deduce su origen ni se eliminan retroactivamente.
+  Con el XPO actualizado, AX comprueba la instantánea de líneas y el estado de la hoja antes de borrar, y vuelve a comprobar vínculos y URL antes de eliminar cada ticket.
+- GET `/api/crm/expensesheets/{hojaGastosId}/deletion`
+  Mismas cabeceras e identidad. Devuelve el mismo DTO dentro de `IndApiResponse`, sin inventario ni URLs. `Exists=false` significa que no existe registro de esa operación; no comprueba la existencia de la hoja.
+  `DeleteAttempted=true` permite reintentar una respuesta perdida del borrado; el servidor consulta AX y conserva los errores de permisos o disponibilidad, sin interpretarlos como ausencia de la hoja.
+  El registro se conserva entre reinicios/despliegues en el mismo servidor; no hay reintentos en segundo plano. Operación y ACL: `docs/operations/configuracion-entornos.md`, apartado de borrado recuperable.
+  Estas rutas son de la APP y no se exponen como herramientas en `MCP_TOOLS.json`. Los endpoints públicos anteriores conservan sus rutas y contratos.
 
 ## Plantilla interna
 - GET /api/crm/template/sample (Authorize + X-IND-Company + contexto firmado)

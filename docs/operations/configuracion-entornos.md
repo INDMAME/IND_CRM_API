@@ -319,6 +319,16 @@ Para scripts privados de máquina o utilidades con datos sensibles, usar:
 
 Esas rutas quedan ignoradas por Git.
 
+## Borrado recuperable de hojas de gastos
+
+La API mantiene el progreso en `%ProgramData%\IND_CRM_API\expense-sheet-deletions`, fuera del directorio que reemplaza `reinstall-api.ps1`. No borrar ese directorio para resolver un error ni durante una publicación: contiene las etapas necesarias para recuperar operaciones interrumpidas. Debe incluirse en la copia de seguridad operativa del servidor y trasladarse junto con la API si se cambia de máquina.
+
+La cuenta del servicio necesita crear y modificar el directorio. El servicio establece una ACL sin herencia para su identidad, SYSTEM y administradores locales. Al cambiar de cuenta, un administrador debe transferir el acceso al directorio y sus archivos antes de arrancar. Se rechazan junctions y enlaces simbólicos. Cada operación usa un bloqueo exclusivo y escritura atómica; los nombres son hashes del entorno, tenant, empresa y hoja. El contenido guarda propietario, actor, identificadores y URLs originales: no publicar ni adjuntar estos registros sin sanearlos.
+
+La recuperación se ejecuta repitiendo el DELETE documentado en `.codex/ENDPOINTS.md`, con el mismo usuario y empresa; no hay tarea automática. Un `409` tras eliminar la hoja conserva el inventario. Si el ticket vuelve a vincularse o cambia su archivo, la limpieza se detiene para conservar los datos actuales. No forzar el borrado del registro ni del ticket para eludir ese conflicto.
+
+Publicar primero la API y después la APP. Importar la tabla `CRMHojaGastosLine.xpo`, compilarla y sincronizarla, e importar y compilar `INDCRMExpenseSheetService.xpo` según `.codex/TECH_SPECS.md` para activar el indicador de origen `INDCreatedFromTicket` y las comprobaciones transaccionales. Mientras AX use el contrato anterior, el borrado de la hoja sigue funcionando y conserva los tickets/archivos. No hay inferencia ni limpieza retroactiva de registros anteriores al indicador. La persistencia es local al servidor: este mecanismo no representa coordinación entre varias réplicas ni una transacción distribuida con Azure.
+
 ## Notas
 
 - `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_IP` y `INDCRM_PUBLIC_PORT` son datos operativos para DNS, firewall y despliegue.

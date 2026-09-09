@@ -1484,6 +1484,41 @@ namespace IND_CRM_API.Controllers.CRM
             [FromUri] bool deleteWholeSheet = false,
             [FromUri] ExpenseSheetDeleteMode? deleteMode = null)
         {
+            return DeleteExpenseSheetLineCore(hojaGastosId, lineRecId, deleteWholeSheet, deleteMode, null);
+        }
+
+        /// <summary>Deletes a whole sheet only while its inventoried line associations remain unchanged.</summary>
+        internal IHttpActionResult DeleteExpenseSheetForCleanup(string hojaGastosId, ExpenseSheetDetailDto snapshot)
+        {
+            if (snapshot == null || snapshot.Lines == null ||
+                !string.Equals(snapshot.HojaGastosId?.Trim(), hojaGastosId?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                snapshot.Lines.Any(line => line == null ||
+                    !long.TryParse(line.RecId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var recId) || recId == 0) ||
+                snapshot.Lines.Select(line => long.Parse(line.RecId, NumberStyles.Integer, CultureInfo.InvariantCulture))
+                    .Distinct().Count() != snapshot.Lines.Count)
+            {
+                return Content(HttpStatusCode.Conflict, new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "No se puede verificar el inventario de lineas de la hoja. Actualiza y reintenta.",
+                    ErrorCode = IndErrorCodes.CrmExpenseSheetMissingFields,
+                    Data = null,
+                    TraceId = Guid.NewGuid().ToString("N")
+                });
+            }
+
+            // Older AX contracts retain atomic sheet deletion; the adapter disables ticket and blob cleanup.
+            if (snapshot.Lines.Any(line => !line.CreatedFromTicket.HasValue))
+                return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, null);
+
+            return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, snapshot);
+        }
+
+        /// <summary>Preserves existing modes and optionally passes an inventory guard to AX.</summary>
+        private IHttpActionResult DeleteExpenseSheetLineCore(
+            string hojaGastosId, long lineRecId, bool deleteWholeSheet,
+            ExpenseSheetDeleteMode? deleteMode, ExpenseSheetDetailDto snapshot)
+        {
             var traceId = Guid.NewGuid().ToString("N");
             var effectiveDeleteMode = deleteMode ?? (deleteWholeSheet ? ExpenseSheetDeleteMode.WholeSheet : ExpenseSheetDeleteMode.LineOnly);
 
@@ -1551,6 +1586,21 @@ namespace IND_CRM_API.Controllers.CRM
                 lineCon.Append(lineRecIdValue);
                 lineCon.Append(deleteWholeSheetFlag);
 
+                if (snapshot != null)
+                {
+                    var expectedLines = ax.CreateContainer();
+                    foreach (var line in snapshot.Lines)
+                    {
+                        var expectedLine = ax.CreateContainer();
+                        expectedLine.Append(line.RecId);
+                        expectedLine.Append(line.FileId ?? string.Empty);
+                        expectedLine.Append(line.CreatedFromTicket.Value ? 1 : 0);
+                        expectedLines.Append(expectedLine);
+                    }
+                    lineCon.Append(expectedLines);
+                    lineCon.Append(1);
+                }
+
                 if (effectiveDeleteMode == ExpenseSheetDeleteMode.HeaderOnly)
                 {
                     Logger.Log(
@@ -1584,6 +1634,8 @@ namespace IND_CRM_API.Controllers.CRM
                 if (!success)
                 {
                     var errorResponse = BuildActionError(message, traceId, out var status);
+                    if (snapshot != null && (message ?? string.Empty).StartsWith("Conflicto:", StringComparison.OrdinalIgnoreCase))
+                        status = HttpStatusCode.Conflict;
                     LogOut(status);
                     return Content(status, errorResponse);
                 }
@@ -2987,7 +3039,9 @@ namespace IND_CRM_API.Controllers.CRM
                 if (row == null || rowLen < 9)
                     continue;
 
-                // Current shape (15): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate [15]ReimbursableAmount
+                // Current shape (17) appends digital creation origin after the legacy Ticket flag at 16.
+                // Previous shape (16) appends the legacy Ticket flag; positions 1-15 stay unchanged.
+                // Previous shape (15): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate [15]ReimbursableAmount
                 // Previous shape (14): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId [11]ReimbursableExpense [12]CurrencyCode [13]AmountMST [14]ExchRate
                 // Current shape (10): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Price [8]Qty [9]Amount [10]ProjId
                 // Previous shape (9): [1]RecId [2]TransDate [3]Type [4]Description [5]Internacional [6]FileId [7]Qty [8]Amount [9]ProjId
@@ -2995,6 +3049,8 @@ namespace IND_CRM_API.Controllers.CRM
                 var hasReimbursableColumns = rowLen >= 14;
                 var lineAmountCurrency = hasPriceColumn ? SafeDecimal(row, 9) : SafeDecimal(row, 8);
                 var lineAmountMST = hasReimbursableColumns ? SafeDecimal(row, 13) : null;
+                var ticketFlag = rowLen >= 16 ? SafeInt(row, 16) : null;
+                var createdFromTicketFlag = rowLen >= 17 ? SafeInt(row, 17) : null;
                 var line = new ExpenseSheetLineDto
                 {
                     RecId = AxContainerReadHelper.SafeString(row, 1),
@@ -3003,6 +3059,8 @@ namespace IND_CRM_API.Controllers.CRM
                     Description = AxContainerReadHelper.SafeString(row, 4),
                     Internacional = ToBool(AxContainerReadHelper.SafeString(row, 5)),
                     FileId = AxContainerReadHelper.SafeString(row, 6),
+                    Ticket = ticketFlag == 1 ? true : ticketFlag == 0 ? false : (bool?)null,
+                    CreatedFromTicket = createdFromTicketFlag == 1 ? true : createdFromTicketFlag == 0 ? false : (bool?)null,
                     Price = hasPriceColumn ? SafeDecimal(row, 7) : null,
                     Qty = hasPriceColumn ? SafeDecimal(row, 8) : SafeDecimal(row, 7),
                     Amount = lineAmountCurrency,

@@ -2746,6 +2746,19 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public IHttpActionResult DeleteExpenseSheetTicket(string fileId, [FromUri] long? lineRecId = null)
         {
+            return DeleteExpenseSheetTicketCore(fileId, lineRecId, null, false);
+        }
+
+        /// <summary>Deletes an unchanged, unlinked ticket during recoverable sheet cleanup.</summary>
+        internal IHttpActionResult DeleteExpenseSheetTicketForCleanup(string fileId, string expectedBlobUrl)
+        {
+            return DeleteExpenseSheetTicketCore(fileId, null, expectedBlobUrl, true);
+        }
+
+        /// <summary>Preserves the public delete contract and appends internal cleanup guards when requested.</summary>
+        private IHttpActionResult DeleteExpenseSheetTicketCore(
+            string fileId, long? lineRecId, string expectedBlobUrl, bool cleanupOnly)
+        {
             var traceId = Guid.NewGuid().ToString("N");
             var validationErrors = new List<IndValidationError>();
 
@@ -2791,7 +2804,13 @@ namespace IND_CRM_API.Controllers.CRM
                 con.Append(company);
                 con.Append(axUserId);
                 con.Append(fileId.Trim());
-                if (lineRecId.HasValue)
+                if (cleanupOnly)
+                {
+                    con.Append("0");
+                    con.Append(expectedBlobUrl ?? string.Empty);
+                    con.Append(1);
+                }
+                else if (lineRecId.HasValue)
                     con.Append(lineRecId.Value.ToString(CultureInfo.InvariantCulture));
 
                 var resultObj = ax.CallStaticClassMethod(
@@ -2818,6 +2837,8 @@ namespace IND_CRM_API.Controllers.CRM
                     var error = BuildTicketActionError(message, traceId, out var status);
                     if (!lineRecId.HasValue)
                         status = NormalizeAssignedTicketDeleteStatus(error, status);
+                    if (cleanupOnly && (message ?? string.Empty).StartsWith("Conflicto:", StringComparison.OrdinalIgnoreCase))
+                        status = HttpStatusCode.Conflict;
                     LogOut(status);
                     return Content(status, error);
                 }

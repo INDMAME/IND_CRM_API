@@ -62,6 +62,10 @@ namespace IND_CRM_API.Contracts.Responses
         public string Description { get; set; }
         public bool? Internacional { get; set; }
         public string FileId { get; set; }
+        /// <summary>Legacy AX paper-ticket flag; this does not identify digital ticket origin.</summary>
+        public bool? Ticket { get; set; }
+        /// <summary>Persisted digital creation origin; null when an older AX contract does not expose it.</summary>
+        public bool? CreatedFromTicket { get; set; }
         // Unit price returned by AX.
         public decimal? Price { get; set; }
         public decimal? Qty { get; set; }

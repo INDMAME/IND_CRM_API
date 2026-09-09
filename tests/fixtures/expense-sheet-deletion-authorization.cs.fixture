@@ -1,0 +1,113 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using AxaptaCOMConnector;
+using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Controllers.CRM;
+using IND_CRM_API.Controllers.System;
+
+// Exercises current rights and every supported company-container shape with the real production mappers.
+internal static class DeletionAuthorizationTests
+{
+    private const BindingFlags InternalStatic = BindingFlags.NonPublic | BindingFlags.Static;
+    private static readonly MethodInfo HeaderMapper = typeof(AuthController).GetMethod("MapEntraHeader", InternalStatic);
+    private static readonly MethodInfo CompanyMapper = typeof(AuthController).GetMethod("MapEntraCompanies", InternalStatic);
+    private static readonly MethodInfo Permission = typeof(CrmExpenseSheetDeletionController).GetMethod("HasExpenseSheetDeletePermission", InternalStatic);
+    private static int checks;
+
+    // All fixtures use memory containers and must never contact AX or Azure.
+    public static int Main()
+    {
+        try
+        {
+            foreach (var shape in new[] { 4, 5, 6, 7 })
+            {
+                Check(Allowed(Context(shape: shape)), "Full permission on company shape " + shape);
+                Check(Allowed(Context(shape: shape, flatHeader: true)), "Flat header on company shape " + shape);
+            }
+            foreach (var rights in new[] { "0", "1", "2", "3", "", "full", "-1" })
+                Check(!Allowed(Context(rights: rights)), "Insufficient or invalid permission " + rights);
+            foreach (var code in new[] { "GASTOS_HOJA_GASTO", "GASTO_HOJA_GASTO", "GASTOS/HOJAS", "GASTOS_HOJAS_GASTOS", " gastos hoja gasto " })
+                Check(Allowed(Context(moduleCode: code)), "Existing APP alias " + code);
+            Check(!Allowed(Context(moduleCode: "GASTOS_TICKETS")), "Ticket permission does not grant sheet deletion");
+            Check(!Allowed(Context(moduleCode: "VISITAS_GESTION")), "Visit permission does not grant sheet deletion");
+            Check(!Allowed(Context(company: "other")), "No fallback to another company");
+            Check(!Allowed(Context(actor: "changed-actor")), "Fresh AX actor must match signed actor");
+            Check(!Allowed(Context(activeModule: "0")), "Inactive module denied");
+            Check(!Allowed(Context(activeUser: "0")), "Disabled AX user denied");
+            Check(!Allowed(Context(activeApp: "0")), "Disabled CRM app denied");
+            Check(!Allowed(Context(success: "0")), "AX authorization rejection denied");
+            Check(!Allowed(null), "Missing AX response denied");
+            Check(!Allowed(Container(Container("1", "incomplete"), Container())), "Incomplete AX header denied");
+            Check(!Allowed(Container(Header(), Container())), "Empty company inventory denied");
+            Check(!Allowed(Container(Header(), Container(Container("company", "1", "name", "EUR")))), "Missing modules denied");
+            var duplicate = Context();
+            var companies = (IAxaptaContainer)duplicate.Peek(2);
+            Check(!Allowed(Container(Header(), Container(companies.Peek(1), companies.Peek(1)))), "Ambiguous duplicate companies denied");
+            var header = (EntraContextHeaderDto)HeaderMapper.Invoke(null, new object[] { Context() });
+            Check(!(bool)Permission.Invoke(null, new object[] { header, null, "owner", "company" }), "Null mapped companies denied");
+            Console.WriteLine("PASS: " + checks + " deletion authorization behavior checks");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error);
+            return 1;
+        }
+    }
+
+    // Re-map each call so changed permissions cannot be hidden by a cached authorization decision.
+    private static bool Allowed(IAxaptaContainer root)
+    {
+        var header = (EntraContextHeaderDto)HeaderMapper.Invoke(null, new object[] { root });
+        var companies = (List<EntraCompanyDto>)CompanyMapper.Invoke(null, new object[] { root });
+        return (bool)Permission.Invoke(null, new object[] { header, companies, "owner", "company" });
+    }
+
+    // Builds the old and current deployed loginEntraContext wire layouts.
+    private static IAxaptaContainer Context(int shape = 7, bool flatHeader = false, string rights = "4",
+        string moduleCode = "GASTOS_HOJA_GASTO", string company = "company", string actor = "owner",
+        string activeModule = "1", string activeUser = "1", string activeApp = "1", string success = "1")
+    {
+        var modules = Container(Container(moduleCode, "Expense sheets", activeModule, rights));
+        var values = new List<object> { company, "1", "Company" };
+        if (shape >= 5) values.Add("EUR");
+        if (shape >= 6) values.Add("0");
+        if (shape >= 7) values.Add("crm-owner");
+        values.Add(modules);
+        var header = Container(success, "result", actor, activeUser, activeApp, company, "EUR", "Owner");
+        return Container(flatHeader ? header : Container(header), Container(Container(values.ToArray())));
+    }
+
+    // Builds the successful nested header used by malformed company fixtures.
+    private static IAxaptaContainer Header() { return Container(Container("1", "OK", "owner", "1", "1", "company")); }
+
+    // Supplies a read-only AX container for the production mapping functions.
+    private static IAxaptaContainer Container(params object[] values) { return new MemoryContainer(values); }
+
+    // Fails immediately with the violated authorization boundary.
+    private static void Check(bool condition, string name)
+    {
+        if (!condition) throw new Exception("FAILED: " + name);
+        checks++;
+    }
+}
+
+// Implements only the read operations used by the real AX response mappers.
+public sealed class MemoryContainer : IAxaptaContainer
+{
+    private readonly object[] values;
+    public MemoryContainer(object[] values) { this.values = values; }
+    public int Length() { return values.Length; }
+    public object Peek(int index) { return values[index - 1]; }
+    public void Delete(int index, int count) { throw new NotSupportedException(); }
+    public int Find(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public int FindEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Insert(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void InsertEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Poke(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void PokeEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Append(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void AppendEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void DeleteAll() { throw new NotSupportedException(); }
+}

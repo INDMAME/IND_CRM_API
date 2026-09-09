@@ -220,6 +220,8 @@
     <Compile Include="Controllers\CRM\CrmEnumsController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetsController.cs" />
     <Compile Include="Controllers\CRM\CrmExpenseSheetTicketsController.cs" />
+    <Compile Include="Controllers\CRM\CrmExpenseSheetDeletionController.cs" />
+    <Compile Include="Contracts\Responses\ExpenseSheetDeletionProgressDto.cs" />
     <Compile Include="Controllers\CRM\CrmProjectsController.cs" />
     <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
@@ -253,6 +255,7 @@
     <Compile Include="Services\ComPlusApplicationController.cs" />
     <Compile Include="Services\CrmEnumCatalogService.cs" />
     <Compile Include="Services\ExpenseSheetAiDatasetProvider.cs" />
+    <Compile Include="Services\ExpenseSheetDeletionService.cs" />
     <Compile Include="Services\ExpenseTicketBlobStorageService.cs" />
     <Compile Include="Services\FrankfurterExchangeRateProvider.cs" />
     <Compile Include="Services\HelpKnowledgeModels.cs" />

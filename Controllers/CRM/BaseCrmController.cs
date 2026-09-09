@@ -291,7 +291,8 @@ namespace IND_CRM_API.Controllers
             return !string.IsNullOrWhiteSpace(normalized) && long.TryParse(normalized, out contextVersion) && contextVersion > 0;
         }
 
-        private static string ResolveTenantId()
+        // Uses the same tenant boundary for signed context and durable operations.
+        protected static string ResolveTenantId()
         {
             var tenantId = AppSettingsHelper.GetMachineEnvironmentVariable("CRM_TENANT_ID");
             if (!string.IsNullOrWhiteSpace(tenantId))

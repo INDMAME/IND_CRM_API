@@ -18,6 +18,7 @@ Objetivo: documentación detallada para exponer la API mediante herramientas MCP
 
 - Archivo canónico de herramientas: `.codex/MCP_TOOLS.json`.
 - Incluye `inputSchema` por herramienta y el mapeo HTTP en `x-http`.
+- El borrado recuperable `DELETE /api/crm/expensesheets/{hojaGastosId}/with-tickets` y su consulta `GET /api/crm/expensesheets/{hojaGastosId}/deletion` son contratos exclusivos de la APP, documentados en `ENDPOINTS.md`; no se exponen como herramientas MCP.
 
 ## Endpoints
 
@@ -154,7 +155,8 @@ Objetivo: documentación detallada para exponer la API mediante herramientas MCP
 - Nota JSON: Web API serializa las propiedades en PascalCase; los consumidores JavaScript deben usar `TotalGrossAmountMST`, `TotalReimbursableAmount` y `ReimbursableAmount`.
 - Nota: `userName` es `CRMUsuarioTable.Name` del propietario CRM de la hoja.
 - Nota AX: `axCreatedDate` expone la fecha final adicional devuelta por AX y normalmente refleja `createdDate`.
-- La respuesta de líneas incluye: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `reimbursableAmount`, `exchRate`.
+- La respuesta de líneas incluye: `price`, `qty`, `amount`, `projId`, `reimbursableExpense`, `currencyCode`, `amountMST`, `reimbursableAmount`, `exchRate`, `ticket`, `createdFromTicket`.
+- `CreatedFromTicket` en JSON expone el origen digital persistido en `INDCreatedFromTicket`, posición 17 de la fila AX: solo la creación de una línea desde ticket digital validado marca `true`. Asociaciones posteriores y registros anteriores quedan en `false`, sin inferencia retroactiva; contratos anteriores o valores inválidos devuelven `null`. `Ticket`, posición 16, conserva el indicador heredado de papel y no decide la limpieza. Las posiciones 1–15 no cambian. Sin metadatos de origen completos, se conserva el borrado atómico anterior de la hoja y se omite la limpieza automática de tickets y blobs.
 - Nota sobre líneas: `amount` es el total en divisa original, `amountMST` es el total de empresa/MST y `reimbursableAmount` es el importe reembolsable de empresa/MST; copia `amountMST` con `ReimbursableExpense=Yes` y vale cero con `ReimbursableExpense=No`, independientemente de Visa; queda nulo con AX heredado. Visa queda bloqueado como espejo inverso de compatibilidad.
 - Nota de enrutamiento: `hojaGastosId` excluye el literal `tickets` para evitar una colisión con `/api/crm/expensesheets/tickets`.
 
