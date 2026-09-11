@@ -31,9 +31,11 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
   Respuesta: `IndApiResponse` con `Data.token` y `Data.expires`.
 - POST /api/auth/refresh (Authorize)
   Cabeceras: `Authorization`.
+  Si no se puede vincular el token renovado a la sesión, devuelve `503` con `INTERNAL_ERROR` y no entrega un token nuevo.
 - POST /api/auth/entra/context (Authorize)
   Cuerpo: `{ "entraOid": "GUID", "appCode": "APP" }`.
   Campos de la respuesta de contexto: `ContextToken`, `ContextVersion`, `PermissionsRevision`, `ContextIssuedUtc`, `ContextExpiresUtc`, `Header.DefaultCurrencyCode`, `Header.UserName`, `Companies[].CurrencyCode`, `Companies[].AllowSelfManagement`, `Companies[].CrmUserId`.
+  Un resultado AX ambiguo con aplicación y usuario activos pero sin empresas deja el contexto pendiente de revalidación: `503` con `AUTH_CONTEXT_STALE`. Una lectura AX exitosa permite recuperarlo; no implica una revocación definitiva. La saturación del almacén devuelve `503` con `AUTH_CONTEXT_REQUIRED`; una renovación concurrente superada devuelve `503` con `AUTH_CONTEXT_STALE`.
 
 ## Salud
 - GET /api/health/ping (AllowAnonymous)
@@ -55,7 +57,7 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
   Endpoint de OpenErApi: `https://open.er-api.com/v6/latest/{BASE}`.
   Nota de OpenErApi: solo admite el último valor disponible; si se solicita una fecha distinta de hoy, se usa igualmente ese último valor.
   Contrato externo: no cambia la ruta, el envoltorio ni la estructura pública; no se expone el proveedor alternativo.
-  Caché: `MemoryCache` durante 24 h por la clave `base|target|date` (solo resultados correctos).
+  Caché: `MemoryCache` dedicado, máximo 20.000 resultados correctos y clave versionada `exchange-rate:v2|base|target|date`. Los proveedores actuales de último valor usan 15 minutos; una cotización histórica exacta de otro proveedor conserva 24 h. ECB comparte un único feed validado durante 15 minutos y las solicitudes coincidentes comparten su carga. Se conservan la fecha efectiva del proveedor y el orden de alternativas. Al alcanzar capacidad se devuelve la cotización sin guardarla.
   Códigos de error: `VALIDATION_ERROR` (422), `EXCHANGE_RATE_NOT_FOUND` (404, heredado), `RATE_UNAVAILABLE` (404), `INTERNAL_ERROR` (500).
 - GET /api/system/exchange-rate/public-direct?baseCurrency=USD&targetCurrency=EUR&date=2026-02-18 (AllowAnonymous)
   Consulta obligatoria: `baseCurrency`, `targetCurrency` (ISO 4217, 3 letras).

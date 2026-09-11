@@ -40,6 +40,10 @@ namespace IND_CRM_API.Services
         private HelpKnowledgeSnapshot _snapshot;
         private DateTime _snapshotWriteTimeUtc;
         private long _snapshotLength;
+        private DateTime _failedWriteTimeUtc;
+        private long _failedLength;
+        private DateTime _nextLoadAttemptUtc;
+        private HelpFeatureUnavailableException _lastLoadError;
 
         public HelpKnowledgeStore(IAxLogger logger)
         {
@@ -62,59 +66,35 @@ namespace IND_CRM_API.Services
                     "El asistente de ayuda no esta habilitado.");
             }
 
-            FileInfo file;
-            try
-            {
-                file = new FileInfo(_bundlePath);
-                if (!file.Exists)
-                {
-                    throw new HelpFeatureUnavailableException(
-                        HelpErrorCodes.KnowledgeUnavailable,
-                        "La documentacion de ayuda no esta disponible.");
-                }
-
-                if (file.Length <= 0 || file.Length > MaxBundleBytes)
-                {
-                    throw new HelpFeatureUnavailableException(
-                        HelpErrorCodes.KnowledgeUnavailable,
-                        "El bundle de ayuda no tiene un tamano valido.");
-                }
-            }
-            catch (HelpFeatureUnavailableException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new HelpFeatureUnavailableException(
-                    HelpErrorCodes.KnowledgeUnavailable,
-                    "No se pudo acceder a la documentacion de ayuda.",
-                    ex);
-            }
-
-            if (_snapshot != null &&
-                file.LastWriteTimeUtc == _snapshotWriteTimeUtc &&
-                file.Length == _snapshotLength)
-            {
-                return _snapshot;
-            }
-
             lock (_syncRoot)
             {
-                file.Refresh();
-                if (_snapshot != null &&
-                    file.LastWriteTimeUtc == _snapshotWriteTimeUtc &&
-                    file.Length == _snapshotLength)
-                {
-                    return _snapshot;
-                }
-
+                var writeTimeUtc = DateTime.MinValue;
+                var length = -1L;
                 try
                 {
+                    var file = new FileInfo(_bundlePath);
+                    if (file.Exists)
+                    {
+                        writeTimeUtc = file.LastWriteTimeUtc;
+                        length = file.Length;
+                    }
+                    if (_snapshot != null && writeTimeUtc == _snapshotWriteTimeUtc && length == _snapshotLength)
+                        return _snapshot;
+                    // Retry a repaired file immediately, but do not repeatedly parse the same failed version.
+                    if (DateTime.UtcNow < _nextLoadAttemptUtc && writeTimeUtc == _failedWriteTimeUtc && length == _failedLength)
+                    {
+                        if (_snapshot != null) return _snapshot;
+                        throw _lastLoadError;
+                    }
+                    if (length <= 0 || length > MaxBundleBytes)
+                        throw new HelpFeatureUnavailableException(HelpErrorCodes.KnowledgeUnavailable,
+                            "La documentacion de ayuda no esta disponible o no tiene un tamano valido.");
                     var loaded = LoadSnapshot(file);
                     _snapshot = loaded;
-                    _snapshotWriteTimeUtc = file.LastWriteTimeUtc;
-                    _snapshotLength = file.Length;
+                    _snapshotWriteTimeUtc = writeTimeUtc;
+                    _snapshotLength = length;
+                    _nextLoadAttemptUtc = DateTime.MinValue;
+                    _lastLoadError = null;
                     _logger.Log(
                         "[HELP-KNOWLEDGE] Bundle loaded version=" + loaded.Bundle.knowledgeVersion +
                         " topics=" + loaded.TopicsById.Count.ToString(CultureInfo.InvariantCulture) +
@@ -124,6 +104,18 @@ namespace IND_CRM_API.Services
                 }
                 catch (Exception ex)
                 {
+                    if (ReferenceEquals(ex, _lastLoadError)) throw;
+                    if (_lastLoadError != null && DateTime.UtcNow < _nextLoadAttemptUtc &&
+                        writeTimeUtc == _failedWriteTimeUtc && length == _failedLength)
+                    {
+                        if (_snapshot != null) return _snapshot;
+                        throw _lastLoadError;
+                    }
+                    _failedWriteTimeUtc = writeTimeUtc;
+                    _failedLength = length;
+                    _nextLoadAttemptUtc = DateTime.UtcNow.AddSeconds(30);
+                    _lastLoadError = ex as HelpFeatureUnavailableException ?? new HelpFeatureUnavailableException(
+                        HelpErrorCodes.KnowledgeUnavailable, "La documentacion de ayuda no se pudo validar.", ex);
                     if (_snapshot != null)
                     {
                         _logger.Log(
@@ -132,10 +124,7 @@ namespace IND_CRM_API.Services
                         return _snapshot;
                     }
 
-                    throw new HelpFeatureUnavailableException(
-                        HelpErrorCodes.KnowledgeUnavailable,
-                        "La documentacion de ayuda no se pudo validar.",
-                        ex);
+                    throw _lastLoadError;
                 }
             }
         }

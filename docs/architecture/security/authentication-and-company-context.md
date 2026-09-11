@@ -41,6 +41,18 @@ En particular, el detalle de una hoja obtiene al usuario que consulta con `Requi
 
 La renovación silenciosa mejora la continuidad, pero no transforma un permiso denegado en autorizado.
 
+## Retención e invalidación de las cachés
+
+`UserCompanyAccessCache` conserva como máximo 50.000 identidades y elimina entradas cuando vence su retención. No desaloja revisiones vivas para admitir otra identidad. El plazo nunca se reduce por debajo de la expiración previamente emitida. La versión se reserva antes de consultar AX, dentro del acceso COM serializado; una respuesta anterior no puede sobrescribir una observación más reciente.
+
+Una denegación explícita de usuario o aplicación, o un contexto exitoso sin empresas, invalida los tokens anteriores mediante un registro de revocación. Recuperar permisos emite un contexto nuevo y no resucita los tokens revocados. AX también puede devolver usuario y aplicación activos sin empresas tanto por falta de permisos como por fallos de lectura por empresa. Ese caso suspende temporalmente el contexto con `RequiresRevalidation` y responde `503/AUTH_CONTEXT_STALE`; una consulta posterior exitosa levanta la suspensión. Los fallos COM, timeouts y resultados genéricos incompletos no se convierten en revocaciones.
+
+El almacén AX de autenticación guarda hashes de los tokens, no sus valores reutilizables. Mantiene como máximo 50.000 bindings y 10.000 credenciales; cada credencial se conserva hasta la mayor expiración de los tokens emitidos para ese usuario, con el mismo margen de tres minutos de la validación JWT. Una renovación corta no reduce ese plazo. No contiene sesiones COM ni cambia su ciclo de vida por petición.
+
+Las ventanas IA se limitan a 50.000 estados y 10.000 usuarios simultáneos, con admisión y liberación atómicas. Las ventanas vencidas se depuran como máximo una vez por minuto; alcanzar capacidad nunca reinicia una cuota vigente. Estas garantías son locales al proceso: reiniciar la API reinicia las cuotas y el conocimiento local de revisiones/revocaciones. El contexto firmado conserva su validación criptográfica y caducidad.
+
+Las regresiones aisladas se ejecutan con `npm run test:cache` después de compilar `Release|x86`; usan configuración y proveedores de prueba, sin conectar a AX ni leer credenciales del servicio.
+
 ## Invariantes de seguridad
 
 - Ninguna caché se indexa solo por `APIAX` ni se comparte entre OID distintos.

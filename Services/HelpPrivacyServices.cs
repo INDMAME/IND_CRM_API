@@ -66,6 +66,9 @@ namespace IND_CRM_API.Services
         private readonly object _consumptionSync = new object();
         private readonly ConcurrentDictionary<string, long> _consumedTokenHashes =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        private readonly SortedSet<KeyValuePair<string, long>> _consumedExpirations =
+            new SortedSet<KeyValuePair<string, long>>(Comparer<KeyValuePair<string, long>>.Create((left, right) =>
+                left.Value != right.Value ? left.Value.CompareTo(right.Value) : StringComparer.Ordinal.Compare(left.Key, right.Key)));
 
         public HelpFeedbackTokenService()
             : this(
@@ -154,7 +157,9 @@ namespace IND_CRM_API.Services
                     return false;
                 if (_consumedTokenHashes.Count >= MaxConsumedTokenHashes)
                     return false;
-                return _consumedTokenHashes.TryAdd(tokenHash, expiresAtUnixSeconds);
+                if (!_consumedTokenHashes.TryAdd(tokenHash, expiresAtUnixSeconds)) return false;
+                _consumedExpirations.Add(new KeyValuePair<string, long>(tokenHash, expiresAtUnixSeconds));
+                return true;
             }
         }
 
@@ -162,12 +167,12 @@ namespace IND_CRM_API.Services
         private void CleanupExpiredHashes(long nowUnixSeconds, int inspectionLimit)
         {
             var inspected = 0;
-            foreach (var entry in _consumedTokenHashes)
+            while (_consumedExpirations.Count > 0 && inspected++ < inspectionLimit)
             {
-                if (inspected++ >= inspectionLimit)
-                    break;
-                if (entry.Value <= nowUnixSeconds)
-                    _consumedTokenHashes.TryRemove(entry.Key, out _);
+                var entry = _consumedExpirations.Min;
+                if (entry.Value > nowUnixSeconds) break;
+                _consumedTokenHashes.TryRemove(entry.Key, out _);
+                _consumedExpirations.Remove(entry);
             }
         }
 
@@ -241,6 +246,11 @@ namespace IND_CRM_API.Services
         private readonly int _pendingQuestionMinutes;
         private readonly ConcurrentDictionary<string, PendingQuestion> _pendingQuestions =
             new ConcurrentDictionary<string, PendingQuestion>(StringComparer.OrdinalIgnoreCase);
+        private readonly object _pendingSync = new object();
+        private readonly SortedSet<PendingQuestion> _pendingExpirations = new SortedSet<PendingQuestion>(
+            Comparer<PendingQuestion>.Create((left, right) => left.ExpiresAtUtc != right.ExpiresAtUtc
+                ? left.ExpiresAtUtc.CompareTo(right.ExpiresAtUtc)
+                : StringComparer.OrdinalIgnoreCase.Compare(left.InteractionId, right.InteractionId)));
 
         public HelpAnalyticsStore(IAxLogger logger)
         {
@@ -345,7 +355,15 @@ namespace IND_CRM_API.Services
             {
                 var now = DateTime.UtcNow;
                 PendingQuestion pendingQuestion;
-                _pendingQuestions.TryRemove(analyticsEvent.InteractionId, out pendingQuestion);
+                lock (_pendingSync)
+                {
+                    _pendingQuestions.TryRemove(analyticsEvent.InteractionId, out pendingQuestion);
+                    if (pendingQuestion != null)
+                    {
+                        _pendingExpirations.Remove(pendingQuestion);
+                        if (pendingQuestion.ExpiresAtUtc <= now) pendingQuestion = null;
+                    }
+                }
                 var metric = new JObject
                 {
                     ["schemaVersion"] = SchemaVersion,
@@ -463,18 +481,27 @@ namespace IND_CRM_API.Services
 
         private void RememberPendingQuestion(string interactionId, string redactedQuestion, DateTime nowUtc)
         {
-            foreach (var entry in _pendingQuestions.Where(item => item.Value.ExpiresAtUtc <= nowUtc).Take(200).ToList())
-                _pendingQuestions.TryRemove(entry.Key, out _);
-            if (_pendingQuestions.Count >= 5000)
+            lock (_pendingSync)
             {
-                foreach (var key in _pendingQuestions.Keys.Take(100).ToList())
-                    _pendingQuestions.TryRemove(key, out _);
+                // Expiration order avoids rescanning live questions and bounds admission atomically.
+                while (_pendingExpirations.Count > 0 &&
+                       (_pendingExpirations.Min.ExpiresAtUtc <= nowUtc || _pendingQuestions.Count >= 5000))
+                {
+                    var oldest = _pendingExpirations.Min;
+                    _pendingQuestions.TryRemove(oldest.InteractionId, out _);
+                    _pendingExpirations.Remove(oldest);
+                }
+                if (_pendingQuestions.TryGetValue(interactionId, out var previous))
+                    _pendingExpirations.Remove(previous);
+                var question = new PendingQuestion
+                {
+                    InteractionId = interactionId,
+                    Question = HelpTextRedactor.Redact(redactedQuestion, 1200),
+                    ExpiresAtUtc = nowUtc.AddMinutes(_pendingQuestionMinutes)
+                };
+                _pendingQuestions[interactionId] = question;
+                _pendingExpirations.Add(question);
             }
-            _pendingQuestions[interactionId] = new PendingQuestion
-            {
-                Question = HelpTextRedactor.Redact(redactedQuestion, 1200),
-                ExpiresAtUtc = nowUtc.AddMinutes(_pendingQuestionMinutes)
-            };
         }
 
         private int CountExistingSuccessSamples(DateTime nowUtc)
@@ -516,6 +543,8 @@ namespace IND_CRM_API.Services
 
         private sealed class PendingQuestion
         {
+            public string InteractionId { get; set; }
+
             public string Question { get; set; }
 
             public DateTime ExpiresAtUtc { get; set; }

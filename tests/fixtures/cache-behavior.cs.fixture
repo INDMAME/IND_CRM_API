@@ -1,0 +1,367 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Collections;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Runtime.Caching;
+using System.Threading;
+using System.Threading.Tasks;
+using IND_CRM_API.Helpers;
+using IND_CRM_API.Services;
+using IND_CRM_API.Services.Interfaces;
+using AxaptaCOMConnector;
+
+// Isolates configuration and logging while compiling the actual production cache code.
+namespace IND_CRM_API.Helpers
+{
+    public static class AppSettingsHelper
+    {
+        public static readonly Dictionary<string, string> Settings = new Dictionary<string, string>();
+        public static string GetSetting(string key, params string[] names)
+        {
+            string value;
+            if (Settings.TryGetValue(key, out value)) return value;
+            if (key.EndsWith("SecretKey")) return "isolated-cache-test-signing-key-012345678901234567890";
+            if (key.EndsWith("Issuer")) return "cache-tests";
+            if (key.EndsWith("Audience")) return "cache-tests-client";
+            return null;
+        }
+        public static int GetIntSetting(string key, int value, params string[] names)
+        { int parsed; return int.TryParse(GetSetting(key, names), out parsed) ? parsed : value; }
+        public static bool GetBoolSetting(string key, bool value = false, params string[] names)
+        { bool parsed; return bool.TryParse(GetSetting(key, names), out parsed) ? parsed : value; }
+        public static string GetMachineEnvironmentVariable(params string[] names) { return null; }
+    }
+}
+namespace IND_CRM_API.Services
+{
+    public static class AxaptaSessionManager
+    {
+        public enum LogLevel { Info, Warning, Error }
+        public static void LogStatic(string value) { }
+    }
+    public sealed class FileAxLogger : IAxLogger
+    {
+        public int Count;
+        public void Log(string value, AxaptaSessionManager.LogLevel level = AxaptaSessionManager.LogLevel.Info) { Interlocked.Increment(ref Count); }
+    }
+}
+
+// Exercises security lifecycle and concurrent cache behavior without HTTP, AX, or provider requests.
+internal static class CacheBehaviorTests
+{
+    private static int failures;
+    private static void Main(string[] args)
+    {
+        Run("live context remains valid", LiveContext);
+        Run("empty company refresh invalidates previous signed token", EmptyCompanies);
+        Run("regrant never resurrects an older revoked token", Regrant);
+        Run("ambiguous AX failure suspends context and recovers without permanent revocation", Revalidation);
+        Run("real AX header classifiers distinguish denial, ambiguity and generic failures", HeaderClassification);
+        Run("old observations cannot overwrite a newer denial", OldObservation);
+        Run("revocation retains the longest previously issued token lifetime", Retention);
+        Run("concurrency cap remains atomic under parallel acquire/release", Concurrency);
+        Run("quota saturation preserves live windows and expiry frees capacity", QuotaCapacity);
+        Run("exchange same-key concurrent miss is shared", ExchangeSingleFlight);
+        Run("ECB feed is shared across pairs and preserves provider date", EcbFeed);
+        Run("feedback replay is atomic and expiry cleanup reaches expired entries", Feedback);
+        Run("pending questions have an atomic capacity and ordered expiry", PendingQuestions);
+        Run("knowledge reload survives missing files and backs off invalid versions", () => Knowledge(args[0]));
+        Run("AX credentials follow live tokens and raw tokens are never retained", AxCredentials);
+        Run("authorization capacity never evicts live revisions and safely expires", AuthorizationCapacity);
+        Environment.ExitCode = failures == 0 ? 0 : 1;
+    }
+    private static void Run(string name, Action test)
+    {
+        try { test(); Console.WriteLine("PASS " + name); }
+        catch (Exception ex) { failures++; Console.WriteLine("FAIL " + name + ": " + ex.Message); }
+    }
+    private static void Assert(bool condition, string message)
+    { if (!condition) throw new Exception(message); }
+    private static UserCompanyAccessCache.Snapshot Snapshot(string user, params string[] companies)
+    { return UserCompanyAccessCache.SetSnapshot("tenant", user, "actor", "company", "CRM", companies, UserCompanyAccessCache.CreateContextVersion()); }
+    private static bool IsValid(string token, UserCompanyAccessCache.Snapshot original)
+    {
+        return UserContextTokenService.Validate(token, original.TenantId, original.EntraOid, original.ContextVersion,
+            original.PermissionsRevision, "company", UserCompanyAccessCache.GetSnapshot(original.TenantId, original.EntraOid)).IsValid;
+    }
+    private static void LiveContext()
+    {
+        var snapshot = Snapshot("live", "company");
+        Assert(IsValid(UserContextTokenService.CreateToken(snapshot), snapshot), "Valid signed context was rejected.");
+    }
+    private static void EmptyCompanies()
+    {
+        var snapshot = Snapshot("denied", "company");
+        var token = UserContextTokenService.CreateToken(snapshot);
+        Snapshot("denied");
+        Assert(!IsValid(token, snapshot), "Previously granted token survived an empty-company refresh.");
+    }
+    private static void Regrant()
+    {
+        var original = Snapshot("regrant", "company");
+        var token = UserContextTokenService.CreateToken(original);
+        UserCompanyAccessCache.Revoke("tenant", "regrant", "CRM");
+        var granted = Snapshot("regrant", "company");
+        Assert(!IsValid(token, original), "Regrant resurrected the original token.");
+        Assert(IsValid(UserContextTokenService.CreateToken(granted), granted), "Freshly regranted context was rejected.");
+    }
+    private static void Revalidation()
+    {
+        var original = Snapshot("revalidation", "company");
+        var token = UserContextTokenService.CreateToken(original);
+        var uncertain = UserCompanyAccessCache.RequireRevalidation("tenant", "revalidation", "CRM", UserCompanyAccessCache.CreateContextVersion());
+        Assert(uncertain.RequiresRevalidation && !uncertain.IsRevoked && !IsValid(token, original), "Uncertain context remained usable or was classified as revoked.");
+        var fresh = Snapshot("revalidation", "company");
+        Assert(!fresh.RequiresRevalidation && fresh.RevokedThroughVersion == 0, "Temporary revalidation became a permanent revocation.");
+        Assert(IsValid(UserContextTokenService.CreateToken(fresh), fresh) && IsValid(token, original), "Successful recovery did not restore unchanged legitimate permissions.");
+    }
+    private static void HeaderClassification()
+    {
+        var controller = typeof(IND_CRM_API.Controllers.System.AuthController);
+        var explicitDenial = PrivateMethod(controller, "HasExplicitContextDenial");
+        var ambiguousDenial = PrivateMethod(controller, "HasAmbiguousContextDenial");
+        Func<object[], object> context = row => new CacheMemoryContainer(new object[]
+            { new CacheMemoryContainer(new object[] { new CacheMemoryContainer(row) }), new CacheMemoryContainer(new object[0]) });
+        var denied = context(new object[] { "0", "denied", "", "0", "1", "" });
+        Assert((bool)explicitDenial.Invoke(null, new[] { denied }) && !(bool)ambiguousDenial.Invoke(null, new[] { denied }), "Explicit inactive user was not distinguished.");
+        var uncertain = context(new object[] { "0", "no companies", "actor", "1", "1", "company" });
+        Assert(!(bool)explicitDenial.Invoke(null, new[] { uncertain }) && (bool)ambiguousDenial.Invoke(null, new[] { uncertain }), "Ambiguous AX no-company response was not distinguished.");
+        var generic = context(new object[] { "0", "generic failure" });
+        Assert(!(bool)explicitDenial.Invoke(null, new[] { generic }) && !(bool)ambiguousDenial.Invoke(null, new[] { generic }), "A short generic failure became a revocation.");
+        var success = context(new object[] { "1", "OK", "actor", "1", "1", "company" });
+        Assert(!(bool)explicitDenial.Invoke(null, new[] { success }) && !(bool)ambiguousDenial.Invoke(null, new[] { success }), "A successful context was classified as a denial.");
+    }
+    private static void OldObservation()
+    {
+        var original = Snapshot("out-of-order", "company");
+        var denial = UserCompanyAccessCache.Revoke("tenant", "out-of-order", "CRM");
+        try
+        {
+            UserCompanyAccessCache.SetSnapshot("tenant", "out-of-order", "actor", "company", "CRM", new[] { "company" }, original.ContextVersion);
+            throw new Exception("An older observation overwrote the denial.");
+        }
+        catch (UserCompanyAccessCache.RefreshConflictException) { }
+        Assert(UserCompanyAccessCache.GetSnapshot("tenant", "out-of-order").IsRevoked, "Denial was not retained.");
+    }
+    private static void Retention()
+    {
+        var ttl = typeof(UserCompanyAccessCache).GetField("DefaultTtl", BindingFlags.NonPublic | BindingFlags.Static);
+        var originalTtl = ttl.GetValue(null);
+        try
+        {
+            ttl.SetValue(null, TimeSpan.FromHours(2));
+            var original = Snapshot("retention", "company");
+            ttl.SetValue(null, TimeSpan.FromMinutes(5));
+            var denial = UserCompanyAccessCache.Revoke("tenant", "retention", "CRM");
+            Assert(denial.ExpiresUtc >= original.ExpiresUtc, "Denial expired before an existing token.");
+            var granted = Snapshot("retention", "company");
+            Assert(granted.ExpiresUtc >= original.ExpiresUtc && granted.RevokedThroughVersion == denial.RevokedThroughVersion,
+                "Regrant dropped the revocation retention boundary.");
+        }
+        finally { ttl.SetValue(null, originalTtl); }
+    }
+    private static MethodInfo PrivateMethod(Type type, string name)
+    { return type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static); }
+    private static object Field(object instance, string name)
+    { return instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(instance); }
+    private static void SetField(object instance, string name, object value)
+    { instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(instance, value); }
+    private static void Concurrency()
+    {
+        var handler = new IND_CRM_API.App_Start.IND_OpenAiRateLimitHandler(new FileAxLogger());
+        var acquire = PrivateMethod(handler.GetType(), "TryAcquireConcurrency");
+        var release = PrivateMethod(handler.GetType(), "ReleaseConcurrency");
+        int executing = 0, breaches = 0, accepted = 0;
+        var start = new ManualResetEventSlim(false);
+        var tasks = Enumerable.Range(0, 12).Select(worker => Task.Factory.StartNew(() =>
+        {
+            start.Wait();
+            for (var i = 0; i < 4000; i++)
+            {
+                var values = new object[] { "same-user", 0 };
+                if (!(bool)acquire.Invoke(handler, values)) { Thread.Yield(); continue; }
+                Interlocked.Increment(ref accepted);
+                if (Interlocked.Increment(ref executing) > 1) Interlocked.Increment(ref breaches);
+                Thread.SpinWait(100);
+                Interlocked.Decrement(ref executing);
+                release.Invoke(handler, new object[] { "same-user" });
+            }
+        }, TaskCreationOptions.LongRunning)).ToArray();
+        start.Set(); Task.WaitAll(tasks);
+        Assert(accepted > 0 && breaches == 0, "Concurrent execution breached the cap " + breaches + " times.");
+        Assert((int)Field(handler, "_activeRequests").GetType().GetProperty("Count").GetValue(Field(handler, "_activeRequests")) == 0,
+            "Finished requests left active counters behind.");
+    }
+    private static void QuotaCapacity()
+    {
+        var handler = new IND_CRM_API.App_Start.IND_OpenAiRateLimitHandler(new FileAxLogger());
+        var endpoint = handler.GetType().GetField("HelpAskLimit", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        var consume = PrivateMethod(handler.GetType(), "TryConsumeRequest");
+        Func<string, bool> take = user => (bool)consume.Invoke(handler, new object[] { user, endpoint, 1, 0, 0 });
+        for (var i = 0; i < 50000; i++) Assert(take("quota-" + i), "Capacity failed before its configured bound.");
+        Assert(!take("quota-overflow"), "A new window exceeded bounded capacity.");
+        for (var i = 1; i < 30; i++) Assert(take("quota-0"), "A live quota was evicted at saturation.");
+        Assert(!take("quota-0"), "A saturated store reset an existing quota.");
+        SetField(handler, "_nextRateCleanupUtc", DateTime.MinValue);
+        PrivateMethod(handler.GetType(), "CleanupRateWindows").Invoke(handler, new object[] { DateTime.UtcNow.AddDays(1) });
+        Assert(take("quota-overflow"), "Expired windows did not free capacity.");
+    }
+    private static void ExchangeSingleFlight()
+    {
+        var provider = new CountingProvider();
+        using (var cache = new MemoryCache("exchange-tests-" + Guid.NewGuid()))
+        {
+            var service = new ExchangeRateService(provider, provider, provider, new FileAxLogger(), cache);
+            var gate = new ManualResetEventSlim(false);
+            var tasks = Enumerable.Range(0, 8).Select(i => Task.Factory.StartNew(() =>
+            { gate.Wait(); return service.GetRate("EUR", "USD", DateTime.UtcNow.Date); }, TaskCreationOptions.LongRunning)).ToArray();
+            gate.Set(); Task.WaitAll(tasks);
+            Assert(provider.Count == 1, "Expected one upstream call; observed " + provider.Count);
+            tasks[0].Result.Rate = 999m;
+            Assert(service.GetRate("EUR", "USD", DateTime.UtcNow.Date).Rate == 2m, "A caller mutated the cached value.");
+        }
+    }
+    private sealed class CountingProvider : IRawExchangeRateProvider
+    {
+        public int Count;
+        public string ProviderName { get { return "FAKE"; } }
+        public ExchangeRateResult GetRate(string source, string target, DateTime date)
+        { Interlocked.Increment(ref Count); Thread.Sleep(80); return new ExchangeRateResult { Success = true, Rate = 2m, Date = date }; }
+    }
+    private static void EcbFeed()
+    {
+        var transport = new FeedHandler();
+        using (var client = new HttpClient(transport))
+        {
+            var provider = new EcbExchangeRateProvider(new FileAxLogger(), client);
+            var first = provider.GetRate("EUR", "USD", new DateTime(2020, 1, 1));
+            var second = provider.GetRate("USD", "GBP", DateTime.UtcNow.Date);
+            Assert(transport.Count == 1 && first.Rate == 2m && second.Rate == 2m, "Feed was not shared across pairs.");
+            Assert(first.Date == new DateTime(2026, 1, 2), "Provider date was replaced with requested date.");
+            SetField(provider, "_feedExpiresUtc", DateTime.UtcNow.AddSeconds(-1));
+            transport.Fail = true;
+            Assert(!provider.GetRate("EUR", "USD", DateTime.UtcNow.Date).Success, "An expired feed masked provider failure.");
+            transport.Fail = false;
+            Assert(provider.GetRate("EUR", "USD", DateTime.UtcNow.Date).Success, "Transient failure was cached permanently.");
+        }
+    }
+    private sealed class FeedHandler : HttpMessageHandler
+    {
+        public int Count;
+        public bool Fail;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Count++;
+            return Task.FromResult(new HttpResponseMessage(Fail ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK)
+            { Content = new StringContent("<Envelope><Cube><Cube time='2026-01-02'><Cube currency='USD' rate='2'/><Cube currency='GBP' rate='4'/></Cube></Cube></Envelope>") });
+        }
+    }
+    private static void Feedback()
+    {
+        var service = new HelpFeedbackTokenService("test-feedback-secret-01234567890123456789", 60);
+        var token = service.Create(Guid.NewGuid().ToString(), "user");
+        int accepted = 0;
+        Parallel.For(0, 64, i => { HelpFeedbackTokenPayload value; if (service.TryConsume(token, "user", out value)) Interlocked.Increment(ref accepted); });
+        Assert(accepted == 1, "Feedback replay was accepted concurrently.");
+        var mark = PrivateMethod(service.GetType(), "TryMarkConsumed");
+        var cleanup = PrivateMethod(service.GetType(), "CleanupExpiredHashes");
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        for (var i = 0; i < 300; i++) mark.Invoke(service, new object[] { "expires-" + i, now + 10 });
+        for (var i = 0; i < 300; i++) mark.Invoke(service, new object[] { "live-" + i, now + 1000 });
+        cleanup.Invoke(service, new object[] { now + 11, 256 });
+        cleanup.Invoke(service, new object[] { now + 11, 256 });
+        var hashes = Field(service, "_consumedTokenHashes");
+        Assert((int)hashes.GetType().GetProperty("Count").GetValue(hashes) == 301, "Ordered cleanup missed expired hashes or evicted live ones.");
+    }
+    private static void PendingQuestions()
+    {
+        var service = new HelpAnalyticsStore(new FileAxLogger());
+        var remember = PrivateMethod(service.GetType(), "RememberPendingQuestion");
+        Parallel.For(0, 5200, i => remember.Invoke(service, new object[] { "question-" + i, "Sample question", DateTime.UtcNow }));
+        var questions = Field(service, "_pendingQuestions");
+        Assert((int)questions.GetType().GetProperty("Count").GetValue(questions) == 5000, "Parallel admission exceeded pending capacity.");
+        remember.Invoke(service, new object[] { "new-question", "Sample", DateTime.UtcNow.AddDays(1) });
+        Assert((int)questions.GetType().GetProperty("Count").GetValue(questions) == 1, "Expired pending questions were retained.");
+    }
+    private static void Knowledge(string repository)
+    {
+        var file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache-test-bundle.json");
+        var original = File.ReadAllBytes(Path.Combine(repository, "Knowledge", "crm-help.bundle.json"));
+        File.WriteAllBytes(file, original);
+        AppSettingsHelper.Settings["HelpAssistant:Enabled"] = "true";
+        AppSettingsHelper.Settings["HelpAssistant:KnowledgeBundlePath"] = file;
+        var logger = new FileAxLogger();
+        var store = new HelpKnowledgeStore(logger);
+        var first = store.GetSnapshot();
+        File.Delete(file);
+        Assert(ReferenceEquals(first, store.GetSnapshot()), "Deleting a bundle discarded the valid previous snapshot.");
+        File.WriteAllText(file, "invalid-json");
+        Assert(ReferenceEquals(first, store.GetSnapshot()), "Invalid replacement discarded the valid snapshot.");
+        var count = logger.Count;
+        for (var i = 0; i < 10; i++) store.GetSnapshot();
+        Assert(count == logger.Count, "An unchanged failed version repeatedly logged a parse failure.");
+        File.WriteAllBytes(file, original);
+        Assert(store.GetSnapshot().BundleHash == first.BundleHash, "A repaired file was not usable immediately.");
+        File.Delete(file);
+        var cold = new HelpKnowledgeStore(new FileAxLogger());
+        try { cold.GetSnapshot(); throw new Exception("Cold start accepted a missing bundle."); }
+        catch (HelpFeatureUnavailableException) { }
+    }
+    private static void AxCredentials()
+    {
+        var cache = new AxaptaAuthenticationCache();
+        Assert(cache.StorePassword("user", "isolated-password"), "Credential admission failed.");
+        var longExpiry = DateTime.UtcNow.AddHours(3);
+        Assert(cache.BindToken("user", "case-sensitive-token-A", longExpiry, null), "Token admission failed.");
+        string value;
+        Assert(cache.TryGetUser("case-sensitive-token-A", out value) && !cache.TryGetUser("case-sensitive-token-a", out value), "Token digests were case-insensitive.");
+        Assert(!cache.BindToken("other-user", "new-token", longExpiry, "case-sensitive-token-A"), "A token was rebound to another user.");
+        var tokens = (IDictionary)Field(cache, "_tokens");
+        Assert(!tokens.Contains("case-sensitive-token-A"), "The store retained a raw bearer token.");
+        Assert(cache.BindToken("user", "refreshed-token", DateTime.UtcNow.AddMinutes(10), "case-sensitive-token-A"), "Refresh failed.");
+        Assert(!cache.TryGetUser("case-sensitive-token-A", out value) && cache.TryGetUser("refreshed-token", out value), "Refresh did not replace its previous binding.");
+        var credential = ((IDictionary)Field(cache, "_credentials"))["user"];
+        Assert((DateTime)credential.GetType().GetField("ExpiresUtc").GetValue(credential) >= longExpiry, "A shorter refresh shortened credential retention.");
+        SetField(cache, "_nextCleanupUtc", DateTime.MinValue);
+        PrivateMethod(cache.GetType(), "Cleanup").Invoke(cache, new object[] { DateTime.UtcNow.AddDays(1) });
+        Assert(!cache.TryGetPassword("user", out value) && !cache.TryGetUser("refreshed-token", out value), "Expired credentials or tokens remained usable.");
+    }
+    private static void AuthorizationCapacity()
+    {
+        var cache = (IDictionary)typeof(UserCompanyAccessCache).GetField("_cache", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        var snapshot = Snapshot("capacity-control", "company");
+        var token = UserContextTokenService.CreateToken(snapshot);
+        var remaining = 50000 - cache.Count;
+        for (var i = 0; i < remaining; i++) Snapshot("capacity-" + i, "company");
+        try { Snapshot("capacity-overflow", "company"); throw new Exception("Authorization capacity was exceeded."); }
+        catch (UserCompanyAccessCache.CapacityException) { }
+        Assert(IsValid(token, snapshot), "Saturation evicted a live authorization revision.");
+        UserCompanyAccessCache.Revoke("tenant", "capacity-control", "CRM");
+        Assert(!IsValid(token, snapshot), "A live entry could not be revoked at capacity.");
+        PrivateMethod(typeof(UserCompanyAccessCache), "RemoveExpiredEntries").Invoke(null, new object[] { DateTime.UtcNow.AddDays(1) });
+        Assert(cache.Count == 0, "Expired authorization state was not reclaimed.");
+    }
+}
+
+// Implements the read-only COM container surface consumed by the production AX header classifiers.
+internal sealed class CacheMemoryContainer : IAxaptaContainer
+{
+    private readonly object[] values;
+    public CacheMemoryContainer(object[] values) { this.values = values; }
+    public int Length() { return values.Length; }
+    public object Peek(int index) { return values[index - 1]; }
+    public void Delete(int index, int count) { throw new NotSupportedException(); }
+    public int Find(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public int FindEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Insert(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void InsertEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Poke(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void PokeEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Append(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void AppendEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void DeleteAll() { throw new NotSupportedException(); }
+}

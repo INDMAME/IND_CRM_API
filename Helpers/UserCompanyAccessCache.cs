@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using IND_CRM_API.Services;
 
 namespace IND_CRM_API.Helpers
@@ -17,6 +17,9 @@ namespace IND_CRM_API.Helpers
         {
             public bool Exists { get; set; }
             public bool Expired { get; set; }
+            public bool IsRevoked { get; set; }
+            public bool RequiresRevalidation { get; set; }
+            public long RevokedThroughVersion { get; set; }
             public string SnapshotKey { get; set; }
             public string TenantId { get; set; }
             public string EntraOid { get; set; }
@@ -43,10 +46,21 @@ namespace IND_CRM_API.Helpers
             public HashSet<string> Companies { get; set; }
             public DateTime IssuedUtc { get; set; }
             public DateTime ExpiresUtc { get; set; }
+            public bool IsRevoked { get; set; }
+            public bool RequiresRevalidation { get; set; }
+            public long RevokedThroughVersion { get; set; }
         }
 
-        private static readonly ConcurrentDictionary<string, CacheEntry> _cache =
-            new ConcurrentDictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private const int MaxSnapshots = 50000;
+        private static readonly object CacheSync = new object();
+        private static readonly Dictionary<string, CacheEntry> _cache =
+            new Dictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly SortedSet<CacheEntry> ExpirationOrder = new SortedSet<CacheEntry>(
+            Comparer<CacheEntry>.Create((left, right) => left.ExpiresUtc != right.ExpiresUtc
+                ? left.ExpiresUtc.CompareTo(right.ExpiresUtc)
+                : StringComparer.OrdinalIgnoreCase.Compare(left.SnapshotKey, right.SnapshotKey)));
+        private static long _lastContextVersion;
+        private static long _missingSnapshotRevokedBeforeTicks;
 
         private static readonly TimeSpan DefaultTtl = ResolveTtl();
 
@@ -73,7 +87,8 @@ namespace IND_CRM_API.Helpers
             string defaultCompany,
             string appCode,
             IEnumerable<string> companyIds,
-            long contextVersion)
+            long contextVersion,
+            bool requiresRevalidation = false)
         {
             var snapshotKey = BuildSnapshotKey(tenantId, entraOid);
             if (string.IsNullOrWhiteSpace(snapshotKey))
@@ -83,13 +98,6 @@ namespace IND_CRM_API.Helpers
             }
 
             var companies = NormalizeCompanies(companyIds);
-            if (companies.Count == 0)
-            {
-                _cache.TryRemove(snapshotKey, out _);
-                LogCacheEvent("set-empty", snapshotKey, null, null, "No companies returned; cache entry removed.");
-                return CreateMissingSnapshot(snapshotKey, tenantId, entraOid);
-            }
-
             var issuedUtc = DateTime.UtcNow;
             var permissionsRevision = CreatePermissionsRevision(
                 tenantId,
@@ -110,10 +118,34 @@ namespace IND_CRM_API.Helpers
                 PermissionsRevision = permissionsRevision,
                 Companies = companies,
                 IssuedUtc = issuedUtc,
-                ExpiresUtc = issuedUtc.Add(DefaultTtl)
+                ExpiresUtc = issuedUtc.Add(DefaultTtl),
+                IsRevoked = companies.Count == 0 && !requiresRevalidation,
+                RequiresRevalidation = requiresRevalidation
             };
 
-            _cache[snapshotKey] = entry;
+            lock (CacheSync)
+            {
+                RemoveExpiredEntries(issuedUtc);
+                if (_cache.TryGetValue(snapshotKey, out var previous))
+                {
+                    if (entry.ContextVersion < previous.ContextVersion)
+                        throw new RefreshConflictException();
+                    entry.RevokedThroughVersion = previous.RevokedThroughVersion;
+                    if (previous.ExpiresUtc > entry.ExpiresUtc) entry.ExpiresUtc = previous.ExpiresUtc;
+                    ExpirationOrder.Remove(previous);
+                }
+                else if (_cache.Count >= MaxSnapshots)
+                {
+                    // Never evict a live revision. At saturation also reject old tokens missing after a restart.
+                    if (entry.IsRevoked || entry.RequiresRevalidation)
+                        Interlocked.Exchange(ref _missingSnapshotRevokedBeforeTicks, issuedUtc.Ticks);
+                    throw new CapacityException();
+                }
+                if (entry.IsRevoked)
+                    entry.RevokedThroughVersion = Math.Max(entry.RevokedThroughVersion, entry.ContextVersion);
+                ExpirationOrder.Add(entry);
+                _cache[snapshotKey] = entry;
+            }
 
             LogCacheEvent(
                 "set",
@@ -141,13 +173,64 @@ namespace IND_CRM_API.Helpers
             if (string.IsNullOrWhiteSpace(snapshotKey))
                 return CreateMissingSnapshot();
 
-            if (!_cache.TryGetValue(snapshotKey, out var entry) || entry == null)
+            lock (CacheSync)
             {
-                LogCacheEvent("miss", snapshotKey, null, null, "No snapshot entry found.");
-                return CreateMissingSnapshot(snapshotKey, null, null);
+                RemoveExpiredEntries(DateTime.UtcNow);
+                return _cache.TryGetValue(snapshotKey, out var entry)
+                    ? CreateSnapshot(entry)
+                    : CreateMissingSnapshot(snapshotKey, null, null);
             }
+        }
 
-            return CreateSnapshot(entry);
+        // Records a confirmed authorization denial without issuing a token or retaining credentials.
+        public static Snapshot Revoke(string tenantId, string entraOid, string appCode, long contextVersion = 0)
+        {
+            return SetSnapshot(tenantId, entraOid, null, null, appCode, Array.Empty<string>(),
+                contextVersion > 0 ? contextVersion : CreateContextVersion());
+        }
+
+        // Suspends use of an uncertain observation until AX returns a complete successful context again.
+        public static Snapshot RequireRevalidation(string tenantId, string entraOid, string appCode, long contextVersion)
+        {
+            var key = BuildSnapshotKey(tenantId, entraOid);
+            if (string.IsNullOrWhiteSpace(key)) return CreateMissingSnapshot();
+            lock (CacheSync)
+            {
+                _cache.TryGetValue(key, out var previous);
+                return SetSnapshot(tenantId, entraOid, previous?.AxUserId, previous?.DefaultCompany, appCode,
+                    previous?.Companies ?? new HashSet<string>(), contextVersion, true);
+            }
+        }
+
+        // Covers cache saturation when an older process issued a token that has no local snapshot.
+        internal static bool IsMissingSnapshotRevoked(DateTime? issuedUtc)
+        {
+            var revokedBefore = Interlocked.Read(ref _missingSnapshotRevokedBeforeTicks);
+            return revokedBefore > 0 && (!issuedUtc.HasValue || issuedUtc.Value.Ticks <= revokedBefore);
+        }
+
+        // Live revisions and denials share the same fixed token lifetime and are never evicted early.
+        private static void RemoveExpiredEntries(DateTime nowUtc)
+        {
+            while (ExpirationOrder.Count > 0)
+            {
+                var entry = ExpirationOrder.Min;
+                if (entry.ExpiresUtc > nowUtc) break;
+                _cache.Remove(entry.SnapshotKey);
+                ExpirationOrder.Remove(entry);
+            }
+        }
+
+        // Stops new context issuance when preserving live revocation state exhausts the bounded store.
+        public sealed class CapacityException : InvalidOperationException
+        {
+            public CapacityException() : base("Authorization context capacity is temporarily exhausted.") { }
+        }
+
+        // Prevents mixing an older AX response with another request's signed snapshot and company catalog.
+        public sealed class RefreshConflictException : InvalidOperationException
+        {
+            public RefreshConflictException() : base("Authorization context changed during refresh.") { }
         }
 
         /// <summary>
@@ -155,7 +238,14 @@ namespace IND_CRM_API.Helpers
         /// </summary>
         public static long CreateContextVersion()
         {
-            return DateTime.UtcNow.Ticks;
+            long previous;
+            long next;
+            do
+            {
+                previous = Interlocked.Read(ref _lastContextVersion);
+                next = Math.Max(DateTime.UtcNow.Ticks, previous + 1);
+            } while (Interlocked.CompareExchange(ref _lastContextVersion, next, previous) != previous);
+            return next;
         }
 
         /// <summary>
@@ -205,6 +295,9 @@ namespace IND_CRM_API.Helpers
             {
                 Exists = true,
                 Expired = entry.ExpiresUtc <= DateTime.UtcNow,
+                IsRevoked = entry.IsRevoked,
+                RequiresRevalidation = entry.RequiresRevalidation,
+                RevokedThroughVersion = entry.RevokedThroughVersion,
                 SnapshotKey = entry.SnapshotKey,
                 TenantId = entry.TenantId,
                 EntraOid = entry.EntraOid,

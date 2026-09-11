@@ -246,6 +246,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AxaptaSessionManager.cs" />
+    <Compile Include="Services\AxaptaAuthenticationCache.cs" />
     <Compile Include="Services\AxaptaComOptions.cs" />
     <Compile Include="Services\AxaptaComSession.cs" />
     <Compile Include="Services\AxSession.cs" />

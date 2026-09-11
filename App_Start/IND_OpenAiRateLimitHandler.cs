@@ -110,6 +110,11 @@ namespace IND_CRM_API.App_Start
         private readonly ConcurrentDictionary<string, int> _activeRequests =
             new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        private const int MaxTrackedRateWindows = 50000;
+        private const int MaxActiveUsers = 10000;
+        private readonly object _stateSync = new object();
+        private DateTime _nextRateCleanupUtc = DateTime.MinValue;
+
         private readonly IAxLogger _logger;
         private readonly int _maxConcurrentPerUser;
         private readonly int _validationMultiplier;
@@ -227,17 +232,28 @@ namespace IND_CRM_API.App_Start
         {
             var nowUtc = DateTime.UtcNow;
             var key = userKey + "|" + endpoint.Name;
-            var state = _rateWindows.GetOrAdd(key, _ => new RateWindowState(nowUtc));
             effectiveMaxRequests = GetEffectiveMaxRequests(endpoint.MaxRequests, validationMultiplier);
 
-            lock (state.SyncRoot)
+            lock (_stateSync)
             {
+                CleanupRateWindows(nowUtc);
+                if (!_rateWindows.TryGetValue(key, out var state))
+                {
+                    if (_rateWindows.Count >= MaxTrackedRateWindows)
+                    {
+                        retryAfterSeconds = 60;
+                        return false;
+                    }
+                    state = new RateWindowState(nowUtc);
+                    _rateWindows[key] = state;
+                }
                 var elapsed = nowUtc - state.WindowStartUtc;
                 if (elapsed >= endpoint.Window)
                 {
                     state.WindowStartUtc = nowUtc;
                     state.Count = 0;
                 }
+                state.ExpiresUtc = state.WindowStartUtc.Add(endpoint.Window);
 
                 if (state.Count >= effectiveMaxRequests)
                 {
@@ -276,25 +292,34 @@ namespace IND_CRM_API.App_Start
 
         private bool TryAcquireConcurrency(string userKey, out int activeCount)
         {
-            activeCount = _activeRequests.AddOrUpdate(userKey, 1, (_, current) => current + 1);
-            if (activeCount <= _maxConcurrentPerUser)
+            lock (_stateSync)
+            {
+                _activeRequests.TryGetValue(userKey, out activeCount);
+                if (activeCount >= _maxConcurrentPerUser || (activeCount == 0 && _activeRequests.Count >= MaxActiveUsers))
+                    return false;
+                activeCount++;
+                _activeRequests[userKey] = activeCount;
                 return true;
-
-            _activeRequests.AddOrUpdate(userKey, 0, (_, current) => current > 0 ? current - 1 : 0);
-            CleanupConcurrencyEntry(userKey);
-            return false;
+            }
         }
 
         private void ReleaseConcurrency(string userKey)
         {
-            _activeRequests.AddOrUpdate(userKey, 0, (_, current) => current > 0 ? current - 1 : 0);
-            CleanupConcurrencyEntry(userKey);
+            lock (_stateSync)
+            {
+                if (!_activeRequests.TryGetValue(userKey, out var active)) return;
+                if (active <= 1) _activeRequests.TryRemove(userKey, out _);
+                else _activeRequests[userKey] = active - 1;
+            }
         }
 
-        private void CleanupConcurrencyEntry(string userKey)
+        // Expired windows can be discarded without resetting an active user's quota.
+        private void CleanupRateWindows(DateTime nowUtc)
         {
-            if (_activeRequests.TryGetValue(userKey, out var active) && active <= 0)
-                _activeRequests.TryRemove(userKey, out _);
+            if (nowUtc < _nextRateCleanupUtc) return;
+            _nextRateCleanupUtc = nowUtc.AddMinutes(1);
+            foreach (var entry in _rateWindows)
+                if (entry.Value.ExpiresUtc <= nowUtc) _rateWindows.TryRemove(entry.Key, out _);
         }
 
         private static bool TryResolveEndpoint(HttpRequestMessage request, out EndpointLimit endpoint)
@@ -475,9 +500,9 @@ namespace IND_CRM_API.App_Start
                 Count = 0;
             }
 
-            public object SyncRoot { get; } = new object();
-
             public DateTime WindowStartUtc { get; set; }
+
+            public DateTime ExpiresUtc { get; set; }
 
             public int Count { get; set; }
         }
