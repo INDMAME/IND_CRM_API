@@ -932,6 +932,7 @@ namespace IND_CRM_API.Services
 - El JSON puede incluir items estructurados y tambien ocrText/ocrLines con texto OCR completo; usa ocrText/ocrLines solo para recuperar conceptos, importes, cantidades, fecha, hora y moneda.
 - totals.total representa el total bruto final a pagar; nunca uses totals.subtotal, base imponible, IVA/VAT/tax o propina aislados como totalAmount.
 - totalAmount debe representar totals.total. El backend lo validara y fijara de forma determinista desde el OCR.
+- En VND, interpreta los enteros agrupados con punto o coma como separadores de miles (82.000 VND = 82000 VND); no apliques esta regla a otras monedas.
 - Si aparece currencyCode, rawCurrency o currencyHints, usalos para devolver currencyCode en ISO-4217 (EUR, USD, GBP, etc.).
 - No inventes datos ni lineas.
 - Omite metadatos opcionales si no aportan valor.
@@ -1260,6 +1261,14 @@ namespace IND_CRM_API.Services
             if (draft == null)
                 return;
 
+            if (receiptAnalysis?.HasAuthoritativeVndTotal == true)
+            {
+                draft.currencyCode = "VND";
+                draft.RawCurrency = NormalizeText(receiptAnalysis.RawCurrency, "VND");
+                draft.Warnings = RemoveCurrencyMissingWarning(draft.Warnings);
+                return;
+            }
+
             var fallbackCurrencyCode = CurrencyCodeHelper.ResolveToIso4217(
                 draft.currencyCode,
                 draft.RawCurrency,
@@ -1287,7 +1296,7 @@ namespace IND_CRM_API.Services
             draft.Warnings = EnsureWarnings(draft.Warnings, "No se detecto currencyCode en el ticket. Revisar manualmente.");
         }
 
-        //MMS - Reconciles every normalized draft against the authoritative gross OCR total - 2026.08.03
+        //MMS - Reconciles the draft with the OCR total and requires an exact match for authoritative VND totals - 2026.08.31
         private static void ReconcileDraftTotalFromOcr(ExpenseSheetDraftResponse draft, AzureReceiptAnalysisResult receiptAnalysis)
         {
             if (draft == null)
@@ -1336,7 +1345,10 @@ namespace IND_CRM_API.Services
 
             var validLinesTotal = validLines.Sum(CalculateValidDraftLineTotal);
             var difference = totalAmount.Value - validLinesTotal;
-            if (Math.Abs(difference) <= OcrTotalTolerance)
+            var reconciliationTolerance = receiptAnalysis?.HasAuthoritativeVndTotal == true
+                ? 0m
+                : OcrTotalTolerance;
+            if (Math.Abs(difference) <= reconciliationTolerance)
                 return;
 
             draft.lines.Add(BuildOcrTotalLine(

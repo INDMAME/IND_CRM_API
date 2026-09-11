@@ -21,13 +21,8 @@ namespace IND_CRM_API.Services
         // Logger inyectado (por ahora FileAxLogger, pero facilmente sustituible)
         private static IAxLogger _logger = new FileAxLogger();
 
-        // Passwords por usuario (cache)
-        private readonly ConcurrentDictionary<string, string> _passwordByUser =
-            new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        // Tokens -> usuario (para compatibilidad con CallMethodByToken)
-        private readonly ConcurrentDictionary<string, string> _tokenToUser =
-            new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Credentials and compatibility token bindings follow the lifetime of issued JWTs.
+        private readonly AxaptaAuthenticationCache _authenticationCache = new AxaptaAuthenticationCache();
 
         // Configuracion de Axapta
         private readonly string _configPath = AppSettingsHelper.GetSetting("AxConfigFile", "INDCRM_AX_CONFIG_FILE");
@@ -149,7 +144,7 @@ namespace IND_CRM_API.Services
                     return false;
                 }
 
-                if (!string.IsNullOrWhiteSpace(password) && _passwordByUser.TryGetValue(resolvedUser, out var stored) &&
+                if (!string.IsNullOrWhiteSpace(password) && _authenticationCache.TryGetPassword(resolvedUser, out var stored) &&
                     !string.Equals(stored, password, StringComparison.Ordinal))
                 {
                     LogSessionTrace("create-or-get-session-password-rotation", resolvedUser, ctx, "cachedPasswordMismatch=true", LogLevel.Warning, durationMs: sw.ElapsedMilliseconds);
@@ -172,12 +167,12 @@ namespace IND_CRM_API.Services
                     return false;
                 }
 
-                _passwordByUser[resolvedUser] = resolvedPassword;
+                if (!_authenticationCache.StorePassword(resolvedUser, resolvedPassword)) return false;
                 LogSessionTrace("create-or-get-session-password-cached", resolvedUser, ctx, "cacheUpdated=true", durationMs: sw.ElapsedMilliseconds);
 
                 if (tokenInfo != null)
                 {
-                    _tokenToUser[tokenInfo.Token] = resolvedUser;
+                    if (!_authenticationCache.BindToken(resolvedUser, tokenInfo.Token, tokenInfo.Expiration, null)) return false;
                     LogSessionTrace("create-or-get-session-token-bound", resolvedUser, ctx, "tokenBound=true", durationMs: sw.ElapsedMilliseconds);
                 }
 
@@ -206,7 +201,7 @@ namespace IND_CRM_API.Services
             if (!string.IsNullOrWhiteSpace(providedPassword))
                 return providedPassword;
 
-            if (_passwordByUser.TryGetValue(username, out var stored) && !string.IsNullOrWhiteSpace(stored))
+            if (_authenticationCache.TryGetPassword(username, out var stored) && !string.IsNullOrWhiteSpace(stored))
             {
                 source = "cache";
                 return stored;
@@ -241,20 +236,15 @@ namespace IND_CRM_API.Services
             }
 
             if (!string.IsNullOrEmpty(oldToken) &&
-                _tokenToUser.TryGetValue(oldToken, out var mappedUser) &&
+                _authenticationCache.TryGetUser(oldToken, out var mappedUser) &&
                 !string.Equals(mappedUser, username, StringComparison.OrdinalIgnoreCase))
             {
                 LogSessionTrace("refresh-session-token-mismatch", username, ctx, "oldTokenBelongsTo=" + mappedUser, LogLevel.Warning);
                 return false; // token no pertenece al usuario autenticado
             }
 
-            if (!string.IsNullOrEmpty(oldToken))
-            {
-                _tokenToUser.TryRemove(oldToken, out _);
-                LogSessionTrace("refresh-session-token-old-removed", username, ctx, "oldTokenPresent=true");
-            }
-
-            _tokenToUser[tokenInfo.Token] = username;
+            if (string.IsNullOrWhiteSpace(ResolvePassword(username, null, out _))) return false;
+            if (!_authenticationCache.BindToken(username, tokenInfo.Token, tokenInfo.Expiration, oldToken)) return false;
             Log($"[SESSION-REFRESH-TOKEN] {username}", LogLevel.Info);
             LogSessionTrace("refresh-session-token-success", username, ctx, "oldTokenPresent=" + (!string.IsNullOrEmpty(oldToken)));
             return true;
@@ -343,7 +333,7 @@ namespace IND_CRM_API.Services
         // ---------------------------------------------------------
         public string CallMethodByToken(string token, string className, string methodName, object args = null)
         {
-            if (!_tokenToUser.TryGetValue(token, out var username))
+            if (!_authenticationCache.TryGetUser(token, out var username))
                 throw new Exception("Invalid token.");
 
             return CallMethodByUser(username, className, methodName, args)?.ToString() ?? string.Empty;

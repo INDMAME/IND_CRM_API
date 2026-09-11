@@ -238,6 +238,7 @@ namespace IND_CRM_API.Controllers.System
         /// </remarks>
         [SwaggerResponse(HttpStatusCode.OK, "Token renovado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Renovacion temporalmente no disponible", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         [Authorize]
         [HttpPost, Route("refresh")]
@@ -285,7 +286,16 @@ namespace IND_CRM_API.Controllers.System
                     $"oldTokenPresent={!string.IsNullOrWhiteSpace(oldToken)} tokenExpiresUtc={tokenInfo.Expiration:o}",
                     authSw);
 
-                _sessionManager.RefreshSessionToken(username, tokenInfo, oldToken);
+                if (!_sessionManager.RefreshSessionToken(username, tokenInfo, oldToken))
+                {
+                    return Content(HttpStatusCode.ServiceUnavailable, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se pudo renovar la sesion temporalmente. Vuelva a intentarlo.",
+                        ErrorCode = IndErrorCodes.InternalError,
+                        TraceId = traceId
+                    });
+                }
                 LogAuthTrace("refresh", "session-token-refreshed", traceId, correlationId, username, null, null, authSw);
 
                 _logger.Log("[AUTH-REFRESH] Token refreshed for " + username);
@@ -328,6 +338,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.OK, "Contexto Entra", typeof(IndPagedResponse<EntraContextDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Forbidden, "Acceso denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Contexto pendiente de revalidacion o capacidad temporalmente agotada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         [Authorize]
         [HttpPost, Route("entra/context")]
@@ -450,6 +461,8 @@ namespace IND_CRM_API.Controllers.System
                 LogAuthTrace("entra-context", "container-populated", traceId, correlationId, username, body.appCode, "appendCount=2", authSw);
 
                 LogAuthTrace("entra-context", "before-login-entra-context-call", traceId, correlationId, username, body.appCode, null, authSw);
+                // Reserve the observation version while the request owns serialized COM access.
+                var contextVersion = UserCompanyAccessCache.CreateContextVersion();
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMUtilityService",
                     "loginEntraContext",
@@ -511,6 +524,21 @@ namespace IND_CRM_API.Controllers.System
 
                 if (!header.Success)
                 {
+                    // Full AX authorization headers distinguish a denial from a short generic failure result.
+                    if (HasExplicitContextDenial(root))
+                        UserCompanyAccessCache.Revoke(ResolveTenantId(), body.entraOid, body.appCode, contextVersion);
+                    else if (HasAmbiguousContextDenial(root))
+                    {
+                        UserCompanyAccessCache.RequireRevalidation(ResolveTenantId(), body.entraOid, body.appCode, contextVersion);
+                        LogOut(HttpStatusCode.ServiceUnavailable);
+                        return Content(HttpStatusCode.ServiceUnavailable, new IndApiResponse<object>
+                        {
+                            Success = false,
+                            Message = "No se pudo confirmar el contexto de empresas. Vuelva a intentarlo.",
+                            ErrorCode = IndErrorCodes.AuthContextStale,
+                            TraceId = traceId
+                        });
+                    }
                     var forbiddenResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -527,7 +555,6 @@ namespace IND_CRM_API.Controllers.System
                 var companies = MapEntraCompanies(root);
                 var normalizedEntraOid = (body.entraOid ?? string.Empty).Trim();
                 var tenantId = ResolveTenantId();
-                var contextVersion = UserCompanyAccessCache.CreateContextVersion();
                 var snapshot = UserCompanyAccessCache.SetSnapshot(
                     tenantId,
                     normalizedEntraOid,
@@ -536,7 +563,7 @@ namespace IND_CRM_API.Controllers.System
                     body.appCode,
                     companies == null ? null : companies.ConvertAll(c => c.CompanyId),
                     contextVersion);
-                var contextToken = snapshot.Exists
+                var contextToken = snapshot.Exists && !snapshot.IsRevoked
                     ? UserContextTokenService.CreateToken(snapshot)
                     : string.Empty;
 
@@ -572,6 +599,30 @@ namespace IND_CRM_API.Controllers.System
                 };
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
+            }
+            catch (UserCompanyAccessCache.CapacityException)
+            {
+                var capacityResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Contexto temporalmente no disponible. Vuelva a intentarlo.",
+                    ErrorCode = IndErrorCodes.AuthContextRequired,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.ServiceUnavailable);
+                return Content(HttpStatusCode.ServiceUnavailable, capacityResponse);
+            }
+            catch (UserCompanyAccessCache.RefreshConflictException)
+            {
+                var conflictResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "El contexto se ha actualizado simultaneamente. Vuelva a intentarlo.",
+                    ErrorCode = IndErrorCodes.AuthContextStale,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.ServiceUnavailable);
+                return Content(HttpStatusCode.ServiceUnavailable, conflictResponse);
             }
             catch (IND_AxCallTimeoutException ex)
             {
@@ -676,7 +727,30 @@ namespace IND_CRM_API.Controllers.System
         }
 
         // Mapeo defensivo del contenedor AX a DTOs tipados.
-        private EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
+        // Shared with destructive operations that recheck current AX permissions without renewing tokens.
+        // Only an explicit inactive flag in a complete AX header invalidates an existing authorization snapshot.
+        internal static bool HasExplicitContextDenial(IAxaptaContainer root)
+        {
+            var container = SafePeekContainer(root, 1);
+            if (container == null) return false;
+            var row = SafePeekContainer(container, 1) ?? container;
+            if (SafeLength(row) < 6 || ToBool(SafeString(row, 1))) return false;
+            return string.Equals(SafeString(row, 4), "0", StringComparison.Ordinal) ||
+                   string.Equals(SafeString(row, 5), "0", StringComparison.Ordinal);
+        }
+
+        // AX uses this shape both for no allowed companies and for failed per-company lookups.
+        internal static bool HasAmbiguousContextDenial(IAxaptaContainer root)
+        {
+            var container = SafePeekContainer(root, 1);
+            if (container == null) return false;
+            var row = SafePeekContainer(container, 1) ?? container;
+            return SafeLength(row) >= 6 && !ToBool(SafeString(row, 1)) &&
+                string.Equals(SafeString(row, 4), "1", StringComparison.Ordinal) &&
+                string.Equals(SafeString(row, 5), "1", StringComparison.Ordinal) && MapEntraCompanies(root).Count == 0;
+        }
+
+        internal static EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
         {
             var headerContainer = SafePeekContainer(root, 1);
             if (headerContainer == null)
@@ -723,7 +797,8 @@ namespace IND_CRM_API.Controllers.System
             return header;
         }
 
-        private List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
+        // Preserves every supported AX company row shape for authorization callers.
+        internal static List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
         {
             var companies = new List<EntraCompanyDto>();
             var companiesCon = SafePeekContainer(root, 2);
@@ -784,7 +859,7 @@ namespace IND_CRM_API.Controllers.System
             return companies;
         }
 
-        private List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
+        private static List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
         {
             var modules = new List<EntraModuleDto>();
             var count = SafeLength(modulesCon);

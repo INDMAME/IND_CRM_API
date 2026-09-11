@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guía funcional - envío de emails desde Axapta en hojas de gastos</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --text: #e5edf5;
+      --muted: #a8b3c2;
+      --line: #314154;
+      --soft: #182232;
+      --panel: #111a27;
+      --accent: #58c4ff;
+      --tech: #fb923c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #07111f;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 48px 56px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      color: #f3f7fb;
+      line-height: 1.25;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 36px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--line);
+      font-size: 22px;
+    }
+
+    h3 {
+      margin: 28px 0 12px;
+      font-size: 18px;
+    }
+
+    h4 {
+      margin: 22px 0 10px;
+      font-size: 15px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 16px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #241a12;
+      color: var(--tech);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.94em;
+      font-weight: 600;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 12px 0 20px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #070d18;
+      color: #e5edf5;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: var(--tech);
+      font-weight: 500;
+    }
+
+    .meta {
+      margin-bottom: 28px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .callout {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      background: #0d2537;
+    }
+
+    .inventory-item {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0e1724;
+    }
+
+    .inventory-item h4 {
+      margin-top: 0;
+      text-transform: none;
+      color: #f3f7fb;
+      font-size: 16px;
+    }
+
+    @media print {
+      body {
+        background: #07111f;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      main {
+        max-width: none;
+        margin: 0;
+        padding: 24mm 18mm;
+        border: 0;
+        box-shadow: none;
+      }
+
+      h2,
+      h3 {
+        break-after: avoid;
+      }
+
+      .inventory-item {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Guía funcional - envío de emails desde Axapta en hojas de gastos</h1>
+    <p class="meta">Fuente funcional contrastada con los XPO de hojas de gastos. Documento reorganizado: 2026-09-01.</p>
+
+    <div class="callout">
+      <strong>Idea principal:</strong> Axapta decide el envío porque confirma el cambio real de estado de la hoja de gastos. La API y la web pueden solicitar el cambio, pero la notificación se evalúa después de guardar correctamente el estado.
+    </div>
+
+    <h2>Objetivo</h2>
+    <p>Esta guía explica de forma funcional cómo, cuándo y por qué Axapta lanza emails al cambiar el estado de una hoja de gastos.</p>
+    <p>El foco no está en la tecnología de envío, sino en la decisión de negocio: qué evento ocurre, quién debe enterarse, qué información recibe y en qué casos no se envía nada.</p>
+
+    <h2>Por qué se envía el email</h2>
+    <p>El email se usa para avisar a la persona que debe actuar o estar informada después de una transición relevante de la hoja de gastos.</p>
+    <ul>
+      <li>Solicitar revisión o aprobación a los responsables.</li>
+      <li>Informar al empleado de que su hoja ha sido aprobada.</li>
+      <li>Informar al empleado de que su hoja ha sido rechazada.</li>
+      <li>Informar de que la hoja ha sido pagada o contabilizada como pagada.</li>
+    </ul>
+    <p>El email no ejecuta la aprobación, el rechazo ni el pago. Solo informa y lleva al usuario a la hoja de gastos en CRM.</p>
+
+    <h2>Cuándo se lanza</h2>
+    <p>Axapta evalúa el envío cuando detecta que el estado de la hoja cambia de verdad.</p>
+    <ul>
+      <li>Si se solicita una actualización pero el estado final es el mismo que el anterior, no se envía email.</li>
+      <li>Si el cambio de estado no corresponde a un evento notificable, no se envía email.</li>
+      <li>Si el cambio es notificable, Axapta guarda primero la hoja y después intenta enviar el email.</li>
+    </ul>
+
+    <h2>Cambios de estado que generan email</h2>
+
+    <section class="inventory-item">
+      <h4>Solicitud de aprobación</h4>
+      <p>Se envía cuando la hoja pasa a revisión.</p>
+      <ul>
+        <li>Transiciones: Borrador a En revisión, Rechazada a En revisión, Aprobada a En revisión.</li>
+        <li>Destinatarios: responsables directos del empleado propietario de la hoja.</li>
+        <li>Motivo: pedir que revisen y aprueben o rechacen la hoja de gastos.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
+      <h4>Aprobación</h4>
+      <p>Se envía cuando la hoja pasa de En revisión a Aprobada.</p>
+      <ul>
+        <li>Destinatario: empleado propietario de la hoja.</li>
+        <li>Motivo: informar de que su hoja de gastos ha sido aprobada.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
+      <h4>Rechazo</h4>
+      <p>Se envía cuando la hoja pasa de En revisión a Rechazada.</p>
+      <ul>
+        <li>Destinatario: empleado propietario de la hoja.</li>
+        <li>Motivo: informar de que la hoja no ha sido aprobada y mostrar los comentarios disponibles.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
+      <h4>Pago</h4>
+      <p>Se envía cuando la hoja queda marcada como Pagada dentro del flujo de contabilización o pago.</p>
+      <ul>
+        <li>Destinatario preferente: creador de la hoja, si existe ese dato.</li>
+        <li>Destinatario alternativo: propietario de la hoja.</li>
+        <li>Motivo: informar de que la hoja ya se ha pagado o contabilizado como pagada.</li>
+      </ul>
+    </section>
+
+    <h2>Cambios de estado que no generan email</h2>
+    <p>No se envía email en estos casos:</p>
+    <ul>
+      <li>La hoja vuelve a Borrador.</li>
+      <li>Se cancela una acción sin dejar la hoja en un estado notificable.</li>
+      <li>Se actualizan datos de cabecera sin cambio real de estado.</li>
+      <li>El cambio de estado no encaja en solicitud, aprobación, rechazo o pago.</li>
+      <li>Axapta no puede resolver destinatario, email, plantilla o configuración mínima.</li>
+      <li>El remitente y el destinatario resultan ser la misma persona.</li>
+    </ul>
+    <p>En estos casos la hoja puede quedar guardada correctamente aunque no exista email.</p>
+
+    <h2>Cómo decide Axapta a quién avisar</h2>
+    <p>Axapta no envía siempre al mismo destinatario. Primero identifica qué evento funcional ha ocurrido y después resuelve los participantes.</p>
+
+    <h3>Solicitud de aprobación</h3>
+    <ul>
+      <li>El propietario de la hoja actúa como remitente funcional.</li>
+      <li>Los destinatarios son los responsables directos configurados para ese empleado.</li>
+      <li>Si hay varios responsables, se envía un email separado a cada uno.</li>
+      <li>Cada responsable recibe el email en su idioma configurado si existe plantilla para ese idioma.</li>
+    </ul>
+
+    <h3>Aprobación y rechazo</h3>
+    <ul>
+      <li>El actor que realiza la acción actúa como remitente funcional.</li>
+      <li>El destinatario es el propietario de la hoja.</li>
+    </ul>
+
+    <h3>Pago</h3>
+    <ul>
+      <li>El usuario pagador actúa como remitente funcional cuando Axapta lo conoce.</li>
+      <li>Si no hay usuario pagador, se usa el actor de la acción.</li>
+      <li>El destinatario preferente es quien creó la hoja; si no existe, el propietario.</li>
+    </ul>
+
+    <h2>Flujo funcional paso a paso</h2>
+    <ol>
+      <li>Un usuario cambia el estado de una hoja de gastos desde CRM o desde Axapta.</li>
+      <li>Axapta valida y guarda el cambio de estado.</li>
+      <li>Axapta confirma la transacción de la hoja de gastos.</li>
+      <li>Una vez guardada, Axapta comprueba si la transición tiene email asociado.</li>
+      <li>Si aplica, Axapta resuelve remitente, destinatario y enlace a CRM.</li>
+      <li>Axapta busca la plantilla de email por evento e idioma del destinatario.</li>
+      <li>Axapta construye el asunto, el cuerpo y el enlace a la hoja.</li>
+      <li>Axapta llama al servicio interno de envío de emails.</li>
+      <li>Si el envío falla, se registra el problema, pero no se deshace el cambio de estado ya guardado.</li>
+    </ol>
+
+    <h2>Qué recibe el usuario</h2>
+    <p>El email contiene información suficiente para entender la situación sin entrar en Axapta:</p>
+    <ul>
+      <li>Identificador de la hoja de gastos.</li>
+      <li>Estado o evento ocurrido.</li>
+      <li>Importe y divisa.</li>
+      <li>Fecha de la hoja.</li>
+      <li>Descripción.</li>
+      <li>Comentarios cuando existen.</li>
+      <li>Enlace a la hoja de gastos en CRM.</li>
+    </ul>
+    <p>El enlace abre la hoja en CRM. No es un enlace de aprobación directa.</p>
+
+    <h2>Por qué el envío se hace después de guardar</h2>
+    <p>El email se lanza después de confirmar el cambio para evitar avisos sobre estados que finalmente no han quedado guardados.</p>
+    <div class="callout">
+      <strong>Regla funcional:</strong> primero se consolida el estado de la hoja; después se informa a los usuarios.
+    </div>
+    <p>Por eso el fallo del email no bloquea la operación principal. La hoja no debe quedar sin aprobar, rechazar o pagar solo porque haya fallado un servicio externo de correo.</p>
+
+    <h2>Por qué Axapta y no la API</h2>
+    <p>Axapta centraliza la decisión porque es quien conoce el estado final real y las reglas de negocio de la hoja de gastos.</p>
+    <p>Esto evita que cada entrada al proceso tenga que duplicar la lógica de emails.</p>
+    <ul>
+      <li>CRM web mediante la API.</li>
+      <li>Formularios o acciones internas de Axapta.</li>
+      <li>Procesos de contabilización o pago.</li>
+    </ul>
+    <p>Si la notificación se decidiera solo en la API, los cambios realizados directamente en Axapta podrían quedar sin aviso o tendrían que duplicar reglas.</p>
+
+    <h2>Reglas funcionales clave</h2>
+    <ul>
+      <li>Solo se notifica si hay cambio real de estado.</li>
+      <li>No todos los cambios de estado son notificables.</li>
+      <li>La solicitud de aprobación va a los responsables del empleado.</li>
+      <li>La aprobación y el rechazo se notifican al empleado.</li>
+      <li>El pago se notifica al creador o propietario de la hoja.</li>
+      <li>El email no sustituye los permisos ni las acciones reales de aprobación.</li>
+      <li>El fallo del email no revierte la hoja de gastos.</li>
+    </ul>
+
+    <h2>Soporte funcional</h2>
+    <p>Si un usuario esperaba un email y no lo recibió, revisar en este orden:</p>
+    <ol>
+      <li>Que la hoja realmente haya cambiado a un estado notificable.</li>
+      <li>Que el destinatario esperado tenga email informado.</li>
+      <li>Que el empleado tenga responsables configurados si era una solicitud de aprobación.</li>
+      <li>Que exista plantilla activa para el evento y el idioma del destinatario.</li>
+      <li>Que la URL de CRM esté configurada para construir el enlace.</li>
+      <li>Que el servicio interno de emails esté disponible.</li>
+      <li>Que no se trate del mismo usuario como remitente y destinatario.</li>
+    </ol>
+
+    <h2>Trazabilidad técnica mínima</h2>
+    <p>Puntos principales de contraste en código y Axapta:</p>
+    <ul>
+      <li>Servicio AX principal: <code>INDCRMExpenseSheetService</code>.</li>
+      <li>Tabla/métodos de hoja de gastos: <code>CRMHojaGastosTable</code>.</li>
+      <li>Relación empleado-responsable: <code>CRMUsuarioSubordinadoTable</code>.</li>
+      <li>Emails de personas: <code>INDPersonaTable.Email</code>.</li>
+      <li>Plantillas: <code>INDEmailTemplates</code>.</li>
+      <li>Parámetros: <code>INDDefaultParameters</code>.</li>
+      <li>Origen funcional del envío: <code>AxaptaExpenseSheetStatus</code>.</li>
+    </ul>
+
+    <h2>Relación con la documentación técnica</h2>
+    <p>Esta guía funcional complementa la documentación técnica ya creada en Notion: <a href="https://app.notion.com/p/396d344f518881ed8ccad306f6bcdd73">Funcionamiento funcional - Emails de hojas de gastos</a>.</p>
+    <p>La página técnica sirve para ver el recorrido completo del envío. Esta guía sirve para explicar el comportamiento funcional a negocio, soporte y usuarios clave.</p>
+  </main>
+</body>
+</html>

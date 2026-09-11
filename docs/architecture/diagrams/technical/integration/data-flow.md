@@ -1,45 +1,45 @@
-# Data flow
+# Flujo de datos
 
-This diagram focuses on data items rather than runtime components. It shows
-how identity, context, headers, request DTOs, envelopes, trace data, and
-errors move through the CRM stack.
+Este diagrama se centra en los datos y muestra cómo recorren el CRM la
+identidad, el contexto, las cabeceras, los DTO de petición, los envoltorios, la
+traza y los errores.
 
 ```mermaid
 flowchart LR
-  subgraph BrowserData["Browser and web session"]
-    UserIdentity["User identity<br/>claims and session cookie"]
+  subgraph BrowserData["Navegador y sesión web"]
+    UserIdentity["Identidad de usuario<br/>Claims y cookie de sesión"]
     EntraOid["Entra OID"]
-    ApiToken["API JWT<br/>Bearer token"]
-    SelectedCompany["Selected company<br/>X-IND-Company"]
-    AxUser["AX user<br/>X-IND-AxUserId"]
-    ContextState["Context metadata<br/>version, permissions revision, token"]
+    ApiToken["JWT de API<br/>Bearer token"]
+    SelectedCompany["Empresa seleccionada<br/>X-IND-Company"]
+    AxUser["Usuario AX<br/>X-IND-AxUserId"]
+    ContextState["Metadatos de contexto<br/>Versión, revisión de permisos y token"]
   end
 
-  subgraph RequestData["Request data"]
-    Filters["Filters and paging<br/>dates, status, user, page, size"]
-    CommandDto["Command DTO<br/>create/update/delete data"]
-    FileData["Multipart file data<br/>ticket image or audio"]
-    Correlation["X-Correlation-Id<br/>optional client trace"]
+  subgraph RequestData["Datos de petición"]
+    Filters["Filtros y paginación<br/>Fechas, estado, usuario, página y tamaño"]
+    CommandDto["DTO de comando<br/>Datos de alta, cambio o borrado"]
+    FileData["Archivo multipart<br/>Imagen de ticket o audio"]
+    Correlation["X-Correlation-Id<br/>Traza opcional del cliente"]
   end
 
-  subgraph ApiBoundary["IND_CRM_API boundary"]
-    Headers["Validated headers<br/>Authorization<br/>company<br/>AX user<br/>Entra/context"]
-    GuardResult["Guard result<br/>allowed, stale, forbidden, invalid"]
-    AxDto["Axapta call container or DTO mapping"]
+  subgraph ApiBoundary["Límite de IND_CRM_API"]
+    Headers["Cabeceras validadas<br/>Authorization<br/>Empresa<br/>Usuario AX<br/>Entra y contexto"]
+    GuardResult["Resultado de protección<br/>Permitido, obsoleto, prohibido o no válido"]
+    AxDto["Contenedor de llamada Axapta o mapeo de DTO"]
     Trace["traceId / X-Trace-Id"]
   end
 
-  subgraph Systems["Systems of record and services"]
-    Ax["Axapta 3.0 data<br/>CRM master and transactions"]
-    Blob["Blob objects<br/>ticket files and previews"]
-    Ocr["Receipt extraction"]
-    Ai["AI response<br/>draft, speech, Q and A"]
+  subgraph Systems["Sistemas de registro y servicios"]
+    Ax["Datos de Axapta 3.0<br/>Maestros y transacciones CRM"]
+    Blob["Objetos Blob<br/>Archivos y vistas previas de tickets"]
+    Ocr["Extracción de justificantes"]
+    Ai["Respuesta de IA<br/>Borrador, voz y preguntas"]
   end
 
-  subgraph Responses["Responses"]
-    ApiEnvelope["IndApiResponse of T<br/>success, message, data, errorCode, errors, traceId"]
-    PagedEnvelope["IndPagedResponse of T<br/>success, message, total, page, pageSize, items, traceId"]
-    ErrorPayload["Error payload<br/>HTTP status, errorCode, validation errors, retry hints"]
+  subgraph Responses["Respuestas"]
+    ApiEnvelope["IndApiResponse de T<br/>success, message, data, errorCode, errors, traceId"]
+    PagedEnvelope["IndPagedResponse de T<br/>success, message, total, page, pageSize, items, traceId"]
+    ErrorPayload["Carga de error<br/>Estado HTTP, errorCode, validaciones y reintentos"]
   end
 
   UserIdentity --> EntraOid
@@ -69,16 +69,16 @@ flowchart LR
   ErrorPayload --> ApiEnvelope
 ```
 
-## Main DTO and envelope observations
+## Observaciones sobre DTO y envoltorios
 
-The analyzed API uses `IndApiResponse<T>` for single-result commands and
-`IndPagedResponse<T>` for list/detail-style CRM responses. Both include a
-diagnostic `traceId` in the API implementation.
+La API usa `IndApiResponse<T>` para comandos de un solo resultado y
+`IndPagedResponse<T>` para respuestas CRM de lista o detalle. Ambos incluyen
+un `traceId` de diagnóstico.
 
-The web app has corresponding response models and TypeScript clients that
-unwrap `success`, `message`, `errorCode`, `items`, `data`, paging fields, and
-context errors.
+La aplicación web dispone de modelos y clientes TypeScript que interpretan
+`success`, `message`, `errorCode`, `items`, `data`, la paginación y los errores
+de contexto.
 
-Request DTO field-level contracts are intentionally not duplicated here
-because they must remain inferred from source code, Swagger/OpenAPI, Postman,
-or existing clients. Bodies containing sensitive or customer data are omitted.
+Los contratos de campos de cada DTO no se duplican aquí: deben consultarse en
+el código, Swagger/OpenAPI, Postman o los clientes existentes. Se omiten los
+cuerpos que puedan contener datos sensibles o de clientes.

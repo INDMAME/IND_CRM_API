@@ -45,7 +45,7 @@ namespace IND_CRM_API.Contracts.Requests
         public int? exchangeRateMode { get; set; }
 
         /// <summary>
-        /// AX reimbursement state for the header: Yes (0) includes lines, No (1) excludes them, and Both (2) represents mixed line values.
+        /// Writable AX reimbursement state for the header. Only Yes (0) and No (1) are accepted; Both (2) is derived from mixed lines and is available only in responses and filters.
         /// </summary>
         public int? reimbursableExpense { get; set; }
 
@@ -79,7 +79,14 @@ namespace IND_CRM_API.Contracts.Requests
         /// Unit price. Amount is calculated internally in AX as qty * price.
         /// </summary>
         [Required] public decimal? price { get; set; }
+        /// <summary>
+        /// Project identifier. An empty value is explicit when projIdProvided is true.
+        /// </summary>
         public string projId { get; set; }
+        /// <summary>
+        /// Distinguishes an omitted project from an explicitly empty project. When false or omitted without projId, AX resolves its default for a new line.
+        /// </summary>
+        public bool? projIdProvided { get; set; }
         /// <summary>
         /// AX reimbursement flag: Yes (0) includes AmountMST and No (1) sets ReimbursableAmount to zero.
         /// </summary>

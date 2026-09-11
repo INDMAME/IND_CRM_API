@@ -1,92 +1,53 @@
-Eres un asistente que trabaja sobre el proyecto IND_CRM_API.
+# Reglas generales de IND_CRM_API
 
-PROPOSITO
-- Este archivo define reglas estables de trabajo para el backend en produccion.
-- No usar este documento como backlog ni como historial de tareas puntuales.
-- Para contratos HTTP vivos, priorizar siempre `.codex/ENDPOINTS.md`.
+## Alcance y precedencia
 
-CONTEXTO TECNICO ESTABLE
-- Proyecto: IND_CRM_API.
-- Stack: .NET Framework 4.8, Web API 2, OWIN self-host.
-- Plataforma: x86 obligatoria por AxaptaCOMConnector.
-- ERP backend: Navision Axapta 3.0 SP2 via Business Connector COM.
-- No migrar a .NET Core ni cambiar la version de framework salvo peticion explicita.
+Estas reglas cubren todo el repositorio. Los contratos y detalles están separados por temática en `.codex/README.md` y no deben duplicarse aquí.
 
-RESTRICCIONES NO NEGOCIABLES
-- Mantener .NET Framework 4.8 y x86.
-- No romper la integracion con Axapta COM ni la logica de `AxaptaSessionManager`.
-- No introducir multithreading o concurrencia que pueda romper el cliente COM.
-- No tocar configuracion critica de AxaptaCOMConnector, OWIN host o despliegue salvo peticion explicita.
-- No agregar dependencias pesadas ni nuevas librerias sin una necesidad clara y acotada.
-- No hardcodear secretos, passwords, tokens, connection strings, tenant ids, `companyId`, `axUserId`, URLs de entorno ni configuraciones sensibles.
-- Si se necesita una nueva clave o secreto, usar la ruta de configuracion del sistema ya existente para conservar interoperabilidad entre DEV y PROD.
+Cuando dos reglas locales no coincidan, revisar el código, las rutas y el flujo realmente ejecutado. Mantener ese comportamiento salvo requisito explícito o defecto demostrado.
 
-POLITICA DE CAMBIOS EN PRODUCCION
-- Antes de cambios medianos o grandes, resumir la estructura actual y presentar un plan corto.
-- Preferir cambios pequenos, quirurgicos y con bajo radio de impacto.
-- Mantener compatibilidad de endpoints, rutas, contratos y comportamiento salvo bug claro o peticion explicita.
-- No hacer refactors amplios, migraciones de envelopes, cambios globales de estilo o reescrituras cruzadas solo porque un documento historico lo sugiera.
-- Cuando haya varias formas validas de resolver algo, explicar opciones y pedir confirmacion antes de implementar.
-- Si algo no esta claro o puede cambiar comportamiento de negocio, preguntar antes de codificar.
+## Principios de trabajo
 
-ARQUITECTURA Y MODULARIDAD
-- Aplicar arquitectura limpia antes de codificar: separar controlador, DTO, validacion, servicio, mapper e integracion.
-- Mantener limites claros entre Web API, logica de aplicacion y acceso a Axapta.
-- No filtrar detalles de AX a contratos publicos si no es estrictamente necesario.
-- Si una misma logica aparece en varios puntos, preferir helper, mapper, validador o servicio compartido solo cuando el reuse sea real y no especulativo.
-- Refactorizar solo lo necesario para que el cambio quede claro, mantenible y seguro.
+- Antes de un cambio importante, presentar un plan breve con alcance, propietarios, contratos, riesgos y validación.
+- Preferir cambios pequeños, compatibles y reversibles; no hacer migraciones globales o refactors cruzados sin petición.
+- Revisar estado de Git, diff y archivos no rastreados. No sobrescribir trabajo ajeno.
+- Mantener límites claros entre controlador, DTO, validación, servicio, mapper y acceso AX.
+- Reutilizar una abstracción común solo cuando exista reutilización real, no especulativa.
+- No añadir dependencias sin necesidad clara y justificación breve.
+- No ocultar errores, debilitar pruebas ni inventar evidencia del entorno de ejecución.
 
-ESTANDARES API VIGENTES
-- El estandar actual de respuestas usa `IndApiResponse<T>`, `IndPagedResponse<T>`, `IndValidationError` e `IndErrorCodes`.
-- Para endpoints ya alineados a ese estandar, mantener el mismo shape salvo peticion explicita.
-- Para endpoints nuevos o tocados, seguir el patron ya usado por los controladores CRM actuales.
-- Usar `Controllers/CRM/CrmTemplateController.cs` y controladores vecinos como referencia estructural, no como excusa para copiar codigo sin revisar.
-- No iniciar una migracion global de envelopes o codigos HTTP a menos que el usuario lo pida de forma explicita.
+## Restricciones no negociables
 
-SWAGGER Y OPENAPI
-- Mantener Swagger/OpenAPI en Web API 2 con la configuracion actual del proyecto.
-- No migrar a paquetes de ASP.NET Core.
-- Cuando cambie un contrato, actualizar tambien XML docs, `ResponseType`, `SwaggerResponse` y cualquier filtro OpenAPI afectado.
-- Priorizar documentar y anotar rutas existentes antes que renombrarlas.
+- .NET Framework 4.8, Web API 2, OWIN self-host y plataforma x86 por el Business Connector de Axapta 3.0.
+- No migrar de framework, arquitectura de host o conector COM sin una petición específica y un plan de compatibilidad.
+- Las llamadas AX pasan por la infraestructura común descrita en `TECH_SPECS.md`; no se crean sesiones COM ad hoc ni concurrencia paralela contra COM.
+- Los endpoints publicados mantienen ruta y contrato salvo cambio aprobado y documentado.
+- `ENDPOINTS.md` es la fuente HTTP; `MCP_TOOLS.json`, la de schemas MCP; `.codex/Axapta`, la fuente canónica XPO compartida con APP.
 
-ROUTING, HEADERS Y FECHAS
-- Toda creacion o modificacion de endpoint debe cerrar con revision de routing.
-- Checklist minimo:
-  - revisar colisiones entre rutas literales y parametrizadas
-  - validar unicidad por `HTTP method + route template`
-  - aplicar constraints cuando haya ambiguedad
-  - revisar `RoutePrefix`, rutas hermanas y compatibilidad con routing legacy
-  - probar endpoints potencialmente conflictivos cuando aplique
-- En endpoints CRM de negocio, exigir `X-IND-Company` segun el contrato canonico.
-- En endpoints que envian identidad a AX, exigir `X-IND-AxUserId` segun el contrato canonico.
-- En `tickets` y `hojas de gastos`, request acepta `DDMMYYYY` y `DD.MM.YYYY`.
-- En `tickets` y `hojas de gastos`, response devuelve fechas en `DD.MM.YYYY`.
-- No exponer formatos internos de AX en respuestas publicas.
+## Seguridad y configuración
 
-INTEGRACION AXAPTA
-- Encapsular llamadas COM con manejo defensivo de errores y logging razonable.
-- Mantener interfaz publica compatible cuando se refactoricen wrappers o servicios AX.
-- Si se toca una clase AX o un contrato AX->API:
-  - analizar primero metodos, indices de `container`, validaciones y compatibilidad
-  - crear o actualizar `.codex/AX_<ClassName>_CHANGES_YYYY-MM-DD.md`
-  - usar ese archivo como bitacora del cambio hasta cerrar AX y API
-- No cerrar un cambio AX->API si la bitacora temporal no refleja el estado final.
+- Nunca versionar secretos, contraseñas, tokens, claves, cadenas de conexión, identificadores privados ni valores operativos sensibles.
+- Mantener los mismos nombres y orden de resolución de configuración en DEV y PROD; solo cambia el valor externo.
+- No confiar en identidad, empresa, propietario o permisos suministrados por el cliente cuando existe contexto firmado del servidor.
+- Los registros no incluyen secretos, tokens completos ni contenido sensible innecesario.
 
-POSTMAN Y MCP
-- Para versionado Postman, usar como fuente `.codex/Postman/POSTMAN_VERSIONING.md`.
-- Mantener separadas las lineas `DEV` y `PROD`.
-- Para catalogo MCP, usar `.codex/MCP_TOOLS.json` como archivo canonico y `.codex/MCP_ENDPOINTS.md` como apoyo descriptivo.
+## Idioma y documentación
 
-FUENTES CANONICAS
-- `.codex/ENDPOINTS.md`: contratos HTTP, headers requeridos, fechas y notas de routing.
-- `.codex/MCP_TOOLS.json`: catalogo MCP y schemas.
-- `.codex/MCP_ENDPOINTS.md`: descripcion detallada de tools MCP.
-- `.codex/POSTMAN.md`: estado operativo de colecciones y variables.
-- `.codex/Postman/POSTMAN_VERSIONING.md`: reglas de versionado Postman.
-- `.codex/AX_*_CHANGES_*.md`: bitacoras historicas o temporales por clase AX. No tratarlas como reglas universales.
+- La documentación del proyecto se escribe en español.
+- Por la instrucción superior activa, los comentarios nuevos de código y mensajes de commit usan inglés simple y ASCII. No reformatear comentarios históricos fuera del bloque tocado.
+- No crear bitácoras Markdown, prompts temporales o informes fechados. Actualizar el documento temático vigente.
+- Las reglas comunes de AX/XPO viven solo en `AX_XPO_WORKFLOW.md` y deben ser idénticas en APP y API.
 
-VALIDACION DE SALIDA
-- Validar cambios con el flujo normal de compilacion o ejecucion de este repo.
-- Si hubo cambios de contrato, actualizar la documentacion canonica afectada.
-- Si hubo cambios API, dejar constancia de que se reviso routing.
-- Cerrar el trabajo indicando que se valido, que riesgos quedan y si hubo algo que no se pudo comprobar.
+## Git, publicación y producción
+
+- El trabajo normal permanece en `DEV`. Commit, push y despliegue requieren petición explícita.
+- Publicar la API en DEV significa usar el flujo mantenido `.\scripts\reinstall-api.ps1 -Apply` desde la raiz y verificar proceso/servicio, HTTPS y artefactos, solo cuando el usuario lo solicite.
+- Solo una petición explícita de promoción a producción autoriza un PR `DEV` → `PROD` numerado `Release <N>`, con comprobaciones y auto-merge.
+- Nunca sustituir un PR bloqueado por merge o push directo a `PROD`/`main`.
+- Una publicación API o web no importa, compila, sincroniza ni activa XPO en Axapta.
+
+## Cierre
+
+- Ejecutar la validación proporcional de `QUALITY_CHECKLIST.md`.
+- Revisar routing y documentación cuando cambie un contrato.
+- Informar resultados reales, impacto, supuestos y cualquier validación manual pendiente.

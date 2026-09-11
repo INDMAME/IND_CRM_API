@@ -1,83 +1,79 @@
-# AI audio transcription sequence
+# Secuencia de transcripción de audio con IA
 
-This diagram documents the audio transcription communication path. The flow
-uses OpenAI from the server side only; the browser never receives API keys or
-OpenAI raw metadata.
+El flujo utiliza OpenAI solo desde el servidor. El navegador nunca recibe las
+claves API ni los metadatos originales de OpenAI.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Ui as React/Razor AI UI
-  participant Proxy as MVC proxy or API client
-  participant Limit as OpenAI rate limit handler
+  participant Ui as Interfaz IA React/Razor
+  participant Proxy as Proxy MVC o cliente API
+  participant Limit as Control de límites de OpenAI
   participant Api as INDSpeechController
-  participant Speech as Audio transcription service
-  participant Mod as Text moderation service
+  participant Speech as Servicio de transcripción
+  participant Mod as Servicio de moderación
   participant OpenAI as OpenAI APIs
 
   Ui->>Proxy: POST /api/ia/service/speech<br/>multipart audioFile + languageId
-  Proxy->>Limit: Forward authenticated request
-  Limit->>Limit: Check per-user rate window<br/>and one active AI request
+  Proxy->>Limit: Reenvía la petición autenticada
+  Limit->>Limit: Comprueba la ventana por usuario<br/>y una sola petición de IA activa
 
-  alt Rate or concurrency limit exceeded
-    Limit-->>Proxy: 429 IndApiResponse<br/>AI_RATE_LIMIT_EXCEEDED or AI_CONCURRENCY_LIMIT_EXCEEDED
-    Proxy-->>Ui: Surface retry message
-  else Request allowed
-    Limit->>Api: Continue to controller
-    Api->>Api: Validate multipart/form-data
-    Api->>Api: Validate languageId, audioFile,<br/>extension, content type, 25 MB max
-    Api->>Api: Resolve temperature and prompt/context<br/>or configured default prompt
-    Api->>Speech: TranscribeAsync(audio stream,<br/>fileName, language, temperature, prompt)
-    Speech->>OpenAI: Audio transcription request<br/>server-side key, model, response_format json
-    OpenAI-->>Speech: JSON with transcript text
-    Speech-->>Api: Transcript string only
+  alt Límite de uso o concurrencia superado
+    Limit-->>Proxy: 429 IndApiResponse<br/>AI_RATE_LIMIT_EXCEEDED o AI_CONCURRENCY_LIMIT_EXCEEDED
+    Proxy-->>Ui: Muestra un mensaje de reintento
+  else Petición permitida
+    Limit->>Api: Continúa al controlador
+    Api->>Api: Valida multipart/form-data
+    Api->>Api: Valida languageId, audioFile,<br/>extensión, tipo y máximo de 25 MB
+    Api->>Api: Resuelve temperature y prompt/context<br/>o usa el prompt configurado
+    Api->>Speech: TranscribeAsync(flujo de audio,<br/>fileName, language, temperature, prompt)
+    Speech->>OpenAI: Solicitud de transcripción<br/>Clave de servidor, modelo y response_format json
+    OpenAI-->>Speech: JSON con el texto transcrito
+    Speech-->>Api: Solo la cadena transcrita
     Api->>Mod: ModerateAsync(transcript)
-    Mod->>OpenAI: Moderation request<br/>server-side key and moderation model
-    OpenAI-->>Mod: Moderation result
+    Mod->>OpenAI: Solicitud de moderación<br/>Clave de servidor y modelo
+    OpenAI-->>Mod: Resultado de la moderación
 
-    alt Transcript flagged
+    alt Transcripción marcada
       Mod-->>Api: flagged=true + categories
       Api-->>Proxy: 422 IndApiResponse<br/>VALIDATION_ERROR
-      Proxy-->>Ui: Reject transcript
-    else Transcript accepted
+      Proxy-->>Ui: Rechaza la transcripción
+    else Transcripción aceptada
       Mod-->>Api: flagged=false
       Api-->>Proxy: 200 IndPagedResponse(string)<br/>Items[0] = transcript + traceId
-      Proxy-->>Ui: Transcript text
+      Proxy-->>Ui: Texto transcrito
     end
   end
 ```
 
-## Observed contracts
+## Contratos observados
 
 - Endpoint: `POST /api/ia/service/speech`.
-- Input: `multipart/form-data`.
-- Required fields: `languageId`, `audioFile`.
-- Optional fields: `temperature`, `prompt` or `context`.
-- Allowed audio extensions observed in code: `.mp3`, `.m4a`, `.wav`,
-  `.flac`.
-- Maximum audio size observed in code: 25 MB.
-- Success envelope: `IndPagedResponse<string>` with transcript text in
-  `Items`.
-- Validation or dependency errors return `IndApiResponse<T>` with `traceId`.
+- Entrada: `multipart/form-data`.
+- Campos obligatorios: `languageId` y `audioFile`.
+- Campos opcionales: `temperature`, `prompt` o `context`.
+- Extensiones admitidas por el código: `.mp3`, `.m4a`, `.wav` y `.flac`.
+- Tamaño máximo observado: 25 MB.
+- Respuesta correcta: `IndPagedResponse<string>` con el texto en `Items`.
+- Los errores de validación o dependencia devuelven `IndApiResponse<T>` con
+  `traceId`.
 
-## Service behavior
+## Comportamiento del servicio
 
-The controller reads the audio into memory, validates the request, obtains the
-OpenAI key from server configuration, and calls the audio transcription
-service. The service sends the audio and model parameters to OpenAI and
-returns only the text field.
+El controlador carga el audio en memoria, valida la petición, obtiene la clave
+de OpenAI de la configuración del servidor y llama al servicio de transcripción.
+El servicio envía el audio y los parámetros del modelo y devuelve solo el
+texto.
 
-After transcription, the controller calls OpenAI moderation. If moderation is
-unavailable, the moderation service logs the issue and returns non-flagged, so
-the transcription flow can continue. If moderation flags the text, the
-controller returns a validation error.
+Después llama a la moderación de OpenAI. Si no está disponible, registra el
+problema y permite continuar como contenido no marcado. Si la moderación marca
+el texto, el controlador devuelve un error de validación.
 
-## Risks and pending validation
+## Límites vigentes
 
-- Large audio files are read into memory before calling OpenAI.
-- The rate-limit handler protects `speech` by user, request window, and
-  concurrency.
-- Exact UI route and user-facing retry text are pendiente de validar for every
-  Razor-only screen.
-- The OpenAI model and timeout are configuration-driven and should not be
-  hardcoded in docs or clients.
+- Los audios grandes se cargan en memoria antes de llamar a OpenAI.
+- El control de uso protege `speech` por usuario, ventana y concurrencia.
+- No se ha verificado en cada pantalla Razor la ruta de interfaz ni el texto de
+  reintento que ve la persona usuaria.
+- El modelo y el tiempo de espera dependen de la configuración; no deben
+  fijarse en la documentación ni en clientes.

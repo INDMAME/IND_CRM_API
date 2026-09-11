@@ -28,6 +28,12 @@ namespace IND_CRM_API.Contracts.Requests
         [Required] public decimal? price { get; set; }
         public string projId { get; set; }
         /// <summary>
+        /// Distinguishes an omitted project from an explicit value, including an empty value.
+        /// When omitted, AX keeps the legacy project inheritance behavior.
+        /// </summary>
+        public bool? projIdProvided { get; set; }
+
+        /// <summary>
         /// AX reimbursement flag: Yes (0) includes AmountMST and No (1) sets ReimbursableAmount to zero.
         /// </summary>
         public int? reimbursableExpense { get; set; }

@@ -3,6 +3,7 @@ using System;
 using System.Globalization;
 using System.Runtime.Caching;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace IND_CRM_API.Services
 {
@@ -12,6 +13,10 @@ namespace IND_CRM_API.Services
     public class ExchangeRateService : IExchangeRateProvider
     {
         private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+        private static readonly TimeSpan LatestCacheTtl = TimeSpan.FromMinutes(15);
+        private const int MaxCacheEntries = 20000;
+        private static readonly MemoryCache DefaultCache = new MemoryCache("IndCrmExchangeRates");
+        private static readonly object CacheAdmissionSync = new object();
         private static readonly Regex IsoCurrencyRegex = new Regex("^[A-Z]{3}$", RegexOptions.Compiled);
 
         private readonly IRawExchangeRateProvider _primaryProvider;
@@ -19,6 +24,7 @@ namespace IND_CRM_API.Services
         private readonly IRawExchangeRateProvider _tertiaryProvider;
         private readonly IAxLogger _logger;
         private readonly ObjectCache _cache;
+        private readonly object[] _loadLocks = Enumerable.Range(0, 64).Select(_ => new object()).ToArray();
 
         public ExchangeRateService(
             IRawExchangeRateProvider primaryProvider,
@@ -31,7 +37,7 @@ namespace IND_CRM_API.Services
             _secondaryProvider = secondaryProvider ?? throw new ArgumentNullException(nameof(secondaryProvider));
             _tertiaryProvider = tertiaryProvider ?? throw new ArgumentNullException(nameof(tertiaryProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = cache ?? MemoryCache.Default;
+            _cache = cache ?? DefaultCache;
         }
 
         public ExchangeRateResult GetRate(string baseCurrency, string targetCurrency, DateTime date)
@@ -54,11 +60,23 @@ namespace IND_CRM_API.Services
             if (TryGetFromCache(cacheKey, out var cachedResult))
                 return cachedResult;
 
+            // Fixed stripes bound synchronization memory while sharing a successful same-key load.
+            var loadLock = _loadLocks[(cacheKey.GetHashCode() & int.MaxValue) % _loadLocks.Length];
+            lock (loadLock)
+            {
+                if (TryGetFromCache(cacheKey, out cachedResult)) return cachedResult;
+                return LoadRate(normalizedBase, normalizedTarget, requestedDate, cacheKey);
+            }
+        }
+
+        // Preserves provider order and result dates while loading one cache miss.
+        private ExchangeRateResult LoadRate(string normalizedBase, string normalizedTarget, DateTime requestedDate, string cacheKey)
+        {
             var primaryResult = ExecuteProvider(_primaryProvider, normalizedBase, normalizedTarget, requestedDate);
             if (primaryResult.Success)
             {
                 var normalizedResult = BuildSuccess(primaryResult.Rate, primaryResult.Date, _primaryProvider.ProviderName, false, false);
-                SetInCache(cacheKey, normalizedResult);
+                SetInCache(cacheKey, normalizedResult, requestedDate);
                 return normalizedResult;
             }
 
@@ -74,7 +92,7 @@ namespace IND_CRM_API.Services
                 if (secondaryResult.Success)
                 {
                     var normalizedResult = BuildSuccess(secondaryResult.Rate, secondaryResult.Date, _secondaryProvider.ProviderName, true, false);
-                    SetInCache(cacheKey, normalizedResult);
+                    SetInCache(cacheKey, normalizedResult, requestedDate);
                     return normalizedResult;
                 }
 
@@ -87,7 +105,7 @@ namespace IND_CRM_API.Services
                     if (tertiaryResult.Success)
                     {
                         var normalizedResult = BuildSuccess(tertiaryResult.Rate, tertiaryResult.Date, _tertiaryProvider.ProviderName, true, true);
-                        SetInCache(cacheKey, normalizedResult);
+                        SetInCache(cacheKey, normalizedResult, requestedDate);
                         return normalizedResult;
                     }
                 }
@@ -155,18 +173,21 @@ namespace IND_CRM_API.Services
             return true;
         }
 
-        private void SetInCache(string cacheKey, ExchangeRateResult result)
+        private void SetInCache(string cacheKey, ExchangeRateResult result, DateTime requestedDate)
         {
             if (result == null || !result.Success)
                 return;
 
-            _cache.Set(
-                cacheKey,
-                CloneResult(result),
-                new CacheItemPolicy
-                {
-                    AbsoluteExpiration = DateTimeOffset.UtcNow.Add(CacheTtl)
-                });
+            var ttl = requestedDate >= DateTime.UtcNow.Date || result.Date != requestedDate ||
+                      result.Source == "ECB" || result.Source == "OPEN_ER_API" || result.Source == "FRANKFURTER"
+                ? LatestCacheTtl : CacheTtl;
+            lock (CacheAdmissionSync)
+            {
+                // Saturation skips caching this result; it never turns a valid provider quote into a failure.
+                if (_cache.GetCount() >= MaxCacheEntries && !_cache.Contains(cacheKey)) return;
+                _cache.Set(cacheKey, CloneResult(result), new CacheItemPolicy
+                { AbsoluteExpiration = DateTimeOffset.UtcNow.Add(ttl) });
+            }
 
             _logger.Log($"[EXCHANGE-CACHE] SET {cacheKey}");
         }
@@ -231,7 +252,7 @@ namespace IND_CRM_API.Services
 
         private static string BuildCacheKey(string baseCurrency, string targetCurrency, DateTime date)
         {
-            return $"{baseCurrency}|{targetCurrency}|{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+            return $"exchange-rate:v2|{baseCurrency}|{targetCurrency}|{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
         }
 
         private static string NormalizeCurrency(string value)

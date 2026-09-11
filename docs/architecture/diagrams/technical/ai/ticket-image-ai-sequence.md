@@ -1,140 +1,136 @@
-# Ticket image AI sequence
+# Secuencia de ticket desde imagen con IA
 
-This diagram documents the full ticket image flow used by the quick-create
-endpoint. It includes image persistence, Azure Document Intelligence receipt
-analysis, OpenAI normalization, mapping into the existing ticket contract, and
-Axapta persistence.
+El flujo de `quick-create` conserva la imagen, analiza el justificante con
+Azure Document Intelligence, normaliza los datos con OpenAI, los adapta al
+contrato del ticket y los persiste en Axapta.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Ui as React ticket UI
-  participant Proxy as MVC ticket proxy
-  participant Limit as OpenAI rate limit handler
+  participant Ui as Interfaz React de tickets
+  participant Proxy as Proxy MVC de tickets
+  participant Limit as Control de límites de OpenAI
   participant Api as CrmExpenseSheetTicketsController
-  participant Guard as Base CRM guards
-  participant Ax as Axapta through COM
-  participant BlobSvc as Ticket blob storage service
+  participant Guard as Protecciones base del CRM
+  participant Ax as Axapta mediante COM
+  participant BlobSvc as Servicio de archivos de tickets
   participant Blob as Azure Blob Storage
-  participant Pipe as Ticket AI processing service
+  participant Pipe as Servicio de procesamiento de IA
   participant Ocr as Azure Document Intelligence
-  participant Norm as OpenAI ticket normalizer
+  participant Norm as Normalizador OpenAI de tickets
   participant OpenAI as OpenAI Responses API
 
-  Ui->>Proxy: POST /api/crm/expensesheets/tickets/quick-create<br/>multipart image + metadata
-  Proxy->>Limit: Forward request with auth and context
-  Limit->>Limit: Check per-user AI rate<br/>and concurrency
+  Ui->>Proxy: POST /api/crm/expensesheets/tickets/quick-create<br/>Imagen multipart + metadatos
+  Proxy->>Limit: Reenvía autenticación y contexto
+  Limit->>Limit: Comprueba el límite de IA por usuario<br/>y la concurrencia
 
-  alt Rate or concurrency limit exceeded
-    Limit-->>Proxy: 429 IndApiResponse<br/>AI limit error
-    Proxy-->>Ui: Retry or show limit message
-  else Request allowed
-    Limit->>Api: Continue to quick-create
-    Api->>Guard: Validate JWT, company,<br/>AX user, and CRM context
-    Guard-->>Api: Request allowed
-    Api->>Api: Read multipart and validate image<br/>extension, content type, 50 MB max
-    Api->>Ax: createExpenseSheetTicket<br/>header-only provisional ticket
-    Ax-->>Api: fileId and provisional ticket data
+  alt Límite de uso o concurrencia superado
+    Limit-->>Proxy: 429 IndApiResponse<br/>Error de límite de IA
+    Proxy-->>Ui: Reintenta o muestra el límite
+  else Petición permitida
+    Limit->>Api: Continúa con quick-create
+    Api->>Guard: Valida JWT, empresa,<br/>usuario AX y contexto CRM
+    Guard-->>Api: Petición permitida
+    Api->>Api: Lee multipart y valida la imagen<br/>Extensión, tipo y máximo de 50 MB
+    Api->>Ax: createExpenseSheetTicket<br/>Ticket provisional solo con cabecera
+    Ax-->>Api: fileId y datos provisionales
 
     Api->>BlobSvc: UploadTicketFile(company, axUser,<br/>fileId, finalFileName, image)
-    BlobSvc->>Blob: Store original ticket image
-    Blob-->>BlobSvc: blobUrl and blobName
-    BlobSvc-->>Api: Upload result
-    Api->>Ax: updateExpenseSheetTicket<br/>sync urlFile and fileName
-    Ax-->>Api: File metadata persisted
+    BlobSvc->>Blob: Guarda la imagen original
+    Blob-->>BlobSvc: blobUrl y blobName
+    BlobSvc-->>Api: Resultado de carga
+    Api->>Ax: updateExpenseSheetTicket<br/>Sincroniza urlFile y fileName
+    Ax-->>Api: Metadatos del archivo persistidos
 
-    Api->>Pipe: ProcessFromStoredBlobAsync(blobUrl,<br/>fileName, QuickCreate profile)
+    Api->>Pipe: ProcessFromStoredBlobAsync(blobUrl,<br/>fileName, perfil QuickCreate)
     Pipe->>BlobSvc: CreateReadOnlyBlobUrl(blobUrl)
-    BlobSvc-->>Pipe: Short-lived read URL
-    Pipe->>Ocr: Analyze receipt from blob URL<br/>urlSource payload
-    Ocr-->>Pipe: AzureReceiptAnalysisResult<br/>RawJson + PromptJson + fields
-    Pipe->>Norm: NormalizeReceiptAsync(ocr result,<br/>fileName, profile)
-    Norm->>OpenAI: Responses API request<br/>prompt + compact OCR JSON
-    OpenAI-->>Norm: Structured draft JSON
+    BlobSvc-->>Pipe: URL de lectura de corta duración
+    Pipe->>Ocr: Analiza el justificante desde Blob<br/>Carga urlSource
+    Ocr-->>Pipe: AzureReceiptAnalysisResult<br/>RawJson + PromptJson + campos
+    Pipe->>Norm: NormalizeReceiptAsync(resultado OCR,<br/>fileName, perfil)
+    Norm->>OpenAI: Petición a Responses API<br/>Prompt + JSON OCR compacto
+    OpenAI-->>Norm: JSON de borrador estructurado
     Norm-->>Pipe: ExpenseSheetDraftResponse<br/>normalizedJson + attempts
-    Pipe-->>Api: Draft + ocrJson + normalizedJson
+    Pipe-->>Api: Borrador + ocrJson + normalizedJson
 
-    Api->>Api: Map draft to UpdateExpenseSheetTicketFromIARequest<br/>header, lines, ocrJson, normalizedJson
+    Api->>Api: Convierte a UpdateExpenseSheetTicketFromIARequest<br/>Cabecera, líneas, ocrJson y normalizedJson
 
-    alt Valid ticket lines
-      Api->>Ax: updateExpenseSheetTicket<br/>replace header and lines from AI
-      Ax-->>Api: processedByAI, fileName, line ids
+    alt Líneas de ticket válidas
+      Api->>Ax: updateExpenseSheetTicket<br/>Reemplaza cabecera y líneas desde IA
+      Ax-->>Api: processedByAI, fileName e ids de línea
       Api->>Api: completedStage = ticket-finalized
-    else Header-only fallback
-      Api->>Ax: updateExpenseSheetTicket<br/>header and DocuRef JSON only
-      Ax-->>Api: processedByAI and fileName
-      Api->>Api: Return created ticket for manual review
+    else Alternativa solo con cabecera
+      Api->>Ax: updateExpenseSheetTicket<br/>Solo la cabecera y el JSON de DocuRef
+      Ax-->>Api: processedByAI y fileName
+      Api->>Api: Devuelve el ticket para revisión manual
     end
 
-    opt Existing expense sheet was supplied
+    opt Se proporcionó una hoja existente
       Api->>Ax: getExpenseSheetTicket
-      Ax-->>Api: Final ticket detail
-      Api->>Ax: createExpenseSheet mode 2<br/>link ticket line to existing sheet
-      Ax-->>Api: Link result
+      Ax-->>Api: Detalle final del ticket
+      Api->>Ax: createExpenseSheet modo 2<br/>Vincula una línea a la hoja existente
+      Ax-->>Api: Resultado de la vinculación
       Api->>Api: completedStage = sheet-linked
     end
 
     Api-->>Proxy: 201 IndApiResponse(QuickCreateResult)<br/>fileId, urlFile, fileName,<br/>processedByAI, linkedToSheet,<br/>completedStage, stepTraceIds
-    Proxy-->>Ui: Created ticket result
+    Proxy-->>Ui: Resultado del ticket creado
   end
 
-  Note over Api,Pipe: Draft-only endpoint:<br/>/api/ia/service/expensefromticket<br/>uses the same AI pipeline.<br/>It calls ProcessFromImageAsync,<br/>writes a temporary blob,<br/>deletes it in cleanup,<br/>and can persist a ticket only<br/>when persistTicket=true.
+  Note over Api,Pipe: El endpoint solo de borrador<br/>/api/ia/service/expensefromticket<br/>usa el mismo flujo IA.<br/>Llama a ProcessFromImageAsync,<br/>escribe un Blob temporal,<br/>lo borra al limpiar<br/>y solo persiste el ticket<br/>cuando persistTicket=true.
 ```
 
-## Observed contracts
+## Contratos observados
 
-Primary creation endpoint:
+Endpoint principal de creación:
 
 - `POST /api/crm/expensesheets/tickets/quick-create`
-- Input: multipart ticket image and optional metadata.
-- Required business headers: `Authorization`, `X-IND-Company`,
-  `X-IND-AxUserId`, and CRM context headers.
-- Success envelope: `IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>`.
-- Result fields observed: `FileId`, `UrlFile`, `FileName`,
+- Entrada: imagen multipart y metadatos opcionales.
+- Cabeceras de negocio obligatorias: `Authorization`, `X-IND-Company`,
+  `X-IND-AxUserId` y las cabeceras de contexto CRM.
+- Respuesta correcta: `IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>`.
+- Campos observados: `FileId`, `UrlFile`, `FileName`,
   `ProcessedByAI`, `LinkedToSheet`, `HojaGastosId`, `CompletedStage`,
   `StepTraceIds`.
 
-Draft-only endpoint using the same AI pipeline:
+Endpoint de solo borrador con el mismo flujo IA:
 
 - `POST /api/ia/service/expensefromticket`
-- Input: `ticketImage`, optional `persistTicket`, optional `ticketUrlFile` or
-  `urlFile`.
-- Success envelope: `IndApiResponse<ExpenseSheetDraftResponse>`.
-- Draft fields inherit the expense-sheet creation shape and add `gastoType`,
-  `transDate`, `Confidence`, `Warnings`, `RawCurrency`, `Merchant`, and
-  optional `TicketCreation`.
+- Entrada: `ticketImage`; `persistTicket`, `ticketUrlFile` o `urlFile` son
+  opcionales.
+- Respuesta correcta: `IndApiResponse<ExpenseSheetDraftResponse>`.
+- El borrador hereda la forma de alta de gastos y añade `gastoType`,
+  `transDate`, `Confidence`, `Warnings`, `RawCurrency`, `Merchant` y el
+  `TicketCreation` opcional.
 
-## Internal contract mapping
+## Mapeo interno de contratos
 
-Azure Document Intelligence returns a structured receipt result represented by
-`AzureReceiptAnalysisResult`. The relevant server-side fields are:
+Azure Document Intelligence devuelve `AzureReceiptAnalysisResult`. Sus campos
+relevantes en el servidor son:
 
-- `RawJson`: original OCR payload kept for audit/persistence.
-- `PromptJson`: compact OCR JSON passed to OpenAI.
+- `RawJson`: respuesta OCR original conservada para auditoría o persistencia.
+- `PromptJson`: JSON OCR compacto enviado a OpenAI.
 - `MerchantName`, `TransactionDate`, `CurrencyCode`, `RawCurrency`,
-  `TotalAmount`, `ItemCount`, `Warnings`, and `CurrencyHints`.
+  `TotalAmount`, `ItemCount`, `Warnings` y `CurrencyHints`.
 
-OpenAI normalization maps that OCR JSON into `ExpenseSheetDraftResponse` and a
-server-side `normalizedJson` string. Quick-create then maps the draft into
-`UpdateExpenseSheetTicketFromIARequest` with header fields, ticket lines,
-`ocrJson`, `normalizedJson`, file URL, file name, and file extension.
+OpenAI convierte el JSON OCR en `ExpenseSheetDraftResponse` y `normalizedJson`.
+Después, `quick-create` genera `UpdateExpenseSheetTicketFromIARequest` con
+cabecera, líneas, `ocrJson`, `normalizedJson`, URL, nombre y extensión.
 
-## Side effects
+## Efectos laterales
 
-- Quick-create creates a provisional Axapta ticket before image upload.
-- The ticket image is stored in Azure Blob and then synced back to Axapta
-  ticket metadata.
-- A short-lived read URL is generated for Azure Document Intelligence.
-- OpenAI receives compact OCR JSON, not the original browser upload.
-- The final Axapta update may replace ticket lines or fall back to header-only
-  update when lines are invalid.
-- If an existing expense sheet id is supplied, the ticket can be linked to that
-  sheet by adding a line through Axapta.
+- `quick-create` crea un ticket provisional antes de subir la imagen.
+- La imagen se guarda en Azure Blob y sus metadatos se sincronizan con Axapta.
+- Se genera una URL de lectura temporal para Azure Document Intelligence.
+- OpenAI recibe el JSON OCR compacto, no el archivo original del navegador.
+- La actualización final puede reemplazar líneas o limitarse a la cabecera si
+  las líneas no son válidas.
+- Si se indica una hoja existente, Axapta puede vincular el ticket añadiendo
+  una línea.
 
-## Pending validation
+## Límites vigentes
 
-- Exact multipart field list for quick-create should be validated against the
-  latest React caller and Postman collection before publishing as a public
-  contract.
-- Exact Axapta container indices remain an AOT/X++ contract detail and are not
-  duplicated here.
+- La lista exacta de campos multipart debe comprobarse contra el cliente React
+  y la colección Postman vigentes antes de publicar o modificar el contrato.
+- Los índices de contenedor de Axapta son un detalle del contrato AOT/X++ y no
+  se duplican aquí.

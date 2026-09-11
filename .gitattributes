@@ -61,3 +61,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Preserve the generated CRM help bundle checksum across platforms.
+Knowledge/crm-help.bundle.json -text

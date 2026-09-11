@@ -151,7 +151,7 @@ namespace IND_CRM_API.Services
                                                     "empty-result");
 
                                             _logger.Log(
-                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
+                                                $"[AZDOCS] AnalyzeReceipt completed ms={sw.ElapsedMilliseconds} items={result.ItemCount} merchant={ToLogValue(result.MerchantName)} total={ToLogDecimal(result.TotalAmount)} currencyCode={ToLogValue(result.CurrencyCode)} rawCurrency={ToLogValue(result.RawCurrency)} authoritativeVnd={(result.HasAuthoritativeVndTotal ? 1 : 0)} currencyHints={ToLogValue(result.CurrencyHints == null ? null : string.Join("|", result.CurrencyHints))}",
                                                 AxaptaSessionManager.LogLevel.Info);
                                             return result;
                                         }
@@ -207,10 +207,23 @@ namespace IND_CRM_API.Services
                 return null;
 
             var documents = analyzeResult["documents"] as JArray;
-            var firstDocument = documents?.OfType<JObject>().FirstOrDefault();
+            var firstDocument = documents != null && documents.Count > 0
+                ? documents[0] as JObject
+                : null;
             var fields = firstDocument?["fields"] as JObject;
             var items = BuildCompactItems(fields?["Items"]);
-            var totalToken = ProjectMoneyField(fields?["Total"] as JObject);
+            var totalField = fields?["Total"] as JObject;
+            var totalContent = totalField?["content"]?.ToString();
+            var receiptContent = analyzeResult["content"]?.ToString();
+            var totalValueCurrency = totalField?["valueCurrency"] as JObject;
+            var totalCurrencyCode = totalValueCurrency?["currencyCode"]?.ToString();
+            var totalCurrencySymbol = totalValueCurrency?["currencySymbol"]?.ToString();
+            var authoritativeVndTotalAmount = TryExtractUnambiguousVndGroupedTotal(
+                totalContent,
+                receiptContent,
+                totalCurrencyCode,
+                totalCurrencySymbol);
+            var totalToken = ProjectMoneyField(totalField);
             var subtotalToken = ProjectMoneyField(fields?["Subtotal"] as JObject);
             var taxToken = ProjectMoneyField(fields?["TotalTax"] as JObject);
             var tipToken = ProjectMoneyField(fields?["Tip"] as JObject);
@@ -218,23 +231,78 @@ namespace IND_CRM_API.Services
             var merchantName = ReadFieldScalar(fields?["MerchantName"] as JObject);
             var merchantAddress = ReadFieldScalar(fields?["MerchantAddress"] as JObject);
             var merchantPhone = ReadFieldScalar(fields?["MerchantPhoneNumber"] as JObject);
-            var receiptContent = analyzeResult["content"]?.ToString();
             var ocrText = NormalizeOcrTextForPrompt(receiptContent);
             var ocrLines = BuildCompactOcrLines(analyzeResult["pages"], receiptContent);
             var currencyHints = BuildCurrencyHints(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedCurrencyCode = ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
-            var resolvedRawCurrency = ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            var totalCurrencyMetadata = new[] { totalCurrencyCode, totalCurrencySymbol };
+            var prioritizedTotalCurrencyCode = ResolvePrioritizedTotalCurrencyCode(
+                totalContent,
+                totalCurrencyMetadata,
+                out var hasTotalCurrencyEvidence);
+            var fallbackCurrencyCode = hasTotalCurrencyEvidence
+                ? prioritizedTotalCurrencyCode
+                : ResolveCurrencyCode(receiptContent, totalToken, subtotalToken, taxToken, tipToken, items);
+            var rejectedAmbiguousGlobalVnd =
+                !hasTotalCurrencyEvidence &&
+                string.Equals(fallbackCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase) &&
+                !HasUnambiguousReceiptVndCurrencyEvidence(receiptContent);
+            var resolvedCurrencyCode = authoritativeVndTotalAmount.HasValue
+                ? "VND"
+                : rejectedAmbiguousGlobalVnd
+                    ? null
+                    : fallbackCurrencyCode;
+            var prioritizedTotalRawCurrency = !string.IsNullOrWhiteSpace(prioritizedTotalCurrencyCode)
+                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(
+                    new[] { totalContent }.Concat(totalCurrencyMetadata).ToArray())) ?? prioritizedTotalCurrencyCode
+                : null;
+            var resolvedRawCurrency = authoritativeVndTotalAmount.HasValue
+                ? ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(totalContent, totalCurrencyCode, totalCurrencySymbol, receiptContent)) ?? "VND"
+                : hasTotalCurrencyEvidence
+                    ? prioritizedTotalRawCurrency
+                    : rejectedAmbiguousGlobalVnd
+                        ? null
+                        : ResolveRawCurrency(currencyHints, totalToken, subtotalToken, taxToken, tipToken, items);
+            if (authoritativeVndTotalAmount.HasValue)
+                currencyHints = new List<string> { resolvedRawCurrency };
+            else if (hasTotalCurrencyEvidence)
+                currencyHints = string.IsNullOrWhiteSpace(prioritizedTotalRawCurrency)
+                    ? new List<string>()
+                    : new List<string> { prioritizedTotalRawCurrency };
+            else if (rejectedAmbiguousGlobalVnd)
+                currencyHints = new List<string>();
+
             var structuredTotalAmount = ReadProjectedAmount(totalToken);
-            var explicitTextTotalAmount = TryExtractExplicitTotalAmountFromReceiptContent(receiptContent);
+            var hasAnyVndEvidence = ExtractNormalizedCurrencyCodes(
+                    new[] { totalContent, receiptContent }.Concat(totalCurrencyMetadata).ToArray())
+                .Any(code => string.Equals(code, "VND", StringComparison.OrdinalIgnoreCase));
+            var hasClearNonVndTotalCurrency =
+                hasTotalCurrencyEvidence &&
+                !string.IsNullOrWhiteSpace(prioritizedTotalCurrencyCode) &&
+                !string.Equals(prioritizedTotalCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase);
+            //MMS - Keeps receipt-wide numbers out of VND totals unless clear local non-VND evidence wins - 2026.09.01
+            var allowReceiptTextTotalFallback = !hasAnyVndEvidence || hasClearNonVndTotalCurrency;
+            var explicitTextTotalAmount = allowReceiptTextTotalFallback
+                ? TryExtractExplicitTotalAmountFromReceiptContent(receiptContent)
+                : null;
             var structuredTotalWasOverridden =
+                !authoritativeVndTotalAmount.HasValue &&
                 explicitTextTotalAmount.HasValue &&
                 structuredTotalAmount.HasValue &&
                 Math.Abs(explicitTextTotalAmount.Value - structuredTotalAmount.Value) > 0.02m;
-            var fallbackTotalAmount = structuredTotalAmount.HasValue
+            var fallbackTotalAmount = authoritativeVndTotalAmount ?? (structuredTotalAmount.HasValue
                 ? (structuredTotalWasOverridden ? explicitTextTotalAmount : structuredTotalAmount)
-                : (explicitTextTotalAmount ?? TryExtractTotalAmountFromReceiptContent(receiptContent));
+                : (allowReceiptTextTotalFallback
+                    ? (explicitTextTotalAmount ?? TryExtractTotalAmountFromReceiptContent(receiptContent))
+                    : null));
             var effectiveTotalToken = totalToken;
-            if (fallbackTotalAmount.HasValue &&
+            if (authoritativeVndTotalAmount.HasValue)
+            {
+                effectiveTotalToken = BuildFallbackMoneyToken(
+                    authoritativeVndTotalAmount.Value,
+                    resolvedCurrencyCode,
+                    resolvedRawCurrency);
+            }
+            else if (fallbackTotalAmount.HasValue &&
                 ((effectiveTotalToken == null || effectiveTotalToken.Type == JTokenType.Null) || structuredTotalWasOverridden))
             {
                 effectiveTotalToken = BuildFallbackMoneyToken(fallbackTotalAmount.Value, resolvedCurrencyCode, resolvedRawCurrency);
@@ -276,6 +344,7 @@ namespace IND_CRM_API.Services
                 CurrencyCode = resolvedCurrencyCode,
                 RawCurrency = resolvedRawCurrency,
                 TotalAmount = fallbackTotalAmount,
+                HasAuthoritativeVndTotal = authoritativeVndTotalAmount.HasValue,
                 ItemCount = items.Count,
                 Warnings = new List<string>(),
                 CurrencyHints = currencyHints
@@ -387,6 +456,7 @@ namespace IND_CRM_API.Services
             {
                 var rawCurrency = ReadNonEmpty(CurrencyCodeHelper.ResolveRawHint(
                     valueCurrency["currencyCode"]?.ToString(),
+                    valueCurrency["currencySymbol"]?.ToString(),
                     field["content"]?.ToString()));
                 return new JObject
                 {
@@ -497,6 +567,145 @@ namespace IND_CRM_API.Services
                 return parsed;
 
             return null;
+        }
+
+        //MMS - Uses receipt-wide VND evidence only to qualify the grouped amount from the first Total field - 2026.08.31
+        private static decimal? TryExtractUnambiguousVndGroupedTotal(
+            string totalContent,
+            string receiptContent,
+            params string[] totalCurrencyMetadata)
+        {
+            if (string.IsNullOrWhiteSpace(totalContent))
+                return null;
+
+            var prioritizedTotalCurrencyCode = ResolvePrioritizedTotalCurrencyCode(
+                totalContent,
+                totalCurrencyMetadata,
+                out var hasTotalCurrencyEvidence);
+            var resolvedVndCurrencyCode = hasTotalCurrencyEvidence
+                ? prioritizedTotalCurrencyCode
+                : HasUnambiguousReceiptVndCurrencyEvidence(receiptContent)
+                    ? "VND"
+                    : null;
+            if (!string.Equals(resolvedVndCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var groupedAmounts = Regex.Matches(
+                totalContent,
+                @"(?<![\d.,+\-])(?<amount>\d{1,3}(?<separator>[.,])\d{3}(?:\k<separator>\d{3})*)(?![\d.,+\-])",
+                RegexOptions.CultureInvariant);
+            if (groupedAmounts.Count != 1)
+                return null;
+
+            var groupedAmount = groupedAmounts[0];
+            var amountText = groupedAmount.Groups["amount"].Value;
+            var separator = groupedAmount.Groups["separator"].Value;
+            var remainingContent = totalContent.Remove(groupedAmount.Index, groupedAmount.Length);
+            if (remainingContent.Any(ch => char.IsDigit(ch) || "+-()".IndexOf(ch) >= 0))
+                return null;
+
+            var normalizedAmount = amountText.Replace(separator, string.Empty);
+            return decimal.TryParse(normalizedAmount, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0m
+                ? parsed
+                : (decimal?)null;
+        }
+
+        // Resolves Total.content before Total metadata and records conflicts that must block global VND evidence.
+        private static string ResolvePrioritizedTotalCurrencyCode(
+            string totalContent,
+            string[] totalCurrencyMetadata,
+            out bool hasTotalCurrencyEvidence)
+        {
+            var contentCurrencies = ExtractNormalizedCurrencyCodes(totalContent);
+            var hasUnknownContentCurrency = HasUnknownGroupedAmountCurrencyToken(totalContent);
+            var contentHasDollar = !string.IsNullOrWhiteSpace(totalContent) && totalContent.IndexOf('$') >= 0;
+            if (contentCurrencies.Count > 0 || hasUnknownContentCurrency || contentHasDollar)
+            {
+                hasTotalCurrencyEvidence = true;
+                if (contentCurrencies.Count != 1 || hasUnknownContentCurrency ||
+                    (contentHasDollar && string.Equals(contentCurrencies[0], "VND", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return null;
+                }
+
+                return contentCurrencies[0];
+            }
+
+            var metadataValues = (totalCurrencyMetadata ?? new string[0])
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+            if (metadataValues.Length == 0)
+            {
+                hasTotalCurrencyEvidence = false;
+                return null;
+            }
+
+            hasTotalCurrencyEvidence = true;
+            var metadataCurrencies = ExtractNormalizedCurrencyCodes(metadataValues);
+            var hasUnknownMetadataCurrency = metadataValues.Any(value =>
+                ExtractNormalizedCurrencyCodes(value).Count == 0);
+            var metadataHasDollar = metadataValues.Any(value => value.IndexOf('$') >= 0);
+            if (metadataCurrencies.Count != 1)
+                return null;
+
+            var metadataCurrencyCode = metadataCurrencies[0];
+            if (string.Equals(metadataCurrencyCode, "VND", StringComparison.OrdinalIgnoreCase) &&
+                (hasUnknownMetadataCurrency || metadataHasDollar))
+                return null;
+
+            return metadataCurrencyCode;
+        }
+
+        // Rejects an unknown three-letter token only when it occupies a currency position beside the grouped amount.
+        private static bool HasUnknownGroupedAmountCurrencyToken(string totalContent)
+        {
+            if (string.IsNullOrWhiteSpace(totalContent))
+                return false;
+
+            var matches = Regex.Matches(
+                totalContent,
+                @"(?:\d{1,3}(?:[.,]\d{3})+\s*(?<code>[A-Z]{3})\b|\b(?<code>[A-Z]{3})\s*\d{1,3}(?:[.,]\d{3})+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return matches.Cast<Match>()
+                .Select(match => match.Groups["code"].Value)
+                .Any(code => string.IsNullOrWhiteSpace(CurrencyCodeHelper.NormalizeToIso4217(code)));
+        }
+
+        // Returns unique normalized currency codes without using candidate order as authority.
+        private static List<string> ExtractNormalizedCurrencyCodes(params string[] values)
+        {
+            return (values ?? new string[0])
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .SelectMany(CurrencyCodeHelper.ExtractHints)
+                .Select(CurrencyCodeHelper.NormalizeToIso4217)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        // Accepts receipt-wide VND evidence only when no competing currency or dollar marker remains.
+        private static bool HasUnambiguousReceiptVndCurrencyEvidence(string receiptContent)
+        {
+            if (HasAmbiguousReceiptDollarEvidence(receiptContent))
+                return false;
+
+            var receiptCurrencies = ExtractNormalizedCurrencyCodes(receiptContent);
+            return receiptCurrencies.Count == 1 &&
+                   string.Equals(receiptCurrencies[0], "VND", StringComparison.OrdinalIgnoreCase);
+        }
+
+        //MMS - Treats the receipt's dollar Cash icon as non-currency and rejects every other global dollar sign - 2026.08.31
+        private static bool HasAmbiguousReceiptDollarEvidence(string receiptContent)
+        {
+            if (string.IsNullOrWhiteSpace(receiptContent) || receiptContent.IndexOf('$') < 0)
+                return false;
+
+            var withoutCashPaymentMarkers = Regex.Replace(
+                receiptContent,
+                @"(?<![\p{L}\p{N}])\$\s*CASH\b",
+                string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return withoutCashPaymentMarkers.IndexOf('$') >= 0;
         }
 
         // Returns the best payable, plain-total, or generic amount candidate from OCR text.
