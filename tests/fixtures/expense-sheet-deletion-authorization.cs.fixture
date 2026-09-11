@@ -59,9 +59,17 @@ internal static class DeletionAuthorizationTests
     // Re-map each call so changed permissions cannot be hidden by a cached authorization decision.
     private static bool Allowed(IAxaptaContainer root)
     {
-        var header = (EntraContextHeaderDto)HeaderMapper.Invoke(null, new object[] { root });
-        var companies = (List<EntraCompanyDto>)CompanyMapper.Invoke(null, new object[] { root });
-        return (bool)Permission.Invoke(null, new object[] { header, companies, "owner", "company" });
+        try
+        {
+            var header = (EntraContextHeaderDto)HeaderMapper.Invoke(null, new object[] { root });
+            var companies = (List<EntraCompanyDto>)CompanyMapper.Invoke(null, new object[] { root });
+            return (bool)Permission.Invoke(null, new object[] { header, companies, "owner", "company" });
+        }
+        catch (TargetInvocationException error) when (error.InnerException?.GetType().Name == "EntraContextReadException")
+        {
+            // The endpoint maps unreadable permissions to its existing transient rejection.
+            return false;
+        }
     }
 
     // Builds the old and current deployed loginEntraContext wire layouts.

@@ -173,7 +173,7 @@ const boundedLogValueSource = sourceBetween(
 );
 const mapExpenseSheetTicketDetailSource = sourceBetween(
   controllerSource,
-  "private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(",
+  "internal static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(",
   "private static List<ExpenseSheetTicketListItemDto> MapExpenseSheetTicketList(",
 );
 const createExpenseSheetHeaderContainerSource = sourceBetween(
@@ -199,7 +199,7 @@ const appendCreateHeaderOptionalFieldsSource = sourceBetween(
 const appendUpdateHeaderOptionalFieldsSource = sourceBetween(
   expenseSheetsControllerSource,
   "private static void AppendUpdateHeaderOptionalFields(",
-  "// Reads optional forwarding headers without making them part of the public body contract.",
+  "// Appends optional line fields to AX container using stable positions after legacy columns.",
 );
 const updateExpenseSheetLineSource = sourceBetween(
   expenseSheetsControllerSource,

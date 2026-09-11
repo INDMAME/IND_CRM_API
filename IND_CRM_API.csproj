@@ -214,6 +214,8 @@
     <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Requests\LoginRequest.cs" />
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
+    <Compile Include="Services\ExpenseMutationPolicy.cs" />
+    <Compile Include="Services\ExpenseMutationAuthorizationService.cs" />
     <Compile Include="Controllers\CRM\CrmAccountsController.cs" />
     <Compile Include="Controllers\CRM\CrmActivitiesController.cs" />
     <Compile Include="Controllers\CRM\CrmDataVisibilityController.cs" />

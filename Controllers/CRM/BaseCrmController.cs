@@ -7,6 +7,7 @@ using IND_CRM_API.Services.Interfaces;
 using IND_CRM_API.Services;
 using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Contracts.Requests;
 
 namespace IND_CRM_API.Controllers
 {
@@ -29,6 +30,42 @@ namespace IND_CRM_API.Controllers
             if (string.IsNullOrWhiteSpace(username))
                 throw new Exception("User not authenticated or invalid token.");
             return username;
+        }
+
+        // Shares current authorization reads only within this request and returns a safe AX actor.
+        internal IHttpActionResult AuthorizeExpenseMutation(ExpenseMutationOperation operation,
+            string company, string owner, string traceId, out ExpenseMutationAuthorization authorization,
+            string sheetId = null, string ticketId = null, UpdateExpenseSheetHeaderRequest header = null)
+        {
+            authorization = null;
+            var actor = RequireValidatedSnapshotAxUserIdOrReturn403(out var identityError, traceId);
+            if (identityError != null) return identityError;
+            try
+            {
+                var oid = GetHeaderValue("X-IND-EntraOid");
+                var key = "IND.ExpenseMutationAuthorization:" + actor + ":" + company + ":" + oid;
+                if (!Request.Properties.TryGetValue(key, out var cached))
+                {
+                    cached = new ExpenseMutationAuthorizationService(SessionManager, GetAuthenticatedUsername(), actor, company, oid);
+                    Request.Properties[key] = cached;
+                }
+                authorization = ((ExpenseMutationAuthorizationService)cached).Authorize(operation, owner,
+                    Request.Method.Method, Request.RequestUri?.AbsolutePath ?? string.Empty, sheetId, ticketId, header);
+                return null;
+            }
+            catch (ExpenseAuthorizationException ex)
+            {
+                return Content(ex.Status, new IndApiResponse<object>
+                { Success = false, Message = ex.Message, ErrorCode = ex.Code, Data = null, TraceId = traceId });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("[EXPENSE-AUTHORIZATION] operation=" + operation + " failureType=" + ex.GetType().Name,
+                    AxaptaSessionManager.LogLevel.Warning);
+                return Content(HttpStatusCode.ServiceUnavailable, new IndApiResponse<object>
+                { Success = false, Message = "No se pudo verificar el permiso actual. Reintente la operacion.",
+                    ErrorCode = IndErrorCodes.AxComError, Data = null, TraceId = traceId });
+            }
         }
 
         protected string GetOrCreateTraceId()

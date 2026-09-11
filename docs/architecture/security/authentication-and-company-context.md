@@ -31,6 +31,8 @@ Esta cabecera continúa en contratos heredados y en operaciones donde AX necesit
 
 En particular, el detalle de una hoja obtiene al usuario que consulta con `RequireValidatedSnapshotAxUserIdOrReturn403`. Así, modificar `X-IND-AxUserId` en el navegador no permite leer una hoja ajena. Los endpoints heredados que aún llaman a `RequireAxUserIdOrReturn422` deben conservarse compatibles y migrarse de forma explícita, no mediante una regla documental ficticia.
 
+Las escrituras de hojas y tickets validan además esa separación con `ExpenseMutationAuthorizationService`. El servicio lee el contexto actual de AX y el propietario real del registro; solo permite acciones delegadas de estado cuando la jerarquía actual incluye a ese propietario. Conserva los permisos de módulo, transiciones, autogestión y campos editables de la APP. El actor de notificación se deriva del contexto firmado, aunque llegue una cabecera opcional distinta. Las lecturas de autorización fallidas impiden la escritura con un error temporal; no se guardan permisos entre peticiones. Los contratos y excepciones concretos se describen en la sección de Gastos de `.codex/ENDPOINTS.md`.
+
 ## Errores y recuperación
 
 | Código | Significado | Respuesta esperada de APP |
@@ -56,6 +58,8 @@ La caché de valoraciones de ayuda identifica cada consumo por el hash del conte
 Las ventanas IA se limitan a 50.000 estados y 10.000 usuarios simultáneos, con admisión y liberación atómicas. Las ventanas vencidas se depuran como máximo una vez por minuto; alcanzar capacidad nunca reinicia una cuota vigente. Estas garantías son locales al proceso: reiniciar la API reinicia las cuotas y el conocimiento local de revisiones/revocaciones. El contexto firmado conserva su validación criptográfica y caducidad.
 
 Las regresiones aisladas se ejecutan con `npm run test:cache` después de compilar `Release|x86`; usan configuración y proveedores de prueba, sin conectar a AX ni leer credenciales del servicio.
+
+La frontera de escritura de Gastos se verifica con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/expense-mutation-authorization.test.ps1`. Compila los controladores y el servicio actuales para x86 con transporte AX en memoria y configuración aislada. La opción `-BaselineReference <commit>` ejecuta las mismas regresiones con los controladores de esa revisión para demostrar el rechazo antes de desplegar.
 
 ## Invariantes de seguridad
 

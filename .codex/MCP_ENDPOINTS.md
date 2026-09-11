@@ -11,6 +11,7 @@ Objetivo: documentación detallada para exponer la API mediante herramientas MCP
 - Cabecera de empresa: `X-IND-Company: {{companyId}}` (obligatoria en endpoints CRM).
 - Contexto firmado: toda ruta `/api/crm/*` que ejecuta `RequireCompanyOrReturn422` exige además `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token`.
 - Cabecera de usuario AX: `X-IND-AxUserId: {{axUserId}}` solo cuando la herramienta lo declara. Puede identificar al sujeto funcional o propietario enviado a AX, pero no reemplaza al actor del contexto firmado.
+- En escrituras de Gastos, API contrasta ese propietario con el registro y los permisos vigentes; únicamente las acciones de estado admiten delegación dentro de la jerarquía actual. Se conserva la política y las excepciones de APP descritas en `ENDPOINTS.md`, sin añadir rutas, cabeceras ni campos MCP.
 - `axUserId` y los campos del contexto firmado se obtienen de `/api/auth/entra/context`; cada herramienta declara cuáles necesita.
 - Fechas en tickets y hojas de gastos: la petición acepta `DDMMYYYY` o `DD.MM.YYYY`; la respuesta devuelve `DD.MM.YYYY`.
 

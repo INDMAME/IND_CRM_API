@@ -160,6 +160,13 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
 - `-ValidateOnly` valida parámetros y corpus, crea los informes sin respuestas y no lee el token ni accede a la red. `requiredFacts`, `forbiddenClaims`, exactitud semántica y calidad de traducción se exportan para revisión humana; nunca se marcan como aprobadas automáticamente.
 
 ## Hojas de gastos
+
+Las escrituras de hojas y tickets conservan sus rutas, cuerpos y cabeceras. El actor procede del contexto firmado; `X-IND-AxUserId` expresa el propietario solicitado y se contrasta con el registro y los permisos actuales de AX. Las altas y modificaciones de líneas, tickets y archivos son propias. Las acciones delegadas sobre cabecera exigen que el propietario siga dentro de `getSubordinatesByUser` del actor firmado; no se acepta otro propietario por modificar una cabecera HTTP.
+
+La autorización mantiene la política APP: `Add` para altas y POST ordinarios, `Edit` para PUT/PATCH, propagación de proyecto/reembolso y asociación/desasociación línea-ticket, y `FullAccess` para borrados. Se conserva la excepción de autogestión vigente para PUT/PATCH de Gastos que no sean líneas. El borrado recuperable conserva su permiso de hojas para la limpieza interna de tickets, sin convertirlo en permiso de borrado público de tickets.
+
+En hoja propia normal: borrador permite edición completa y pasar a solicitada; solicitada o rechazada pueden volver a borrador. Con autogestión: borrador permite pasar a aprobada y aprobada puede volver a borrador. En jefatura: solicitada puede aprobarse o rechazarse; aprobada o rechazada pueden volver a solicitada. Una hoja pagada o con asiento asignado queda bloqueada. Las acciones solo de estado preservan descripción, proyecto, divisa, cambio y reembolso almacenados; únicamente aplican estado y comentario. Un fallo de lectura de autorización devuelve `503/AX_COM_ERROR`, sin escribir ni reutilizar un permiso de otra petición; una denegación devuelve `403/AUTH_FORBIDDEN` y un estado incompatible, `409`.
+
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)
   Elementos de respuesta: `CurrencyCode`, `CurrencyCodeISO`.
 - GET /api/crm/expensesheets/subordinates (Authorize + X-IND-Company + X-IND-AxUserId)
@@ -190,6 +197,7 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
   Nota sobre líneas: `amount` y su alias `totalAmountCurrency` expresan el total en la divisa original de la línea; `amountMST` y su alias `totalAmountMST` expresan el total de empresa/MST; `reimbursableAmount` expresa la parte reembolsable de empresa/MST, copia `amountMST` con `ReimbursableExpense=Yes` y vale cero con `ReimbursableExpense=No`, independientemente de `VisaEmpresa`; queda nulo con contratos AX heredados. AX conserva `VisaEmpresa` bloqueado como espejo inverso de compatibilidad (`Yes` reembolsable -> Visa `No`; `No` reembolsable -> Visa `Yes`).
   Nota de enrutamiento: el literal `tickets` queda excluido de `hojaGastosId` para evitar colisión con `/api/crm/expensesheets/tickets`.
 - PUT /api/crm/expensesheets/{hojaGastosId} (Authorize + X-IND-Company + X-IND-AxUserId)
+  La cabecera opcional heredada `X-IND-ActorAxUserId` puede seguir enviándose por compatibilidad, pero la API calcula el actor de notificación desde el contexto firmado y la delegación vigente.
   Cuerpo obligatorio: `description`. Opcionales: `projId`/`projIdProvided`, `currencyCode`/`exchRate` heredados e ignorados por cabecera, `expenseSheetStatus`, `exchangeRateMode`, `estadoComentarios` y `reimbursableExpense` con enum `INDReimbursableExpense`; solo se admiten `0=Yes` o `1=No`.
   Nota sobre el proyecto: `projIdProvided=false` conserva el proyecto bajo el bloqueo de cabecera de AX; `true` aplica `projId`, incluido `""`. Todo valor no vacío debe ser un proyecto elegible: AX rechaza `PurchParameters.INDProjIdVarious`, proyectos inexistentes, cerrados o no imputables. Si se omite el indicador, un `projId` no nulo se considera explícito para mantener clientes anteriores.
   Nota: `Both=2` no se admite en escritura de cabecera; AX lo deriva cuando existen líneas mixtas y la API lo conserva en respuestas y filtros.

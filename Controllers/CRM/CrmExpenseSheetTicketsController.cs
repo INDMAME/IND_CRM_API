@@ -217,6 +217,12 @@ namespace IND_CRM_API.Controllers.CRM
                     });
                 }
 
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketCreate, company, axUserId, traceId, out var authorization,
+                    ticketId: modeValue == ModeAddLinesToExisting ? body.existingFileId : null);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var extension = NormalizeFileExtension(body.fileExtension, "jpg");
                 var provisionalFileName = BuildProvisionalTicketFileName(axUserId, extension);
@@ -514,6 +520,11 @@ namespace IND_CRM_API.Controllers.CRM
                     "allow",
                     readFormMs,
                     $"multipart-ok fileName={quickCreateForm.OriginalFileName} imageBytes={quickCreateForm.ImageBytes?.Length ?? 0}");
+
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketCreate, company, axUserId, traceId, out var authorization);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
 
                 username = GetAuthenticatedUsername();
                 var createStepTraceId = Guid.NewGuid().ToString("N");
@@ -1361,6 +1372,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketBulkLink, company, axUserId, traceId, out var authorization, sheetId: body.expenseSheetId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var expenseSheetId = body.expenseSheetId.Trim();
                 var requestedTicketIds = new List<string>();
@@ -1683,6 +1699,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketUpdate, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log($"[API-IN] UpdateExpenseSheetTicket fileId={fileId} user={username} axUserId={axUserId} traceId={traceId}");
 
@@ -1949,6 +1970,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketTotalAdjustment, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] AdjustExpenseSheetTicketTotalAmount fileId={fileId} totalAmount={body.totalAmount.Value.ToString(CultureInfo.InvariantCulture)} " +
@@ -2123,6 +2149,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketAiUpdate, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetTicketFromIA fileId={fileId} user={username} axUserId={axUserId} " +
@@ -2394,6 +2425,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketFileUpload, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var cleanFileId = fileId.Trim();
                 Logger.Log(
@@ -2601,6 +2637,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketFileDelete, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var cleanFileId = fileId.Trim();
                 Logger.Log(
@@ -2795,6 +2836,12 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    cleanupOnly ? ExpenseMutationOperation.TicketCleanup : ExpenseMutationOperation.TicketDelete,
+                    company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] DeleteExpenseSheetTicket fileId={fileId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
@@ -2916,6 +2963,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketLineCreate, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log($"[API-IN] CreateExpenseSheetTicketLine fileId={fileId} user={username} axUserId={axUserId} traceId={traceId}");
 
@@ -3042,6 +3094,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketLineUpdate, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetTicketLine fileId={fileId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
@@ -3168,6 +3225,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.TicketLineDelete, company, axUserId, traceId, out var authorization, ticketId: fileId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] DeleteExpenseSheetTicketLine fileId={fileId} lineRecId={lineRecId} user={username} axUserId={axUserId} traceId={traceId}");
@@ -7025,7 +7087,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         //MMS - Maps current and legacy ticket rows, including linked reimbursement metadata - 2026.07.30
-        private static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
+        internal static ExpenseSheetTicketDetailDto MapExpenseSheetTicketDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
             if (headerExtras == null || headerExtras.Count < 6)
                 return null;

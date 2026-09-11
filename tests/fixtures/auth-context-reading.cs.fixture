@@ -1,0 +1,250 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Web.Http;
+using System.Web.Http.Results;
+using AxaptaCOMConnector;
+using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Controllers.System;
+using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
+using IND_CRM_API.Services;
+using IND_CRM_API.Services.Interfaces;
+
+// Drives the complete production action with COM faults after different portions of the response were read.
+internal static class AuthContextReadingTests
+{
+    private const string Tenant = "fixture-tenant";
+    private static int checks;
+
+    public static int Main()
+    {
+        try
+        {
+            foreach (var shape in new[] { 4, 5, 6, 7 })
+            foreach (var headerLength in new[] { 6, 7, 8 })
+            foreach (var flat in new[] { false, true })
+            {
+                var context = Granted(Call(Context(shape, headerLength, flat), NewOid()));
+                var company = context.Companies[0];
+                Check(company.CompanyId == "CEU" && company.Modules[0].AccessRightsInt == 4, "Legacy permissions shape " + shape);
+                Check(company.CurrencyCode == (shape >= 5 ? "EUR" : "") &&
+                    company.AllowSelfManagement == (shape >= 6) && company.CrmUserId == (shape >= 7 ? "crm-actor" : ""), "Legacy optional fields shape " + shape);
+                Check(context.Header.DefaultCurrencyCode == (headerLength >= 7 ? "EUR" : "") &&
+                    context.Header.UserName == (headerLength >= 8 ? "Actor" : ""), "Legacy header length " + headerLength);
+            }
+
+            RecoverAfterFault("company inventory peek", root => root.FailPeek = 2);
+            RecoverAfterFault("root length", root => root.FailLength = true);
+            RecoverAfterFault("company inventory length", root => Inventory(root).FailLength = true);
+            RecoverAfterFault("header identity", root => Header(root).FailPeek = 3);
+            RecoverAfterFault("second company", root => Inventory(root).FailPeek = 2);
+            RecoverAfterFault("company identity", root => Company(root).FailPeek = 1);
+            RecoverAfterFault("current module field", root => Company(root).FailPeek = 7);
+            RecoverAfterFault("optional current field", root => Company(root).FailPeek = 6);
+            RecoverAfterFault("module inventory length", root => Modules(root).FailLength = true);
+            RecoverAfterFault("module permissions", root => Module(root).FailPeek = 4);
+            RecoverAfterFault("scalar conversion", root => Module(root).Values[3] = new UnreadableScalar());
+            RecoverAfterFault("malformed second company", root => Inventory(root).Values[1] = null);
+            RecoverAfterFault("incomplete module", root => Modules(root).Values[0] = Box("module", "description"));
+            RecoverAfterFault("missing modules", root => Company(root).Values[6] = null);
+
+            var emptyOid = NewOid();
+            var beforeEmpty = Granted(Call(Context(), emptyOid));
+            var empty = Context();
+            empty.Values[1] = Box();
+            var emptyResponse = Granted(Call(empty, emptyOid), expectToken: false);
+            Check(emptyResponse.Companies.Count == 0 && UserCompanyAccessCache.GetSnapshot(Tenant, emptyOid).IsRevoked,
+                "A genuinely empty successful result remains a denial");
+            Granted(Call(Context(), emptyOid));
+            Check(!Valid(beforeEmpty), "An authoritative empty denial keeps prior tokens revoked after recovery");
+
+            var deniedOid = NewOid();
+            Granted(Call(Context(), deniedOid));
+            var denied = Context();
+            Header(denied).Values[0] = "0";
+            Header(denied).Values[3] = "0";
+            denied.FailPeek = 2;
+            Check(Failure(Call(denied, deniedOid)).StatusCode == HttpStatusCode.Forbidden &&
+                UserCompanyAccessCache.GetSnapshot(Tenant, deniedOid).IsRevoked, "A complete explicit denial does not depend on optional inventory reads");
+
+            var genericOid = NewOid();
+            var beforeGeneric = Granted(Call(Context(), genericOid));
+            var generic = Box(Box(Box("0", "generic failure")), Box());
+            Check(Failure(Call(generic, genericOid)).StatusCode == HttpStatusCode.Forbidden && Valid(beforeGeneric),
+                "A short generic AX failure is not a permanent authorization denial");
+
+            var ambiguousOid = NewOid();
+            var beforeAmbiguous = Granted(Call(Context(), ambiguousOid));
+            var ambiguous = Context();
+            Header(ambiguous).Values[0] = "0";
+            ambiguous.Values[1] = Box();
+            Check(Failure(Call(ambiguous, ambiguousOid)).StatusCode == HttpStatusCode.ServiceUnavailable && !Valid(beforeAmbiguous),
+                "An ambiguous no-company header remains temporarily blocked");
+            Granted(Call(Context(), ambiguousOid));
+            Check(Valid(beforeAmbiguous), "An ambiguous denial still recovers without permanent revocation");
+
+            var partial = Context();
+            Inventory(partial).FailPeek = 2;
+            try { AuthController.MapEntraCompanies(partial); throw new Exception("Partial permissions escaped the shared mapper"); }
+            catch (InvalidOperationException error) when (error.GetType().Name == "EntraContextReadException") { checks++; }
+            Console.WriteLine("PASS: " + checks + " auth context reading checks, including endpoint recovery and all legacy layouts");
+            return 0;
+        }
+        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+
+    // Verifies that a transient failure blocks old tokens only until an unchanged healthy context returns.
+    private static void RecoverAfterFault(string name, Action<ReadingContainer> fault)
+    {
+        var oid = NewOid();
+        var prior = Granted(Call(Context(), oid));
+        var broken = Context();
+        fault(broken);
+        var response = Failure(Call(broken, oid));
+        var snapshot = UserCompanyAccessCache.GetSnapshot(Tenant, oid);
+        Check(response.StatusCode == HttpStatusCode.ServiceUnavailable && response.Content.ErrorCode == "AUTH_CONTEXT_STALE" &&
+            response.Content.Data == null, name + " returns a transient response without partial data");
+        Check(snapshot.RequiresRevalidation && !snapshot.IsRevoked && snapshot.RevokedThroughVersion == 0 &&
+            snapshot.Companies.Length == 2 && !Valid(prior), name + " suspends the existing complete snapshot");
+        var recovered = Granted(Call(Context(), oid));
+        Check(Valid(prior) && Valid(recovered), name + " recovers old and newly issued tokens");
+    }
+
+    // Uses real signed token validation against the latest production cache state.
+    private static bool Valid(EntraContextDto context)
+    {
+        return UserContextTokenService.Validate(context.ContextToken, Tenant, context.EntraOid,
+            context.ContextVersion, context.PermissionsRevision, "CEU",
+            UserCompanyAccessCache.GetSnapshot(Tenant, context.EntraOid)).IsValid;
+    }
+
+    // Runs the real controller without HTTP hosting, production settings or a COM connection.
+    private static IHttpActionResult Call(ReadingContainer root, string oid)
+    {
+        var controller = new AuthController(new ReadingSessionManager(root), new ReadingJwt(), new ReadingLogger())
+        {
+            Request = new HttpRequestMessage(HttpMethod.Post, "https://fixture.invalid/api/auth/entra/context"),
+            Configuration = new HttpConfiguration(),
+            User = new GenericPrincipal(new GenericIdentity("technical-fixture"), new string[0])
+        };
+        return controller.EntraContext(new EntraContextRequest { entraOid = oid, appCode = "CRM" });
+    }
+
+    // Requires a complete successful envelope and the expected token issuance decision.
+    private static EntraContextDto Granted(IHttpActionResult result, bool expectToken = true)
+    {
+        var response = result as OkNegotiatedContentResult<IndPagedResponse<EntraContextDto>>;
+        Check(response != null && response.Content.Success && response.Content.Items.Count == 1, "Successful context envelope");
+        var context = response.Content.Items[0];
+        Check(!string.IsNullOrWhiteSpace(context.ContextToken) == expectToken, "Context token issuance matches complete permissions");
+        return context;
+    }
+
+    private static NegotiatedContentResult<IndApiResponse<object>> Failure(IHttpActionResult result)
+    {
+        var response = result as NegotiatedContentResult<IndApiResponse<object>>;
+        Check(response != null && !response.Content.Success, "Failure envelope");
+        return response;
+    }
+
+    // Generates all deployed company and header variants, including a later company to catch partial reads.
+    private static ReadingContainer Context(int shape = 7, int headerLength = 8, bool flat = false)
+    {
+        var headerValues = new List<object> { "1", "OK", "actor", "1", "1", "CEU" };
+        if (headerLength >= 7) headerValues.Add("EUR");
+        if (headerLength >= 8) headerValues.Add("Actor");
+        var header = Box(headerValues.ToArray());
+        Func<string, ReadingContainer> company = id =>
+        {
+            var values = new List<object> { id, "1", "Company" };
+            if (shape >= 5) values.Add("EUR");
+            if (shape >= 6) values.Add("1");
+            if (shape >= 7) values.Add("crm-actor");
+            values.Add(Box(Box("GASTOS_HOJA_GASTO", "Expense sheets", "1", "4")));
+            return Box(values.ToArray());
+        };
+        return Box(flat ? header : Box(header), Box(company("CEU"), company("CEE")));
+    }
+
+    private static ReadingContainer Header(ReadingContainer root) { return (ReadingContainer)((ReadingContainer)root.Values[0]).Values[0]; }
+    private static ReadingContainer Inventory(ReadingContainer root) { return (ReadingContainer)root.Values[1]; }
+    private static ReadingContainer Company(ReadingContainer root) { return (ReadingContainer)Inventory(root).Values[0]; }
+    private static ReadingContainer Modules(ReadingContainer root) { return (ReadingContainer)Company(root).Values[6]; }
+    private static ReadingContainer Module(ReadingContainer root) { return (ReadingContainer)Modules(root).Values[0]; }
+    private static string NewOid() { return Guid.NewGuid().ToString(); }
+    private static ReadingContainer Box(params object[] values) { return new ReadingContainer(values); }
+    private static void Check(bool condition, string name) { if (!condition) throw new Exception("FAILED: " + name); checks++; }
+}
+
+// Each fake implements the production boundary while preventing network, live settings and COM activation.
+internal sealed class ReadingSessionManager : IAxaptaSessionManager
+{
+    private readonly ReadingContainer root;
+    internal ReadingSessionManager(ReadingContainer value) { root = value; }
+    public AxaptaComSession GetAxInstanceForUser(string user) { return new AxaptaComSession(root); }
+    public bool CreateOrGetSession(string user, string password, JwtService.JwtTokenInfo token) { throw new NotSupportedException(); }
+    public bool RefreshSessionToken(string user, JwtService.JwtTokenInfo token, string previous) { throw new NotSupportedException(); }
+    public object CallMethodByUser(string user, string className, string methodName, object args = null) { throw new NotSupportedException(); }
+    public IAxaptaContainer CallContainerMethodByUser(string user, string className, string methodName, object[] args = null) { throw new NotSupportedException(); }
+}
+internal sealed class ReadingJwt : IJwtService { public JwtService.JwtTokenInfo GenerateToken(string user, int? minutes = null) { throw new NotSupportedException(); } }
+internal sealed class ReadingLogger : IAxLogger { public void Log(string value, AxaptaSessionManager.LogLevel level = AxaptaSessionManager.LogLevel.Info) { } }
+internal sealed class UnreadableScalar { public override string ToString() { throw new COMException("Simulated scalar read failure"); } }
+
+// Supports only the container reads and input appends used by the production endpoint.
+public sealed class ReadingContainer : IAxaptaContainer
+{
+    internal readonly object[] Values;
+    internal int FailPeek;
+    internal bool FailLength;
+    internal ReadingContainer(object[] values) { Values = values; }
+    public int Length() { if (FailLength) throw new COMException("Simulated length read failure"); return Values.Length; }
+    public object Peek(int index) { if (index == FailPeek) throw new COMException("Simulated field read failure"); return Values[index - 1]; }
+    public void Append(object a, object b, object c, object d, object e, object f) { }
+    public void Delete(int index, int count) { throw new NotSupportedException(); }
+    public int Find(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public int FindEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Insert(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void InsertEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Poke(int index, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void PokeEx(int index, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void AppendEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void DeleteAll() { throw new NotSupportedException(); }
+}
+
+namespace IND_CRM_API.Helpers
+{
+    // Local-only settings prevent test execution from reading real machine credentials.
+    public static class AppSettingsHelper
+    {
+        public static string GetMachineEnvironmentVariable(string name) { return name == "CRM_TENANT_ID" ? "fixture-tenant" : null; }
+        public static string GetSetting(string name, params string[] alternatives)
+        {
+            if (name.EndsWith("SecretKey")) return "fixture-only-key-012345678901234567890123456789";
+            if (name.EndsWith("Issuer")) return "fixture-issuer";
+            if (name.EndsWith("Audience")) return "fixture-audience";
+            return null;
+        }
+    }
+}
+namespace IND_CRM_API.Services
+{
+    // Replaces only transport and logging; the endpoint, cache and JWT source remain production code.
+    public sealed class AxaptaComSession
+    {
+        private readonly IAxaptaContainer root;
+        public AxaptaComSession(IAxaptaContainer value) { root = value; }
+        public IAxaptaContainer CreateContainer() { return new ReadingContainer(new object[0]); }
+        public object CallStaticClassMethod(string className, string methodName, object args) { return root; }
+    }
+    public static class AxaptaSessionManager
+    {
+        public enum LogLevel { Info, Warning, Error }
+        public static void LogStatic(string value) { }
+    }
+}

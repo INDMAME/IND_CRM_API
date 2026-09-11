@@ -50,7 +50,6 @@ namespace IND_CRM_API.Controllers.CRM
         private const string LineReimbursableExpenseValidationMessage = "reimbursableExpense de linea debe ser un valor de INDReimbursableExpenseLines: 0=Yes, 1=No. Consulte /api/crm/enums/by-name?axEnumNames=INDReimbursableExpenseLines.";
         private const string CrmGastoTypeValidationMessage = "typeValue debe ser un valor CRMGastoType entre 0 y 20 segun AX.";
         private const int MaxPageSize = 50;
-        private const string ActorAxUserIdHeaderName = "X-IND-ActorAxUserId";
 
         private sealed class ExpenseSheetListRow
         {
@@ -136,6 +135,14 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    modeValue == ModeAddLinesToExisting
+                        ? ExpenseMutationOperation.SheetAddLines : ExpenseMutationOperation.SheetCreate,
+                    company, axUserId, traceId, out var authorization,
+                    sheetId: modeValue == ModeAddLinesToExisting ? body.existingHojaGastosId : null);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var existingHojaGastosId = (body.existingHojaGastosId ?? string.Empty).Trim();
                 if (!string.IsNullOrWhiteSpace(body.userId) &&
@@ -782,8 +789,14 @@ namespace IND_CRM_API.Controllers.CRM
             string actorAxUserId = null;
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetHeaderUpdate, company, axUserId, traceId, out var authorization, sheetId: hojaGastosId, header: body);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+                body = authorization.Header;
+                actorAxUserId = authorization.NotificationActorAxUserId;
+
                 var username = GetAuthenticatedUsername();
-                actorAxUserId = GetOptionalHeaderValue(ActorAxUserIdHeaderName);
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetHeader hojaGastosId={hojaGastosId} user={username} axUserId={axUserId} " +
                     $"expenseSheetStatus={ToLogValue(body.expenseSheetStatus)} exchangeRateMode={ToLogValue(body.exchangeRateMode)} " +
@@ -912,6 +925,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetCurrencyPropagate, company, axUserId, traceId, out var authorization, sheetId: hojaGastosId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] PropagateExpenseSheetCurrencyDefaults hojaGastosId={hojaGastosId} " +
@@ -1040,6 +1058,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetPropagate, company, axUserId, traceId, out var authorization, sheetId: hojaGastosId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] PropagateExpenseSheetProjectDefault hojaGastosId={hojaGastosId} " +
@@ -1160,6 +1183,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetReimbursementPropagate, company, axUserId, traceId, out var authorization, sheetId: hojaGastosId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] PropagateExpenseSheetReimbursableExpense hojaGastosId={hojaGastosId} " +
@@ -1314,6 +1342,11 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetLineUpdate, company, axUserId, traceId, out var authorization, sheetId: hojaGastosId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] UpdateExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} " +
@@ -1567,6 +1600,13 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    effectiveDeleteMode == ExpenseSheetDeleteMode.LineOnly
+                        ? ExpenseMutationOperation.SheetLineDelete : ExpenseMutationOperation.SheetDelete,
+                    company, axUserId, traceId, out var authorization, sheetId: hojaGastosId);
+                if (authorizationError != null) return authorizationError;
+                axUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 Logger.Log(
                     $"[API-IN] DeleteExpenseSheetLine hojaGastosId={hojaGastosId} lineRecId={lineRecId} deleteWholeSheet={deleteWholeSheet} " +
@@ -2194,26 +2234,6 @@ namespace IND_CRM_API.Controllers.CRM
                 : noOptionalValueToken);
         }
 
-        // Reads optional forwarding headers without making them part of the public body contract.
-        private string GetOptionalHeaderValue(string headerName)
-        {
-            try
-            {
-                IEnumerable<string> values;
-                if (Request?.Headers != null &&
-                    Request.Headers.TryGetValues(headerName, out values))
-                {
-                    return values?.FirstOrDefault()?.Trim();
-                }
-            }
-            catch
-            {
-                // Keep optional headers best-effort so legacy API behavior remains stable.
-            }
-
-            return null;
-        }
-
         // Appends optional line fields to AX container using stable positions after legacy columns.
         private static void AppendLineOptionalFields(
             IAxaptaContainer container,
@@ -2545,6 +2565,12 @@ namespace IND_CRM_API.Controllers.CRM
 
             try
             {
+                var authorizationError = AuthorizeExpenseMutation(
+                    ExpenseMutationOperation.SheetTicketAssociation, company, ownerAxUserId, traceId, out var authorization,
+                    sheetId: hojaGastosId, ticketId: linkTicket ? body.fileId : null);
+                if (authorizationError != null) return authorizationError;
+                ownerAxUserId = authorization.OwnerAxUserId;
+
                 var username = GetAuthenticatedUsername();
                 var cleanHojaGastosId = hojaGastosId.Trim();
                 var cleanFileId = linkTicket ? body.fileId.Trim() : string.Empty;
@@ -2902,7 +2928,7 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         // Maps header extras and lines to a typed DTO.
-        private static ExpenseSheetDetailDto MapExpenseSheetDetail(List<string> headerExtras, IAxaptaContainer linesCon)
+        internal static ExpenseSheetDetailDto MapExpenseSheetDetail(List<string> headerExtras, IAxaptaContainer linesCon)
         {
             if (headerExtras == null || headerExtras.Count < 7)
                 return null;

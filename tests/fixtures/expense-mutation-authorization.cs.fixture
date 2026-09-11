@@ -1,0 +1,362 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Threading;
+using System.Web.Http;
+using AxaptaCOMConnector;
+using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Contracts.Responses;
+using IND_CRM_API.Controllers.CRM;
+using IND_CRM_API.Helpers;
+using IND_CRM_API.Services;
+using IND_CRM_API.Services.Interfaces;
+
+// Tests the complete API write boundary with memory-only AX responses and isolated signing keys.
+internal static class ExpenseMutationAuthorizationTests
+{
+    private static int checks;
+    public static int Main()
+    {
+        try
+        {
+            Matrix();
+            ControllerBoundary();
+            CurrentPermissions();
+            OtherWriteFamilies();
+            BusinessFields();
+            PermissionLevels();
+            Console.WriteLine("PASS: " + checks + " expense mutation authorization checks");
+            return 0;
+        }
+        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+    }
+
+    // Keeps derived reimbursement and status-only field semantics identical to the APP guard.
+    private static void BusinessFields()
+    {
+        foreach (var currency in new[] { "EUR", " eur ", "USD" })
+        foreach (decimal? rate in new decimal?[] { null, 1m, 125m })
+        {
+            var payload = ExpenseMutationPolicy.StatusPayload(new ExpenseSheetDetailDto { CurrencyCode = currency, ExchRate = rate },
+                new UpdateExpenseSheetHeaderRequest());
+            var expected = currency.Trim().Equals("EUR", StringComparison.OrdinalIgnoreCase) ? 100m : rate ?? 0m;
+            Check(payload.exchRate == expected, "Legacy currency reference values match the existing APP write contract");
+        }
+        foreach (int? stored in new int?[] { null, -1, 0, 1, 2, 99 })
+        foreach (int? requested in new int?[] { null, -1, 0, 1, 2, 99 })
+        {
+            var allowed = !requested.HasValue || ((stored == 0 || stored == 1 || stored == 2) && (requested == 0 || requested == 1));
+            Check(ExpenseMutationPolicy.CanUpdateReimbursement(stored, requested) == allowed, "Reimbursement edit matches current APP policy");
+        }
+        var invalid = new MemoryAx { Reimbursement = "" };
+        Check(Update(invalid, "SELF", 1, reimbursement: 0) == 409 && invalid.Writes.Count == 0,
+            "Unknown stored reimbursement cannot be overwritten by a concrete edit");
+        Check(Update(new MemoryAx { Reimbursement = "2" }, "SELF", 1, reimbursement: 1) == 200,
+            "Mixed reimbursement can be set to a concrete value in own draft");
+        var mixed = new MemoryAx { SheetOwner = "MANAGED", SheetCrmOwner = "CRM_MANAGED", Status = 1, Reimbursement = "2" };
+        Check(Update(mixed, "MANAGED", 2, reimbursement: 1) == 200 && (string)mixed.Writes[0].Values[10] == "null",
+            "Status-only approval does not overwrite derived mixed reimbursement");
+        var concrete = new MemoryAx { SheetOwner = "MANAGED", SheetCrmOwner = "CRM_MANAGED", Status = 1, Reimbursement = "0" };
+        Check(Update(concrete, "MANAGED", 2, reimbursement: 1) == 200 && (int)concrete.Writes[0].Values[10] == 0,
+            "Status-only approval retains concrete stored reimbursement");
+        try { Service(new MemoryAx { Reimbursement = "2" }).Authorize(ExpenseMutationOperation.SheetReimbursementPropagate,
+            "SELF", "POST", "/api/crm/expensesheets/SHEET/reimbursable-expense/propagate", "SHEET"); throw new Exception("Expected rejection"); }
+        catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.BadRequest, "Derived mixed reimbursement is not propagated"); }
+    }
+
+    // Characterizes current HTTP permission levels and route exceptions without changing the hierarchy.
+    private static void PermissionLevels()
+    {
+        var add = new[] { ExpenseMutationOperation.SheetCreate, ExpenseMutationOperation.SheetAddLines,
+            ExpenseMutationOperation.SheetCurrencyPropagate, ExpenseMutationOperation.TicketCreate,
+            ExpenseMutationOperation.TicketLineCreate, ExpenseMutationOperation.TicketFileUpload,
+            ExpenseMutationOperation.TicketTotalAdjustment, ExpenseMutationOperation.TicketAiUpdate, ExpenseMutationOperation.TicketBulkLink };
+        var edit = new[] { ExpenseMutationOperation.SheetHeaderUpdate, ExpenseMutationOperation.SheetLineUpdate,
+            ExpenseMutationOperation.SheetPropagate, ExpenseMutationOperation.SheetReimbursementPropagate,
+            ExpenseMutationOperation.SheetTicketAssociation, ExpenseMutationOperation.TicketUpdate, ExpenseMutationOperation.TicketLineUpdate };
+        foreach (ExpenseMutationOperation operation in Enum.GetValues(typeof(ExpenseMutationOperation)))
+        {
+            var expected = add.Contains(operation) ? 3 : edit.Contains(operation) ? 2 : 4;
+            Check(ExpenseMutationPolicy.RequiredAccess(operation) == expected, "APP permission level " + operation);
+        }
+        var low = new EntraCompanyDto { AllowSelfManagement = true, Modules = new List<EntraModuleDto>() };
+        Check(ExpenseMutationPolicy.HasModuleAccess(low, ExpenseMutationOperation.SheetHeaderUpdate, "PUT", "/api/crm/expensesheets/SHEET"),
+            "Self-management keeps its existing header override");
+        Check(ExpenseMutationPolicy.HasModuleAccess(low, ExpenseMutationOperation.TicketUpdate, "PUT", "/api/crm/expensesheets/tickets/TICKET"),
+            "Self-management retains the existing ticket PUT exception");
+        Check(!ExpenseMutationPolicy.HasModuleAccess(low, ExpenseMutationOperation.SheetLineUpdate, "PUT", "/api/crm/expensesheets/SHEET/lines/1"),
+            "Self-management does not grant line permissions");
+        Check(!ExpenseMutationPolicy.HasModuleAccess(low, ExpenseMutationOperation.SheetDelete, "DELETE", "/api/crm/expensesheets/SHEET/lines/1"),
+            "Self-management does not grant FullAccess deletion");
+        var ax = new MemoryAx();
+        var service = Service(ax);
+        service.Authorize(ExpenseMutationOperation.SheetLineUpdate, "SELF", "PUT", "/api/crm/expensesheets/SHEET/lines/1", "SHEET");
+        ax.Status = 1;
+        try { service.Authorize(ExpenseMutationOperation.SheetLineUpdate, "SELF", "PUT", "/api/crm/expensesheets/SHEET/lines/2", "SHEET"); throw new Exception("Expected rejection"); }
+        catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.Conflict, "A second internal write rereads sheet state"); }
+        Check(ax.Reads.Count(x => x == "loginEntraContext") == 1 && ax.Reads.Count(x => x == "getExpenseSheet") == 2,
+            "Request reuse retains permissions only, never a stale mutable sheet");
+    }
+
+    // Checks every status matrix cell, including unknown states and both self-management settings.
+    private static void Matrix()
+    {
+        foreach (var managed in new[] { false, true })
+        foreach (var self in new[] { false, true })
+        foreach (var paid in new[] { false, true })
+        foreach (int? status in new int?[] { null, -1, 0, 1, 2, 3, 4, 99 })
+        {
+            var policy = ExpenseMutationPolicy.Resolve(status, paid, managed, self);
+            var next = new int[0];
+            if (!paid)
+            {
+                if (managed) next = status == 1 ? new[] { 2, 3 } : status == 2 || status == 3 ? new[] { 1 } : next;
+                else if (self) next = status == 0 ? new[] { 2 } : status == 2 ? new[] { 0 } : next;
+                else next = status == 0 ? new[] { 1 } : status == 1 || status == 3 ? new[] { 0 } : next;
+            }
+            Check(policy.NextStatuses.SetEquals(next), "Status targets match the APP matrix");
+            Check(policy.FullEdit == (!paid && !managed && status == 0) && policy.CanDelete == policy.FullEdit,
+                "Only an unpaid own draft permits full editing and deletion");
+        }
+    }
+
+    // Proves signed actor and delegated owner are distinct all the way to the actual controller write.
+    private static void ControllerBoundary()
+    {
+        var unrelated = new MemoryAx { SheetOwner = "OTHER", SheetCrmOwner = "CRM_OTHER", Status = 1, HasSubordinate = false };
+        Check(Update(unrelated, "OTHER", 2) == 403 && unrelated.Writes.Count == 0, "Unrelated owner never reaches AX write");
+        var managed = new MemoryAx { SheetOwner = "MANAGED", SheetCrmOwner = "CRM_MANAGED", Status = 1 };
+        Check(Update(managed, "MANAGED", 2, "FORGED_NOTIFICATION_ACTOR") == 200, "Existing manager approval succeeds");
+        var values = managed.Writes.Single().Values;
+        Check((string)values[1] == "MANAGED" && (string)values[11] == "SELF", "AX receives authorized owner and signed notification actor");
+        Check((string)values[3] == "Stored description" && (int)values[12] == 0 && (string)values[9] == "new comment",
+            "Status-only approval preserves business fields and accepts its comment");
+        Check((string)values[4] == "EUR" && (decimal)values[5] == 100m,
+            "Status-only approval retains the APP EUR reference rate despite a legacy detail value of one");
+        Check(managed.Reads.Count(x => x == "loginEntraContext") == 1 && managed.Reads.Count(x => x == "getSubordinatesByUser") == 1,
+            "Current rights and subordinate scope are each read once");
+        Check(managed.SignedViewers.All(x => x == "SELF"), "Current hierarchy and detail always use the signed actor");
+
+        var alias = new MemoryAx { SheetOwner = "MANAGED", SheetCrmOwner = "CRM_MANAGED", Status = 1 };
+        Check(Update(alias, "crm_managed", 3) == 200 && (string)alias.Writes[0].Values[1] == "MANAGED", "CRM alias resolves to the same managed AX owner");
+        var legacy = new MemoryAx { SheetOwner = "", SheetCrmOwner = "CRM_MANAGED", Status = 1, LegacySubordinate = true };
+        Check(Update(legacy, "CRM_MANAGED", 2) == 200 && (string)legacy.Writes[0].Values[1] == "CRM_MANAGED",
+            "Legacy two-column hierarchy and CRM owner remain supported");
+        foreach (var shape in new[] { 1, 2 })
+            Check(Update(new MemoryAx { SheetOwner = "OTHER", Status = 1, EmptyHierarchyShape = shape }, "OTHER", 2) == 403,
+                "Legacy empty hierarchy sentinel is a denial, not a transient failure");
+        var wrongOwner = new MemoryAx { SheetOwner = "MANAGED", Status = 1 };
+        Check(Update(wrongOwner, "SELF", 2) == 403 && wrongOwner.Writes.Count == 0, "SELF fallback cannot mutate a displayed subordinate sheet");
+        var own = new MemoryAx();
+        Check(Update(own, "SELF", 1) == 200 && (string)own.Writes[0].Values[3] == "Client description", "Own draft editing remains available");
+        Check(Update(new MemoryAx(), "SELF", 2) == 409, "Normal owner cannot approve its own sheet");
+        Check(Update(new MemoryAx { SelfManagement = true, Rights = 1 }, "SELF", 2) == 200,
+            "Existing self-management header override works below Edit rights");
+        Check(Update(new MemoryAx { Status = 2, SelfManagement = true }, "SELF", 0) == 200, "Self-managed approval can return to draft");
+        Check(Update(new MemoryAx { Status = 4 }, "SELF", 0) == 409, "Paid status is immutable");
+        Check(Update(new MemoryAx { Voucher = "VOUCHER" }, "SELF", 1) == 409, "Assigned voucher is immutable");
+        foreach (var voucher in new[] { "", "-", ".", "0" })
+            Check(Update(new MemoryAx { Voucher = voucher }, "SELF", 1) == 200, "Existing empty-voucher sentinel " + voucher);
+        Check(Update(new MemoryAx { WrongSheetId = true }, "SELF", 1) == 503, "A different returned sheet cannot authorize the requested id");
+        Check(Update(new MemoryAx(), "SELF", 1, company: "OTHER") == 403, "Signed company scope remains enforced");
+        Check(Update(new MemoryAx(), "SELF", 1, invalidToken: true) == 403, "Invalid signed context remains rejected");
+    }
+
+    // Recreates each request so permission removal cannot be hidden by previous successful authorization.
+    private static void CurrentPermissions()
+    {
+        var ax = new MemoryAx();
+        Check(Update(ax, "SELF", 1) == 200, "Initial allowed request");
+        ax.Rights = 1;
+        Check(Update(ax, "SELF", 1) == 403 && ax.Writes.Count == 1, "Next request sees removed Edit rights");
+        ax.Rights = 4; ax.FailContext = true;
+        Check(Update(ax, "SELF", 1) == 503 && ax.Writes.Count == 1, "COM failure never reuses previous authorization");
+        ax.FailContext = false;
+        Check(Update(ax, "SELF", 1) == 200, "Transient permission read recovers on retry");
+        Check(Update(new MemoryAx { CurrentActor = "CHANGED" }, "SELF", 1) == 403, "Changed current actor is rejected");
+        Check(Update(new MemoryAx { ActiveUser = false }, "SELF", 1) == 403, "Inactive user is rejected");
+        Check(Update(new MemoryAx { CurrentCompany = "OTHER" }, "SELF", 1) == 403, "No fallback to another current company");
+        Check(Update(new MemoryAx { FailHeader = true }, "SELF", 1) == 503, "Unreadable sheet status never becomes draft");
+        Check(Update(new MemoryAx { SheetOwner = "MANAGED", Status = 1, FailHierarchy = true }, "MANAGED", 2) == 503,
+            "Unreadable hierarchy cannot grant delegation");
+    }
+
+    // Covers every equivalent owner-header write family and protected internal cleanup.
+    private static void OtherWriteFamilies()
+    {
+        foreach (ExpenseMutationOperation operation in Enum.GetValues(typeof(ExpenseMutationOperation)))
+        {
+            if (operation == ExpenseMutationOperation.SheetHeaderUpdate) continue;
+            var ax = new MemoryAx();
+            var service = Service(ax);
+            try
+            {
+                service.Authorize(operation, "MANAGED", "POST", "/api/crm/expensesheets/tickets", "SHEET", "TICKET");
+                throw new Exception("Unexpected delegated write: " + operation);
+            }
+            catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.Forbidden, "Own-only family " + operation); }
+        }
+        var own = new MemoryAx();
+        Check(Service(own).Authorize(ExpenseMutationOperation.SheetLineUpdate, "CRM_SELF", "PUT", "/api/crm/expensesheets/SHEET/lines/1", "SHEET").OwnerAxUserId == "SELF",
+            "Own CRM alias can update its draft line");
+        var assigned = new MemoryAx { SheetOwner = "OTHER", SheetCrmOwner = "CRM_OTHER" };
+        try { Service(assigned).Authorize(ExpenseMutationOperation.TicketBulkLink, "SELF", "POST", "/api/crm/expensesheets/tickets/link/bulk", "SHEET"); throw new Exception("Expected rejection"); }
+        catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.Forbidden, "Bulk link checks actual sheet owner"); }
+        var wrongTicket = new MemoryAx { TicketOwner = "OTHER" };
+        try { Service(wrongTicket).Authorize(ExpenseMutationOperation.TicketUpdate, "SELF", "PUT", "/api/crm/expensesheets/tickets/TICKET", ticketId: "TICKET"); throw new Exception("Expected rejection"); }
+        catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.Forbidden, "Ticket checks actual owner"); }
+        var cleanup = new MemoryAx { TicketRights = 0 };
+        Check(Service(cleanup).Authorize(ExpenseMutationOperation.TicketCleanup, "SELF", "POST", "/api/crm/expensesheets/SHEET/delete", ticketId: "TICKET") != null,
+            "Durable sheet cleanup retains its existing sheet permission");
+        try { Service(cleanup).Authorize(ExpenseMutationOperation.TicketDelete, "SELF", "DELETE", "/api/crm/expensesheets/tickets/TICKET", ticketId: "TICKET"); throw new Exception("Expected rejection"); }
+        catch (ExpenseAuthorizationException ex) { Check(ex.Status == HttpStatusCode.Forbidden, "Public ticket deletion still requires ticket rights"); }
+        Check(ExpenseMutationPolicy.RequiredAccess(ExpenseMutationOperation.TicketCleanup) == 4,
+            "Internal cleanup does not inherit Add from the outer POST");
+        var ticketAx = new MemoryAx { TicketOwner = "OTHER" };
+        var ticketController = new CrmExpenseSheetTicketsController(ticketAx, new QuietLogger());
+        Prepare(ticketController, "SELF", HttpMethod.Delete, "/api/crm/expensesheets/tickets/TICKET");
+        Check(Status(ticketController.DeleteExpenseSheetTicket("TICKET")) == 403 && ticketAx.Writes.Count == 0,
+            "Real ticket DELETE invokes the common boundary");
+    }
+
+    // Uses the production service with a deterministic AX transport.
+    private static ExpenseMutationAuthorizationService Service(MemoryAx ax)
+    { return new ExpenseMutationAuthorizationService(ax.Read, "SELF", "DAT", "oid-self"); }
+    // Executes the real controller action rather than mirroring its guards in a test.
+    private static int Update(MemoryAx ax, string owner, int next, string notificationActor = null, string company = "DAT", bool invalidToken = false, int? reimbursement = null)
+    {
+        var controller = new CrmExpenseSheetsController(ax, new QuietLogger());
+        Prepare(controller, owner, HttpMethod.Put, "/api/crm/expensesheets/SHEET", company, invalidToken);
+        if (notificationActor != null) controller.Request.Headers.Add("X-IND-ActorAxUserId", notificationActor);
+        return Status(controller.UpdateExpenseSheetHeader("SHEET", new UpdateExpenseSheetHeaderRequest
+        { description = "Client description", expenseSheetStatus = next, estadoComentarios = "new comment", projId = "CLIENT_PROJECT", currencyCode = "USD", exchRate = 100m,
+            reimbursableExpense = reimbursement }));
+    }
+    // Signs a valid functional context with isolated settings and a synthetic authenticated channel.
+    private static void Prepare(ApiController controller, string owner, HttpMethod method, string path, string company = "DAT", bool invalidToken = false)
+    {
+        var snapshot = UserCompanyAccessCache.SetSnapshot("fixture-tenant", Guid.NewGuid().ToString("N"), "SELF", "DAT", "CRM", new[] { "DAT" }, UserCompanyAccessCache.CreateContextVersion());
+        var request = new HttpRequestMessage(method, "https://isolated.invalid" + path);
+        request.SetConfiguration(new HttpConfiguration());
+        controller.Request = request;
+        controller.RequestContext.Principal = new GenericPrincipal(new GenericIdentity("APIAX", "test-auth"), new string[0]);
+        request.Headers.Add("X-IND-Company", company);
+        request.Headers.Add("X-IND-AxUserId", owner);
+        request.Headers.Add("X-IND-EntraOid", snapshot.EntraOid);
+        request.Headers.Add("X-IND-Context-Version", snapshot.ContextVersion.ToString());
+        request.Headers.Add("X-IND-Permissions-Revision", snapshot.PermissionsRevision);
+        request.Headers.Add("X-IND-Context-Token", invalidToken ? "invalid" : UserContextTokenService.CreateToken(snapshot));
+    }
+    private static int Status(IHttpActionResult result) { return (int)result.ExecuteAsync(CancellationToken.None).GetAwaiter().GetResult().StatusCode; }
+    private static void Check(bool value, string name) { if (!value) throw new Exception("FAILED: " + name); checks++; }
+}
+
+// Supplies current authorization data and records every attempted write without contacting AX.
+internal sealed class MemoryAx : IAxaptaSessionManager
+{
+    internal string SheetOwner = "SELF", SheetCrmOwner = "CRM_SELF", TicketOwner = "SELF", CurrentActor = "SELF", CurrentCompany = "DAT", Voucher = "", Reimbursement = "0";
+    internal int Status, Rights = 4, TicketRights = 4, EmptyHierarchyShape;
+    internal bool SelfManagement, HasSubordinate = true, ActiveUser = true, WrongSheetId, FailContext, FailHeader, FailHierarchy, LegacySubordinate;
+    internal readonly List<string> Reads = new List<string>(), SignedViewers = new List<string>();
+    internal readonly List<MemoryContainer> Writes = new List<MemoryContainer>();
+    internal IAxaptaContainer Read(string className, string method, object[] values)
+    {
+        Reads.Add(method);
+        if (method == "loginEntraContext")
+        {
+            if (FailContext) throw new COMException("isolated context fault");
+            return Box(Box(Box("1", "OK", CurrentActor, ActiveUser ? "1" : "0", "1", CurrentCompany, "EUR", "Self")),
+                Box(Box(CurrentCompany, "1", "Company", "EUR", SelfManagement ? "1" : "0", "CRM_SELF",
+                    Box(Box("GASTOS_HOJA_GASTO", "Sheets", "1", Rights.ToString()), Box("GASTOS_TICKETS", "Tickets", "1", TicketRights.ToString())))));
+        }
+        if (method == "getSubordinatesByUser")
+        {
+            SignedViewers.Add((string)values[1]);
+            if (FailHierarchy) throw new COMException("isolated hierarchy fault");
+            if (EmptyHierarchyShape == 1) return Box("Sin datos.");
+            if (EmptyHierarchyShape == 2) return Box(Box("Sin datos."));
+            if (LegacySubordinate) return Box(Box("CRM_MANAGED", "Managed"));
+            return HasSubordinate ? Box(Box("CRM_MANAGED", "MANAGED", "Managed")) : Box();
+        }
+        if (method == "getExpenseSheet")
+        {
+            SignedViewers.Add((string)values[1]);
+            var row = Box("1", "OK", WrongSheetId ? "DIFFERENT" : "SHEET", "Stored description", Status.ToString(), "Old comment", SheetCrmOwner,
+                "EUR", "100", "1", "0", "STORED_PROJECT", Voucher, "11.09.2026", Reimbursement, "Owner", SheetOwner, "Owner", "100");
+            if (FailHeader) row.FailPeek = 5;
+            return Box(Box(row), Box());
+        }
+        if (method == "getExpenseSheetTicket")
+            return Box(Box(Box("1", "OK", "TICKET", "Ticket", "0", "EUR", "10", "CRM_SELF", "11.09.2026", "", "", "", "0", "1", "", "", "", "", "", TicketOwner, "Owner")), Box());
+        Writes.Add(new MemoryContainer(values));
+        return Box(Box(Box("1", "OK", "SHEET")), Box());
+    }
+    internal static MemoryContainer Box(params object[] values) { return new MemoryContainer(values); }
+    public AxaptaComSession GetAxInstanceForUser(string user) { return new AxaptaComSession(Read); }
+    public bool CreateOrGetSession(string u, string p, JwtService.JwtTokenInfo token) { throw new NotSupportedException(); }
+    public bool RefreshSessionToken(string u, JwtService.JwtTokenInfo n, string o) { throw new NotSupportedException(); }
+    public object CallMethodByUser(string u, string c, string m, object a = null) { throw new NotSupportedException(); }
+    public IAxaptaContainer CallContainerMethodByUser(string u, string c, string m, object[] a = null) { throw new NotSupportedException(); }
+}
+
+// Implements the AX container wire shape and injects deterministic read faults.
+internal sealed class MemoryContainer : IAxaptaContainer
+{
+    internal readonly List<object> Values;
+    internal int FailPeek;
+    internal MemoryContainer(IEnumerable<object> values) { Values = values.ToList(); }
+    public int Length() { return Values.Count; }
+    public object Peek(int index) { if (index == FailPeek) throw new COMException("isolated scalar fault"); return Values[index - 1]; }
+    public void Append(object a, object b, object c, object d, object e, object f)
+    { foreach (var item in new[] { a, b, c, d, e, f }) if (item != Missing.Value) Values.Add(item); }
+    public void Delete(int i, int c) { throw new NotSupportedException(); }
+    public int Find(object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public int FindEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Insert(int i, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void InsertEx(int i, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void Poke(int i, object a, object b, object c, object d, object e, object f) { throw new NotSupportedException(); }
+    public void PokeEx(int i, AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void AppendEx(AxaptaParameterList args) { throw new NotSupportedException(); }
+    public void DeleteAll() { Values.Clear(); }
+}
+internal sealed class QuietLogger : IAxLogger
+{ public void Log(string message, AxaptaSessionManager.LogLevel level = AxaptaSessionManager.LogLevel.Info) { } }
+namespace IND_CRM_API.Helpers
+{
+    // Never reads machine configuration, credentials or live endpoints in this fixture.
+    public static class AppSettingsHelper
+    {
+        public static string GetMachineEnvironmentVariable(params string[] names) { return names.Contains("CRM_TENANT_ID") ? "fixture-tenant" : null; }
+        public static string GetSetting(string name, params string[] alternatives)
+        {
+            if (name.EndsWith("SecretKey")) return "fixture-only-key-012345678901234567890123456789";
+            if (name.EndsWith("Issuer")) return "fixture-issuer";
+            if (name.EndsWith("Audience")) return "fixture-audience";
+            return null;
+        }
+        public static int GetIntSetting(string name, int fallback, params string[] alternatives) { return fallback; }
+        public static bool GetBoolSetting(string name, bool fallback = false, params string[] alternatives) { return fallback; }
+    }
+}
+namespace IND_CRM_API.Services
+{
+    // Replaces COM transport only; controllers, JWT validation, authorization and all mappers are production sources.
+    public sealed class AxaptaComSession
+    {
+        private readonly Func<string, string, object[], IAxaptaContainer> read;
+        public AxaptaComSession(Func<string, string, object[], IAxaptaContainer> value) { read = value; }
+        public IAxaptaContainer CreateContainer() { return new MemoryContainer(new object[0]); }
+        public object CallStaticClassMethod(string className, string method, object input)
+        { return read(className, method, ((MemoryContainer)input).Values.ToArray()); }
+    }
+    public static class AxaptaSessionManager
+    {
+        public enum LogLevel { Info, Warning, Error }
+        public static void LogStatic(string value) { }
+    }
+}
