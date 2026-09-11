@@ -85,7 +85,8 @@ namespace IND_CRM_API.Helpers
             long expectedContextVersion,
             string expectedPermissionsRevision,
             string requestedCompany,
-            UserCompanyAccessCache.Snapshot latestSnapshot)
+            UserCompanyAccessCache.Snapshot latestSnapshot,
+            string expectedAppCode = "CRM")
         {
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -138,6 +139,18 @@ namespace IND_CRM_API.Helpers
                     {
                         IsStale = true,
                         Reason = "context-token-entraoid-mismatch",
+                        Snapshot = snapshot
+                    };
+                }
+
+                // The expected application belongs to the caller's endpoint, never to an unsigned header.
+                if (string.IsNullOrWhiteSpace(expectedAppCode) ||
+                    !string.Equals(Normalize(expectedAppCode), Normalize(snapshot.AppCode), StringComparison.Ordinal))
+                {
+                    return new ValidationResult
+                    {
+                        IsStale = true,
+                        Reason = "context-token-application-mismatch",
                         Snapshot = snapshot
                     };
                 }

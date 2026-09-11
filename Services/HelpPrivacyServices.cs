@@ -134,7 +134,8 @@ namespace IND_CRM_API.Services
                     UserFingerprint = userFingerprint,
                     ExpiresAtUtc = DateTimeOffset.FromUnixTimeSeconds(expiresSeconds.Value).UtcDateTime
                 };
-                if (!TryMarkConsumed(token, expiresSeconds.Value))
+                // The verified payload stays identical when the signature uses an equivalent Base64 encoding.
+                if (!TryMarkConsumed(parts[0], expiresSeconds.Value))
                     return false;
                 payload = validatedPayload;
                 return true;
@@ -145,10 +146,10 @@ namespace IND_CRM_API.Services
             }
         }
 
-        // Stores only a token digest and atomically rejects replay within this process.
-        private bool TryMarkConsumed(string token, long expiresAtUnixSeconds)
+        // Stores only a signed-payload digest and atomically rejects replay within this process.
+        private bool TryMarkConsumed(string signedPayload, long expiresAtUnixSeconds)
         {
-            var tokenHash = ComputeTokenHash(token);
+            var tokenHash = ComputeTokenHash(signedPayload);
             var nowUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             lock (_consumptionSync)
             {

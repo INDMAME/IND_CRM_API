@@ -57,6 +57,9 @@ internal static class CacheBehaviorTests
     private static void Main(string[] args)
     {
         Run("live context remains valid", LiveContext);
+        Run("application grants, denials and revalidation remain isolated", ApplicationIsolation);
+        Run("CRM rejects another application's signed token even without a cached snapshot", ApplicationTokenValidation);
+        Run("legacy CRM keys and tokens survive an unchanged context renewal", LegacyCrmContext);
         Run("empty company refresh invalidates previous signed token", EmptyCompanies);
         Run("regrant never resurrects an older revoked token", Regrant);
         Run("ambiguous AX failure suspends context and recovers without permanent revocation", Revalidation);
@@ -68,6 +71,7 @@ internal static class CacheBehaviorTests
         Run("exchange same-key concurrent miss is shared", ExchangeSingleFlight);
         Run("ECB feed is shared across pairs and preserves provider date", EcbFeed);
         Run("feedback replay is atomic and expiry cleanup reaches expired entries", Feedback);
+        Run("equivalent feedback signatures share one consumption identity", FeedbackEquivalentEncodings);
         Run("pending questions have an atomic capacity and ordered expiry", PendingQuestions);
         Run("knowledge reload survives missing files and backs off invalid versions", () => Knowledge(args[0]));
         Run("AX credentials follow live tokens and raw tokens are never retained", AxCredentials);
@@ -92,6 +96,57 @@ internal static class CacheBehaviorTests
     {
         var snapshot = Snapshot("live", "company");
         Assert(IsValid(UserContextTokenService.CreateToken(snapshot), snapshot), "Valid signed context was rejected.");
+    }
+    // Exercises all authorization mutations for two applications sharing one real user.
+    private static void ApplicationIsolation()
+    {
+        var crm = Snapshot("app-isolation", "company");
+        var crmToken = UserContextTokenService.CreateToken(crm);
+        var other = UserCompanyAccessCache.SetSnapshot("tenant", "app-isolation", "other-actor", "company", "OTHER",
+            new[] { "company" }, UserCompanyAccessCache.CreateContextVersion());
+        Assert(IsValid(crmToken, crm) && other.SnapshotKey != crm.SnapshotKey, "Another application replaced the CRM grant.");
+        Assert(UserCompanyAccessCache.GetSnapshot("tenant", "app-isolation", "other").AxUserId == "other-actor",
+            "Application lookup lost case-insensitive identity or returned the CRM actor.");
+        UserCompanyAccessCache.Revoke("tenant", "app-isolation", "OTHER");
+        Assert(IsValid(crmToken, crm) && UserCompanyAccessCache.GetSnapshot("tenant", "app-isolation", "OTHER").IsRevoked,
+            "Another application's denial revoked CRM or was not retained.");
+        UserCompanyAccessCache.RequireRevalidation("tenant", "app-isolation", "OTHER", UserCompanyAccessCache.CreateContextVersion());
+        Assert(IsValid(crmToken, crm) && UserCompanyAccessCache.GetSnapshot("tenant", "app-isolation", "OTHER").RequiresRevalidation,
+            "Another application's uncertain response suspended CRM or lost its own suspension.");
+        other = UserCompanyAccessCache.SetSnapshot("tenant", "app-isolation", "other-actor", "company", "OTHER",
+            new[] { "company" }, UserCompanyAccessCache.CreateContextVersion());
+        var otherToken = UserContextTokenService.CreateToken(other);
+        UserCompanyAccessCache.Revoke("tenant", "app-isolation", "CRM");
+        Assert(!IsValid(crmToken, crm), "CRM denial stopped invalidating its own tokens.");
+        Assert(UserContextTokenService.Validate(otherToken, "tenant", "app-isolation", other.ContextVersion,
+            other.PermissionsRevision, "company", UserCompanyAccessCache.GetSnapshot("tenant", "app-isolation", "OTHER"), "OTHER").IsValid,
+            "CRM denial revoked another application's valid token.");
+    }
+    // The endpoint selects its application; an otherwise valid foreign token cannot select a CRM scope.
+    private static void ApplicationTokenValidation()
+    {
+        var other = UserCompanyAccessCache.SetSnapshot("tenant", "foreign-token", "other-actor", "company", "OTHER",
+            new[] { "company" }, UserCompanyAccessCache.CreateContextVersion());
+        var token = UserContextTokenService.CreateToken(other);
+        var missingCrm = UserCompanyAccessCache.GetSnapshot("tenant", "foreign-token");
+        Assert(!missingCrm.Exists, "A foreign grant populated the CRM cache.");
+        var validation = UserContextTokenService.Validate(token, "tenant", "foreign-token", other.ContextVersion,
+            other.PermissionsRevision, "company", missingCrm);
+        Assert(!validation.IsValid && validation.Reason == "context-token-application-mismatch", "CRM accepted a foreign application token.");
+    }
+    // CRM keeps its previous key and signed claims, including while its cache is cold after a restart.
+    private static void LegacyCrmContext()
+    {
+        var original = Snapshot("legacy-crm", "company");
+        Assert(original.SnapshotKey == "tenant:legacy-crm" &&
+            UserCompanyAccessCache.BuildSnapshotKey("TENANT", "LEGACY-CRM", " crm ") == original.SnapshotKey,
+            "The existing CRM key changed.");
+        var token = UserContextTokenService.CreateToken(original);
+        Snapshot("legacy-crm", "company");
+        Assert(IsValid(token, original), "An unchanged CRM renewal rejected the previously signed token.");
+        Assert(UserContextTokenService.Validate(token, "tenant", "legacy-crm", original.ContextVersion,
+            original.PermissionsRevision, "company", new UserCompanyAccessCache.Snapshot { Exists = false }).IsValid,
+            "The existing cold-cache CRM token behavior changed.");
     }
     private static void EmptyCompanies()
     {
@@ -276,6 +331,28 @@ internal static class CacheBehaviorTests
         cleanup.Invoke(service, new object[] { now + 11, 256 });
         var hashes = Field(service, "_consumedTokenHashes");
         Assert((int)hashes.GetType().GetProperty("Count").GetValue(hashes) == 301, "Ordered cleanup missed expired hashes or evicted live ones.");
+    }
+    // Equivalent encodings must share one atomic admission; invalid callers must not consume the payload.
+    private static void FeedbackEquivalentEncodings()
+    {
+        var service = new HelpFeedbackTokenService("test-feedback-secret-01234567890123456789", 60);
+        var token = service.Create(Guid.NewGuid().ToString(), "user");
+        var variants = new[] { token, token + "=", token + "    ", token + "=    " };
+        var accepted = 0;
+        Parallel.For(0, 64, i =>
+        {
+            HelpFeedbackTokenPayload value;
+            if (service.TryConsume(variants[i % variants.Length], "user", out value)) Interlocked.Increment(ref accepted);
+        });
+        Assert(accepted == 1, "Equivalent signature encodings consumed the same feedback more than once.");
+        var fresh = service.Create(Guid.NewGuid().ToString(), "user");
+        var signatureStart = fresh.IndexOf('.') + 1;
+        var tampered = fresh.Substring(0, signatureStart) + (fresh[signatureStart] == 'A' ? 'B' : 'A') + fresh.Substring(signatureStart + 1);
+        HelpFeedbackTokenPayload payload;
+        Assert(!service.TryConsume(fresh, "other-user", out payload) && !service.TryConsume(tampered, "user", out payload),
+            "An invalid caller or signature consumed a feedback token.");
+        Assert(service.TryConsume(fresh + "=", "user", out payload) && !service.TryConsume(fresh, "user", out payload),
+            "A legitimate padded token was rejected or its canonical replay remained usable.");
     }
     private static void PendingQuestions()
     {

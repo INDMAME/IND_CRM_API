@@ -8,7 +8,7 @@ Separar la cuenta técnica que abre Axapta de la identidad funcional del usuario
 
 - `APIAX` autentica el canal técnico y abre el Business Connector. No representa al usuario que navega.
 - El usuario real se identifica por `tenantId + entraOid`.
-- El usuario AX funcional, sus empresas y permisos se guardan en una instantánea temporal propia mediante `UserCompanyAccessCache`.
+- El usuario AX funcional, sus empresas y permisos se guardan en una instantánea temporal propia por aplicación mediante `UserCompanyAccessCache`.
 - La empresa activa pertenece a la sesión web del usuario y debe estar incluida en esa instantánea.
 
 ## Flujo vigente
@@ -22,7 +22,7 @@ Separar la cuenta técnica que abre Axapta de la identidad funcional del usuario
    - `X-IND-Context-Version`;
    - `X-IND-Permissions-Revision`;
    - `X-IND-Context-Token`.
-5. `BaseCrmController` valida firma, expiración, identidad, versión, revisión y pertenencia de la empresa.
+5. `BaseCrmController` valida firma, expiración, identidad, aplicación `CRM`, versión, revisión y pertenencia de la empresa.
 6. El actor AX autorizado se obtiene de la instantánea firmada cuando el endpoint lo exige.
 
 ## Papel de `X-IND-AxUserId`
@@ -43,11 +43,15 @@ La renovación silenciosa mejora la continuidad, pero no transforma un permiso d
 
 ## Retención e invalidación de las cachés
 
-`UserCompanyAccessCache` conserva como máximo 50.000 identidades y elimina entradas cuando vence su retención. No desaloja revisiones vivas para admitir otra identidad. El plazo nunca se reduce por debajo de la expiración previamente emitida. La versión se reserva antes de consultar AX, dentro del acceso COM serializado; una respuesta anterior no puede sobrescribir una observación más reciente.
+`UserCompanyAccessCache` conserva como máximo 50.000 contextos de usuario y aplicación y elimina entradas cuando vence su retención. No desaloja revisiones vivas para admitir otro contexto. El plazo nunca se reduce por debajo de la expiración previamente emitida. La versión se reserva antes de consultar AX, dentro del acceso COM serializado; una respuesta anterior no puede sobrescribir una observación más reciente.
+
+Las claves incluyen la aplicación; CRM conserva su clave histórica y la compatibilidad de sus tokens ya emitidos. Consultar, denegar o suspender otra aplicación no reemplaza el contexto CRM retenido del mismo OID. Las rutas CRM comprueban también la aplicación firmada cuando no existe una instantánea local. La protección global ante saturación se mantiene para tokens antiguos sin instantánea local.
 
 Una denegación explícita de usuario o aplicación, o un contexto exitoso sin empresas, invalida los tokens anteriores mediante un registro de revocación. Recuperar permisos emite un contexto nuevo y no resucita los tokens revocados. AX también puede devolver usuario y aplicación activos sin empresas tanto por falta de permisos como por fallos de lectura por empresa. Ese caso suspende temporalmente el contexto con `RequiresRevalidation` y responde `503/AUTH_CONTEXT_STALE`; una consulta posterior exitosa levanta la suspensión. Los fallos COM, timeouts y resultados genéricos incompletos no se convierten en revocaciones.
 
 El almacén AX de autenticación guarda hashes de los tokens, no sus valores reutilizables. Mantiene como máximo 50.000 bindings y 10.000 credenciales; cada credencial se conserva hasta la mayor expiración de los tokens emitidos para ese usuario, con el mismo margen de tres minutos de la validación JWT. Una renovación corta no reduce ese plazo. No contiene sesiones COM ni cambia su ciclo de vida por petición.
+
+La caché de valoraciones de ayuda identifica cada consumo por el hash del contenido cuya firma ya se ha validado. Las codificaciones Base64 equivalentes de una firma comparten así un único consumo, conservando el formato de los tokens y su caducidad.
 
 Las ventanas IA se limitan a 50.000 estados y 10.000 usuarios simultáneos, con admisión y liberación atómicas. Las ventanas vencidas se depuran como máximo una vez por minuto; alcanzar capacidad nunca reinicia una cuota vigente. Estas garantías son locales al proceso: reiniciar la API reinicia las cuotas y el conocimiento local de revisiones/revocaciones. El contexto firmado conserva su validación criptográfica y caducidad.
 

@@ -17,7 +17,7 @@
 ## Identidad y contexto funcional
 
 - El bearer autentica el canal técnico entre APP y API; `APIAX` sigue siendo la identidad técnica de la integración COM.
-- La autorización funcional se aísla por `tenantId + entraOid` mediante `UserCompanyAccessCache` y un token de contexto firmado por `UserContextTokenService`.
+- La autorización funcional se aísla por `tenantId + entraOid + appCode` mediante `UserCompanyAccessCache` y un token de contexto firmado por `UserContextTokenService`. CRM conserva su clave histórica; los endpoints CRM exigen que la aplicación del token firmado sea `CRM`.
 - Los endpoints CRM dependientes de empresa validan `X-IND-Company`, OID Entra, versión de contexto, revisión de permisos y token firmado en `BaseCrmController`.
 - La instantánea validada aporta el usuario AX funcional del solicitante. Una cabecera `X-IND-AxUserId` puede seguir existiendo en contratos heredados o representar al propietario de una operación concreta, pero no sustituye al actor firmado.
 - En el detalle de hojas, el viewer se obtiene con `RequireValidatedSnapshotAxUserIdOrReturn403`; no se confía en el usuario enviado por el navegador para decidir qué puede ver.

@@ -34,6 +34,7 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
   Si no se puede vincular el token renovado a la sesión, devuelve `503` con `INTERNAL_ERROR` y no entrega un token nuevo.
 - POST /api/auth/entra/context (Authorize)
   Cuerpo: `{ "entraOid": "GUID", "appCode": "APP" }`.
+  Las renovaciones, revocaciones y suspensiones se aíslan por usuario y aplicación. Los endpoints CRM requieren un contexto firmado para `CRM`; los tokens CRM emitidos antes de este aislamiento siguen siendo compatibles.
   Campos de la respuesta de contexto: `ContextToken`, `ContextVersion`, `PermissionsRevision`, `ContextIssuedUtc`, `ContextExpiresUtc`, `Header.DefaultCurrencyCode`, `Header.UserName`, `Companies[].CurrencyCode`, `Companies[].AllowSelfManagement`, `Companies[].CrmUserId`.
   Un resultado AX ambiguo con aplicación y usuario activos pero sin empresas deja el contexto pendiente de revalidación: `503` con `AUTH_CONTEXT_STALE`. Una lectura AX exitosa permite recuperarlo; no implica una revocación definitiva. La saturación del almacén devuelve `503` con `AUTH_CONTEXT_REQUIRED`; una renovación concurrente superada devuelve `503` con `AUTH_CONTEXT_STALE`.
 
@@ -136,7 +137,7 @@ URL base: `{{baseUrl}}`. Las URLs vigentes de DEV y PROD se mantienen en `docs/o
 - POST /api/help/feedback (Authorize)
   Cuerpo obligatorio: `feedbackToken`, `helpful`.
   Si `helpful=false`, `reason` es obligatorio: `incorrect`, `outdated`, `unclear`, `incomplete`, `permissions`, `other`. `comment` es opcional (máximo 1.000).
-  El token HMAC está ligado al usuario y a `InteractionId`, caduca en 60 minutos por defecto y se consume una sola vez por proceso API; una repetición devuelve 403.
+  El token HMAC está ligado al usuario y a `InteractionId`, caduca en 60 minutos por defecto y se consume una sola vez por proceso API; una repetición devuelve 403, incluidas las variantes equivalentes de codificación Base64 de su firma.
 
 ### Runtime y configuración
 

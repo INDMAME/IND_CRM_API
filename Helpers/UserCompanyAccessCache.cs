@@ -9,7 +9,7 @@ using IND_CRM_API.Services;
 namespace IND_CRM_API.Helpers
 {
     /// <summary>
-    /// Stores the latest authorization snapshot per real Entra user.
+    /// Stores the latest authorization snapshot per real Entra user and application.
     /// </summary>
     public static class UserCompanyAccessCache
     {
@@ -65,16 +65,19 @@ namespace IND_CRM_API.Helpers
         private static readonly TimeSpan DefaultTtl = ResolveTtl();
 
         /// <summary>
-        /// Builds a stable cache key from tenant and Entra OID.
+        /// Scopes authorization by application while preserving the legacy CRM key.
         /// </summary>
-        public static string BuildSnapshotKey(string tenantId, string entraOid)
+        public static string BuildSnapshotKey(string tenantId, string entraOid, string appCode = "CRM")
         {
             var normalizedTenantId = NormalizeTokenPart(tenantId);
             var normalizedEntraOid = NormalizeTokenPart(entraOid);
-            if (string.IsNullOrWhiteSpace(normalizedTenantId) || string.IsNullOrWhiteSpace(normalizedEntraOid))
+            var normalizedAppCode = NormalizeTokenPart(appCode);
+            if (string.IsNullOrWhiteSpace(normalizedTenantId) || string.IsNullOrWhiteSpace(normalizedEntraOid) ||
+                string.IsNullOrWhiteSpace(normalizedAppCode))
                 return null;
 
-            return normalizedTenantId + ":" + normalizedEntraOid;
+            var userKey = normalizedTenantId + ":" + normalizedEntraOid;
+            return normalizedAppCode == "crm" ? userKey : userKey + ":" + normalizedAppCode;
         }
 
         /// <summary>
@@ -90,10 +93,10 @@ namespace IND_CRM_API.Helpers
             long contextVersion,
             bool requiresRevalidation = false)
         {
-            var snapshotKey = BuildSnapshotKey(tenantId, entraOid);
+            var snapshotKey = BuildSnapshotKey(tenantId, entraOid, appCode);
             if (string.IsNullOrWhiteSpace(snapshotKey))
             {
-                LogCacheEvent("set-invalid-key", null, null, null, "TenantId or EntraOid missing.");
+                LogCacheEvent("set-invalid-key", null, null, null, "TenantId, EntraOid or AppCode missing.");
                 return CreateMissingSnapshot();
             }
 
@@ -158,11 +161,11 @@ namespace IND_CRM_API.Helpers
         }
 
         /// <summary>
-        /// Gets the latest snapshot for a real Entra user.
+        /// Gets the latest snapshot for a real Entra user in the requested application.
         /// </summary>
-        public static Snapshot GetSnapshot(string tenantId, string entraOid)
+        public static Snapshot GetSnapshot(string tenantId, string entraOid, string appCode = "CRM")
         {
-            return GetSnapshotByKey(BuildSnapshotKey(tenantId, entraOid));
+            return GetSnapshotByKey(BuildSnapshotKey(tenantId, entraOid, appCode));
         }
 
         /// <summary>
@@ -192,7 +195,7 @@ namespace IND_CRM_API.Helpers
         // Suspends use of an uncertain observation until AX returns a complete successful context again.
         public static Snapshot RequireRevalidation(string tenantId, string entraOid, string appCode, long contextVersion)
         {
-            var key = BuildSnapshotKey(tenantId, entraOid);
+            var key = BuildSnapshotKey(tenantId, entraOid, appCode);
             if (string.IsNullOrWhiteSpace(key)) return CreateMissingSnapshot();
             lock (CacheSync)
             {
