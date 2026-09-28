@@ -184,7 +184,7 @@
     <p>El email se usa para avisar a la persona que debe actuar o estar informada después de una transición relevante de la hoja de gastos.</p>
     <ul>
       <li>Solicitar revisión o aprobación a los responsables.</li>
-      <li>Informar a los responsables de que el propietario ha cancelado una solicitud pendiente para corregir la hoja.</li>
+      <li>Informar a los responsables de que el propietario ha deshecho una solicitud pendiente para corregir la hoja.</li>
       <li>Informar al empleado de que su hoja ha sido aprobada.</li>
       <li>Informar al empleado de que su hoja ha sido rechazada.</li>
       <li>Informar al propietario cuando un responsable deshace una aprobación o un rechazo anterior.</li>
@@ -213,7 +213,7 @@
     </section>
 
     <section class="inventory-item">
-      <h4>Cancelación de Solicitud de Aprobación</h4>
+      <h4>Solicitud de Aprobación Deshecha</h4>
       <p>Se envía cuando el propietario deshace una solicitud pendiente y la hoja vuelve de En revisión a Borrador.</p>
       <ul>
         <li>Transición: En revisión a Borrador.</li>
@@ -273,10 +273,10 @@
     <h2>Cambios de estado que no generan email</h2>
     <p>No se envía email en estos casos:</p>
     <ul>
-      <li>La hoja vuelve a Borrador desde Aprobada o Rechazada; esos cambios no cancelan una solicitud pendiente.</li>
+      <li>La hoja vuelve a Borrador desde Aprobada o Rechazada; esos cambios no deshacen una solicitud pendiente.</li>
       <li>Se cancela el diálogo de confirmación sin cambiar el estado de la hoja.</li>
       <li>Se actualizan datos de cabecera sin cambio real de estado.</li>
-      <li>El cambio de estado no encaja en solicitud, cancelación de solicitud, aprobación, rechazo o pago.</li>
+      <li>El cambio de estado no encaja en solicitud, solicitud deshecha, aprobación, rechazo o pago.</li>
       <li>Axapta no puede resolver destinatario, email o configuración mínima.</li>
       <li>El remitente y el destinatario resultan ser la misma persona.</li>
     </ul>
@@ -285,13 +285,13 @@
     <h2>Cómo decide Axapta a quién avisar</h2>
     <p>Axapta no envía siempre al mismo destinatario. Primero identifica qué evento funcional ha ocurrido y después resuelve los participantes.</p>
 
-    <h3>Solicitud y cancelación de aprobación</h3>
+    <h3>Solicitud de aprobación y solicitud deshecha</h3>
     <ul>
       <li>El propietario de la hoja actúa como remitente funcional.</li>
       <li>Los destinatarios son los responsables directos configurados para ese empleado.</li>
       <li>Si hay varios responsables, se envía un email separado a cada uno.</li>
       <li>Cada responsable recibe el email en su idioma configurado si existe plantilla para ese idioma.</li>
-      <li>La cancelación usa los mismos responsables y al propietario como remitente funcional.</li>
+      <li>La solicitud deshecha usa los mismos responsables y al propietario como remitente funcional.</li>
     </ul>
 
     <h3>Aprobación y rechazo</h3>
@@ -355,7 +355,7 @@
     <ul>
       <li>Solo se notifica si hay cambio real de estado.</li>
       <li>No todos los cambios de estado son notificables.</li>
-      <li>La solicitud y su cancelación van a los responsables del empleado.</li>
+      <li>La solicitud y el aviso de solicitud deshecha van a los responsables del empleado.</li>
       <li>La aprobación y el rechazo se notifican al empleado.</li>
       <li>La reversión de una aprobación o rechazo se notifica al empleado y vuelve a solicitar revisión a la jefatura.</li>
       <li>El pago se notifica al creador o propietario de la hoja.</li>
