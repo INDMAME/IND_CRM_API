@@ -184,8 +184,10 @@
     <p>El email se usa para avisar a la persona que debe actuar o estar informada después de una transición relevante de la hoja de gastos.</p>
     <ul>
       <li>Solicitar revisión o aprobación a los responsables.</li>
+      <li>Informar a los responsables de que el propietario ha cancelado una solicitud pendiente para corregir la hoja.</li>
       <li>Informar al empleado de que su hoja ha sido aprobada.</li>
       <li>Informar al empleado de que su hoja ha sido rechazada.</li>
+      <li>Informar al propietario cuando un responsable deshace una aprobación o un rechazo anterior.</li>
       <li>Informar de que la hoja ha sido pagada o contabilizada como pagada.</li>
     </ul>
     <p>El email no ejecuta la aprobación, el rechazo ni el pago. Solo informa y lleva al usuario a la hoja de gastos en CRM.</p>
@@ -211,6 +213,16 @@
     </section>
 
     <section class="inventory-item">
+      <h4>Cancelación de Solicitud de Aprobación</h4>
+      <p>Se envía cuando el propietario deshace una solicitud pendiente y la hoja vuelve de En revisión a Borrador.</p>
+      <ul>
+        <li>Transición: En revisión a Borrador.</li>
+        <li>Destinatarios: responsables directos del empleado propietario de la hoja, uno por correo.</li>
+        <li>Motivo: dejar visible que la solicitud anterior ya no está pendiente y que la hoja se va a corregir.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
       <h4>Aprobación</h4>
       <p>Se envía cuando la hoja pasa de En revisión a Aprobada.</p>
       <ul>
@@ -229,6 +241,26 @@
     </section>
 
     <section class="inventory-item">
+      <h4>Aprobación deshecha</h4>
+      <p>Se envía al propietario cuando un responsable devuelve una hoja Aprobada a En revisión.</p>
+      <ul>
+        <li>Transición: Aprobada a En revisión.</li>
+        <li>Destinatario: propietario de la hoja; el responsable que deshace la decisión es el remitente funcional.</li>
+        <li>La aprobación anterior deja de estar vigente. Además, los responsables reciben la solicitud de revisión ya existente.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
+      <h4>Rechazo deshecho</h4>
+      <p>Se envía al propietario cuando un responsable devuelve una hoja Rechazada a En revisión.</p>
+      <ul>
+        <li>Transición: Rechazada a En revisión.</li>
+        <li>Destinatario: propietario de la hoja; el responsable que deshace la decisión es el remitente funcional.</li>
+        <li>El rechazo anterior deja de estar vigente. Además, los responsables reciben la solicitud de revisión ya existente.</li>
+      </ul>
+    </section>
+
+    <section class="inventory-item">
       <h4>Pago</h4>
       <p>Se envía cuando la hoja queda marcada como Pagada dentro del flujo de contabilización o pago.</p>
       <ul>
@@ -241,30 +273,32 @@
     <h2>Cambios de estado que no generan email</h2>
     <p>No se envía email en estos casos:</p>
     <ul>
-      <li>La hoja vuelve a Borrador.</li>
-      <li>Se cancela una acción sin dejar la hoja en un estado notificable.</li>
+      <li>La hoja vuelve a Borrador desde Aprobada o Rechazada; esos cambios no cancelan una solicitud pendiente.</li>
+      <li>Se cancela el diálogo de confirmación sin cambiar el estado de la hoja.</li>
       <li>Se actualizan datos de cabecera sin cambio real de estado.</li>
-      <li>El cambio de estado no encaja en solicitud, aprobación, rechazo o pago.</li>
-      <li>Axapta no puede resolver destinatario, email, plantilla o configuración mínima.</li>
+      <li>El cambio de estado no encaja en solicitud, cancelación de solicitud, aprobación, rechazo o pago.</li>
+      <li>Axapta no puede resolver destinatario, email o configuración mínima.</li>
       <li>El remitente y el destinatario resultan ser la misma persona.</li>
     </ul>
-    <p>En estos casos la hoja puede quedar guardada correctamente aunque no exista email.</p>
+    <p>En estos casos la hoja puede quedar guardada correctamente aunque no exista email. Si falta una plantilla vigente para un evento notificable, Axapta intenta enviar texto plano.</p>
 
     <h2>Cómo decide Axapta a quién avisar</h2>
     <p>Axapta no envía siempre al mismo destinatario. Primero identifica qué evento funcional ha ocurrido y después resuelve los participantes.</p>
 
-    <h3>Solicitud de aprobación</h3>
+    <h3>Solicitud y cancelación de aprobación</h3>
     <ul>
       <li>El propietario de la hoja actúa como remitente funcional.</li>
       <li>Los destinatarios son los responsables directos configurados para ese empleado.</li>
       <li>Si hay varios responsables, se envía un email separado a cada uno.</li>
       <li>Cada responsable recibe el email en su idioma configurado si existe plantilla para ese idioma.</li>
+      <li>La cancelación usa los mismos responsables y al propietario como remitente funcional.</li>
     </ul>
 
     <h3>Aprobación y rechazo</h3>
     <ul>
       <li>El actor que realiza la acción actúa como remitente funcional.</li>
       <li>El destinatario es el propietario de la hoja.</li>
+      <li>Cuando el actor deshace una aprobación o rechazo, el propietario recibe un aviso específico y los responsables reciben el aviso de nueva revisión.</li>
     </ul>
 
     <h3>Pago</h3>
@@ -321,8 +355,9 @@
     <ul>
       <li>Solo se notifica si hay cambio real de estado.</li>
       <li>No todos los cambios de estado son notificables.</li>
-      <li>La solicitud de aprobación va a los responsables del empleado.</li>
+      <li>La solicitud y su cancelación van a los responsables del empleado.</li>
       <li>La aprobación y el rechazo se notifican al empleado.</li>
+      <li>La reversión de una aprobación o rechazo se notifica al empleado y vuelve a solicitar revisión a la jefatura.</li>
       <li>El pago se notifica al creador o propietario de la hoja.</li>
       <li>El email no sustituye los permisos ni las acciones reales de aprobación.</li>
       <li>El fallo del email no revierte la hoja de gastos.</li>
@@ -331,7 +366,7 @@
     <h2>Soporte funcional</h2>
     <p>Si un usuario esperaba un email y no lo recibió, revisar en este orden:</p>
     <ol>
-      <li>Que la hoja realmente haya cambiado a un estado notificable.</li>
+      <li>Que la hoja haya seguido una de las transiciones notificables indicadas arriba.</li>
       <li>Que el destinatario esperado tenga email informado.</li>
       <li>Que el empleado tenga responsables configurados si era una solicitud de aprobación.</li>
       <li>Que exista plantilla activa para el evento y el idioma del destinatario.</li>
