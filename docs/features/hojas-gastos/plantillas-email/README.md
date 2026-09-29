@@ -69,16 +69,26 @@ El envío real lo decide Axapta desde `INDCRMExpenseSheetService` y sale por `IN
 El único método COM/DLL admitido es `SendMailEx`. Su contrato incluye `attachmentFilePaths` después de `textBody` y antes de `saveToSentItems`.
 
 - Para notificaciones de hojas de gastos se envía `attachmentFilePaths` vacío.
+- Para estas notificaciones se envía `saveToSentItems=true` para solicitar a Graph una copia en Elementos enviados del buzón emisor.
 - Cualquier flujo que adjunte ficheros debe pasar rutas absolutas ya preparadas y separadas por `;`.
 - Esas rutas deben apuntar a ficheros copiados en la carpeta configurada en Axapta con `INDDefaultParameters.FilePathEmails`.
 - `IND_CRM_API` no recibe ni almacena Base64 para este flujo; solo transporta las rutas preparadas o las deja vacías.
 - La DLL lee los ficheros desde AOS, infiere el tipo de contenido y aplica los límites vigentes: máximo 10 adjuntos, 25 MB por fichero y 50 MB total antes de Base64.
 
+## Registro de envíos en Axapta
+
+`INDCRMExpenseSheetService` crea una fila en `INDMailLogTable` por destinatario cuando `SendMailEx` devuelve éxito para un aviso de cambio de estado. Usa la empresa de la hoja, `DocumentTypes=Crm_HojaGasto`, `IdDocumento=HojaGastosId`, el remitente y destinatario reales, el asunto, el cuerpo en texto plano y `TipoDocumento=eventType`. La fecha y hora de creación las aporta Axapta. La tabla no distingue fallos de envíos aceptados: los intentos rechazados siguen en los avisos de Axapta y los logs del transporte. Un fallo al insertar el registro no cambia el resultado del envío ni revierte el estado de la hoja.
+
+La clase requiere que existan en el AOT `INDMailLogTable` y el valor `INDMailDocumentTypes::Crm_HojaGasto` creado en DEV. No se modifica la tabla ni se utiliza su método heredado `EnviarMail`.
+
 ## Checklist de importación en Axapta DEV
 
 Si ya se importó la versión anterior de este evento, actualizar `INDEmailTemplateTargetModule` e `INDCRMExpenseSheetService`, el asunto de la fila `CRMApprovalRequestCancelled` y su HTML con `crm-approval-request-undone.html`. `INDEmailTemplatesForm` no cambia con este ajuste de texto. Para una primera instalación, seguir el checklist completo.
 
+Si el flujo anterior ya está instalado y solo se quiere activar la copia en Elementos enviados, basta con reimportar y compilar `INDCRMExpenseSheetService.xpo`.
+
 - [ ] Confirmar que el cliente está conectado a **DEV** y a la empresa donde se harán las pruebas. No usar una hoja real en trámite para provocar las transiciones.
+- [ ] Antes de compilar la clase, verificar en el AOT que existen `INDMailLogTable` y `INDMailDocumentTypes::Crm_HojaGasto`. Para trasladar la integración a otra instalación, llevar primero ese valor del enum y la tabla si allí no existe.
 - [ ] Exportar desde el AOT los objetos activos `INDEmailTemplateTargetModule`, `INDCRMExpenseSheetService` e `INDEmailTemplatesForm` como copia recuperable. Comparar los métodos activos con los XPO de esta entrega para preservar cambios de Axapta aún no versionados.
 - [ ] Importar `.codex/Axapta/INDEmailTemplateTargetModule.xpo` sobre el enum existente y compilarlo. Comprobar que los valores `0` a `6` conservan sus números y que `CRMApprovalRequestCancelled=5`, `CRMApprovalUndone=7` y `CRMRejectionUndone=8` aparecen una sola vez.
 - [ ] Importar `.codex/Axapta/INDCRMExpenseSheetService.xpo` sobre la clase existente. Compilar la clase y revisar errores, advertencias e Infolog.
@@ -88,6 +98,8 @@ Si ya se importó la versión anterior de este evento, actualizar `INDEmailTempl
 - [ ] Usar la prueba del formulario para `CRMApprovalRequestCancelled` con `InReview -> Draft` y un responsable destinatario. Verificar asunto, logo, enlace, estado, remitente propietario y que se recibe una sola vez.
 - [ ] Usar la prueba del formulario para `CRMApprovalUndone` con `Approved -> InReview` y para `CRMRejectionUndone` con `Rejected -> InReview`. Indicar como remitente a un responsable distinto del propietario y verificar que el propietario recibe el mensaje correcto.
 - [ ] Ejecutar las tres transiciones reales con hojas de prueba: solicitud deshecha por el propietario y ambas reversiones por un responsable. Confirmar el estado guardado, el aviso a todos los responsables cuando la hoja vuelve a revisión y el aviso adicional al propietario en cada reversión. Revisar `correlationId` e `idempotencyKey` en los registros del transporte y descartar duplicados.
+- [ ] Comprobar que el mensaje de prueba aparece en Elementos enviados del buzón usado como remitente.
+- [ ] En la empresa de la hoja de prueba, comprobar en `INDMailLogTable` una fila por destinatario aceptado, con `DocumentTypes=Crm_HojaGasto`, `IdDocumento=HojaGastosId`, remitente, destinatario, asunto y `TipoDocumento` del evento. Un envío rechazado no debe crear fila.
 - [ ] Comprobar casos negativos: cambio sin transición, `Approved -> Draft` de autogestión y `Rejected -> Draft` no deben generar estos tres avisos. Confirmar que un fallo de correo no revierte el estado ya guardado.
 
 Si falta una plantilla vigente, el servicio intenta enviar texto plano. El correo HTML solo quedará activo cuando exista la fila de `INDEmailTemplates` para el idioma del destinatario.
