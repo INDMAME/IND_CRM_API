@@ -27,6 +27,11 @@ namespace IND_CRM_API.App_Start
             var openAiDraftService = new IND_OpenAiExpenseTicketDraftService(axLogger);
             var openAiDatasetAnswerService = new IND_OpenAiDatasetAnswerService(axLogger);
             var openAiTextFormattingService = new IND_OpenAiTextFormattingService(axLogger);
+            var helpKnowledgeStore = new HelpKnowledgeStore(axLogger);
+            var helpTopicRetriever = new HelpTopicRetriever();
+            var helpAnswerService = new HelpOpenAiAnswerService(axLogger);
+            var helpAnalyticsStore = new HelpAnalyticsStore(axLogger);
+            var helpFeedbackTokenService = new HelpFeedbackTokenService();
             var openAiTicketNormalizationService = new OpenAITicketNormalizationService(openAiDraftService);
             var ticketAiProcessingService = new TicketAIProcessingService(
                 expenseTicketBlobStorageService,
@@ -62,6 +67,11 @@ namespace IND_CRM_API.App_Start
                 { typeof(IOpenAITicketNormalizationService), openAiTicketNormalizationService },
                 { typeof(IAiDatasetAnswerService), openAiDatasetAnswerService },
                 { typeof(IND_ITextFormattingService), openAiTextFormattingService },
+                { typeof(IHelpKnowledgeStore), helpKnowledgeStore },
+                { typeof(IHelpTopicRetriever), helpTopicRetriever },
+                { typeof(IHelpAnswerService), helpAnswerService },
+                { typeof(IHelpAnalyticsStore), helpAnalyticsStore },
+                { typeof(IHelpFeedbackTokenService), helpFeedbackTokenService },
                 { typeof(IExpenseSheetAiDatasetProvider), expenseSheetAiDatasetProvider },
                 { typeof(IExchangeRateProvider), exchangeRateProvider }
             };

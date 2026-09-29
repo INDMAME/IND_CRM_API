@@ -24,10 +24,19 @@ namespace IND_CRM_API.Services
         private static readonly HttpClient SharedHttpClient = CreateSharedHttpClient();
 
         private readonly IAxLogger _logger;
+        private readonly HttpClient _httpClient;
+        private readonly object _feedSync = new object();
+        private IDictionary<string, decimal> _feedRates;
+        private DateTime _feedDate;
+        private DateTime _feedExpiresUtc;
 
-        public EcbExchangeRateProvider(IAxLogger logger)
+        public EcbExchangeRateProvider(IAxLogger logger) : this(logger, SharedHttpClient) { }
+
+        // Allows isolated transport tests while keeping the shared production HTTP client.
+        internal EcbExchangeRateProvider(IAxLogger logger, HttpClient httpClient)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         }
 
         public string ProviderName => "ECB";
@@ -49,25 +58,10 @@ namespace IND_CRM_API.Services
 
             try
             {
-                using (var request = new HttpRequestMessage(HttpMethod.Get, DailyFeedUrl))
-                using (var response = SharedHttpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead).GetAwaiter().GetResult())
+                if (!TryGetFeed(out var feedDate, out var eurRates))
+                    return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+
                 {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        _logger.Log($"[EXCHANGE-ECB] GET {DailyFeedUrl} -> {(int)response.StatusCode}", AxaptaSessionManager.LogLevel.Warning);
-                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
-                    }
-
-                    var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                    if (!TryParseDailyFeed(payload, out var feedDate, out var eurRates, out var parseError))
-                    {
-                        _logger.Log($"[EXCHANGE-ECB] Parse error reason={parseError}", AxaptaSessionManager.LogLevel.Warning);
-                        return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
-                    }
-
-                    if (!eurRates.ContainsKey(EurCurrencyCode))
-                        eurRates[EurCurrencyCode] = 1m;
-
                     if (!eurRates.TryGetValue(normalizedBase, out var basePerEur) ||
                         !eurRates.TryGetValue(normalizedTarget, out var targetPerEur) ||
                         basePerEur <= 0m ||
@@ -104,6 +98,37 @@ namespace IND_CRM_API.Services
             {
                 _logger.Log($"[EXCHANGE-ECB] Unexpected error {ex.Message}", AxaptaSessionManager.LogLevel.Warning);
                 return BuildFailure(ExchangeRateProviderErrorCodes.ProviderError, date.Date);
+            }
+        }
+
+        // Shares one bounded daily-feed snapshot across currency pairs and requested dates.
+        private bool TryGetFeed(out DateTime feedDate, out IDictionary<string, decimal> rates)
+        {
+            lock (_feedSync)
+            {
+                feedDate = _feedDate;
+                rates = _feedRates;
+                if (rates != null && DateTime.UtcNow < _feedExpiresUtc) return true;
+                using (var request = new HttpRequestMessage(HttpMethod.Get, DailyFeedUrl))
+                using (var response = _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead).GetAwaiter().GetResult())
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.Log($"[EXCHANGE-ECB] GET {DailyFeedUrl} -> {(int)response.StatusCode}", AxaptaSessionManager.LogLevel.Warning);
+                        return false;
+                    }
+                    var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    if (!TryParseDailyFeed(payload, out feedDate, out rates, out var parseError))
+                    {
+                        _logger.Log($"[EXCHANGE-ECB] Parse error reason={parseError}", AxaptaSessionManager.LogLevel.Warning);
+                        return false;
+                    }
+                    rates[EurCurrencyCode] = 1m;
+                    _feedRates = rates;
+                    _feedDate = feedDate;
+                    _feedExpiresUtc = DateTime.UtcNow.AddMinutes(15);
+                    return true;
+                }
             }
         }
 
@@ -147,6 +172,7 @@ namespace IND_CRM_API.Services
 
             var client = new HttpClient(handler)
             {
+                MaxResponseContentBufferSize = 1024 * 1024,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds)
             };
 

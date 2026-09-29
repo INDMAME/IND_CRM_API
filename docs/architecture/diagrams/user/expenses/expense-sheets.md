@@ -1,74 +1,72 @@
-# User flow: expense sheets
+# Flujo funcional: hojas de gastos
 
-Technical source:
+Fuente técnica:
 [expense-sheets-sequence.md](../../technical/expenses/expense-sheets-sequence.md)
 
-This is the user-level version of the technical expense sheet diagram. It keeps
-the same order of operations, but uses business labels and explains technical
-terms in parentheses.
+Esta versión conserva el orden del flujo técnico, pero usa lenguaje de negocio
+y explica entre paréntesis los términos necesarios.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant User as Usuario
   participant Screen as Pantalla de gastos
-  participant System as Sistema CRM<br/>(aplicacion que coordina)
-  participant Check as Validacion<br/>(comprueba permisos y datos)
+  participant System as Sistema CRM<br/>(aplicación que coordina)
+  participant Check as Validación<br/>(comprueba permisos y datos)
   participant Ax as Axapta<br/>(sistema donde se guardan datos)
-  participant Files as Archivos<br/>(imagenes o adjuntos)
+  participant Files as Archivos<br/>(imágenes o adjuntos)
 
   Note over User,Ax: Consultar hojas de gasto
-    User->>Screen: Busca hojas con filtros<br/>(fechas, estado, pagina)
+    User->>Screen: Busca hojas con filtros<br/>(fechas, estado, página)
     Screen->>System: Pide la lista de hojas
     System->>Check: Comprueba usuario, empresa<br/>y permisos
     Check->>Ax: Consulta hojas de gasto
     Ax-->>System: Devuelve resultados
-    System-->>Screen: Lista paginada<br/>(resultados en paginas)
+    System-->>Screen: Lista paginada<br/>(resultados en páginas)
     Screen-->>User: Muestra las hojas encontradas
 
     User->>Screen: Abre una hoja concreta
     Screen->>System: Pide el detalle de la hoja
     System->>Check: Comprueba el contexto<br/>(empresa y usuario activos)
-    Check->>Ax: Consulta cabecera y lineas
+    Check->>Ax: Consulta la cabecera y las líneas
     Ax-->>System: Devuelve el detalle
     System-->>Screen: Detalle de la hoja
     Screen-->>User: Muestra la hoja completa
 
   Note over User,Ax: Crear o cambiar hojas de gasto
     User->>Screen: Crea una hoja nueva
-    Screen->>System: Envia datos de cabecera y lineas
+    Screen->>System: Envía datos de cabecera y líneas
     System->>Check: Comprueba permisos y datos obligatorios
     Check->>Ax: Guarda la nueva hoja
     Ax-->>System: Resultado de guardado
-    System-->>Screen: Confirmacion o aviso de error
+    System-->>Screen: Confirmación o aviso de error
     Screen-->>User: Muestra el resultado
 
-    User->>Screen: Cambia la cabecera<br/>(descripcion, moneda, proyecto)
-    Screen->>System: Envia cambios de cabecera
+    User->>Screen: Cambia la cabecera<br/>(descripción, moneda, proyecto)
+    Screen->>System: Envía cambios de cabecera
     System->>Ax: Actualiza la cabecera
-    Ax-->>System: Resultado de actualizacion
-    System-->>Screen: Confirmacion o aviso de error
+    Ax-->>System: Resultado de la actualización
+    System-->>Screen: Confirmación o aviso de error
 
-    User->>Screen: Cambia o borra una linea
-    Screen->>System: Envia cambio de linea
-    System->>Ax: Actualiza o borra la linea
-    Ax-->>System: Resultado de la linea
-    System-->>Screen: Confirmacion o aviso de error
+    User->>Screen: Cambia o borra una línea
+    Screen->>System: Envía el cambio de línea
+    System->>Ax: Actualiza o borra la línea
+    Ax-->>System: Resultado de la línea
+    System-->>Screen: Confirmación o aviso de error
 
   opt Borrar hoja con archivos relacionados
     User->>Screen: Solicita borrar la hoja
     Screen->>Files: Borra adjuntos relacionados si aplica
     Screen->>System: Pide borrar o actualizar datos
-    Note over Screen,Files: Este recorrido exacto esta pendiente de validar.
+    Note over Screen,Files: El borrado de archivos vinculados<br/>no está confirmado en el recorrido actual.
   end
 ```
 
-## User-level explanation
+## Explicación funcional
 
-The user can search, open, create, and update expense sheets. The system checks
-the active company, user permissions, and required data before saving anything
-in Axapta, which is the central business system.
+La persona puede buscar, abrir, crear y actualizar hojas de gastos. Antes de
+guardar en Axapta, el sistema comprueba la empresa activa, los permisos y los
+datos obligatorios.
 
-If the operation succeeds, the screen shows the updated information. If
-something is missing or cannot be saved, the user sees a message that explains
-what needs attention.
+Si la operación termina correctamente, la pantalla muestra la información
+actualizada. Si falta algo o no puede guardarse, muestra un aviso explicativo.

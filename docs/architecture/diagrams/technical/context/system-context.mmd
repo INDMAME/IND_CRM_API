@@ -1,16 +1,16 @@
 flowchart LR
-  User["CRM user"]
-  Browser["Browser<br/>Razor pages and React islands"]
+  User["Usuario del CRM"]
+  Browser["Navegador<br/>Páginas Razor e islas React"]
   WebApp["IND_CRM_APP<br/>ASP.NET Core MVC + Razor<br/>React TypeScript"]
-  Entra["Microsoft Entra ID<br/>OIDC login and claims"]
+  Entra["Microsoft Entra ID<br/>Inicio OIDC y claims"]
   Api["IND_CRM_API<br/>Web API 2, .NET Framework 4.8<br/>OWIN self-host, x86"]
-  Guard["API guard layer<br/>JWT, company, AX user, context token"]
-  Bc["Business Connector COM<br/>request-scoped Axapta session"]
-  Ax["Axapta 3.0<br/>AOT CRM service classes"]
-  Blob["Azure Blob Storage<br/>ticket files and previews"]
-  Ocr["Azure Document Intelligence<br/>receipt extraction"]
-  Ai["OpenAI services<br/>speech, normalization, Q&A"]
-  Fx["Exchange rate providers<br/>currency rates"]
+  Guard["Capa de protección de la API<br/>JWT, empresa, usuario AX y token de contexto"]
+  Bc["Business Connector COM<br/>Sesión Axapta por petición"]
+  Ax["Axapta 3.0<br/>Clases de servicio CRM en AOT"]
+  Blob["Azure Blob Storage<br/>Archivos y vistas previas de tickets"]
+  Ocr["Azure Document Intelligence<br/>Extracción de justificantes"]
+  Ai["Servicios OpenAI<br/>Voz, normalización y preguntas"]
+  Fx["Proveedores de tipo de cambio"]
 
   User --> Browser
   Browser --> WebApp

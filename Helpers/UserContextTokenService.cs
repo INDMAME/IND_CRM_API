@@ -41,7 +41,7 @@ namespace IND_CRM_API.Helpers
         /// </summary>
         public static string CreateToken(UserCompanyAccessCache.Snapshot snapshot)
         {
-            if (snapshot == null || !snapshot.Exists)
+            if (snapshot == null || !snapshot.Exists || snapshot.IsRevoked || snapshot.RequiresRevalidation)
                 throw new InvalidOperationException("Context snapshot is required to create a context token.");
 
             var creds = BuildSigningCredentials();
@@ -85,7 +85,8 @@ namespace IND_CRM_API.Helpers
             long expectedContextVersion,
             string expectedPermissionsRevision,
             string requestedCompany,
-            UserCompanyAccessCache.Snapshot latestSnapshot)
+            UserCompanyAccessCache.Snapshot latestSnapshot,
+            string expectedAppCode = "CRM")
         {
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -142,6 +143,18 @@ namespace IND_CRM_API.Helpers
                     };
                 }
 
+                // The expected application belongs to the caller's endpoint, never to an unsigned header.
+                if (string.IsNullOrWhiteSpace(expectedAppCode) ||
+                    !string.Equals(Normalize(expectedAppCode), Normalize(snapshot.AppCode), StringComparison.Ordinal))
+                {
+                    return new ValidationResult
+                    {
+                        IsStale = true,
+                        Reason = "context-token-application-mismatch",
+                        Snapshot = snapshot
+                    };
+                }
+
                 if (expectedContextVersion <= 0 || snapshot.ContextVersion != expectedContextVersion)
                 {
                     return new ValidationResult
@@ -171,6 +184,27 @@ namespace IND_CRM_API.Helpers
                         IsExpired = true,
                         Reason = "context-token-expired",
                         Snapshot = snapshot
+                    };
+                }
+
+                if (latestSnapshot != null && latestSnapshot.RequiresRevalidation)
+                {
+                    return new ValidationResult
+                    {
+                        IsStale = true,
+                        Reason = "context-token-revalidation-required",
+                        Snapshot = latestSnapshot
+                    };
+                }
+
+                if ((latestSnapshot != null && (latestSnapshot.IsRevoked || snapshot.ContextVersion <= latestSnapshot.RevokedThroughVersion)) ||
+                    ((latestSnapshot == null || !latestSnapshot.Exists) && UserCompanyAccessCache.IsMissingSnapshotRevoked(snapshot.IssuedUtc)))
+                {
+                    return new ValidationResult
+                    {
+                        IsStale = true,
+                        Reason = "context-token-revoked",
+                        Snapshot = CreateSnapshotFromLatest(latestSnapshot)
                     };
                 }
 

@@ -187,6 +187,52 @@ namespace IND_CRM_API.Services
             return deleted;
         }
 
+        // Validates a managed ticket URL without contacting or creating anything in Azure.
+        public void ValidateTicketFileUrl(string blobUrl)
+        {
+            if (string.IsNullOrWhiteSpace(blobUrl)) return;
+            ResolveOwnedBlobName(blobUrl, _storageContext ?? ResolveStorageConfiguration());
+        }
+
+        // Treats an already absent owned blob as complete and propagates all other failures.
+        public void EnsureTicketFileDeleted(string blobUrl)
+        {
+            if (string.IsNullOrWhiteSpace(blobUrl)) return;
+            var context = _storageContext ?? ResolveStorageConfiguration();
+            var blobName = ResolveOwnedBlobName(blobUrl, context);
+            var blob = context.Container.GetBlockBlobReference(blobName);
+            ExecuteStorageOperation(
+                "ensure-ticket-file-deleted",
+                "No se pudo eliminar el archivo porque Azure Blob Storage no respondio correctamente.",
+                IndErrorCodes.CrmExpenseSheetTicketFileDeleteFailed,
+                () => blob.DeleteIfExists());
+        }
+
+        // Matches the configured endpoint, container and environment before resolving any blob reference.
+        private static string ResolveOwnedBlobName(string blobUrl, StorageContext context)
+        {
+            var configured = context.Container.Uri;
+            if (!Uri.TryCreate(blobUrl.Trim(), UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) ||
+                !string.Equals(uri.Scheme, configured.Scheme, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(uri.Host, configured.Host, StringComparison.OrdinalIgnoreCase) ||
+                uri.Port != configured.Port || !string.IsNullOrEmpty(uri.UserInfo) ||
+                !string.IsNullOrEmpty(uri.Fragment))
+                throw new InvalidOperationException("La URL del archivo no pertenece al almacenamiento configurado.");
+
+            var containerPath = Uri.UnescapeDataString(configured.AbsolutePath).TrimEnd('/') + "/";
+            var absolutePath = Uri.UnescapeDataString(uri.AbsolutePath);
+            if (!absolutePath.StartsWith(containerPath, StringComparison.Ordinal))
+                throw new InvalidOperationException("La URL del archivo no pertenece al contenedor configurado.");
+            var blobName = absolutePath.Substring(containerPath.Length);
+            var basePath = context.BlobBasePath.Trim('/') + "/";
+            if (!blobName.StartsWith(basePath, StringComparison.Ordinal) || blobName.Length <= basePath.Length ||
+                blobName.Split('/').Any(segment => segment == "." || segment == ".." || segment.Length == 0) ||
+                blobName.IndexOf('\\') >= 0)
+                throw new InvalidOperationException("La URL del archivo no pertenece al entorno de tickets configurado.");
+            return blobName;
+        }
+
         private StorageContext ResolveStorageContext()
         {
             if (_storageContext != null)
@@ -197,40 +243,38 @@ namespace IND_CRM_API.Services
                 if (_storageContext != null)
                     return _storageContext;
 
-                var connectionString = AppSettingsHelper.GetSetting(ConnectionSettingKey, ConnectionEnvVar);
-                if (string.IsNullOrWhiteSpace(connectionString))
-                    throw new InvalidOperationException(
-                        "No se encontro configuracion de Azure Blob Storage. Defina AZURE_BLOB_CONNECTION_STRING.");
-
-                if (!TryParseStorageConnectionString(connectionString, out var account))
-                    throw new InvalidOperationException("La cadena de conexion de Azure Blob Storage no es valida.");
-
-                var containerNameRaw = AppSettingsHelper.GetSetting(ContainerSettingKey, ContainerEnvVar);
-                var containerName = string.IsNullOrWhiteSpace(containerNameRaw)
-                    ? DefaultContainer
-                    : containerNameRaw.Trim().ToLowerInvariant();
-
-                if (!IsValidContainerName(containerName))
-                    throw new InvalidOperationException("El nombre de contenedor de Azure Blob no es valido.");
-
-                var blobBasePath = ResolveBlobBasePath();
-
-                var client = account.CreateCloudBlobClient();
-                var container = client.GetContainerReference(containerName);
+                var context = ResolveStorageConfiguration();
                 ExecuteStorageOperation(
                     "ensure-blob-container",
                     "Azure Blob Storage no esta disponible en este momento.",
                     IndErrorCodes.ExternalServiceUnavailable,
-                    () => container.CreateIfNotExists());
+                    () => context.Container.CreateIfNotExists());
 
-                _storageContext = new StorageContext
-                {
-                    BlobBasePath = blobBasePath,
-                    Container = container
-                };
+                _storageContext = context;
 
                 return _storageContext;
             }
+        }
+
+        // Resolves existing configuration without provisioning the container during deletion validation.
+        private StorageContext ResolveStorageConfiguration()
+        {
+            var connectionString = AppSettingsHelper.GetSetting(ConnectionSettingKey, ConnectionEnvVar);
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException(
+                    "No se encontro configuracion de Azure Blob Storage. Defina AZURE_BLOB_CONNECTION_STRING.");
+            if (!TryParseStorageConnectionString(connectionString, out var account))
+                throw new InvalidOperationException("La cadena de conexion de Azure Blob Storage no es valida.");
+            var containerNameRaw = AppSettingsHelper.GetSetting(ContainerSettingKey, ContainerEnvVar);
+            var containerName = string.IsNullOrWhiteSpace(containerNameRaw)
+                ? DefaultContainer : containerNameRaw.Trim().ToLowerInvariant();
+            if (!IsValidContainerName(containerName))
+                throw new InvalidOperationException("El nombre de contenedor de Azure Blob no es valido.");
+            return new StorageContext
+            {
+                BlobBasePath = ResolveBlobBasePath(),
+                Container = account.CreateCloudBlobClient().GetContainerReference(containerName)
+            };
         }
 
         private static long? TryGetStreamLength(Stream content)

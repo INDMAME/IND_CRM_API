@@ -36,6 +36,12 @@ namespace IND_CRM_API.App_Start
             var axUserId = IndRequestDiagnosticsHelper.GetHeaderValue(request, "X-IND-AxUserId") ?? string.Empty;
             var principal = request?.GetRequestContext()?.Principal ?? Thread.CurrentPrincipal;
             var authenticatedUser = principal?.Identity?.Name ?? string.Empty;
+            var requestPath = request?.RequestUri?.AbsolutePath ?? string.Empty;
+            var isHelpRequest = requestPath.StartsWith("/api/help", StringComparison.OrdinalIgnoreCase) ||
+                                requestPath.StartsWith("/api/ia/service/help", StringComparison.OrdinalIgnoreCase);
+            var logCompany = isHelpRequest ? "redacted" : company;
+            var logAxUserId = isHelpRequest ? "redacted" : axUserId;
+            var logAuthenticatedUser = isHelpRequest ? "redacted" : authenticatedUser;
             var isAuthenticated = principal?.Identity?.IsAuthenticated ?? false;
             var allowAnonymous = HasAllowAnonymous(actionContext);
             var filterNames = ResolveAuthorizationFilterNames(actionContext, allowAnonymous);
@@ -86,8 +92,8 @@ namespace IND_CRM_API.App_Start
                 logger?.Log(
                     $"[AUTHZ-PRE] correlationId={correlationId} traceId={traceId} filters={filterNames} result={result} " +
                     $"reason={reason} status={statusText} method={request?.Method?.Method ?? "UNKNOWN"} " +
-                    $"path={request?.RequestUri?.AbsolutePath ?? string.Empty} company={company} axUserId={axUserId} " +
-                    $"authenticatedUser={authenticatedUser} companyCacheContext=not-evaluated-pre-controller");
+                    $"path={request?.RequestUri?.AbsolutePath ?? string.Empty} company={logCompany} axUserId={logAxUserId} " +
+                    $"authenticatedUser={logAuthenticatedUser} companyCacheContext=not-evaluated-pre-controller");
             }
         }
 

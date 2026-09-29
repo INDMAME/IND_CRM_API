@@ -1,46 +1,45 @@
-# User flow: ticket from image with AI
+# Flujo funcional: ticket desde imagen con IA
 
-Technical source:
+Fuente técnica:
 [ticket-image-ai-sequence.md](../../technical/ai/ticket-image-ai-sequence.md)
 
-This is the user-level version of the technical ticket image AI diagram. It
-keeps the same steps as the technical flow, but uses simpler labels and
-explains technical terms in parentheses.
+Esta versión conserva los pasos del flujo técnico, pero usa etiquetas sencillas
+y explica entre paréntesis los términos necesarios.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant User as Usuario
   participant Screen as Pantalla de tickets
-  participant Limit as Control de uso<br/>(evita exceso de IA)
-  participant System as Sistema CRM<br/>(aplicacion que coordina)
-  participant Check as Validacion<br/>(comprueba permisos)
+  participant Limit as Control de uso<br/>(evita el exceso de IA)
+  participant System as Sistema CRM<br/>(aplicación que coordina)
+  participant Check as Validación<br/>(comprueba permisos)
   participant Ax as Axapta<br/>(sistema donde se guardan datos)
-  participant Store as Servicio de archivos<br/>(prepara y controla imagenes)
+  participant Store as Servicio de archivos<br/>(prepara y controla imágenes)
   participant Blob as Azure Blob<br/>(nube donde queda la imagen)
   participant Ocr as Azure OCR<br/>(lee texto de la imagen)
   participant Ai as OpenAI<br/>(ordena los datos)
 
   User->>Screen: Sube imagen del recibo<br/>y datos opcionales
-  Screen->>Limit: Envia solicitud de ticket rapido
-  Limit->>Limit: Comprueba limite de IA<br/>y solicitudes simultaneas
+  Screen->>Limit: Envía la solicitud de ticket rápido
+  Limit->>Limit: Comprueba el límite de IA<br/>y las solicitudes simultáneas
 
-  alt Se supera el limite de IA
-    Limit-->>Screen: Mensaje de limite o reintento
+  alt Se supera el límite de IA
+    Limit-->>Screen: Mensaje de límite o reintento
     Screen-->>User: Muestra aviso
   else Solicitud permitida
-    Limit->>System: Continua la creacion rapida
+    Limit->>System: Continúa la creación rápida
     System->>Check: Comprueba permisos,<br/>empresa y usuario
     Check-->>System: Solicitud permitida
-    System->>System: Comprueba imagen<br/>(formato, tipo y tamano)
+    System->>System: Comprueba la imagen<br/>(formato, tipo y tamaño)
     System->>Ax: Crea ticket provisional<br/>(registro inicial)
     Ax-->>System: Devuelve identificador del ticket
 
     System->>Store: Pide guardar la imagen original
     Store->>Blob: Guarda la imagen en Azure Blob
-    Blob-->>Store: Devuelve ubicacion del archivo
-    Store-->>System: Informa donde quedo la imagen
-    System->>Ax: Guarda en el ticket<br/>la ubicacion de la imagen
+    Blob-->>Store: Devuelve la ubicación del archivo
+    Store-->>System: Informa dónde quedó la imagen
+    System->>Ax: Guarda en el ticket<br/>la ubicación de la imagen
     Ax-->>System: Imagen asociada al ticket
 
     System->>Store: Pide enlace temporal<br/>(solo lectura por poco tiempo)
@@ -49,26 +48,26 @@ sequenceDiagram
     Store-->>System: Entrega enlace temporal
     System->>Ocr: Lee el recibo desde la imagen
     Ocr-->>System: Texto y datos detectados
-    System->>Ai: Pide ordenar los datos<br/>(importe, fecha, lineas)
+    System->>Ai: Pide ordenar los datos<br/>(importe, fecha, líneas)
     Ai-->>System: Borrador estructurado<br/>(propuesta editable)
 
     System->>System: Convierte el borrador<br/>a datos del ticket
 
-    alt Lineas validas
-      System->>Ax: Guarda cabecera y lineas<br/>propuestas por IA
+    alt Líneas válidas
+      System->>Ax: Guarda la cabecera y las líneas<br/>propuestas por la IA
       Ax-->>System: Ticket finalizado
       System->>System: Marca paso como finalizado
-    else Solo cabecera valida
-      System->>Ax: Guarda cabecera y datos IA<br/>sin reemplazar lineas
-      Ax-->>System: Ticket para revision manual
+    else Solo la cabecera es válida
+      System->>Ax: Guarda la cabecera y los datos de IA<br/>sin reemplazar líneas
+      Ax-->>System: Ticket para revisión manual
       System->>System: Mantiene el ticket para revisar
     end
 
-    opt El usuario eligio una hoja existente
+    opt El usuario eligió una hoja existente
       System->>Ax: Carga el ticket final
       Ax-->>System: Detalle del ticket
       System->>Ax: Agrega el ticket a la hoja
-      Ax-->>System: Resultado de vinculacion
+      Ax-->>System: Resultado de la vinculación
       System->>System: Marca paso como vinculado
     end
 
@@ -79,12 +78,12 @@ sequenceDiagram
   Note over System,Ai: Variante de solo borrador:<br/>la pantalla puede pedir leer una imagen<br/>sin crear el ticket final.<br/>El sistema usa la misma IA,<br/>guarda una imagen temporal en Azure Blob,<br/>la borra al terminar,<br/>y solo persiste si se pide.
 ```
 
-## User-level explanation
+## Explicación funcional
 
-The user uploads a receipt image. The system creates a provisional ticket,
-saves the image in Azure Blob, reads the receipt with OCR, and asks AI to
-organize the detected data into ticket fields and lines.
+La persona sube la imagen de un justificante. El sistema crea un ticket
+provisional, guarda la imagen, la lee con OCR y pide a la IA que ordene los
+datos detectados en campos y líneas.
 
-If the suggested lines are reliable, the ticket is finalized. If only the
-header is reliable, the ticket remains available for manual review. If the
-user selected an existing expense sheet, the ticket can also be linked to it.
+Si las líneas propuestas son válidas, finaliza el ticket. Si solo es válida la
+cabecera, queda disponible para revisión manual. Si se eligió una hoja
+existente, también puede vincularse a ella.

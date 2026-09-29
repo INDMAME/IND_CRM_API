@@ -1,25 +1,20 @@
-# Diagram Catalog
+# Catálogo de diagramas
 
-Diagrams are grouped by audience first and by process second.
+Los diagramas se agrupan primero por audiencia y después por proceso:
 
-## Audiences
+- [technical](technical/README.md): detalle para desarrollo, arquitectura y
+  mantenimiento.
+- [user](user/README.md): explicaciones para negocio y lectores no técnicos.
 
-- [technical](technical/README.md): diagrams for developers, architects, and
-  maintainers.
-- [user](user/README.md): diagrams for business users and non-technical
-  stakeholders.
-
-## Process Folders
-
-| Folder | Meaning |
+| Carpeta | Contenido |
 | --- | --- |
-| `context` | System context and actors. |
-| `integration` | Cross-system communication and data flow. |
-| `auth` | Login, identity, company, and context flows. |
-| `expenses` | Expense sheet flows. |
-| `tickets` | Ticket and receipt flows. |
-| `ai` | AI-assisted audio, image, OCR, and normalization flows. |
-| `errors` | Error handling and failure paths. |
+| `context` | Contexto del sistema y actores. |
+| `integration` | Comunicación y datos entre sistemas. |
+| `auth` | Identidad, empresa, autenticación y contexto. |
+| `expenses` | Hojas y líneas de gastos. |
+| `tickets` | Tickets y justificantes. |
+| `ai` | Audio, imagen, OCR y normalización asistidos por IA. |
+| `errors` | Tratamiento de errores y fallos. |
 
-Every diagram should keep its Markdown page and `.mmd` source in the same
-folder.
+Cada diagrama debe conservar en la misma carpeta su página Markdown y su
+fuente `.mmd`.
