@@ -18,11 +18,11 @@ namespace IND_CRM_API.Services
     /// Implementacion de OpenAI para transcripcion de audio.
     /// Notas:
     /// - Usa Audio Transcriptions API: POST https://api.openai.com/v1/audio/transcriptions
-    /// - El modelo se lee desde configuracion/entorno. Por defecto: "gpt-4o-transcribe".
+    /// - The model is configured on the server and defaults to "gpt-transcribe".
     /// </summary>
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
-        private const string DefaultModel = "gpt-4o-transcribe";
+        private const string DefaultModel = "gpt-transcribe";
         private const int DefaultTimeoutSeconds = 600;
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -94,12 +94,10 @@ namespace IND_CRM_API.Services
 
                 form.Add(new StringContent(_model, Encoding.UTF8), "model");
 
-                // gpt-4o-transcribe devuelve JSON; extraemos solo el campo "text".
+                // Read only the transcript text from the JSON response.
                 form.Add(new StringContent("json", Encoding.UTF8), "response_format");
 
-                // Si languageId es "auto", no enviar el parametro language.
-                if (!string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
-                    form.Add(new StringContent(languageId, Encoding.UTF8), "language");
+                AddLanguageHint(form, languageId);
 
                 // Temperatura: controla aleatoriedad. Por defecto 0 para salida mas determinista.
                 form.Add(new StringContent(temperature.ToString(System.Globalization.CultureInfo.InvariantCulture), Encoding.UTF8), "temperature");
@@ -219,6 +217,20 @@ namespace IND_CRM_API.Services
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
+        }
+
+        /// <summary>
+        /// Adds the language hint expected by the configured transcription model.
+        /// </summary>
+        private void AddLanguageHint(MultipartFormDataContent form, string languageId)
+        {
+            if (string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var usesLanguageList = string.Equals(_model, DefaultModel, StringComparison.OrdinalIgnoreCase) ||
+                _model.StartsWith(DefaultModel + "-", StringComparison.OrdinalIgnoreCase);
+            var parameterName = usesLanguageList ? "languages[]" : "language";
+            form.Add(new StringContent(languageId, Encoding.UTF8), parameterName);
         }
 
         private static string ReadModelFromConfig()

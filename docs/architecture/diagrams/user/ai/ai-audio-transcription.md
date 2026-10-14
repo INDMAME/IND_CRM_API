@@ -1,41 +1,40 @@
-# User flow: audio transcription
+# Flujo funcional: transcripción de audio
 
-Technical source:
+Fuente técnica:
 [ai-audio-transcription-sequence.md](../../technical/ai/ai-audio-transcription-sequence.md)
 
-This is the user-level version of the technical audio transcription diagram.
-It keeps the same decisions and outcomes, but uses simpler labels.
+Esta versión explica las mismas decisiones y resultados con lenguaje sencillo.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant User as Usuario
   participant Screen as Pantalla de audio
-  participant System as Sistema CRM<br/>(aplicacion que coordina)
+  participant System as Sistema CRM<br/>(aplicación que coordina)
   participant Limit as Control de uso<br/>(evita exceso de IA)
   participant Voice as IA de voz<br/>(convierte audio en texto)
-  participant Review as Revision de contenido<br/>(comprueba si el texto es aceptable)
+  participant Review as Revisión de contenido<br/>(comprueba si el texto es aceptable)
   participant OpenAI as OpenAI<br/>(servicio externo de IA)
 
   User->>Screen: Selecciona audio e idioma
-  Screen->>System: Envia el audio para transcribir
-  System->>Limit: Comprueba limite de uso<br/>y si ya hay otra IA en curso
+  Screen->>System: Envía el audio para transcribir
+  System->>Limit: Comprueba el límite de uso<br/>y si ya hay otra IA en curso
 
-  alt Se supera el limite de uso
+  alt Se supera el límite de uso
     Limit-->>System: Bloquea temporalmente la solicitud
-    System-->>Screen: Mensaje para intentar mas tarde
-    Screen-->>User: Muestra aviso de limite
+    System-->>Screen: Mensaje para intentarlo más tarde
+    Screen-->>User: Muestra un aviso de límite
   else Solicitud permitida
     Limit->>System: Permite continuar
-    System->>System: Comprueba formato, tamano<br/>e idioma del audio
+    System->>System: Comprueba formato, tamaño<br/>e idioma del audio
     System->>System: Prepara instrucciones opcionales<br/>(contexto para mejorar el texto)
     System->>Voice: Pide convertir audio a texto
-    Voice->>OpenAI: Envia audio al servicio de IA
+    Voice->>OpenAI: Envía audio al servicio de IA
     OpenAI-->>Voice: Devuelve texto transcrito
     Voice-->>System: Entrega solo el texto
     System->>Review: Revisa el texto generado
-    Review->>OpenAI: Pide moderacion<br/>(revision automatica de contenido)
-    OpenAI-->>Review: Resultado de la revision
+    Review->>OpenAI: Pide moderación<br/>(revisión automática de contenido)
+    OpenAI-->>Review: Resultado de la revisión
 
     alt Texto rechazado
       Review-->>System: Contenido no aceptado
@@ -44,13 +43,13 @@ sequenceDiagram
     else Texto aceptado
       Review-->>System: Contenido aceptado
       System-->>Screen: Texto transcrito<br/>y referencia de seguimiento
-      Screen-->>User: Muestra la transcripcion
+      Screen-->>User: Muestra la transcripción
     end
   end
 ```
 
-## User-level explanation
+## Explicación funcional
 
-The user sends an audio file and receives text back. The system first checks
-usage limits and file rules. Then AI converts the audio into text, and a second
-AI review checks whether the generated text can be returned to the user.
+La persona envía un audio y recibe texto. El sistema comprueba primero los
+límites de uso y las reglas del archivo. Después, una IA convierte el audio en
+texto y otra revisión automática comprueba si puede mostrarse.

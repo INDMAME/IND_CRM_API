@@ -3,13 +3,17 @@ Formatversion: 1
 
 ***Element: JOB
 
-; Navision Axapta Job: INDRecalcularAmountMST_Tickets descargados en Miércoles 29/07/2026
+; Navision Axapta Job: INDRecalcularAmountMST_Tickets descargados en Jueves 06/08/2026
 ; --------------------------------------------------------------------------------
   JOBVERSION 1
-
+  
   SOURCE #INDRecalcularAmountMST_Tickets
     #static void INDRecalcularAmountMST_Tickets(Args _args)
     #{
+    #    Set                 setCia  = new Set(Types::String);
+    #    SetIterator         si;
+    #    DataAreaId          id;
+    #
     #    CurrencyCode localCompanyCurrency()
     #    {
     #        return strUpr(CompanyInfo::standardCurrency());
@@ -119,6 +123,10 @@ Formatversion: 1
     #
     #            ticketInfoUpdate.doUpdate();
     #
+    #            //MMS - Ajustes CRM - 2026.08.03
+    #            // doUpdate evita la logica de update; sincroniza expresamente la linea vinculada y su importe reembolsable.
+    #            ticketInfoUpdate.syncHojaGastoLine();
+    #
     #            updated++;
     #            ttscommit;
     #        }
@@ -133,9 +141,37 @@ Formatversion: 1
     #    ;
     #
     #
-    #    //MMS - Ejecuta la carga solo en la compania actual; el operador decide las companias autorizadas - 2026.07.29
-    #    UpdateTickets();
+    #    //MMS - Ajustes CRM - 2026.08.03
+    #    // Conserva el conjunto multiempresa heredado para recalcular y sincronizar cada ticket en su compania.
+    #    /*setCia.add("LAN");
+    #    setCia.add("IHI");
+    #    setCia.add("RSI");
+    #    setCia.add("SET");
+    #    setCia.add("REF");
+    #    setCia.add("TAZ");
+    #    setCia.add("ISI");
+    #    setCia.add("ISM");
+    #    setCia.add("AZM");
+    #    setCia.add("CUM");
+    #    setCia.add("IST");
+    #    setCia.add("ITA");*/
+    #    setCia.add("ISE");
+    #
+    #    si = new SetIterator(setCia);
+    #
+    #    while (si.more())
+    #    {
+    #        id = si.value();
+    #
+    #        changeCompany(id)
+    #        {
+    #            UpdateTickets();
+    #        }
+    #
+    #        si.next();
+    #    }
     #}
+    #
   ENDSOURCE
 
 ***Element: END

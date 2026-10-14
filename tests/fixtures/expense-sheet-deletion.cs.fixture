@@ -1,0 +1,307 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Reflection;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Text;
+using System.Threading.Tasks;
+using IND_CRM_API.Services;
+using Microsoft.Azure.Storage;
+using Microsoft.Azure.Storage.Auth;
+using Microsoft.Azure.Storage.Blob;
+using Newtonsoft.Json;
+
+// Exercises the built API services with in-memory AX adapters and a local fake blob provider.
+internal static class DeletionTests
+{
+    private const string Scope = "tenant|DEV|company|sheet";
+    private const string Actor = "oid|actor";
+    private const string Owner = "owner";
+    private static string _root;
+    private static int _checks;
+
+    private static void Main(string[] args)
+    {
+        _root = args[0];
+        Directory.CreateDirectory(_root);
+        foreach (var failure in new[] { "read", "sheet-before", "sheet-after", "ticket-before", "ticket-after", "blob-before", "blob-after" })
+            ResumeAfterFailure(failure);
+        RejectKnownFailure();
+        RefreshInventory();
+        VerifyIsolationAndCorruption();
+        VerifyExclusiveLock();
+        VerifyLegacyAndDuplicateInventory();
+        VerifyReparseAndAcl();
+        VerifyStrictBlobUrls();
+        Console.WriteLine("Journal and URL checks passed: " + _checks);
+        VerifyBlobAbsentAndFailure();
+        Console.WriteLine("Passed " + _checks + " durable deletion and blob checks; no live API, AX or Azure calls.");
+    }
+
+    // Recreates the coordinator after every injected failure, including lost successful responses.
+    private static void ResumeAfterFailure(string failure)
+    {
+        var directory = Path.Combine(_root, failure);
+        var sheetExists = true;
+        var ticketExists = true;
+        var blobExists = true;
+        var failed = false;
+        var sheetCalls = 0;
+        Action<string> fault = phase =>
+        {
+            if (failure == phase && !failed) { failed = true; throw new IOException("injected-" + phase); }
+        };
+        Func<DeletionSnapshot> read = () =>
+        {
+            fault("read");
+            return sheetExists ? Snapshot("ticket") : null;
+        };
+        Action deleteSheet = () =>
+        {
+            sheetCalls++;
+            var persisted = LoadRaw(directory);
+            Check(persisted.DeleteAttempted && persisted.Tickets.Count == 1, "Intent must precede AX deletion");
+            fault("sheet-before");
+            sheetExists = false;
+            fault("sheet-after");
+        };
+        Action<DeletionTicket> deleteTicket = ticket =>
+        {
+            Check(LoadRaw(directory).SheetDeleted, "Ticket cleanup must follow committed sheet progress");
+            fault("ticket-before");
+            ticketExists = false;
+            fault("ticket-after");
+        };
+        Action<string> deleteBlob = url =>
+        {
+            Check(LoadRaw(directory).Tickets[0].Deleted, "Blob cleanup must follow committed ticket progress");
+            fault("blob-before");
+            blobExists = false;
+            fault("blob-after");
+        };
+        Expect<IOException>(() => new ExpenseSheetDeletionService(directory).Execute(Scope, Actor, Owner, read, deleteSheet, deleteTicket, deleteBlob));
+        var result = new ExpenseSheetDeletionService(directory).Execute(Scope, Actor, Owner, read, deleteSheet, deleteTicket, deleteBlob);
+        Check(result.Completed && !sheetExists && !ticketExists && !blobExists, "Restart must finish all remaining steps: " + failure);
+        if (failure == "sheet-after") Check(sheetCalls == 1, "Lost sheet response must not repeat the AX delete");
+        var replay = new ExpenseSheetDeletionService(directory).Execute(Scope, Actor, Owner,
+            () => { throw new Exception("Unexpected read"); },
+            () => { throw new Exception("Unexpected sheet delete"); },
+            ticket => { throw new Exception("Unexpected ticket delete"); },
+            blob => { throw new Exception("Unexpected blob delete"); });
+        Check(replay.Completed, "Completed journal must be idempotent");
+    }
+
+    // A confirmed business rejection cannot authorize cleanup after someone else removes the sheet.
+    private static void RejectKnownFailure()
+    {
+        var service = new ExpenseSheetDeletionService(Path.Combine(_root, "known-rejection"));
+        Expect<DeletionRejectedException>(() => service.Execute(Scope, Actor, Owner, () => Snapshot("ticket"),
+            () => { throw new DeletionRejectedException(new InvalidOperationException("AX rejected")); },
+            ticket => { throw new Exception("Unexpected cleanup"); }, blob => { }));
+        Check(!service.Read(Scope, Actor, Owner).DeleteAttempted, "Confirmed rejection must clear durable intent");
+        Expect<InvalidOperationException>(() => service.Execute(Scope, Actor, Owner, () => null,
+            () => { }, ticket => { throw new Exception("Stale inventory used"); }, blob => { }));
+    }
+
+    // Reads a changed inventory again while the original sheet still exists.
+    private static void RefreshInventory()
+    {
+        var directory = Path.Combine(_root, "refresh-inventory");
+        var service = new ExpenseSheetDeletionService(directory);
+        Expect<IOException>(() => service.Execute(Scope, Actor, Owner, () => Snapshot("old-ticket"),
+            () => { throw new IOException("Before commit"); }, ticket => { }, blob => { }));
+        var cleaned = new List<string>();
+        var result = new ExpenseSheetDeletionService(directory).Execute(Scope, Actor, Owner, () => Snapshot("current-ticket"),
+            () => { }, ticket => cleaned.Add(ticket.FileId), blob => { });
+        Check(result.Completed && cleaned.SequenceEqual(new[] { "current-ticket" }), "Retry must use refreshed inventory");
+    }
+
+    // Verifies server context isolation and rejects malformed or contradictory durable records.
+    private static void VerifyIsolationAndCorruption()
+    {
+        var directory = Path.Combine(_root, "isolation");
+        var service = new ExpenseSheetDeletionService(directory);
+        Expect<IOException>(() => service.Execute(Scope, Actor, Owner, () => Snapshot("ticket"),
+            () => { throw new IOException("Before commit"); }, ticket => { }, blob => { }));
+        Expect<UnauthorizedAccessException>(() => service.Read(Scope, "another-oid|actor", Owner));
+        Expect<UnauthorizedAccessException>(() => service.Read(Scope, Actor, "another-owner"));
+        Expect<UnauthorizedAccessException>(() => service.Execute(Scope, "another-oid|actor", Owner,
+            () => { throw new Exception("Unauthorized inventory read"); }, () => { }, ticket => { }, blob => { }));
+        Check(service.Read("tenant|DEV|other-company|sheet", Actor, Owner) == null, "Company journals must be isolated");
+        Check(service.Read("tenant|PROD|company|sheet", Actor, Owner) == null, "Environment journals must be isolated");
+        Check(service.Read("other-tenant|DEV|company|sheet", Actor, Owner) == null, "Tenant journals must be isolated");
+        var file = Directory.GetFiles(directory, "*.json").Single();
+        var original = File.ReadAllText(file);
+        foreach (var corrupt in new[] { "{}", original.Substring(0, original.Length / 2), original.Replace("\"Version\":1", "\"Version\":2"),
+            original.Replace("\"Deleted\":false", "\"Deleted\":true"), original.Replace("\"SheetDeleted\":false", "\"SheetDeleted\":true").Replace("\"DeleteAttempted\":true", "\"DeleteAttempted\":false") })
+        {
+            File.WriteAllText(file, corrupt);
+            Expect<InvalidOperationException>(() => service.Execute(Scope, Actor, Owner,
+                () => { throw new Exception("Corrupt journal invoked read"); }, () => { }, ticket => { }, blob => { }));
+        }
+        File.WriteAllText(file, original);
+    }
+
+    // Simulates competing requests without making any parallel COM calls.
+    private static void VerifyExclusiveLock()
+    {
+        var directory = Path.Combine(_root, "exclusive");
+        var service = new ExpenseSheetDeletionService(directory);
+        var result = service.Execute(Scope, Actor, Owner, () =>
+        {
+            Task.Run(() => Expect<IOException>(() => new ExpenseSheetDeletionService(directory).Execute(Scope, Actor, Owner,
+                () => { throw new Exception("Concurrent callback"); }, () => { }, ticket => { }, blob => { }))).GetAwaiter().GetResult();
+            return Snapshot("ticket");
+        }, () => { }, ticket => { }, blob => { });
+        Check(result.Completed, "Original lock holder must finish");
+    }
+
+    // Legacy unknown origins remain untouched, and ambiguous duplicate identities never begin deletion.
+    private static void VerifyLegacyAndDuplicateInventory()
+    {
+        var service = new ExpenseSheetDeletionService(Path.Combine(_root, "legacy"));
+        var legacy = service.Execute(Scope, Actor, Owner, () => new DeletionSnapshot
+        {
+            MetadataAvailable = false, PreservedManualTicketCount = 2
+        }, () => { }, ticket => { throw new Exception("Legacy ticket deleted"); }, blob => { throw new Exception("Legacy blob deleted"); });
+        Check(legacy.Completed && !legacy.MetadataAvailable && legacy.PreservedManualTicketCount == 2, "Legacy fallback must be durable");
+        var duplicates = Snapshot("ticket");
+        duplicates.Tickets.Add(new DeletionTicket { FileId = "TICKET", BlobUrl = "url" });
+        Expect<InvalidOperationException>(() => new ExpenseSheetDeletionService(Path.Combine(_root, "duplicates"))
+            .Execute(Scope, Actor, Owner, () => duplicates, () => { throw new Exception("Duplicate inventory deleted sheet"); }, ticket => { }, blob => { }));
+    }
+
+    // Checks protected ACLs and rejects a junction before any journal is created through it.
+    private static void VerifyReparseAndAcl()
+    {
+        var directory = Path.Combine(_root, "acl");
+        new ExpenseSheetDeletionService(directory).Read(Scope, Actor, Owner);
+        var security = Directory.GetAccessControl(directory);
+        Check(security.AreAccessRulesProtected, "Journal directory must not inherit broad ACLs");
+        var allowed = new HashSet<string>(new[] { WindowsIdentity.GetCurrent().User.Value, "S-1-5-18", "S-1-5-32-544" });
+        Check(security.GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+            .All(rule => rule.AccessControlType != AccessControlType.Allow || allowed.Contains(rule.IdentityReference.Value)), "Journal ACL grants unexpected access");
+        var junction = Path.Combine(_root, "junction");
+        using (var process = Process.Start(new ProcessStartInfo("cmd.exe", "/c mklink /J \"" + junction + "\" \"" + directory + "\"")
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }))
+        {
+            process.WaitForExit();
+            Check(process.ExitCode == 0, "Test junction could not be created");
+        }
+        Expect<InvalidOperationException>(() => new ExpenseSheetDeletionService(junction).Read(Scope, Actor, Owner));
+        Directory.Delete(junction);
+    }
+
+    // Validates real blob URL ownership logic with an injected test container and no network.
+    private static void VerifyStrictBlobUrls()
+    {
+        var service = BlobService(new Uri("https://owned.example.invalid/tickets"));
+        service.ValidateTicketFileUrl(null);
+        service.ValidateTicketFileUrl("https://owned.example.invalid/tickets/DEV/TICKET/company/file%20name.pdf");
+        service.ValidateTicketFileUrl("https://owned.example.invalid/tickets/DEV/TICKET/company/file.pdf?sig=test-only");
+        _checks += 3;
+        foreach (var url in new[]
+        {
+            "http://owned.example.invalid/tickets/DEV/TICKET/company/file.pdf",
+            "https://foreign.example.invalid/tickets/DEV/TICKET/company/file.pdf",
+            "https://owned.example.invalid:444/tickets/DEV/TICKET/company/file.pdf",
+            "https://owned.example.invalid/other/DEV/TICKET/company/file.pdf",
+            "https://owned.example.invalid/tickets/PROD/TICKET/company/file.pdf",
+            "https://owned.example.invalid/tickets/DEV/TICKET-other/company/file.pdf",
+            "https://owned.example.invalid/tickets/DEV/TICKET/",
+            "https://owned.example.invalid/tickets/DEV/TICKET/company/%2e%2e/%2e%2e/private.pdf",
+            "https://user@owned.example.invalid/tickets/DEV/TICKET/company/file.pdf",
+            "file:///tickets/DEV/TICKET/company/file.pdf"
+        }) Expect<InvalidOperationException>(() => service.ValidateTicketFileUrl(url));
+    }
+
+    // Uses a loopback provider to prove absent blobs complete and other storage failures propagate.
+    private static void VerifyBlobAbsentAndFailure()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        var prefix = "http://127.0.0.1:" + port + "/";
+        using (var server = new HttpListener())
+        {
+            server.Prefixes.Add(prefix);
+            server.Start();
+            var requests = new List<string>();
+            var serving = Task.Run(() =>
+            {
+                foreach (var status in new[] { 202, 404, 403 })
+                {
+                    var request = server.GetContext();
+                    requests.Add(request.Request.HttpMethod);
+                    request.Response.StatusCode = status;
+                    var code = status == 404 ? "BlobNotFound" : "AuthorizationFailure";
+                    if (status != 202)
+                    {
+                        request.Response.Headers.Add("x-ms-error-code", code);
+                        request.Response.ContentType = "application/xml";
+                        var bytes = Encoding.UTF8.GetBytes("<Error><Code>" + code + "</Code><Message>Test provider</Message></Error>");
+                        request.Response.ContentLength64 = bytes.Length;
+                        request.Response.OutputStream.Write(bytes, 0, bytes.Length);
+                    }
+                    request.Response.Close();
+                }
+            });
+            var service = BlobService(new Uri(prefix + "account/tickets"));
+            var url = prefix + "account/tickets/DEV/TICKET/company/file.pdf";
+            service.EnsureTicketFileDeleted(url);
+            service.EnsureTicketFileDeleted(url);
+            Expect<IND_ExternalServiceException>(() => service.EnsureTicketFileDeleted(url));
+            Check(serving.Wait(TimeSpan.FromSeconds(10)), "Fake blob provider did not finish");
+            Check(requests.All(method => method == "DELETE") && requests.Count == 3, "Delete validation must not create a container");
+        }
+    }
+
+    // Injects a controlled SDK reference so the test never reads machine Azure credentials.
+    private static ExpenseTicketBlobStorageService BlobService(Uri containerUri)
+    {
+        var service = new ExpenseTicketBlobStorageService(null);
+        var contextType = typeof(ExpenseTicketBlobStorageService).GetNestedType("StorageContext", BindingFlags.NonPublic);
+        var context = Activator.CreateInstance(contextType, true);
+        contextType.GetProperty("BlobBasePath").SetValue(context, "DEV/TICKET");
+        contextType.GetProperty("Container").SetValue(context, new CloudBlobContainer(containerUri,
+            new StorageCredentials("account", Convert.ToBase64String(new byte[64]))));
+        typeof(ExpenseTicketBlobStorageService).GetField("_storageContext", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(service, context);
+        return service;
+    }
+
+    // Builds one eligible ticket snapshot for the isolated adapters.
+    private static DeletionSnapshot Snapshot(string ticketId)
+    {
+        return new DeletionSnapshot { Tickets = new List<DeletionTicket>
+        {
+            new DeletionTicket { FileId = ticketId, BlobUrl = "https://owned.example.invalid/tickets/DEV/TICKET/company/file.pdf" }
+        } };
+    }
+
+    // Reads the actual committed file while an adapter runs, proving write-before-delete ordering.
+    private static DeletionProgress LoadRaw(string directory)
+    {
+        return JsonConvert.DeserializeObject<DeletionProgress>(File.ReadAllText(Directory.GetFiles(directory, "*.json").Single()));
+    }
+
+    // Requires a particular failure class without accepting unrelated exceptions.
+    private static void Expect<T>(Action action) where T : Exception
+    {
+        try { action(); }
+        catch (T) { _checks++; return; }
+        throw new Exception("Expected " + typeof(T).Name);
+    }
+
+    // Fails immediately on a violated durable-state or provider contract.
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new Exception(message);
+        _checks++;
+    }
+}

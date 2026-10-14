@@ -238,6 +238,7 @@ namespace IND_CRM_API.Controllers.System
         /// </remarks>
         [SwaggerResponse(HttpStatusCode.OK, "Token renovado", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Renovacion temporalmente no disponible", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         [Authorize]
         [HttpPost, Route("refresh")]
@@ -285,7 +286,16 @@ namespace IND_CRM_API.Controllers.System
                     $"oldTokenPresent={!string.IsNullOrWhiteSpace(oldToken)} tokenExpiresUtc={tokenInfo.Expiration:o}",
                     authSw);
 
-                _sessionManager.RefreshSessionToken(username, tokenInfo, oldToken);
+                if (!_sessionManager.RefreshSessionToken(username, tokenInfo, oldToken))
+                {
+                    return Content(HttpStatusCode.ServiceUnavailable, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se pudo renovar la sesion temporalmente. Vuelva a intentarlo.",
+                        ErrorCode = IndErrorCodes.InternalError,
+                        TraceId = traceId
+                    });
+                }
                 LogAuthTrace("refresh", "session-token-refreshed", traceId, correlationId, username, null, null, authSw);
 
                 _logger.Log("[AUTH-REFRESH] Token refreshed for " + username);
@@ -328,6 +338,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.OK, "Contexto Entra", typeof(IndPagedResponse<EntraContextDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Forbidden, "Acceso denegado", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Contexto pendiente de revalidacion o capacidad temporalmente agotada", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         [Authorize]
         [HttpPost, Route("entra/context")]
@@ -450,6 +461,8 @@ namespace IND_CRM_API.Controllers.System
                 LogAuthTrace("entra-context", "container-populated", traceId, correlationId, username, body.appCode, "appendCount=2", authSw);
 
                 LogAuthTrace("entra-context", "before-login-entra-context-call", traceId, correlationId, username, body.appCode, null, authSw);
+                // Reserve the observation version while the request owns serialized COM access.
+                var contextVersion = UserCompanyAccessCache.CreateContextVersion();
                 object resultObj = ax.CallStaticClassMethod(
                     "INDCRMUtilityService",
                     "loginEntraContext",
@@ -482,7 +495,20 @@ namespace IND_CRM_API.Controllers.System
                     return Content(HttpStatusCode.InternalServerError, errorResponse);
                 }
 
-                var header = MapEntraHeader(root);
+                var contextRead = ReadEntraContextForRefresh(root, ResolveTenantId(), body.entraOid, body.appCode, contextVersion);
+                if (contextRead.RequiresRevalidation)
+                {
+                    LogOut(HttpStatusCode.ServiceUnavailable);
+                    return Content(HttpStatusCode.ServiceUnavailable, new IndApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "No se pudo confirmar el contexto de empresas. Vuelva a intentarlo.",
+                        ErrorCode = IndErrorCodes.AuthContextStale,
+                        TraceId = traceId
+                    });
+                }
+
+                var header = contextRead.Header;
                 if (header == null)
                 {
                     LogAuthTrace("entra-context", "invalid-header", traceId, correlationId, username, body.appCode, null, authSw, AxaptaSessionManager.LogLevel.Error);
@@ -511,6 +537,9 @@ namespace IND_CRM_API.Controllers.System
 
                 if (!header.Success)
                 {
+                    // Full AX authorization headers distinguish a denial from a short generic failure result.
+                    if (contextRead.ExplicitDenial)
+                        UserCompanyAccessCache.Revoke(ResolveTenantId(), body.entraOid, body.appCode, contextVersion);
                     var forbiddenResponse = new IndApiResponse<object>
                     {
                         Success = false,
@@ -524,10 +553,9 @@ namespace IND_CRM_API.Controllers.System
                     return Content(HttpStatusCode.Forbidden, forbiddenResponse);
                 }
 
-                var companies = MapEntraCompanies(root);
+                var companies = contextRead.Companies;
                 var normalizedEntraOid = (body.entraOid ?? string.Empty).Trim();
                 var tenantId = ResolveTenantId();
-                var contextVersion = UserCompanyAccessCache.CreateContextVersion();
                 var snapshot = UserCompanyAccessCache.SetSnapshot(
                     tenantId,
                     normalizedEntraOid,
@@ -536,7 +564,7 @@ namespace IND_CRM_API.Controllers.System
                     body.appCode,
                     companies == null ? null : companies.ConvertAll(c => c.CompanyId),
                     contextVersion);
-                var contextToken = snapshot.Exists
+                var contextToken = snapshot.Exists && !snapshot.IsRevoked
                     ? UserContextTokenService.CreateToken(snapshot)
                     : string.Empty;
 
@@ -572,6 +600,30 @@ namespace IND_CRM_API.Controllers.System
                 };
                 LogOut(HttpStatusCode.OK);
                 return Ok(okResponse);
+            }
+            catch (UserCompanyAccessCache.CapacityException)
+            {
+                var capacityResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Contexto temporalmente no disponible. Vuelva a intentarlo.",
+                    ErrorCode = IndErrorCodes.AuthContextRequired,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.ServiceUnavailable);
+                return Content(HttpStatusCode.ServiceUnavailable, capacityResponse);
+            }
+            catch (UserCompanyAccessCache.RefreshConflictException)
+            {
+                var conflictResponse = new IndApiResponse<object>
+                {
+                    Success = false,
+                    Message = "El contexto se ha actualizado simultaneamente. Vuelva a intentarlo.",
+                    ErrorCode = IndErrorCodes.AuthContextStale,
+                    TraceId = traceId
+                };
+                LogOut(HttpStatusCode.ServiceUnavailable);
+                return Content(HttpStatusCode.ServiceUnavailable, conflictResponse);
             }
             catch (IND_AxCallTimeoutException ex)
             {
@@ -675,15 +727,79 @@ namespace IND_CRM_API.Controllers.System
             return value.Substring(0, maxLength);
         }
 
-        // Mapeo defensivo del contenedor AX a DTOs tipados.
-        private EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
+        // A failed read never exposes a partially mapped context to authorization callers.
+        internal sealed class EntraContextReadResult
         {
-            var headerContainer = SafePeekContainer(root, 1);
+            internal EntraContextHeaderDto Header { get; set; }
+            internal List<EntraCompanyDto> Companies { get; set; }
+            internal bool ExplicitDenial { get; set; }
+            internal bool RequiresRevalidation { get; set; }
+        }
+
+        // Separates unreadable COM data from authoritative empty results during context refresh.
+        internal static EntraContextReadResult ReadEntraContextForRefresh(IAxaptaContainer root,
+            string tenantId, string entraOid, string appCode, long contextVersion)
+        {
+            try
+            {
+                var header = MapEntraHeader(root);
+                if (header == null) return new EntraContextReadResult();
+                var explicitDenial = !header.Success && HasExplicitContextDenial(root);
+                // A complete inactive header is authoritative without reading optional company data.
+                var companies = explicitDenial ? new List<EntraCompanyDto>() : MapEntraCompanies(root);
+                if (header.Success && (ContainerLength(root) < 2 || string.IsNullOrWhiteSpace(header.AxUserId)))
+                    throw new EntraContextReadException("Incomplete successful AX context.");
+                if (!explicitDenial && HasAmbiguousContextDenial(root))
+                {
+                    UserCompanyAccessCache.RequireRevalidation(tenantId, entraOid, appCode, contextVersion);
+                    return new EntraContextReadResult { RequiresRevalidation = true };
+                }
+                return new EntraContextReadResult { Header = header, Companies = companies, ExplicitDenial = explicitDenial };
+            }
+            catch (EntraContextReadException)
+            {
+                UserCompanyAccessCache.RequireRevalidation(tenantId, entraOid, appCode, contextVersion);
+                return new EntraContextReadResult { RequiresRevalidation = true };
+            }
+        }
+
+        // Lets live permission checks return their existing transient failure instead of using partial rights.
+        internal sealed class EntraContextReadException : InvalidOperationException
+        {
+            internal EntraContextReadException(string message, Exception inner = null) : base(message, inner) { }
+        }
+
+        // Shared with destructive operations that recheck current AX permissions without renewing tokens.
+        // Only an explicit inactive flag in a complete AX header invalidates an existing authorization snapshot.
+        internal static bool HasExplicitContextDenial(IAxaptaContainer root)
+        {
+            var container = PeekContainer(root, 1);
+            if (container == null) return false;
+            var row = PeekContainer(container, 1) ?? container;
+            if (ContainerLength(row) < 6 || ToBool(ReadString(row, 1))) return false;
+            return string.Equals(ReadString(row, 4), "0", StringComparison.Ordinal) ||
+                   string.Equals(ReadString(row, 5), "0", StringComparison.Ordinal);
+        }
+
+        // AX uses this shape both for no allowed companies and for failed per-company lookups.
+        internal static bool HasAmbiguousContextDenial(IAxaptaContainer root)
+        {
+            var container = PeekContainer(root, 1);
+            if (container == null) return false;
+            var row = PeekContainer(container, 1) ?? container;
+            return ContainerLength(row) >= 6 && !ToBool(ReadString(row, 1)) &&
+                string.Equals(ReadString(row, 4), "1", StringComparison.Ordinal) &&
+                string.Equals(ReadString(row, 5), "1", StringComparison.Ordinal) && MapEntraCompanies(root).Count == 0;
+        }
+
+        internal static EntraContextHeaderDto MapEntraHeader(IAxaptaContainer root)
+        {
+            var headerContainer = PeekContainer(root, 1);
             if (headerContainer == null)
                 return null;
 
-            var headerRow = SafePeekContainer(headerContainer, 1);
-            if (headerRow == null && SafeLength(headerContainer) >= 2)
+            var headerRow = PeekContainer(headerContainer, 1);
+            if (headerRow == null && ContainerLength(headerContainer) >= 2)
                 headerRow = headerContainer;
 
             if (headerRow == null)
@@ -691,8 +807,8 @@ namespace IND_CRM_API.Controllers.System
 
             var header = new EntraContextHeaderDto
             {
-                Success = ToBool(SafeString(headerRow, 1)),
-                Message = SafeString(headerRow, 2),
+                Success = ToBool(ReadString(headerRow, 1)),
+                Message = ReadString(headerRow, 2),
                 AxUserId = string.Empty,
                 UserActive = false,
                 AppActive = false,
@@ -701,20 +817,20 @@ namespace IND_CRM_API.Controllers.System
                 UserName = string.Empty
             };
 
-            if (SafeLength(headerRow) >= 6)
+            if (ContainerLength(headerRow) >= 6)
             {
-                header.AxUserId = SafeString(headerRow, 3);
-                header.UserActive = ToBool(SafeString(headerRow, 4));
-                header.AppActive = ToBool(SafeString(headerRow, 5));
-                header.DefaultCompany = SafeString(headerRow, 6);
+                header.AxUserId = ReadString(headerRow, 3);
+                header.UserActive = ToBool(ReadString(headerRow, 4));
+                header.AppActive = ToBool(ReadString(headerRow, 5));
+                header.DefaultCompany = ReadString(headerRow, 6);
 
                 // Nuevo contrato AX: Header[7] = DefaultCurrencyCode.
-                if (SafeLength(headerRow) >= 7)
-                    header.DefaultCurrencyCode = SafeString(headerRow, 7);
+                if (ContainerLength(headerRow) >= 7)
+                    header.DefaultCurrencyCode = ReadString(headerRow, 7);
 
                 // Nuevo contrato AX: Header[8] = UserName.
-                if (SafeLength(headerRow) >= 8)
-                    header.UserName = SafeString(headerRow, 8);
+                if (ContainerLength(headerRow) >= 8)
+                    header.UserName = ReadString(headerRow, 8);
             }
 
             if (string.IsNullOrWhiteSpace(header.Message))
@@ -723,30 +839,33 @@ namespace IND_CRM_API.Controllers.System
             return header;
         }
 
-        private List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
+        // Preserves every supported AX company row shape for authorization callers.
+        internal static List<EntraCompanyDto> MapEntraCompanies(IAxaptaContainer root)
         {
             var companies = new List<EntraCompanyDto>();
-            var companiesCon = SafePeekContainer(root, 2);
-            var count = SafeLength(companiesCon);
+            var companiesCon = PeekContainer(root, 2);
+            if (companiesCon == null && ReadValue(root, 2) != null)
+                throw new EntraContextReadException("Invalid AX company inventory.");
+            var count = ContainerLength(companiesCon);
 
             for (int i = 1; i <= count; i++)
             {
-                var companyCon = SafePeekContainer(companiesCon, i);
-                if (companyCon == null)
-                    continue;
+                var companyCon = PeekContainer(companiesCon, i);
+                if (companyCon == null || ContainerLength(companyCon) < 4)
+                    throw new EntraContextReadException("Incomplete AX company row.");
 
                 // AX contract vNext:
                 // [companyId, isDefault, companyName, currencyCode, allowSelfManagement, crmUserId, modulesCon].
-                var modulesCon = SafePeekContainer(companyCon, 7);
-                var currencyCode = SafeString(companyCon, 4);
-                var allowSelfManagement = ToBool(SafeString(companyCon, 5));
-                var crmUserId = SafeString(companyCon, 6);
+                var modulesCon = PeekContainer(companyCon, 7);
+                var currencyCode = ReadString(companyCon, 4);
+                var allowSelfManagement = ToBool(ReadString(companyCon, 5));
+                var crmUserId = ReadString(companyCon, 6);
 
                 // Backward compatibility:
                 // [companyId, isDefault, companyName, currencyCode, allowSelfManagement, modulesCon].
                 if (modulesCon == null)
                 {
-                    modulesCon = SafePeekContainer(companyCon, 6);
+                    modulesCon = PeekContainer(companyCon, 6);
                     crmUserId = string.Empty;
                 }
 
@@ -754,7 +873,7 @@ namespace IND_CRM_API.Controllers.System
                 // [companyId, isDefault, companyName, currencyCode, modulesCon].
                 if (modulesCon == null)
                 {
-                    modulesCon = SafePeekContainer(companyCon, 5);
+                    modulesCon = PeekContainer(companyCon, 5);
                     allowSelfManagement = false;
                     crmUserId = string.Empty;
                 }
@@ -763,17 +882,20 @@ namespace IND_CRM_API.Controllers.System
                 // [companyId, isDefault, companyName, modulesCon].
                 if (modulesCon == null)
                 {
-                    modulesCon = SafePeekContainer(companyCon, 4);
+                    modulesCon = PeekContainer(companyCon, 4);
                     currencyCode = string.Empty;
                     allowSelfManagement = false;
                     crmUserId = string.Empty;
                 }
 
+                if (modulesCon == null || string.IsNullOrWhiteSpace(ReadString(companyCon, 1)))
+                    throw new EntraContextReadException("Incomplete AX company permissions.");
+
                 companies.Add(new EntraCompanyDto
                 {
-                    CompanyId = SafeString(companyCon, 1),
-                    IsDefault = ToBool(SafeString(companyCon, 2)),
-                    CompanyName = SafeString(companyCon, 3),
+                    CompanyId = ReadString(companyCon, 1),
+                    IsDefault = ToBool(ReadString(companyCon, 2)),
+                    CompanyName = ReadString(companyCon, 3),
                     CurrencyCode = currencyCode,
                     AllowSelfManagement = allowSelfManagement,
                     CrmUserId = crmUserId,
@@ -784,62 +906,65 @@ namespace IND_CRM_API.Controllers.System
             return companies;
         }
 
-        private List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
+        private static List<EntraModuleDto> MapEntraModules(IAxaptaContainer modulesCon)
         {
             var modules = new List<EntraModuleDto>();
-            var count = SafeLength(modulesCon);
+            var count = ContainerLength(modulesCon);
 
             for (int i = 1; i <= count; i++)
             {
-                var moduleCon = SafePeekContainer(modulesCon, i);
-                if (moduleCon == null)
-                    continue;
+                var moduleCon = PeekContainer(modulesCon, i);
+                if (moduleCon == null || ContainerLength(moduleCon) < 4)
+                    throw new EntraContextReadException("Incomplete AX module row.");
 
                 modules.Add(new EntraModuleDto
                 {
-                    ModuleCode = SafeString(moduleCon, 1),
-                    Description = SafeString(moduleCon, 2),
-                    IsActive = ToBool(SafeString(moduleCon, 3)),
-                    AccessRightsInt = ToInt(SafeString(moduleCon, 4))
+                    ModuleCode = ReadString(moduleCon, 1),
+                    Description = ReadString(moduleCon, 2),
+                    IsActive = ToBool(ReadString(moduleCon, 3)),
+                    AccessRightsInt = ToInt(ReadString(moduleCon, 4))
                 });
             }
 
             return modules;
         }
 
-        private static IAxaptaContainer SafePeekContainer(IAxaptaContainer container, int index)
+        private static IAxaptaContainer PeekContainer(IAxaptaContainer container, int index)
         {
-            try
-            {
-                return container?.Peek(index) as IAxaptaContainer;
-            }
-            catch
-            {
-                return null;
-            }
+            return ReadValue(container, index) as IAxaptaContainer;
         }
 
-        private static int SafeLength(IAxaptaContainer container)
+        // Optional legacy fields are absent by length; a failed COM read is never an absent field.
+        private static object ReadValue(IAxaptaContainer container, int index)
+        {
+            if (container == null || index > ContainerLength(container)) return null;
+            try { return container.Peek(index); }
+            catch (Exception ex) { throw new EntraContextReadException("AX context field could not be read.", ex); }
+        }
+
+        // Propagates unreadable inventories instead of classifying them as empty authorization results.
+        private static int ContainerLength(IAxaptaContainer container)
         {
             try
             {
                 return container?.Length() ?? 0;
             }
-            catch
+            catch (Exception ex)
             {
-                return 0;
+                throw new EntraContextReadException("AX context length could not be read.", ex);
             }
         }
 
-        private static string SafeString(IAxaptaContainer container, int index)
+        // Keeps legacy scalar conversion while rejecting a conversion failure as incomplete data.
+        private static string ReadString(IAxaptaContainer container, int index)
         {
             try
             {
-                return container?.Peek(index)?.ToString() ?? string.Empty;
+                return ReadValue(container, index)?.ToString() ?? string.Empty;
             }
-            catch
+            catch (Exception ex)
             {
-                return string.Empty;
+                throw new EntraContextReadException("AX context scalar could not be read.", ex);
             }
         }
 

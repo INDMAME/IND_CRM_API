@@ -1,20 +1,19 @@
-# User flow: tickets
+# Flujo funcional: tickets
 
-Technical source: [tickets-sequence.md](../../technical/tickets/tickets-sequence.md)
+Fuente técnica: [tickets-sequence.md](../../technical/tickets/tickets-sequence.md)
 
-This is the user-level version of the technical ticket diagram. It follows the
-same operations, but uses business terms and explains technical words in
-parentheses.
+Esta versión conserva las mismas operaciones, pero usa lenguaje de negocio y
+explica entre paréntesis los términos técnicos necesarios.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant User as Usuario
   participant Screen as Pantalla de tickets
-  participant System as Sistema CRM<br/>(aplicacion que coordina)
-  participant Check as Validacion<br/>(comprueba permisos)
+  participant System as Sistema CRM<br/>(aplicación que coordina)
+  participant Check as Validación<br/>(comprueba permisos)
   participant Ax as Axapta<br/>(sistema donde se guardan datos)
-  participant Files as Archivos<br/>(imagenes de tickets)
+  participant Files as Archivos<br/>(imágenes de tickets)
   participant Ocr as Lectura de imagen<br/>(OCR: extrae texto)
   participant Ai as IA<br/>(ayuda a proponer datos)
 
@@ -34,28 +33,28 @@ sequenceDiagram
     System-->>Screen: Detalle del ticket
     Screen-->>User: Muestra el ticket
 
-  Note over User,Ax: Crear, editar y cambiar lineas
+  Note over User,Ax: Crear, editar y cambiar líneas
     User->>Screen: Crea un ticket
-    Screen->>System: Envia datos del ticket
+    Screen->>System: Envía los datos del ticket
     System->>Ax: Guarda el ticket
     Ax-->>System: Ticket creado
-    System-->>Screen: Confirmacion o aviso de error
+    System-->>Screen: Confirmación o aviso de error
 
     User->>Screen: Edita el ticket
-    Screen->>System: Envia cambios
+    Screen->>System: Envía los cambios
     System->>Ax: Actualiza el ticket
-    Ax-->>System: Resultado de actualizacion
-    System-->>Screen: Confirmacion o aviso de error
+    Ax-->>System: Resultado de la actualización
+    System-->>Screen: Confirmación o aviso de error
 
-    User->>Screen: Cambia lineas del ticket
-    Screen->>System: Envia lineas nuevas o cambiadas
-    System->>Ax: Crea, actualiza o borra lineas
-    Ax-->>System: Resultado de las lineas
-    System-->>Screen: Confirmacion o aviso de error
+    User->>Screen: Cambia líneas del ticket
+    Screen->>System: Envía líneas nuevas o modificadas
+    System->>Ax: Crea, actualiza o borra líneas
+    Ax-->>System: Resultado de las líneas
+    System-->>Screen: Confirmación o aviso de error
 
-  Note over User,Ai: Alta rapida con imagen e IA
+  Note over User,Ai: Alta rápida con imagen e IA
     User->>Screen: Sube imagen del ticket<br/>y datos opcionales
-    Screen->>System: Pide crear ticket rapido
+    Screen->>System: Pide crear un ticket rápido
     System->>Check: Comprueba usuario, empresa<br/>y permisos
     System->>Ax: Crea ticket provisional<br/>(borrador inicial)
     Ax-->>System: Identificador del ticket
@@ -64,35 +63,35 @@ sequenceDiagram
     System->>Ocr: Lee la imagen del recibo
     Ocr-->>System: Datos detectados en la imagen
     System->>Ai: Ordena los datos detectados
-    Ai-->>System: Propuesta de cabecera y lineas
+    Ai-->>System: Propuesta de cabecera y líneas
     System->>Ax: Aplica la propuesta de IA
     Ax-->>System: Ticket finalizado o para revisar
     opt Vincular a una hoja existente
       System->>Ax: Agrega el ticket a la hoja
-      Ax-->>System: Resultado de vinculacion
+      Ax-->>System: Resultado de la vinculación
     end
     System-->>Screen: Resultado con pasos completados
     Screen-->>User: Muestra el ticket creado
 
-  Note over User,Ax: Aplicar IA o vincular despues
+  Note over User,Ax: Aplicar IA o vincular después
     User->>Screen: Pide aplicar IA a un ticket
-    Screen->>System: Envia solicitud de IA
+    Screen->>System: Envía la solicitud de IA
     System->>Files: Lee la imagen guardada
     System->>Ocr: Extrae texto de la imagen
     System->>Ai: Prepara una propuesta
     System->>Ax: Guarda la propuesta en el ticket
     Ax-->>System: Resultado de guardado
-    System-->>Screen: Confirmacion o aviso de error
+    System-->>Screen: Confirmación o aviso de error
 
     User->>Screen: Vincula tickets a una hoja
-    Screen->>System: Envia solicitud de vinculacion
+    Screen->>System: Envía la solicitud de vinculación
     System->>Ax: Busca o vincula tickets
-    Ax-->>System: Resultado de vinculacion
-    System-->>Screen: Confirmacion o lista actualizada
+    Ax-->>System: Resultado de la vinculación
+    System-->>Screen: Confirmación o lista actualizada
 ```
 
-## User-level explanation
+## Explicación funcional
 
-The user can list, open, create, update, and link tickets. The AI-assisted
-parts use OCR, which means reading text from an image, and IA, which proposes
-structured ticket data that the system can save or leave for manual review.
+La persona puede listar, abrir, crear, actualizar y vincular tickets. Los
+pasos asistidos usan OCR para leer texto de una imagen e IA para proponer datos
+estructurados que se guardan o quedan pendientes de revisión manual.
