@@ -679,6 +679,41 @@ test("normal header updates do not propagate project changes to existing lines",
   );
 });
 
+test("line update keeps validation and writes inside the requested company", () => {
+  const source = axUpdateExpenseSheetLineSource;
+  const companyStart = source.indexOf("changecompany(companyId)");
+  assert.notEqual(companyStart, -1, "Line update must select the requested company");
+
+  // Match standalone X++ braces so comments and string literals cannot close the scope.
+  let depth = 0;
+  let companyEnd = -1;
+  for (const match of source.slice(companyStart).matchAll(/^[ \t]*([{}])[ \t]*$/gm)) {
+    depth += match[1] === "{" ? 1 : -1;
+    if (depth === 0) {
+      companyEnd = companyStart + match.index + match[0].length;
+      break;
+    }
+  }
+  assert.notEqual(companyEnd, -1, "Requested-company block must be balanced");
+
+  const companyScope = source.slice(companyStart, companyEnd);
+  for (const operation of [
+    "ttsbegin;",
+    "findHeaderForUpdate(crmUserId, hojaId)",
+    "select firstonly forupdate line",
+    "line.TransDate     = transDate;",
+    "resolveCurrencyCode(lineCurrencyCode)",
+    "line.normalizeCurrencyAmounts(hasLineAmountMST);",
+    "validateExpenseSheetLineForApi(line)",
+    "line.update();",
+    "refreshTicketStatusByFileId(axUserId, line.FileId)",
+    "ttscommit;",
+    "'Linea actualizada correctamente.'",
+  ]) {
+    assert.ok(companyScope.includes(operation), `${operation} must stay in the requested company`);
+  }
+});
+
 test("unchanged historical line projects remain editable after project closure", () => {
   const strictEligibilityPredicate =
     /if \(this\.ProjIdHornos\s*&&\s*\(!this\.RecId \|\| this\.ProjIdHornos != this\.orig\(\)\.ProjIdHornos\)\s*&&\s*!CRMHojaGastosLine::resolveEligibleProjectId\(this\.ProjIdHornos\)\)/;
