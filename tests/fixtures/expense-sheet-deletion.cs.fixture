@@ -36,6 +36,7 @@ internal static class DeletionTests
         VerifyIsolationAndCorruption();
         VerifyExclusiveLock();
         VerifyLegacyAndDuplicateInventory();
+        VerifyTicketChoice();
         VerifyReparseAndAcl();
         VerifyStrictBlobUrls();
         Console.WriteLine("Journal and URL checks passed: " + _checks);
@@ -174,6 +175,36 @@ internal static class DeletionTests
         duplicates.Tickets.Add(new DeletionTicket { FileId = "TICKET", BlobUrl = "url" });
         Expect<InvalidOperationException>(() => new ExpenseSheetDeletionService(Path.Combine(_root, "duplicates"))
             .Execute(Scope, Actor, Owner, () => duplicates, () => { throw new Exception("Duplicate inventory deleted sheet"); }, ticket => { }, blob => { }));
+    }
+
+    // Keeps the recorded choice stable across retries and process restarts.
+    private static void VerifyTicketChoice()
+    {
+        var preserveDirectory = Path.Combine(_root, "preserve-choice");
+        var preserved = new ExpenseSheetDeletionService(preserveDirectory).Execute(Scope, Actor, Owner,
+            () => new DeletionSnapshot(), () => { },
+            ticket => { throw new Exception("Preserved ticket was deleted"); },
+            blob => { throw new Exception("Preserved blob was deleted"); }, false);
+        Check(preserved.Completed && preserved.DeleteTickets == false, "Preserve choice completes without ticket cleanup");
+        Expect<DeletionChoiceConflictException>(() => new ExpenseSheetDeletionService(preserveDirectory).Execute(Scope, Actor, Owner,
+            () => { throw new Exception("Choice conflict read AX"); }, () => { }, ticket => { }, blob => { }, true));
+
+        var deleteDirectory = Path.Combine(_root, "delete-choice");
+        Expect<IOException>(() => new ExpenseSheetDeletionService(deleteDirectory).Execute(Scope, Actor, Owner,
+            () => Snapshot("manual-or-origin"), () => { }, ticket => { throw new IOException("cleanup interrupted"); }, blob => { }, true));
+        Check(LoadRaw(deleteDirectory).DeleteTickets == true && LoadRaw(deleteDirectory).SheetDeleted,
+            "Complete cleanup decision is durable before retry");
+        Expect<DeletionChoiceConflictException>(() => new ExpenseSheetDeletionService(deleteDirectory).Execute(Scope, Actor, Owner,
+            () => null, () => { }, ticket => { throw new Exception("Wrong choice removed ticket"); }, blob => { }, false));
+        var ticketCalls = 0;
+        var blobCalls = 0;
+        var resumed = new ExpenseSheetDeletionService(deleteDirectory).Execute(Scope, Actor, Owner,
+            () => { throw new Exception("Deleted sheet was read again"); }, () => { },
+            ticket => ticketCalls++, blob => blobCalls++, true);
+        Check(resumed.Completed && ticketCalls == 1 && blobCalls == 1, "Same choice resumes only unfinished cleanup");
+        Expect<InvalidOperationException>(() => new ExpenseSheetDeletionService(Path.Combine(_root, "invalid-preserve-inventory"))
+            .Execute(Scope, Actor, Owner, () => Snapshot("unexpected"),
+                () => { throw new Exception("Preserve inventory was accepted"); }, ticket => { }, blob => { }, false));
     }
 
     // Checks protected ACLs and rejects a junction before any journal is created through it.

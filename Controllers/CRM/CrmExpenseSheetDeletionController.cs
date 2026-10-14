@@ -37,19 +37,23 @@ namespace IND_CRM_API.Controllers.CRM
             _blobs = new ExpenseTicketBlobStorageService(logger);
         }
 
-        /// <summary>Deletes an own draft sheet, then resumes only confirmed ticket-origin cleanup.</summary>
+        /// <summary>Deletes an own draft sheet and applies the confirmed ticket cleanup choice.</summary>
         /// <remarks>Requires bearer and X-IND-Company, X-IND-AxUserId, X-IND-EntraOid, X-IND-Context-Version,
         /// X-IND-Permissions-Revision and X-IND-Context-Token. Retry the same route and identity after a pending response.
-        /// Older AX metadata preserves all tickets and files. Import the updated XPO to enable origin cleanup.</remarks>
+        /// deleteTickets=false preserves all tickets; true removes all linked tickets and files.
+        /// Omission retains origin-based cleanup for older callers. Retries must preserve the original choice.</remarks>
         [HttpDelete, Route("{hojaGastosId}/with-tickets")]
         [ResponseType(typeof(IndApiResponse<ExpenseSheetDeletionProgressDto>))]
         [SwaggerOperation(Tags = new[] { "Hojas de Gastos" })]
         [SwaggerResponse(HttpStatusCode.OK, "Borrado completado", typeof(IndApiResponse<ExpenseSheetDeletionProgressDto>))]
         [SwaggerResponse(HttpStatusCode.Conflict, "Operacion pendiente; reintentar la misma ruta", typeof(IndApiResponse<ExpenseSheetDeletionProgressDto>))]
         [SwaggerResponse(HttpStatusCode.Forbidden, "Actor o propietario no autorizado", typeof(IndApiResponse<object>))]
-        public IHttpActionResult DeleteWithTickets(string hojaGastosId)
+        public IHttpActionResult DeleteWithTickets(string hojaGastosId, [FromUri] bool? deleteTickets = null)
         {
             var traceId = GetOrCreateTraceId();
+            if (!ModelState.IsValid)
+                return Failure((HttpStatusCode)422, IndErrorCodes.CrmExpenseSheetMissingFields,
+                    "deleteTickets debe ser true o false.", traceId);
             var identity = ResolveIdentity(hojaGastosId, traceId, out var error);
             if (error != null) return error;
 
@@ -66,7 +70,7 @@ namespace IND_CRM_API.Controllers.CRM
                             IndErrorCodes.CrmExpenseSheetNotFound);
                         return currentSheet == null ? null : BuildSnapshot(currentSheet, identity.Owner,
                             id => ReadItem<ExpenseSheetTicketDetailDto>(tickets.GetExpenseSheetTicket(id),
-                                IndErrorCodes.CrmExpenseSheetTicketNotFound), _blobs.ValidateTicketFileUrl);
+                                IndErrorCodes.CrmExpenseSheetTicketNotFound), _blobs.ValidateTicketFileUrl, deleteTickets);
                     },
                     () => RequireSuccess(sheets.DeleteExpenseSheetForCleanup(hojaGastosId, currentSheet), true),
                     ticket =>
@@ -77,7 +81,7 @@ namespace IND_CRM_API.Controllers.CRM
                         ValidateTicketForCleanup(current, ticket, identity.Owner);
                         RequireSuccess(tickets.DeleteExpenseSheetTicketForCleanup(ticket.FileId, ticket.BlobUrl));
                     },
-                    _blobs.EnsureTicketFileDeleted);
+                    _blobs.EnsureTicketFileDeleted, deleteTickets);
                 return Ok(Response(true, progress, null, "Hoja de gastos eliminada correctamente.", traceId));
             }
             catch (UnauthorizedAccessException)
@@ -89,6 +93,9 @@ namespace IND_CRM_API.Controllers.CRM
                 // Never include saved file URLs or storage credentials in errors or logs.
                 Logger.Log($"[EXPENSE-DELETE] failure type={ex.GetType().Name} traceId={traceId}", AxaptaSessionManager.LogLevel.Warning);
                 var progress = ReadAfterFailure(identity);
+                if (ex is DeletionChoiceConflictException)
+                    return Content(HttpStatusCode.Conflict, Response(false, progress, "CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT",
+                        "El borrado ya se inicio con otra opcion de tickets. Reintente con la opcion original.", traceId));
                 if (progress?.SheetDeleted == true)
                     return Content(HttpStatusCode.Conflict, Response(false, progress, "CRM_EXPENSESHEET_CLEANUP_PENDING",
                         "La hoja se ha eliminado. Queda limpieza pendiente; reintente la misma operacion.", traceId));
@@ -130,9 +137,9 @@ namespace IND_CRM_API.Controllers.CRM
             }
         }
 
-        // Captures only assets whose every association explicitly identifies ticket origin.
+        // Inventories the selected ticket scope before AX removes any lines or associations.
         internal static DeletionSnapshot BuildSnapshot(ExpenseSheetDetailDto sheet, string owner,
-            Func<string, ExpenseSheetTicketDetailDto> readTicket, Action<string> validateBlob)
+            Func<string, ExpenseSheetTicketDetailDto> readTicket, Action<string> validateBlob, bool? deleteTickets = null)
         {
             if (sheet.ExpenseSheetStatus != 0 || !string.IsNullOrWhiteSpace(sheet.Voucher) ||
                 (!string.IsNullOrWhiteSpace(sheet.OwnerAxUserId) && !Same(sheet.OwnerAxUserId, owner)))
@@ -143,16 +150,20 @@ namespace IND_CRM_API.Controllers.CRM
             var result = new DeletionSnapshot { MetadataAvailable = sheet.Lines.All(line => line.CreatedFromTicket.HasValue) };
             var groups = linked.GroupBy(line => line.FileId.Trim(), StringComparer.OrdinalIgnoreCase).ToList();
             result.PreservedManualTicketCount = groups.Count(group => !group.All(line => line.CreatedFromTicket == true));
+            if (deleteTickets == false) return result;
+            // Explicit complete cleanup requires the AX contract that guards the line snapshot and each ticket.
+            if (deleteTickets == true && !result.MetadataAvailable) throw new DeletionConflictException();
             // Older AX versions do not identify origin; preserve all tickets in that case.
             if (!result.MetadataAvailable) return result;
-            foreach (var group in groups.Where(group => group.All(line => line.CreatedFromTicket == true)))
+            if (deleteTickets == true) result.PreservedManualTicketCount = 0;
+            foreach (var group in groups.Where(group => deleteTickets == true || group.All(line => line.CreatedFromTicket == true)))
             {
                 var ticket = readTicket(group.Key);
                 if (ticket == null) throw new DeletionConflictException();
                 var ticketOwner = string.IsNullOrWhiteSpace(ticket.OwnerAxUserId) ? ticket.CreatedByUserId : ticket.OwnerAxUserId;
                 if (!Same(ticket.FileId, group.Key) || !Same(ticketOwner, owner)) throw new DeletionConflictException();
                 var blobUrl = (ticket.UrlFile ?? string.Empty).Trim();
-                validateBlob(blobUrl);
+                if (blobUrl.Length > 0) validateBlob(blobUrl);
                 result.Tickets.Add(new DeletionTicket { FileId = group.Key, BlobUrl = blobUrl });
             }
             return result;
@@ -257,8 +268,8 @@ namespace IND_CRM_API.Controllers.CRM
         // Keep the original request and identity while using existing controller operations as adapters.
         private T ShareContext<T>(T controller) where T : ApiController
         {
-            controller.Request = Request;
             controller.RequestContext = RequestContext;
+            controller.Request = Request;
             controller.Configuration = Configuration;
             return controller;
         }
@@ -309,7 +320,8 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     Exists = progress != null, DeleteAttempted = progress?.DeleteAttempted == true,
                     SheetDeleted = progress?.SheetDeleted == true,
-                    Complete = progress?.Completed == true, MetadataAvailable = progress?.MetadataAvailable == true
+                    Complete = progress?.Completed == true, MetadataAvailable = progress?.MetadataAvailable == true,
+                    DeleteTickets = progress?.DeleteTickets
                 }
             };
         }

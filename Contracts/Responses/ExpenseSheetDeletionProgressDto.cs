@@ -8,5 +8,7 @@ namespace IND_CRM_API.Contracts.Responses
         public bool SheetDeleted { get; set; }
         public bool Complete { get; set; }
         public bool MetadataAvailable { get; set; }
+        /// <summary>Recorded cleanup choice; null identifies the legacy origin-based policy.</summary>
+        public bool? DeleteTickets { get; set; }
     }
 }

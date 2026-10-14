@@ -31,6 +31,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Web.Http;
 using System.Web.Http.Results;
@@ -77,14 +78,36 @@ public static class ExpenseDeletionBoundaryTests
     }
 
     private static DeletionSnapshot Snapshot(ExpenseSheetDetailDto sheet, Func<string, ExpenseSheetTicketDetailDto> read,
-        Action<string> validate)
+        Action<string> validate, bool? deleteTickets = null)
     {
         return (DeletionSnapshot)Controller.GetMethod("BuildSnapshot", BindingFlags.NonPublic | BindingFlags.Static)
-            .Invoke(null, new object[] { sheet, "owner", read, validate });
+            .Invoke(null, new object[] { sheet, "owner", read, validate, deleteTickets });
     }
 
     public static void Run()
     {
+        // Mirror a routed request without opening an AX session or touching live data.
+        var parent = new CrmExpenseSheetDeletionController(new AxaptaSessionManager(), new FileAxLogger());
+        var request = new HttpRequestMessage(HttpMethod.Delete, "https://example.invalid/api/crm/expensesheets/test/with-tickets");
+        var configuration = new HttpConfiguration();
+        request.SetConfiguration(configuration);
+        parent.Request = request;
+        var context = parent.RequestContext;
+        var child = new EmptyController();
+        var shared = Controller.GetMethod("ShareContext", BindingFlags.Instance | BindingFlags.NonPublic)
+            .MakeGenericMethod(typeof(EmptyController)).Invoke(parent, new object[] { child });
+        Assert(ReferenceEquals(shared, child) && ReferenceEquals(child.Request, request) &&
+            ReferenceEquals(child.RequestContext, context) && ReferenceEquals(child.Configuration, configuration),
+            "nested deletion adapters reuse the routed request context");
+        foreach (var adapter in new ApiController[] {
+            new CrmExpenseSheetsController(new AxaptaSessionManager(), new FileAxLogger()),
+            new CrmExpenseSheetTicketsController(new AxaptaSessionManager(), new FileAxLogger()) })
+        {
+            Controller.GetMethod("ShareContext", BindingFlags.Instance | BindingFlags.NonPublic)
+                .MakeGenericMethod(adapter.GetType()).Invoke(parent, new object[] { adapter });
+            Assert(ReferenceEquals(adapter.Request, request), "real deletion adapter accepts the shared request");
+        }
+
         int reads = 0, validations = 0;
         Func<string, ExpenseSheetTicketDetailDto> read = id => { reads++; return Ticket(id); };
         Action<string> validate = url => { validations++; Assert(url == "saved-file", "original URL validated before deletion"); };
@@ -102,6 +125,21 @@ public static class ExpenseDeletionBoundaryTests
             "origin ticket is inventoried once and a manual line without a file is preserved");
         var empty = Snapshot(Sheet(), read, validate);
         Assert(empty.Tickets.Count == 0 && empty.MetadataAvailable, "empty draft remains deletable");
+        var readCount = reads;
+        var keepAll = Snapshot(Sheet(Line("origin", true), Line("manual", false)), read, validate, false);
+        Assert(keepAll.Tickets.Count == 0 && reads == readCount, "explicit preserve never reads or deletes ticket assets");
+        var deleteAll = Snapshot(Sheet(Line("origin", true), Line("manual", false), Line("MANUAL", false)), read, validate, true);
+        Assert(deleteAll.Tickets.Count == 2 && deleteAll.PreservedManualTicketCount == 0,
+            "explicit cleanup includes manual tickets exactly once");
+        var withoutFile = Snapshot(Sheet(Line("manual", false)), id => { var t = Ticket(id); t.UrlFile = ""; return t; },
+            url => { throw new Exception("Empty attachment reached storage validation"); }, true);
+        Assert(withoutFile.Tickets.Count == 1 && withoutFile.Tickets[0].BlobUrl == "", "tickets without attachments remain deletable");
+        var keepLegacy = Snapshot(Sheet(Line("legacy", null)), read, validate, false);
+        Assert(!keepLegacy.MetadataAvailable && keepLegacy.Tickets.Count == 0, "preserve works without origin metadata");
+        Reject(() => Snapshot(Sheet(Line("legacy", null)), read, validate, true),
+            "explicit cleanup rejects an AX contract without guarded snapshot metadata");
+        Reject(() => Snapshot(Sheet(Line("manual", false)), id => { var t = Ticket(id); t.OwnerAxUserId = "other"; return t; }, validate, true),
+            "explicit cleanup still enforces manual-ticket ownership");
 
         var locked = Sheet(); locked.Voucher = "posted";
         Reject(() => Snapshot(locked, read, validate), "voucher blocks deletion");
@@ -157,7 +195,8 @@ public static class ExpenseDeletionBoundaryTests
     foreach ($reference in $references) { [void]$parameters.ReferencedAssemblies.Add($reference) }
     $compiled = $compiler.CompileAssemblyFromSource($parameters, $source)
     if ($compiled.Errors.HasErrors) { throw ($compiled.Errors | Out-String) }
-    $compiled.CompiledAssembly.GetType('ExpenseDeletionBoundaryTests').GetMethod('Run').Invoke($null, @())
+    try { $compiled.CompiledAssembly.GetType('ExpenseDeletionBoundaryTests').GetMethod('Run').Invoke($null, @()) }
+    catch { throw $_.Exception.GetBaseException().ToString() }
     $compiler.Dispose()
 }
 finally { [AppDomain]::CurrentDomain.remove_AssemblyResolve($resolver) }

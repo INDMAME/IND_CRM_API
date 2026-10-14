@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "73f67aea-3f40-4378-b513-a886e2ea4d8b",
-    "name": "IND_CRM_API DEV V08",
-    "description": "Coleccion DEV V08. Conserva los contratos anteriores y anade borrado recuperable de hojas con tickets y consulta de progreso. Las nuevas rutas usan contexto firmado y actor propietario; conservan el borrado atomico anterior cuando AX no informa CreatedFromTicket.",
+    "_postman_id": "384474ae-1e21-41c0-b151-dabfcf3fb321",
+    "name": "IND_CRM_API DEV V09",
+    "description": "Coleccion DEV V09. El borrado recuperable acepta deleteTickets=false para conservar todos los tickets desvinculados y true para eliminar todos los tickets vinculados y adjuntos. La eleccion persiste entre reintentos; omitir el parametro conserva el contrato anterior.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "12158298"
   },
@@ -3724,7 +3724,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets",
+              "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets?deleteTickets={{deleteExpenseTickets}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -3734,9 +3734,15 @@
                 "expensesheets",
                 "{{expenseSheetId}}",
                 "with-tickets"
+              ],
+              "query": [
+                {
+                  "key": "deleteTickets",
+                  "value": "{{deleteExpenseTickets}}"
+                }
               ]
             },
-            "description": "Elimina una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes y establecer expenseSheetId. Persiste el inventario, elimina la hoja atomicamente y despues limpia solo tickets cuyo origen digital persistido AX es CreatedFromTicket=true. Conserva asociaciones manuales. Si falta CreatedFromTicket en alguna linea, elimina la hoja mediante el contrato anterior y omite limpieza de tickets/blobs (MetadataAvailable=false). Con 409 CRM_EXPENSESHEET_CLEANUP_PENDING, la hoja ya fue eliminada: repetir esta misma ruta con el mismo actor, empresa y expenseSheetId. No crear otra hoja para reintentar. El indicador AX nuevo requiere importar y compilar CRMHojaGastosLine e INDCRMExpenseSheetService y sincronizar la tabla CRMHojaGastosLine. Las lineas antiguas quedan CreatedFromTicket=false: no se infiere origen desde FileId o el indicador heredado de papel Ticket. API vuelve a validar usuario/compania activos y FullAccess en GASTOS_HOJA_GASTO contra AX antes de operar; un permiso revocado no permite continuar."
+            "description": "Borra una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes. deleteExpenseTickets=false conserva todos los tickets desvinculados; true elimina tambien todos los tickets vinculados y adjuntos, incluidas asociaciones manuales. API valida propietario y FullAccess vigente. Repetir con el mismo actor, empresa, hoja y eleccion; cambiar de opcion devuelve 409 CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT. La limpieza completa requiere el contrato AX protegido; conservar tickets admite metadatos antiguos. No se exponen inventarios ni URLs en el progreso."
           },
           "response": [
             {
@@ -3781,7 +3787,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets",
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets?deleteTickets=false",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -3791,9 +3797,15 @@
                     "expensesheets",
                     "{{expenseSheetId}}",
                     "with-tickets"
+                  ],
+                  "query": [
+                    {
+                      "key": "deleteTickets",
+                      "value": "false"
+                    }
                   ]
                 },
-                "description": "Elimina una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes y establecer expenseSheetId. Persiste el inventario, elimina la hoja atomicamente y despues limpia solo tickets cuyo origen digital persistido AX es CreatedFromTicket=true. Conserva asociaciones manuales. Si falta CreatedFromTicket en alguna linea, elimina la hoja mediante el contrato anterior y omite limpieza de tickets/blobs (MetadataAvailable=false). Con 409 CRM_EXPENSESHEET_CLEANUP_PENDING, la hoja ya fue eliminada: repetir esta misma ruta con el mismo actor, empresa y expenseSheetId. No crear otra hoja para reintentar. El indicador AX nuevo requiere importar y compilar CRMHojaGastosLine e INDCRMExpenseSheetService y sincronizar la tabla CRMHojaGastosLine. Las lineas antiguas quedan CreatedFromTicket=false: no se infiere origen desde FileId o el indicador heredado de papel Ticket. API vuelve a validar usuario/compania activos y FullAccess en GASTOS_HOJA_GASTO contra AX antes de operar; un permiso revocado no permite continuar."
+                "description": "Borra una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes. deleteExpenseTickets=false conserva todos los tickets desvinculados; true elimina tambien todos los tickets vinculados y adjuntos, incluidas asociaciones manuales. API valida propietario y FullAccess vigente. Repetir con el mismo actor, empresa, hoja y eleccion; cambiar de opcion devuelve 409 CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT. La limpieza completa requiere el contrato AX protegido; conservar tickets admite metadatos antiguos. No se exponen inventarios ni URLs en el progreso."
               },
               "status": "OK",
               "code": 200,
@@ -3805,7 +3817,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"Success\": true,\n  \"Message\": \"Hoja de gastos eliminada correctamente.\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": true,\n    \"MetadataAvailable\": true\n  }\n}"
+              "body": "{\n  \"Success\": true,\n  \"Message\": \"Hoja de gastos eliminada correctamente.\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": true,\n    \"MetadataAvailable\": true,\n    \"DeleteTickets\": false\n  }\n}"
             },
             {
               "name": "Pending cleanup after sheet deletion",
@@ -3849,7 +3861,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets",
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets?deleteTickets=true",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -3859,9 +3871,15 @@
                     "expensesheets",
                     "{{expenseSheetId}}",
                     "with-tickets"
+                  ],
+                  "query": [
+                    {
+                      "key": "deleteTickets",
+                      "value": "true"
+                    }
                   ]
                 },
-                "description": "Elimina una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes y establecer expenseSheetId. Persiste el inventario, elimina la hoja atomicamente y despues limpia solo tickets cuyo origen digital persistido AX es CreatedFromTicket=true. Conserva asociaciones manuales. Si falta CreatedFromTicket en alguna linea, elimina la hoja mediante el contrato anterior y omite limpieza de tickets/blobs (MetadataAvailable=false). Con 409 CRM_EXPENSESHEET_CLEANUP_PENDING, la hoja ya fue eliminada: repetir esta misma ruta con el mismo actor, empresa y expenseSheetId. No crear otra hoja para reintentar. El indicador AX nuevo requiere importar y compilar CRMHojaGastosLine e INDCRMExpenseSheetService y sincronizar la tabla CRMHojaGastosLine. Las lineas antiguas quedan CreatedFromTicket=false: no se infiere origen desde FileId o el indicador heredado de papel Ticket. API vuelve a validar usuario/compania activos y FullAccess en GASTOS_HOJA_GASTO contra AX antes de operar; un permiso revocado no permite continuar."
+                "description": "Borra una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes. deleteExpenseTickets=false conserva todos los tickets desvinculados; true elimina tambien todos los tickets vinculados y adjuntos, incluidas asociaciones manuales. API valida propietario y FullAccess vigente. Repetir con el mismo actor, empresa, hoja y eleccion; cambiar de opcion devuelve 409 CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT. La limpieza completa requiere el contrato AX protegido; conservar tickets admite metadatos antiguos. No se exponen inventarios ni URLs en el progreso."
               },
               "status": "Conflict",
               "code": 409,
@@ -3873,7 +3891,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"Success\": false,\n  \"Message\": \"La hoja se ha eliminado. Queda limpieza pendiente; reintente la misma operacion.\",\n  \"ErrorCode\": \"CRM_EXPENSESHEET_CLEANUP_PENDING\",\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": false,\n    \"MetadataAvailable\": true\n  }\n}"
+              "body": "{\n  \"Success\": false,\n  \"Message\": \"La hoja se ha eliminado. Queda limpieza pendiente; reintente la misma operacion.\",\n  \"ErrorCode\": \"CRM_EXPENSESHEET_CLEANUP_PENDING\",\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": false,\n    \"MetadataAvailable\": true,\n    \"DeleteTickets\": true\n  }\n}"
             },
             {
               "name": "Legacy AX: sheet deleted, tickets preserved",
@@ -3917,7 +3935,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets",
+                  "raw": "{{baseUrl}}/api/crm/expensesheets/{{expenseSheetId}}/with-tickets?deleteTickets=false",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -3927,9 +3945,15 @@
                     "expensesheets",
                     "{{expenseSheetId}}",
                     "with-tickets"
+                  ],
+                  "query": [
+                    {
+                      "key": "deleteTickets",
+                      "value": "false"
+                    }
                   ]
                 },
-                "description": "Elimina una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes y establecer expenseSheetId. Persiste el inventario, elimina la hoja atomicamente y despues limpia solo tickets cuyo origen digital persistido AX es CreatedFromTicket=true. Conserva asociaciones manuales. Si falta CreatedFromTicket en alguna linea, elimina la hoja mediante el contrato anterior y omite limpieza de tickets/blobs (MetadataAvailable=false). Con 409 CRM_EXPENSESHEET_CLEANUP_PENDING, la hoja ya fue eliminada: repetir esta misma ruta con el mismo actor, empresa y expenseSheetId. No crear otra hoja para reintentar. El indicador AX nuevo requiere importar y compilar CRMHojaGastosLine e INDCRMExpenseSheetService y sincronizar la tabla CRMHojaGastosLine. Las lineas antiguas quedan CreatedFromTicket=false: no se infiere origen desde FileId o el indicador heredado de papel Ticket. API vuelve a validar usuario/compania activos y FullAccess en GASTOS_HOJA_GASTO contra AX antes de operar; un permiso revocado no permite continuar."
+                "description": "Borra una hoja propia en Draft y sin Voucher. Ejecutar Auth / Entra Context antes. deleteExpenseTickets=false conserva todos los tickets desvinculados; true elimina tambien todos los tickets vinculados y adjuntos, incluidas asociaciones manuales. API valida propietario y FullAccess vigente. Repetir con el mismo actor, empresa, hoja y eleccion; cambiar de opcion devuelve 409 CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT. La limpieza completa requiere el contrato AX protegido; conservar tickets admite metadatos antiguos. No se exponen inventarios ni URLs en el progreso."
               },
               "status": "OK",
               "code": 200,
@@ -3941,7 +3965,26 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"Success\": true,\n  \"Message\": \"Hoja de gastos eliminada correctamente.\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": true,\n    \"MetadataAvailable\": false\n  }\n}"
+              "body": "{\n  \"Success\": true,\n  \"Message\": \"Hoja de gastos eliminada correctamente.\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": true,\n    \"Complete\": true,\n    \"MetadataAvailable\": false,\n    \"DeleteTickets\": false\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var data = body.Data || body.data;",
+                  "var code = body.ErrorCode || body.errorCode;",
+                  "if (data && (data.Exists || data.exists) && code !== \"CRM_EXPENSESHEET_DELETE_CHOICE_CONFLICT\") {",
+                  "  pm.test(\"Ticket cleanup choice remains recorded\", function () {",
+                  "    var saved = data.DeleteTickets !== undefined ? data.DeleteTickets : data.deleteTickets;",
+                  "    pm.expect(saved).to.eql(pm.variables.get(\"deleteExpenseTickets\") === \"true\");",
+                  "  });",
+                  "}"
+                ]
+              }
             }
           ]
         },
@@ -4068,7 +4111,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"Success\": true,\n  \"Message\": \"OK\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": false,\n    \"DeleteAttempted\": false,\n    \"SheetDeleted\": false,\n    \"Complete\": false,\n    \"MetadataAvailable\": false\n  }\n}"
+              "body": "{\n  \"Success\": true,\n  \"Message\": \"OK\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": false,\n    \"DeleteAttempted\": false,\n    \"SheetDeleted\": false,\n    \"Complete\": false,\n    \"MetadataAvailable\": false,\n    \"DeleteTickets\": null\n  }\n}"
             },
             {
               "name": "Delete response not confirmed yet",
@@ -4136,7 +4179,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"Success\": true,\n  \"Message\": \"OK\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": false,\n    \"Complete\": false,\n    \"MetadataAvailable\": true\n  }\n}"
+              "body": "{\n  \"Success\": true,\n  \"Message\": \"OK\",\n  \"ErrorCode\": null,\n  \"TraceId\": \"example-trace-id\",\n  \"Data\": {\n    \"Exists\": true,\n    \"DeleteAttempted\": true,\n    \"SheetDeleted\": false,\n    \"Complete\": false,\n    \"MetadataAvailable\": true,\n    \"DeleteTickets\": false\n  }\n}"
             }
           ]
         }
@@ -4551,6 +4594,11 @@
     {
       "key": "expenseNotificationLastTraceId",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deleteExpenseTickets",
+      "value": "false",
       "type": "string"
     }
   ]

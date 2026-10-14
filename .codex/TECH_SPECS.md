@@ -45,6 +45,8 @@ La explicación vigente de este flujo está en `docs/architecture/security/authe
 
 ### Contrato AX para borrado recuperable de hojas
 
+La confirmación de la APP pregunta por separado si se eliminan los tickets. Envía `deleteTickets=false` para conservar todos los tickets y adjuntos, desvinculados tras borrar las líneas, o `true` para limpiar todos los tickets vinculados del propietario y sus adjuntos, también los asociados manualmente. API persiste la elección en el registro recuperable y rechaza cambios de opción durante un reintento. La omisión conserva la política de origen digital de los clientes anteriores y de los registros existentes. La limpieza completa exige los metadatos del contrato AX protegido descrito a continuación; el modo conservar admite el contrato anterior.
+
 Importar primero `.codex/Axapta/CRMHojaGastosLine.xpo` en la tabla existente y después `.codex/Axapta/INDCRMExpenseSheetService.xpo` en la clase existente. Compilar ambas y sincronizar la tabla `CRMHojaGastosLine` antes de ejecutar el contrato nuevo. La tabla incorpora el campo persistido `INDCreatedFromTicket`, enum existente `NoYes`, oculto y no editable en UI. Su valor predeterminado es `No`; no se reclasifican registros antiguos ni se deduce el origen desde `FileId`, `Ticket` o `Factura`.
 
 Métodos de clase afectados:

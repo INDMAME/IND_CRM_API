@@ -679,6 +679,23 @@ test("normal header updates do not propagate project changes to existing lines",
   );
 });
 
+test("rounded foreign reimbursements do not replace a consistent exchange rate", () => {
+  const ticketNormalization = xpoMethod(ticketTableSource, "normalizeCurrencyAmounts");
+  const lineNormalization = xpoMethod(expenseSheetLineSource, "normalizeCurrencyAmounts");
+  assert.match(ticketNormalization,
+    /if \(this\.ExchRate <= 0 \|\| this\.AmountMST != this\.ticketAmountMST\(\)\)\s*this\.ExchRate = this\.calcExchRateFromAmountMST\(\);/);
+  assert.match(lineNormalization,
+    /this\.Currency != reimbursementCurrencyCode &&\s*\(this\.ExchRate <= 0 \|\| this\.AmountMST != Currency::amount\(this\.Amount \* 100 \/ this\.ExchRate, reimbursementCurrencyCode\)\)\)/);
+
+  const amount = 408.5;
+  const requestedRate = 2899751.4016;
+  const reimbursement = Math.round((amount * 100 / requestedRate) * 100) / 100;
+  assert.equal(reimbursement, 0.01);
+  assert.equal(amount * 100 / reimbursement, 4085000);
+  assert.notEqual(requestedRate, amount * 100 / reimbursement,
+    "A cent-rounded reimbursement cannot reconstruct the original VND rate");
+});
+
 test("line update keeps validation and writes inside the requested company", () => {
   const source = axUpdateExpenseSheetLineSource;
   const companyStart = source.indexOf("changecompany(companyId)");

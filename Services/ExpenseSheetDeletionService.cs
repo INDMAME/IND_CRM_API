@@ -27,7 +27,7 @@ namespace IND_CRM_API.Services
         // Persists intent before deletion and resumes idempotent cleanup using the original inventory.
         public DeletionProgress Execute(string scope, string actor, string owner,
             Func<DeletionSnapshot> readSheet, Action deleteSheet,
-            Action<DeletionTicket> deleteTicket, Action<string> deleteBlob)
+            Action<DeletionTicket> deleteTicket, Action<string> deleteBlob, bool? deleteTickets = null)
         {
             ValidateIdentity(scope, actor, owner);
             if (readSheet == null) throw new ArgumentNullException(nameof(readSheet));
@@ -41,8 +41,9 @@ namespace IND_CRM_API.Services
                 var file = Path.Combine(_directory, key + ".json");
                 var progress = Load(file, scope, actor, owner) ?? new DeletionProgress
                 {
-                    Scope = scope, Actor = actor, Owner = owner
+                    Scope = scope, Actor = actor, Owner = owner, DeleteTickets = deleteTickets
                 };
+                if (progress.DeleteTickets != deleteTickets) throw new DeletionChoiceConflictException();
                 if (progress.Completed) return progress;
 
                 if (!progress.SheetDeleted)
@@ -59,6 +60,8 @@ namespace IND_CRM_API.Services
                     }
                     else
                     {
+                        if (deleteTickets == false && snapshot.Tickets?.Count > 0)
+                            throw new InvalidOperationException("El borrado debe conservar todos los tickets.");
                         ApplySnapshot(progress, snapshot);
                         progress.DeleteAttempted = true;
                         Save(file, progress);
@@ -141,7 +144,8 @@ namespace IND_CRM_API.Services
                 !string.Equals(value.Scope, scope, StringComparison.Ordinal) ||
                 value.PreservedManualTicketCount < 0 ||
                 (!value.MetadataAvailable && value.Tickets.Count != 0) ||
-                (value.SheetDeleted && !value.DeleteAttempted))
+                (value.SheetDeleted && !value.DeleteAttempted) ||
+                (value.DeleteTickets == false && value.Tickets.Count != 0))
                 throw new InvalidOperationException("El registro de borrado no es valido.");
             if (!string.Equals(value.Actor, actor, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(value.Owner, owner, StringComparison.OrdinalIgnoreCase))
@@ -279,6 +283,8 @@ namespace IND_CRM_API.Services
         [JsonProperty(Required = Required.Always)] public string Scope { get; set; }
         [JsonProperty(Required = Required.Always)] public string Actor { get; set; }
         [JsonProperty(Required = Required.Always)] public string Owner { get; set; }
+        // Null retains the origin-based policy of journals written before an explicit choice existed.
+        public bool? DeleteTickets { get; set; }
         [JsonProperty(Required = Required.Always)] public bool DeleteAttempted { get; set; }
         [JsonProperty(Required = Required.Always)] public bool SheetDeleted { get; set; }
         [JsonProperty(Required = Required.Always)] public bool MetadataAvailable { get; set; } = true;
@@ -303,5 +309,11 @@ namespace IND_CRM_API.Services
             : base("La eliminacion de la hoja fue rechazada sin confirmar cambios.", innerException)
         {
         }
+    }
+
+    // Prevents retries from changing an already recorded ticket-cleanup decision.
+    public sealed class DeletionChoiceConflictException : Exception
+    {
+        public DeletionChoiceConflictException() : base("La opcion de tickets no coincide con el borrado iniciado.") { }
     }
 }
