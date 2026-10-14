@@ -23,7 +23,7 @@ namespace IND_CRM_API.Services
     public sealed class IND_OpenAiTextFormattingService : IND_ITextFormattingService
     {
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
-        private const string DefaultModel = "gpt-5-mini";
+        private const string DefaultModel = "gpt-5.6-terra";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxOutputTokens = 12000;
         private const string SchemaName = "text_formatting_result";

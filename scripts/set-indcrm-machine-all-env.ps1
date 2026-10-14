@@ -211,13 +211,14 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_SERVICE_PASSWORD" -Category "Ops" -Secret $true
 
         New-InteractiveSetting -Name "OPENAI_API_KEY" -Category "OpenAI" -Secret $true
-        New-InteractiveSetting -Name "OPENAI_AUDIO_MODEL" -Category "OpenAI" -DefaultValue "gpt-4o-transcribe"
+        New-InteractiveSetting -Name "OPENAI_AUDIO_MODEL" -Category "OpenAI" -DefaultValue "gpt-transcribe"
+        New-InteractiveSetting -Name "OPENAI_TEXT_FORMATTING_MODEL" -Category "OpenAI" -DefaultValue "gpt-5.6-terra"
         New-InteractiveSetting -Name "OPENAI_TIMEOUT_SECONDS" -Category "OpenAI" -DefaultValue "600"
         New-InteractiveSetting -Name "OPENAI_MODERATION_MODEL" -Category "OpenAI" -DefaultValue "omni-moderation-latest"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_PROMPT_MAX_WORDS" -Category "OpenAI" -DefaultValue "500"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT_PATH" -Category "OpenAI" -DefaultValue "C:\INDAxaptaConfigAPI\Prompts\Wisper\prompt.txt"
         New-InteractiveSetting -Name "OPENAI_TRANSCRIPTION_DEFAULT_PROMPT" -Category "OpenAI" -Required $false
-        New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MODEL" -Category "OpenAI" -DefaultValue "gpt-5.4-nano"
+        New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MODEL" -Category "OpenAI" -DefaultValue "gpt-6-luna"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_TIMEOUT_SECONDS" -Category "OpenAI" -DefaultValue "180"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MAX_IMAGE_BYTES" -Category "OpenAI" -DefaultValue "52428800"
         New-InteractiveSetting -Name "OPENAI_EXPENSE_TICKET_MAX_OUTPUT_TOKENS" -Category "OpenAI" -DefaultValue "1024"

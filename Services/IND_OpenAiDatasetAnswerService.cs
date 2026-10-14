@@ -21,7 +21,7 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiDatasetAnswerService : IAiDatasetAnswerService
     {
-        private const string DefaultModel = "gpt-5-mini";
+        private const string DefaultModel = "gpt-5.4-mini";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxOutputTokens = 2200;
         private const int DefaultChunkMaxOutputTokens = 1200;
@@ -31,7 +31,7 @@ namespace IND_CRM_API.Services
         private const string DefaultServiceTier = "priority";
         private const string DefaultProfileTag = "dataset-answer-v1";
         private const string DefaultPromptCacheKey = "dataset-answer-v1";
-        private const string DefaultReasoningEffort = "minimal";
+        private const string DefaultReasoningEffort = "low";
         private const string StructuredAnswerSchemaVersion = "expense-chat-v2";
         private const string ResponsesUrl = "https://api.openai.com/v1/responses";
         private const string ModelSettingKey = "OpenAI:ExpenseSheetAskModel";

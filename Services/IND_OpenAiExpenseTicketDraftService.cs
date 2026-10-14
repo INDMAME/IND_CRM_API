@@ -23,7 +23,7 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService, IOpenAITicketNormalizationService
     {
-        private const string DefaultModel = "gpt-5-nano";
+        private const string DefaultModel = "gpt-6-luna";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
         private const int DefaultMaxOutputTokens = 1024;
