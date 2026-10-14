@@ -1540,17 +1540,19 @@ namespace IND_CRM_API.Controllers.CRM
                 });
             }
 
-            // Older AX contracts retain atomic sheet deletion; the adapter disables ticket and blob cleanup.
+            // Older inventories still require AX to preserve tickets before any cleanup policy is applied.
             if (snapshot.Lines.Any(line => !line.CreatedFromTicket.HasValue))
-                return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, null);
+                return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, null,
+                    requireTicketPreservation: true);
 
-            return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, snapshot);
+            return DeleteExpenseSheetLineCore(hojaGastosId, 0, true, ExpenseSheetDeleteMode.WholeSheet, snapshot,
+                requireTicketPreservation: true);
         }
 
         /// <summary>Preserves existing modes and optionally passes an inventory guard to AX.</summary>
         private IHttpActionResult DeleteExpenseSheetLineCore(
             string hojaGastosId, long lineRecId, bool deleteWholeSheet,
-            ExpenseSheetDeleteMode? deleteMode, ExpenseSheetDetailDto snapshot)
+            ExpenseSheetDeleteMode? deleteMode, ExpenseSheetDetailDto snapshot, bool requireTicketPreservation = false)
         {
             var traceId = Guid.NewGuid().ToString("N");
             var effectiveDeleteMode = deleteMode ?? (deleteWholeSheet ? ExpenseSheetDeleteMode.WholeSheet : ExpenseSheetDeleteMode.LineOnly);
@@ -1647,9 +1649,13 @@ namespace IND_CRM_API.Controllers.CRM
                         $"[WARN] DeleteExpenseSheetLine deleteMode=HeaderOnly mapped to WholeSheet for AX contract traceId={traceId}");
                 }
 
+                // An older AX class must reject this call before its cascade can delete linked tickets.
+                var deletionMethod = requireTicketPreservation
+                    ? "deleteExpenseSheetLinePreservingTickets"
+                    : "deleteExpenseSheetLine";
                 var resultObj = ax.CallStaticClassMethod(
                     "INDCRMExpenseSheetService",
-                    "deleteExpenseSheetLine",
+                    deletionMethod,
                     lineCon
                 );
 
