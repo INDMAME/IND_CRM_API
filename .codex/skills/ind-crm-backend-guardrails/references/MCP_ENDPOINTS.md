@@ -15,6 +15,7 @@ Convenciones globales
 Catalogo MCP
 - Archivo canonico de tools: `.codex/MCP_TOOLS.json`.
 - Incluye `inputSchema` por tool y mapeo HTTP en `x-http`.
+- Los endpoints de IA distinguen `429 AI_RATE_LIMIT_EXCEEDED` (espera temporal, `Retry-After` cuando existe) de `503 AI_QUOTA_EXCEEDED` (saldo/cuota del proveedor, sin `Retry-After`; requiere revisar facturacion). Se mantienen rutas, inputs, envelopes y trazas. El alta rapida conserva su rollback; las consultas de gastos no ocultan una cuota agotada con una respuesta exitosa.
 
 Endpoints
 

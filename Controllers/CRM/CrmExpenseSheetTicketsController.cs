@@ -395,7 +395,7 @@ namespace IND_CRM_API.Controllers.CRM
         [SwaggerResponse(HttpStatusCode.NotFound, "Ticket u hoja no encontrada", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
-        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Servicio IA no disponible", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "AI provider unavailable or quota exhausted (AI_QUOTA_EXCEEDED)", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetTicketQuickCreateResultDto>))]
         public async Task<IHttpActionResult> QuickCreateExpenseSheetTicket(CancellationToken cancellationToken)
         {
@@ -652,7 +652,7 @@ namespace IND_CRM_API.Controllers.CRM
                     LogOut((HttpStatusCode)429);
                     return BuildQuickCreateTooManyRequests(
                         traceId,
-                        string.IsNullOrWhiteSpace(ex.Message) ? "Limite de uso IA excedido." : ex.Message,
+                        "Se excedio el limite de solicitudes de IA. Intente de nuevo en unos segundos.",
                         IndErrorCodes.AiRateLimitExceeded,
                         ex.RetryAfterSeconds,
                         resultData);
@@ -661,7 +661,7 @@ namespace IND_CRM_API.Controllers.CRM
                 {
                     draftMs = draftSw.ElapsedMilliseconds;
                     LogQuickCreateStage("draft-extract", draftStepTraceId, "deny", draftMs, ex.UserMessage);
-                    Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft external service={ex.ServiceName} summary={ex.ProviderSummary} traceId={traceId}");
+                    Logger.Log($"[ERROR] QuickCreateExpenseSheetTicket draft external service={ex.ServiceName} errorCode={ex.ErrorCode} summary={ex.ProviderSummary} traceId={traceId}");
                     RollbackQuickCreateIfNeeded("draft-extract", ex.UserMessage);
                     LogOut(ex.StatusCode);
                     return Content(ex.StatusCode, BuildQuickCreateErrorResponse(

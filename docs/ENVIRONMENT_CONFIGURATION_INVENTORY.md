@@ -289,7 +289,7 @@ Restart-Service IND_CRM_API
 - `AZURE_DOCS_IA_ENDPOINT`: `https://westeurope.api.cognitive.microsoft.com/`
 - `OPENAI_EXPENSE_SHEET_ASK_MODEL`: `gpt-5.4-mini`
 - `OPENAI_EXPENSE_SHEET_ASK_REASONING_EFFORT`: `low`
-- `OPENAI_EXPENSE_TICKET_MODEL`: `gpt-5.4-nano`
+- `OPENAI_EXPENSE_TICKET_MODEL`: `gpt-6-luna`
 - `INDCRM_CONTEXT_TOKEN_AUDIENCE`: `IND_CRM_WEB_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_ISSUER`: `IND_CRM_CONTEXT`
 - `INDCRM_CONTEXT_TOKEN_SECRET_KEY`: generado por el script al aplicar si la maquina no tiene valor previo; debe quedar distinto entre DEV y PROD.
@@ -322,6 +322,33 @@ Para scripts privados de maquina o utilidades con datos sensibles, usar:
 Esas rutas quedan ignoradas por Git.
 
 ## Notas
+
+### Revision de modelos OpenAI (22/10/2026)
+
+La revision contrasta variables de maquina, defaults y catalogo `GET /v1/models`. Las pruebas reales del hotfix con la clave de PROD completaron ambos perfiles de tickets con `gpt-6-luna` (EUR 12.50 preservados), formateo con `gpt-5.6-terra` (importe y negacion conservados), y voz sintetica con `gpt-transcribe` y `languages[]`. No se crearon registros de negocio. Estas llamadas funcionaron con saldo disponible en el momento de la prueba.
+
+| Uso | Configuracion observada en PROD | Retirada anunciada | Modelo del hotfix autorizado |
+| --- | --- | --- | --- |
+| OCR de tickets | `OPENAI_EXPENSE_TICKET_MODEL=gpt-5.4-nano` | 01/04/2027 | `gpt-6-luna` |
+| Voz | `OPENAI_AUDIO_MODEL=gpt-4o-transcribe` | 26/02/2027 | `gpt-transcribe` |
+| Formateo | `OPENAI_TEXT_FORMATTING_MODEL` ausente; fallback `gpt-5-mini` | 11/12/2026 para su snapshot actual `gpt-5-mini-2025-08-07` | `gpt-5.6-terra` |
+| Consultas de gastos | `OPENAI_EXPENSE_SHEET_ASK_MODEL=gpt-5.4-mini` | Sin fecha encontrada en la documentacion consultada | Mantener |
+| Moderacion | `OPENAI_MODERATION_MODEL=omni-moderation-latest` | Sin fecha encontrada en la documentacion consultada | Mantener |
+
+- El catalogo de la cuenta incluye `gpt-6-luna`, `gpt-transcribe` y `gpt-5.6-terra`. Para `gpt-5-mini` no devolvio `shutdown_date`, pero la documentacion identifica su snapshot actual y la fecha de retirada anterior; no interpretar ese campo ausente como garantia de continuidad.
+- Los reemplazos de texto mantienen Responses, los esquemas estrictos y los limites de salida existentes. El hotfix incluye pruebas de contrato sin red y la regresion de importes VND; las pruebas sinteticas reales pasaron; queda la comprobacion funcional con un ticket del usuario.
+- Voz usa `languages[]` para `gpt-transcribe` y sus snapshots; conserva `language` para modelos anteriores y omite la pista en modo `auto`. Mantiene `/v1/audio/transcriptions`, respuesta JSON y extraccion de `text`.
+- Cambios aplicados directamente sobre PROD por autorizacion expresa, sin incorporar el resto de DEV. Los defaults y scripts de provision quedan alineados con los tres reemplazos.
+- Activar `OPENAI_EXPENSE_TICKET_MODEL=gpt-6-luna`, `OPENAI_AUDIO_MODEL=gpt-transcribe` y `OPENAI_TEXT_FORMATTING_MODEL=gpt-5.6-terra` y reiniciar la API. La facturacion se gestiona aparte. Para saldo agotado responde `503 AI_QUOTA_EXCEEDED`; para saturacion temporal mantiene `429 AI_RATE_LIMIT_EXCEEDED` y el `Retry-After` disponible.
+- El indicador de gasto frente a presupuesto en Usage no acredita saldo prepago. Si el proveedor devuelve `credit_balance_exhausted`, revisar Billing de la organizacion/proyecto de la clave usada por la API.
+
+Fuentes oficiales consultadas:
+- [Retiradas de modelos](https://developers.openai.com/api/docs/deprecations).
+- [GPT-5 Mini y su snapshot actual](https://developers.openai.com/api/docs/models/gpt-5-mini).
+- [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) y [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
+- [Migracion de transcripcion por archivo](https://developers.openai.com/api/docs/guides/speech-to-text).
+
+### Operacion de entornos
 
 - `INDCRM_PUBLIC_HOST`, `INDCRM_PUBLIC_IP` y `INDCRM_PUBLIC_PORT` son datos operativos para DNS, firewall y despliegue.
 - La IP de `DEV` queda confirmada en `192.168.0.148`.

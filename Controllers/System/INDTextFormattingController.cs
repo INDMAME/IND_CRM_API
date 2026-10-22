@@ -66,7 +66,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)422, "Body, texto, idioma o contenido no valido", typeof(IndApiResponse<object>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso de IA excedido", typeof(IndApiResponse<object>))]
-        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Proveedor IA no disponible", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "AI provider unavailable or quota exhausted (AI_QUOTA_EXCEEDED)", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<object>))]
         public async Task<IHttpActionResult> Format(
             [FromBody] FormatTextRequest body,

@@ -84,6 +84,18 @@ Endpoints
   Response y semantica iguales a `/api/crm/enums/by-name`.
 
 ## IA Services
+Errores comunes de proveedor en voz, borradores de ticket, alta rapida, formateo y consultas de gastos:
+- `429 AI_RATE_LIMIT_EXCEEDED`: limite temporal de peticiones; conserva `Retry-After` cuando el proveedor lo envia.
+- `503 AI_QUOTA_EXCEEDED`: el proveedor informa de saldo o cuota de facturacion agotados (`credit_balance_exhausted`, `insufficient_quota` o limite de gasto/uso). El mensaje solicita revisar la facturacion con el administrador, sin recomendar un reintento inmediato ni emitir `Retry-After`.
+- Se conserva el envelope y el `TraceId`. En alta rapida se mantiene el rollback del archivo y ticket provisional, incluyendo `FailedStage` y el resultado de limpieza. Las consultas de gastos propagan este error en lugar de devolver un fallback exitoso.
+
+- POST /api/ia/service/text/format (Authorize)
+  Content-Type: application/json.
+  Body required: `text` (max configurable, 20,000 characters by default).
+  Body optional: `languageId` (`auto` by default or a valid BCP 47 language identifier).
+  Behavior: corrects spelling, grammar, punctuation and readable plain-text layout while preserving the source language, meaning and data. It does not translate, summarize, answer, persist or update content. Server-owned instructions cannot be overridden by the consumer.
+  Response data: `formattedText` (complete result), `hasChanges` (calculated by the API) and `warnings[]` with `fragment` and `reason`.
+  Errors: 422 validation or moderation rejection, 429 per-user rate/concurrency limit, 503 AI provider unavailable.
 - POST /api/ia/service/speech (Authorize)
   Content-Type: multipart/form-data
   Fields: languageId (required), audioFile (required), temperature (optional 0-1), prompt/context (optional)
@@ -103,7 +115,7 @@ Endpoints
   Si llega `sourceJson`, el endpoint analiza ese JSON directamente y omite la carga server-side.
   Si no llega `sourceJson`, el backend carga todos los registros filtrados server-side y decide si responde en modo `direct` o `chunked`.
   Response data: `Answer`, `Model`, `SourceKey`, `FiltersApplied`, `TotalSourceRecords`, `RecordsSentToModel`, `RetrievalMode`, `Truncated`, `Warnings`.
-  Errores relevantes: 422 validacion, 429 rate limit IA, 500 error interno.
+  Errores relevantes: 422 validacion, 429 rate limit IA, 503 cuota del proveedor agotada (`AI_QUOTA_EXCEEDED`), 500 error interno.
 
 ## Expense Sheets
 - GET /api/crm/expensesheets/currencies (Authorize + X-IND-Company)

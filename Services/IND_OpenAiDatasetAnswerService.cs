@@ -1,4 +1,5 @@
 using IND_CRM_API.Helpers;
+using IND_CRM_API.Models.Responses;
 using IND_CRM_API.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -21,7 +22,7 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiDatasetAnswerService : IAiDatasetAnswerService
     {
-        private const string DefaultModel = "gpt-5-mini";
+        private const string DefaultModel = "gpt-5.4-mini";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxOutputTokens = 2200;
         private const int DefaultChunkMaxOutputTokens = 1200;
@@ -112,6 +113,11 @@ namespace IND_CRM_API.Services
             }
             catch (IND_OpenAiRateLimitException)
             {
+                throw;
+            }
+            catch (IND_ExternalServiceException ex) when (ex.ErrorCode == IndErrorCodes.AiQuotaExceeded)
+            {
+                // Billing failures must reach the caller instead of becoming a successful fallback.
                 throw;
             }
             catch (Exception ex)
@@ -363,6 +369,7 @@ namespace IND_CRM_API.Services
                             " summary=" + summary,
                             AxaptaSessionManager.LogLevel.Warning);
 
+                        IND_OpenAiErrorHandling.ThrowIfQuotaExceeded(responseBody);
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
                         {
                             throw new IND_OpenAiRateLimitException(

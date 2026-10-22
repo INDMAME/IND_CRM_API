@@ -67,6 +67,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.OK, "AI answer generated", typeof(IndApiResponse<AskExpenseSheetsAiResponse>))]
         [SwaggerResponse((HttpStatusCode)422, "Validation errors", typeof(IndApiResponse<AskExpenseSheetsAiResponse>))]
         [SwaggerResponse((HttpStatusCode)429, "AI rate limit exceeded", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "AI provider quota exhausted (AI_QUOTA_EXCEEDED)", typeof(IndApiResponse<AskExpenseSheetsAiResponse>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Internal error", typeof(IndApiResponse<AskExpenseSheetsAiResponse>))]
         public async Task<IHttpActionResult> Ask([FromBody] AskExpenseSheetsAiRequest body, CancellationToken cancellationToken)
         {
@@ -173,6 +174,14 @@ namespace IND_CRM_API.Controllers.System
                     AxaptaSessionManager.LogLevel.Warning);
 
                 return BuildTooManyRequests(traceId, ex.RetryAfterSeconds);
+            }
+            catch (IND_ExternalServiceException ex) when (ex.ErrorCode == IndErrorCodes.AiQuotaExceeded)
+            {
+                Logger.Log(
+                    "[AI-EXPENSESHEETS] Provider quota exhausted errorCode=" + ex.ErrorCode + " summary=" + ex.ProviderSummary +
+                    " traceId=" + traceId,
+                    AxaptaSessionManager.LogLevel.Warning);
+                return Content(ex.StatusCode, BuildErrorResponse(traceId, ex.UserMessage, ex.ErrorCode));
             }
             catch (Exception ex) when (ex is COMException)
             {

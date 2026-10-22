@@ -23,7 +23,7 @@ namespace IND_CRM_API.Services
     /// </summary>
     public sealed class IND_OpenAiExpenseTicketDraftService : IND_IExpenseTicketDraftService, IOpenAITicketNormalizationService
     {
-        private const string DefaultModel = "gpt-5-nano";
+        private const string DefaultModel = "gpt-6-luna";
         private const int DefaultTimeoutSeconds = 180;
         private const int DefaultMaxImageBytes = 50 * 1024 * 1024;
         private const int DefaultMaxOutputTokens = 1024;
@@ -177,6 +177,7 @@ namespace IND_CRM_API.Services
                             $"[OPENAI] Expense draft failed attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
                             AxaptaSessionManager.LogLevel.Warning);
 
+                        IND_OpenAiErrorHandling.ThrowIfQuotaExceeded(responseBody);
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
                         {
                             throw new IND_OpenAiRateLimitException(
@@ -347,6 +348,7 @@ namespace IND_CRM_API.Services
                             $"[OPENAI-NORMALIZE] Receipt normalization failed attempt={attempt} draftProfile={GetDraftProfileText(requestOptions.DraftProfile)} status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture) : "na")} summary={summary}",
                             AxaptaSessionManager.LogLevel.Warning);
 
+                        IND_OpenAiErrorHandling.ThrowIfQuotaExceeded(responseBody);
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
                         {
                             throw new IND_OpenAiRateLimitException(

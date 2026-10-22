@@ -2,6 +2,8 @@ using System;
 using System.Net;
 using System.Net.Http;
 using IND_CRM_API.Models.Responses;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace IND_CRM_API.Services
 {
@@ -131,16 +133,81 @@ namespace IND_CRM_API.Services
 
     internal static class IND_OpenAiErrorHandling
     {
+        // Reports provider billing failures separately from temporary throttling.
+        public static void ThrowIfQuotaExceeded(string responseBody)
+        {
+            if (!TryReadQuotaError(responseBody, out var type, out var code))
+                return;
+
+            var message = string.Equals(code, "credit_balance_exhausted", StringComparison.OrdinalIgnoreCase)
+                ? "El proveedor de IA informa de saldo agotado. Contacte con el administrador para revisar la facturacion."
+                : "El proveedor de IA informa de una cuota de uso agotada. Contacte con el administrador para revisar la facturacion y los limites.";
+
+            throw new IND_ExternalServiceException(
+                "OpenAI",
+                message,
+                IndErrorCodes.AiQuotaExceeded,
+                HttpStatusCode.ServiceUnavailable,
+                "type=" + type + " code=" + code);
+        }
+
+        // Only structured provider error fields can establish a billing failure.
+        private static bool TryReadQuotaError(string responseBody, out string type, out string code)
+        {
+            type = null;
+            code = null;
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return false;
+
+            try
+            {
+                var error = JObject.Parse(responseBody)["error"] as JObject;
+                type = ReadErrorIdentifier(error?["type"]);
+                code = ReadErrorIdentifier(error?["code"]);
+                return IsQuotaIdentifier(type) || IsQuotaIdentifier(code);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        // Ignore unexpected object or array values in provider error identifiers.
+        private static string ReadErrorIdentifier(JToken token)
+        {
+            return token?.Type == JTokenType.String ? token.Value<string>().Trim() : null;
+        }
+
+        // These failures require a billing or quota change, not a short retry.
+        private static bool IsQuotaIdentifier(string value)
+        {
+            switch (value?.ToLowerInvariant())
+            {
+                case "insufficient_quota":
+                case "credit_balance_exhausted":
+                case "billing_hard_limit_reached":
+                case "organization_spend_limit_exceeded":
+                case "project_spend_limit_exceeded":
+                case "organization_usage_limit_exceeded":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // Preserve throttling behavior while excluding known billing failures.
         public static bool IsRateLimit(HttpStatusCode statusCode, string responseBody)
         {
+            if (TryReadQuotaError(responseBody, out _, out _))
+                return false;
+
             if (statusCode == (HttpStatusCode)429)
                 return true;
 
             var body = (responseBody ?? string.Empty).ToLowerInvariant();
             return body.Contains("rate_limit")
                 || body.Contains("rate limit")
-                || body.Contains("too many requests")
-                || body.Contains("insufficient_quota");
+                || body.Contains("too many requests");
         }
 
         public static int? GetRetryAfterSeconds(HttpResponseMessage response)

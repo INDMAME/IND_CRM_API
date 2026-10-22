@@ -18,11 +18,11 @@ namespace IND_CRM_API.Services
     /// Implementacion de OpenAI para transcripcion de audio.
     /// Notas:
     /// - Usa Audio Transcriptions API: POST https://api.openai.com/v1/audio/transcriptions
-    /// - El modelo se lee desde configuracion/entorno. Por defecto: "gpt-4o-transcribe".
+    /// - The server configuration selects the model, defaulting to gpt-transcribe.
     /// </summary>
     public sealed class IND_OpenAiAudioTranscriptionService : IND_IAudioTranscriptionService
     {
-        private const string DefaultModel = "gpt-4o-transcribe";
+        private const string DefaultModel = "gpt-transcribe";
         private const int DefaultTimeoutSeconds = 600;
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -94,12 +94,10 @@ namespace IND_CRM_API.Services
 
                 form.Add(new StringContent(_model, Encoding.UTF8), "model");
 
-                // gpt-4o-transcribe devuelve JSON; extraemos solo el campo "text".
+                // Request JSON and extract the text field for both model generations.
                 form.Add(new StringContent("json", Encoding.UTF8), "response_format");
 
-                // Si languageId es "auto", no enviar el parametro language.
-                if (!string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
-                    form.Add(new StringContent(languageId, Encoding.UTF8), "language");
+                AddLanguageHint(form, _model, languageId);
 
                 // Temperatura: controla aleatoriedad. Por defecto 0 para salida mas determinista.
                 form.Add(new StringContent(temperature.ToString(System.Globalization.CultureInfo.InvariantCulture), Encoding.UTF8), "temperature");
@@ -139,6 +137,7 @@ namespace IND_CRM_API.Services
                             $"[OPENAI] Fallo transcripcion. Status={(int)response.StatusCode} retryAfter={(retryAfterSeconds.HasValue ? retryAfterSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "na")} {summary}".Trim(),
                             AxaptaSessionManager.LogLevel.Error);
 
+                        IND_OpenAiErrorHandling.ThrowIfQuotaExceeded(responseBody);
                         if (IND_OpenAiErrorHandling.IsRateLimit(response.StatusCode, responseBody))
                         {
                             throw new IND_OpenAiRateLimitException(
@@ -219,6 +218,17 @@ namespace IND_CRM_API.Services
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
+        }
+
+        // Send the new language list while preserving legacy model compatibility.
+        private static void AddLanguageHint(MultipartFormDataContent form, string model, string languageId)
+        {
+            if (string.Equals(languageId, "auto", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var usesLanguageList = string.Equals(model, "gpt-transcribe", StringComparison.OrdinalIgnoreCase)
+                || model.StartsWith("gpt-transcribe-", StringComparison.OrdinalIgnoreCase);
+            form.Add(new StringContent(languageId, Encoding.UTF8), usesLanguageList ? "languages[]" : "language");
         }
 
         private static string ReadModelFromConfig()

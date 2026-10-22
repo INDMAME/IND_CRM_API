@@ -108,6 +108,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.OK, "Transcripcion correcta", typeof(IndPagedResponse<string>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<string>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "AI provider unavailable or quota exhausted (AI_QUOTA_EXCEEDED)", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.UnsupportedMediaType, "Tipo de contenido no soportado", typeof(IndApiResponse<string>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<string>))]
@@ -294,7 +295,7 @@ namespace IND_CRM_API.Controllers.System
             catch (IND_ExternalServiceException ex)
             {
                 totalSw.Stop();
-                _logger.Log("[SPEECH] External dependency error: " + ex.ServiceName + " " + ex.Message + " summary=" + (ex.ProviderSummary ?? string.Empty) + " totalMs=" + totalSw.ElapsedMilliseconds + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
+                _logger.Log("[SPEECH] External dependency error: " + ex.ServiceName + " " + ex.Message + " errorCode=" + ex.ErrorCode + " summary=" + (ex.ProviderSummary ?? string.Empty) + " totalMs=" + totalSw.ElapsedMilliseconds + " traceId=" + traceId, AxaptaSessionManager.LogLevel.Error);
                 LogApiOut(ex.StatusCode, traceId, AxaptaSessionManager.LogLevel.Error);
 
                 return Content(
@@ -327,6 +328,7 @@ namespace IND_CRM_API.Controllers.System
         [SwaggerResponse(HttpStatusCode.OK, "Borrador de hoja de gastos generado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
         [SwaggerResponse((HttpStatusCode)422, "Errores de validacion", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
         [SwaggerResponse((HttpStatusCode)429, "Limite de uso excedido", typeof(IndApiResponse<object>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "AI provider unavailable or quota exhausted (AI_QUOTA_EXCEEDED)", typeof(IndApiResponse<object>))]
         [SwaggerResponse(HttpStatusCode.Unauthorized, "Autenticacion requerida", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
         [SwaggerResponse(HttpStatusCode.UnsupportedMediaType, "Tipo de contenido no soportado", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
         [SwaggerResponse(HttpStatusCode.InternalServerError, "Error interno", typeof(IndApiResponse<ExpenseSheetDraftResponse>))]
@@ -515,7 +517,7 @@ namespace IND_CRM_API.Controllers.System
             }
             catch (IND_ExternalServiceException ex)
             {
-                _logger.Log("[IA-DRAFT] External dependency error: " + ex.ServiceName + " " + ex.Message + " summary=" + (ex.ProviderSummary ?? string.Empty), AxaptaSessionManager.LogLevel.Error);
+                _logger.Log("[IA-DRAFT] External dependency error: " + ex.ServiceName + " " + ex.Message + " errorCode=" + ex.ErrorCode + " summary=" + (ex.ProviderSummary ?? string.Empty), AxaptaSessionManager.LogLevel.Error);
                 LogApiOut(ex.StatusCode, traceId, AxaptaSessionManager.LogLevel.Error);
                 return ReturnError(ex.StatusCode, traceId, ex.UserMessage, ex.ErrorCode, null);
             }
