@@ -11,6 +11,8 @@ identificadores técnicos internos.
 
 | Documento funcional | Fuente Mermaid | Fuente técnica |
 | --- | --- | --- |
+| [visits-support-context.md](auth/visits-support-context.md) | [visits-support-context.mmd](auth/visits-support-context.mmd) | [visits-support-context-sequence.md](../technical/auth/visits-support-context-sequence.md) |
+| [visits-autonomous-workflow.md](integration/visits-autonomous-workflow.md) | [visits-autonomous-workflow.mmd](integration/visits-autonomous-workflow.mmd) | [visits-autonomous-target.md](../technical/integration/visits-autonomous-target.md) |
 | [expense-sheets.md](expenses/expense-sheets.md) | [expense-sheets.mmd](expenses/expense-sheets.mmd) | [expense-sheets-sequence.md](../technical/expenses/expense-sheets-sequence.md) |
 | [expense-sheet-line-create-edit-flow.md](expenses/expense-sheet-line-create-edit-flow.md) | [expense-sheet-line-create-edit-flow.mmd](expenses/expense-sheet-line-create-edit-flow.mmd) | [expense-sheet-line-create-edit-flow.md](../technical/expenses/expense-sheet-line-create-edit-flow.md) |
 | [ax-bi-query-table-schema.md](integration/ax-bi-query-table-schema.md) | [ax-bi-query-table-schema.mmd](integration/ax-bi-query-table-schema.mmd) | [ax-bi-query-table-schema.md](../technical/integration/ax-bi-query-table-schema.md) |

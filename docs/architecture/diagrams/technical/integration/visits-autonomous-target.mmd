@@ -1,0 +1,18 @@
+flowchart TB
+  USER["Persona usuaria"] --> SPA["FRONTEND<br/>React / Vite / MSAL"]
+  SPA <-->|"Authorization Code + PKCE"| ENTRA["Microsoft Entra"]
+  SPA -->|"Access token para API propia"| API["API propia<br/>NestJS / Fastify"]
+  API --> DOMAIN["Dominio local<br/>acceso, maestros y Visitas"]
+  API --> ADMIN["Administracion y soporte<br/>configuracion y diagnostico"]
+  ADMIN --> DB
+  DOMAIN -->|"Transaccion: agregado + auditoria + outbox"| DB[("PostgreSQL privado")]
+  LOGS["Logs tecnicos saneados<br/>escritor acotado por lotes"] --> DB
+  API -.-> LOGS
+  WORKER["Worker del mismo producto<br/>importacion, entrega y reconciliacion"] <--> DB
+  WORKER -.-> LOGS
+  WORKER <-->|"Contrato tecnico autenticado<br/>extraccion y aplicacion"| BRIDGE["Puente AX<br/>Windows / COM x86 serializado"]
+  BRIDGE <--> AX["Axapta / X++<br/>receptor idempotente y exportador"]
+  AX --> AXDATA[("Copia AX y maestros")]
+  WORKER -.->|"Importacion periodica<br/>maestros e historico autorizado"| DB
+  WORKER -.->|"Agregados WEB: solo observacion y comparacion"| DB
+  NOTE["El flujo interactivo usa datos locales.<br/>WEB es autoridad de las visitas migradas."] --- DOMAIN

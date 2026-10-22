@@ -16,6 +16,10 @@ Cada diagrama conserva juntos su explicación Markdown y su fuente Mermaid.
 
 ## Navegación
 
+- [Visitas con backend y base de datos propios](integration/visitas-autonomas.md):
+  análisis del sistema actual, adopción de IND_APP_STANDARD y propuesta de
+  autonomía con sincronización asíncrona, soporte como otra persona,
+  administración y logs en PostgreSQL; destino todavía no implementado.
 - [Autenticación y contexto de empresa](security/authentication-and-company-context.md):
   identidad, autorización y aislamiento por empresa.
 - [Catálogo de diagramas](diagrams/README.md): separa las vistas técnicas de

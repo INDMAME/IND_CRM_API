@@ -10,7 +10,8 @@ Los diagramas se agrupan primero por audiencia y después por proceso:
 | --- | --- |
 | `context` | Contexto del sistema y actores. |
 | `integration` | Comunicación y datos entre sistemas. |
-| `auth` | Identidad, empresa, autenticación y contexto. |
+| `integration` — Visitas | Flujo actual y propuesta de autonomía con base propia, worker y entrega AX. |
+| `auth` | Identidad, empresa, autenticación, contexto y propuesta de actuación de soporte en Visitas. |
 | `expenses` | Hojas y líneas de gastos. |
 | `tickets` | Tickets y justificantes. |
 | `ai` | Audio, imagen, OCR y normalización asistidos por IA. |
