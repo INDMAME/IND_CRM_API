@@ -246,6 +246,7 @@ $settings = @(
     New-EnvSetting -Name "JWT_SECRET_KEY" -Value "<SET_ME_JWT_SECRET_KEY>" -Secret $true -Category "JWT"
     New-EnvSetting -Name "INDCRM_JWT_EXPIRATION_MINUTES" -Value "60" -Category "JWT"
     New-EnvSetting -Name "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES" -Value "5" -Category "JWT"
+    New-EnvSetting -Name "INDCRM_SYNC_USER" -Value "APIAX" -Category "Sync"
     New-EnvSetting -Name "INDCRM_CONTEXT_TOKEN_ISSUER" -Value "IND_CRM_CONTEXT" -Category "JWT"
     New-EnvSetting -Name "INDCRM_CONTEXT_TOKEN_AUDIENCE" -Value "IND_CRM_WEB_CONTEXT" -Category "JWT"
     New-EnvSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Value (New-RandomSecret) -Secret $true -PreserveExisting $true -Category "JWT"

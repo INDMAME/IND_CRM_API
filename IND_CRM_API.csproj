@@ -159,6 +159,7 @@
   <ItemGroup>
     <Compile Include="App_Start\DependencyConfig.cs" />
     <Compile Include="App_Start\CompanyHeaderOperationFilter.cs" />
+    <Compile Include="App_Start\SyncWorkerAuthorizeAttribute.cs" />
     <Compile Include="App_Start\INDSwaggerConfig.cs" />
     <Compile Include="App_Start\IND_OpenAiRateLimitHandler.cs" />
     <Compile Include="Contracts\Requests\FormatTextRequest.cs" />
@@ -192,6 +193,7 @@
     <Compile Include="Contracts\Requests\UpdateExpenseSheetTicketRequest.cs" />
     <Compile Include="Contracts\Requests\DeleteVisitaAsistenteRequest.cs" />
     <Compile Include="Contracts\Responses\ActivityDetailDto.cs" />
+    <Compile Include="Contracts\Responses\SyncDtos.cs" />
     <Compile Include="Contracts\Responses\AskExpenseSheetsAiResponse.cs" />
     <Compile Include="Contracts\Responses\CrmEnumCatalogDto.cs" />
     <Compile Include="Contracts\Responses\DataVisibilityVisibleUserDto.cs" />
@@ -212,6 +214,7 @@
     <Compile Include="Models\Responses\INDPagedResponse.cs" />
     <Compile Include="Models\Responses\INDValidationError.cs" />
     <Compile Include="Contracts\Requests\CreateVisitaAsistenteRequest.cs" />
+    <Compile Include="Contracts\Requests\SyncRequests.cs" />
     <Compile Include="Contracts\Requests\LoginRequest.cs" />
     <Compile Include="Controllers\CRM\BaseCrmController.cs" />
     <Compile Include="Services\ExpenseMutationPolicy.cs" />
@@ -227,6 +230,8 @@
     <Compile Include="Controllers\CRM\CrmProjectsController.cs" />
     <Compile Include="Controllers\CRM\CrmTemplateController.cs" />
     <Compile Include="Controllers\CRM\CrmVisitsController.cs" />
+    <Compile Include="Controllers\CRM\BaseSyncController.cs" />
+    <Compile Include="Controllers\CRM\CrmSyncController.cs" />
     <Compile Include="Controllers\System\AuthController.cs" />
     <Compile Include="Controllers\System\INDExpenseSheetsAiController.cs" />
     <Compile Include="Controllers\System\INDSpeechController.cs" />
@@ -234,6 +239,8 @@
     <Compile Include="Helpers\AxContainerReadHelper.cs" />
     <Compile Include="Helpers\AxContainerHelper.cs" />
     <Compile Include="Helpers\AppSettingsHelper.cs" />
+    <Compile Include="Helpers\AxSyncDateTime.cs" />
+    <Compile Include="Helpers\SyncWorkerIdentity.cs" />
     <Compile Include="Helpers\CurrencyCodeHelper.cs" />
     <Compile Include="Helpers\ExpenseSheetListQueryHelper.cs" />
     <Compile Include="Helpers\ExpenseTicketImageHelper.cs" />
@@ -299,6 +306,8 @@
     <Compile Include="Services\Interfaces\ITicketAIProcessingService.cs" />
     <Compile Include="Services\Interfaces\IJwtService.cs" />
     <Compile Include="Services\JwtService.cs" />
+    <Compile Include="Services\Interfaces\ICrmSyncService.cs" />
+    <Compile Include="Services\CrmSyncService.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="WebApiConfig.cs" />
   </ItemGroup>

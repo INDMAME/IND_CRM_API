@@ -1,0 +1,117 @@
+using System;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Security.Claims;
+using System.Security.Principal;
+using System.Web.Http;
+using System.Web.Http.Controllers;
+using System.Web.Http.Routing;
+using IND_CRM_API.App_Start;
+using IND_CRM_API.Helpers;
+using IND_CRM_API.Services;
+
+// Behavioral checks of the sync worker identity: role claim issued only to the configured user
+// and SyncWorkerAuthorizeAttribute decisions, run against the compiled sources without AX.
+internal static class Program
+{
+    private static int failures;
+
+    private static void Check(bool condition, string name)
+    {
+        Console.WriteLine((condition ? "PASS: " : "FAILED: ") + name);
+        if (!condition)
+            failures++;
+    }
+
+    private static int Main()
+    {
+        var configured = SyncWorkerIdentity.GetConfiguredUser();
+        Check(!string.IsNullOrWhiteSpace(configured), "sync worker user is configured for the test");
+        if (string.IsNullOrWhiteSpace(configured))
+            return 1;
+
+        var jwt = new JwtService();
+        var handler = new JwtSecurityTokenHandler();
+
+        var workerToken = handler.ReadJwtToken(jwt.GenerateToken(configured, 5).Token);
+        Check(workerToken.Claims.Any(c => c.Type == SyncWorkerIdentity.RoleClaimType && c.Value == SyncWorkerIdentity.SyncWorkerRole),
+            "login token of the configured user carries ind:role=sync-worker");
+        Check(workerToken.Claims.Any(c => c.Type == ClaimTypes.Name && c.Value == configured),
+            "login token keeps the name claim");
+
+        var otherToken = handler.ReadJwtToken(jwt.GenerateToken(configured + "X", 5).Token);
+        Check(!otherToken.Claims.Any(c => c.Type == SyncWorkerIdentity.RoleClaimType),
+            "token of another user has no role claim");
+
+        var explicitToken = handler.ReadJwtToken(jwt.GenerateToken(configured + "X", 5, new[] { "custom-role" }).Token);
+        Check(explicitToken.Claims.Any(c => c.Type == SyncWorkerIdentity.RoleClaimType && c.Value == "custom-role"),
+            "explicit roles are embedded as ind:role claims");
+
+        Check(SyncWorkerIdentity.IsSyncWorkerUser(configured.ToLowerInvariant()), "user match is case-insensitive");
+        Check(!SyncWorkerIdentity.IsSyncWorkerUser(null), "null user is not the worker");
+
+        Check(!Authorize(null), "anonymous request is denied");
+        Check(!Authorize(Principal(configured, false)), "configured user without the claim is denied");
+        Check(!Authorize(Principal(configured + "X", true)), "forged claim for another user is denied");
+        Check(Authorize(Principal(configured, true)), "configured user with the claim is allowed");
+
+        var forbidden = Context(Principal(configured, false));
+        new SyncWorkerAuthorizeAttribute().OnAuthorization(forbidden);
+        Check(forbidden.Response != null && forbidden.Response.StatusCode == HttpStatusCode.Forbidden,
+            "denied authenticated request is 403");
+        var body = forbidden.Response == null ? string.Empty : forbidden.Response.Content.ReadAsStringAsync().Result;
+        Check(body.Contains("SYNC_WORKER_FORBIDDEN"), "403 envelope carries SYNC_WORKER_FORBIDDEN");
+
+        var anonymous = Context(null);
+        new SyncWorkerAuthorizeAttribute().OnAuthorization(anonymous);
+        Check(anonymous.Response != null && anonymous.Response.StatusCode == HttpStatusCode.Unauthorized,
+            "anonymous request is 401");
+
+        Console.WriteLine(failures == 0 ? "All sync worker identity checks passed." : failures + " check(s) failed.");
+        return failures == 0 ? 0 : 1;
+    }
+
+    private static bool Authorize(IPrincipal principal)
+    {
+        var context = Context(principal);
+        new SyncWorkerAuthorizeAttribute().OnAuthorization(context);
+        return context.Response == null;
+    }
+
+    private static ClaimsPrincipal Principal(string name, bool withRole)
+    {
+        var identity = new ClaimsIdentity("Test");
+        identity.AddClaim(new Claim(ClaimTypes.Name, name));
+        if (withRole)
+            identity.AddClaim(new Claim(SyncWorkerIdentity.RoleClaimType, SyncWorkerIdentity.SyncWorkerRole));
+        return new ClaimsPrincipal(identity);
+    }
+
+    private static HttpActionContext Context(IPrincipal principal)
+    {
+        var configuration = new HttpConfiguration();
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/crm/sync/ping");
+        request.SetConfiguration(configuration);
+        var requestContext = new HttpRequestContext { Principal = principal, Configuration = configuration };
+        request.SetRequestContext(requestContext);
+
+        var controllerDescriptor = new HttpControllerDescriptor(configuration, "Probe", typeof(ProbeController));
+        var controllerContext = new HttpControllerContext(configuration, new HttpRouteData(new HttpRoute()), request)
+        {
+            ControllerDescriptor = controllerDescriptor,
+            RequestContext = requestContext
+        };
+        var actionDescriptor = new ReflectedHttpActionDescriptor(controllerDescriptor, typeof(ProbeController).GetMethod("Get"));
+        return new HttpActionContext(controllerContext, actionDescriptor);
+    }
+
+    public sealed class ProbeController : ApiController
+    {
+        public IHttpActionResult Get()
+        {
+            return Ok();
+        }
+    }
+}

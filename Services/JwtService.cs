@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
@@ -61,6 +63,18 @@ namespace IND_CRM_API.Services
         /// </exception>
         public JwtTokenInfo GenerateToken(string username, int? overrideMinutes = null)
         {
+            // API roles follow the configured identity so login, refresh and auto-renewal stay consistent.
+            return GenerateToken(username, overrideMinutes, SyncWorkerIdentity.RolesFor(username));
+        }
+
+        /// <summary>
+        /// Genera un token JWT con claims de rol de la API (ind:role) ademas de los claims basicos.
+        /// </summary>
+        /// <param name="username">Nombre del usuario autenticado.</param>
+        /// <param name="overrideMinutes">Expiracion opcional en minutos.</param>
+        /// <param name="roles">Roles de la API que se incluyen como claims ind:role (puede ser vacio).</param>
+        public JwtTokenInfo GenerateToken(string username, int? overrideMinutes, IEnumerable<string> roles)
+        {
             // Leer configuracion JWT desde App.config o variables de entorno
             var secretKey = AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY");
             var issuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER");
@@ -78,15 +92,21 @@ namespace IND_CRM_API.Services
             var expiration = DateTime.UtcNow.AddMinutes(expirationMinutes);
 
             // Crear token con claims básicos
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, username),
+                new Claim("iss", issuer),
+                new Claim("aud", audience)
+            };
+
+            // One ind:role claim per API role (today only the sync worker has one).
+            foreach (var role in (roles ?? Enumerable.Empty<string>()).Where(r => !string.IsNullOrWhiteSpace(r)))
+                claims.Add(new Claim(SyncWorkerIdentity.RoleClaimType, role.Trim()));
+
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
-                claims: new[]
-                {
-                    new Claim(ClaimTypes.Name, username),
-                    new Claim("iss", issuer),
-                    new Claim("aud", audience)
-                },
+                claims: claims,
                 expires: expiration,
                 signingCredentials: creds
             );

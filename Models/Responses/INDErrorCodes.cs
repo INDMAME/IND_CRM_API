@@ -127,5 +127,17 @@ namespace IND_CRM_API.Models.Responses
 
         /// <summary>Dependencia externa agoto su tiempo de espera.</summary>
         public const string ExternalServiceTimeout = "EXTERNAL_SERVICE_TIMEOUT";
+
+        /// <summary>Endpoint reserved to the CRM_INSERTEC sync worker (bearer without the sync-worker role).</summary>
+        public const string SyncWorkerForbidden = "SYNC_WORKER_FORBIDDEN";
+
+        /// <summary>The AX receiver rejected a sync message for a functional reason (no retry).</summary>
+        public const string SyncRejected = "SYNC_REJECTED";
+
+        /// <summary>The AX record changed after the base version known by the web (no automatic merge).</summary>
+        public const string SyncDivergent = "SYNC_DIVERGENT";
+
+        /// <summary>The AX record referenced by a sync read does not exist in the company.</summary>
+        public const string SyncNotFound = "SYNC_NOT_FOUND";
     }
 }

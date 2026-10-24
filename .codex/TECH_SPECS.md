@@ -24,6 +24,7 @@
 - Las escrituras de hojas y tickets pasan por `ExpenseMutationAuthorizationService`: separa actor firmado y propietario, lee permisos actuales con `loginEntraContext`, verifica el propietario del registro y consulta `getSubordinatesByUser` para las acciones delegadas de estado. `ExpenseMutationPolicy` conserva la matriz vigente de APP, sus niveles de módulo, excepciones de autogestión y campos permitidos. La cabecera opcional `X-IND-ActorAxUserId` no decide el actor de notificación: API lo deriva del contexto firmado.
 - Esta autorización no crea una caché entre peticiones. Solo reutiliza contexto y jerarquía dentro de `Request.Properties`; los registros mutables se vuelven a leer. Añade una lectura AX en altas propias, dos en escrituras sobre un registro y hasta tres en aprobación delegada o asociación línea-ticket. El lote de vinculación añade dos lecturas por lote; la limpieza recuperable añade una por ticket y comparte contexto dentro de la petición. Mantiene el acceso COM serializado y los controles transaccionales de AX.
 - Errores de contexto: `AUTH_CONTEXT_REQUIRED`, `AUTH_CONTEXT_STALE` y `AUTH_FORBIDDEN`. La APP puede refrescar y reintentar una vez los dos primeros; no convierte un 403 real en permiso.
+- El worker de CRM_INSERTEC (`/api/crm/sync/*`) usa una identidad técnica propia: login de servicio del usuario `SyncWorker:User` / `INDCRM_SYNC_USER`, al que `JwtService` añade el claim `ind:role=sync-worker` (`SyncWorkerIdentity`, también en refresh y renovación automática). `SyncWorkerAuthorizeAttribute` exige ese claim y que el nombre siga siendo el usuario configurado; `BaseSyncController` valida solo bearer, rol y `X-IND-Company`, sin contexto Entra, porque el propietario funcional viaja en el mensaje. Ese bearer no eleva permisos en el resto de rutas, que siguen exigiendo el contexto firmado.
 
 La explicación vigente de este flujo está en `docs/architecture/security/authentication-and-company-context.md`.
 
@@ -42,6 +43,7 @@ La explicación vigente de este flujo está en `docs/architecture/security/authe
 - `IND_CRM_API/.codex/Axapta` es la fuente canónica; APP es espejo.
 - Formato, análisis, compatibilidad y activación manual se rigen exclusivamente por `AX_XPO_WORKFLOW.md`.
 - Los cambios en XPO no se consideran activos hasta importar, compilar, sincronizar si corresponde y probar en Axapta.
+- Receptor del outbox web de CRM_INSERTEC: enum `INDCrmSyncEntityType`, tabla `INDCrmSyncMap`, clase `INDCrmSyncService` y formulario `INDCrmSyncMapForm`; contratos de contenedor y orden de importación en `ENDPOINTS.md`, sección «Sincronización CRM_INSERTEC». `CrmSyncService` (C#) usa la sesión COM por petición del usuario técnico del worker.
 
 ### Contrato AX para borrado recuperable de hojas
 

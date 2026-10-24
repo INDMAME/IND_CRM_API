@@ -4,7 +4,7 @@
 
 | Entorno | Colección canónica | Copia operativa |
 |---|---|---|
-| DEV | `.codex/postman/DEV/IND_CRM_API V09.postman_collection.json` | `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json` y `Notes/DEV/IND_CRM_API V09.postman_collection.json` |
+| DEV | `.codex/postman/DEV/IND_CRM_API V10.postman_collection.json` | `.codex/postman/DEV/IND_CRM_API_DEV.postman_collection.json` y `Notes/DEV/IND_CRM_API V10.postman_collection.json` |
 | PROD | `.codex/postman/PROD/IND_CRM_API V31.postman_collection.json` | `.codex/postman/IND_CRM_API V31.postman_collection.json` y `Notes/PROD/IND_CRM_API V31.postman_collection.json` |
 
 Las copias de una misma versión deben ser idénticas byte a byte. Las versiones anteriores se conservan como snapshots de colección, no como documentación normativa.
@@ -16,6 +16,7 @@ Las copias de una misma versión deben ser idénticas byte a byte. Las versiones
 - `companyId`: empresa seleccionada y permitida.
 - `axUserId`: valor funcional devuelto por el contexto para contratos que aún lo requieren.
 - `entraOid`, `contextVersion`, `permissionsRevision`, `contextToken`: contexto firmado devuelto por `/api/auth/entra/context`.
+- `syncUsername`, `syncPassword`, `syncTokenId`, `syncVisitRecId`: login de servicio del worker de CRM_INSERTEC (`INDCRM_SYNC_USER`) para la carpeta «CRM Sync (worker)»; el script de colección no sustituye ese bearer ni añade contexto Entra en `/api/crm/sync/*`.
 
 No guardar credenciales o tokens reales dentro de las colecciones versionadas.
 

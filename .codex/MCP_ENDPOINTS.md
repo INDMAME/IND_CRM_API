@@ -20,6 +20,7 @@ Objetivo: documentación detallada para exponer la API mediante herramientas MCP
 - Archivo canónico de herramientas: `.codex/MCP_TOOLS.json`.
 - Incluye `inputSchema` por herramienta y el mapeo HTTP en `x-http`.
 - El borrado recuperable `DELETE /api/crm/expensesheets/{hojaGastosId}/with-tickets` y su consulta `GET /api/crm/expensesheets/{hojaGastosId}/deletion` son contratos exclusivos de la APP, documentados en `ENDPOINTS.md`; no se exponen como herramientas MCP.
+- Las rutas `/api/crm/sync/*` son el receptor del worker de CRM_INSERTEC (identidad técnica `ind:role=sync-worker`, sin contexto Entra), documentadas en `ENDPOINTS.md`; no se exponen como herramientas MCP.
 
 ## Endpoints
 
