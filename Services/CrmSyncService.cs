@@ -94,33 +94,8 @@ namespace IND_CRM_API.Services
                 con.Append(message.prospect?.contactOrigin ?? 0);           // 12
                 con.Append(Text(message.prospect?.vatNum));                 // 13
                 con.Append(Text(message.prospect?.responsibleCrmUserId));   // 14
-                con.Append(ProspectOrigin(message.origin));                 // 15
-                con.Append(message.prospect?.supplierType ?? 0);            // 16
             });
             return ReadResult(root, message.messageId);
-        }
-
-        public SyncResultDto UpdateAccount(string username, string company, SyncAccountUpdateRequest message)
-        {
-            var root = Call(username, "updateAccount", con =>
-            {
-                AppendEnvelope(con, company, message);              // 1..4
-                con.Append(RecIdOrZero(message.axRecId));           // 5
-                con.Append(Text(message.account?.origin));          // 6
-                con.Append(Text(message.account?.accountNum));      // 7
-                con.Append(Text(message.fields?.tradeName));        // 8
-                con.Append(Text(message.fields?.legalName));        // 9
-                con.Append(Text(message.fields?.city));             // 10
-                con.Append(Text(message.fields?.countryId));        // 11
-            });
-            return ReadResult(root, message.messageId);
-        }
-
-        // Prospect origin of account.upsert; older workers send none and mean a customer prospect.
-        private static string ProspectOrigin(string origin)
-        {
-            var text = Text(origin);
-            return text.Length == 0 ? "ClientePotencial" : text;
         }
 
         public SyncResultDto UpsertContact(string username, string company, SyncContactUpsertRequest message)

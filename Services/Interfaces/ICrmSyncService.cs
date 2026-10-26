@@ -19,9 +19,6 @@ namespace IND_CRM_API.Services.Interfaces
 
         SyncResultDto UpsertContact(string username, string company, SyncContactUpsertRequest message);
 
-        /// <summary>Updates the CRM fields of an existing AX account (any origin).</summary>
-        SyncResultDto UpdateAccount(string username, string company, SyncAccountUpdateRequest message);
-
         /// <summary>Returns the current version of an AX visit, or null when it does not exist.</summary>
         SyncVersionDto GetVisitVersion(string username, string company, int recId);
 
