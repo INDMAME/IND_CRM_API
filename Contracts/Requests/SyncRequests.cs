@@ -104,15 +104,39 @@ namespace IND_CRM_API.Contracts.Requests
         public int? contactOrigin { get; set; }
         public string vatNum { get; set; }
         public string responsibleCrmUserId { get; set; }
+
+        /// <summary>Vendor prospects only: CRMVendDistribuidorFabricante (1 Distribuidor, 2 Fabricante).</summary>
+        public int? supplierType { get; set; }
     }
 
-    /// <summary>account.upsert message (web prospects only).</summary>
+    /// <summary>account.upsert message (web prospects: customer or vendor prospect).</summary>
     public class SyncProspectUpsertRequest : SyncMessageRequest
     {
         /// <summary>RecId of CRMAccountTable when the prospect already exists in AX.</summary>
         public string axRecId { get; set; }
         public string localCode { get; set; }
+
+        /// <summary>ClientePotencial (default) or ProveedorPotencial.</summary>
+        public string origin { get; set; }
         public SyncProspectFieldsDto prospect { get; set; }
+    }
+
+    /// <summary>CRM fields of an existing AX account that the web may change.</summary>
+    public class SyncAccountFieldsDto
+    {
+        public string tradeName { get; set; }
+        public string legalName { get; set; }
+        public string city { get; set; }
+        public string countryId { get; set; }
+    }
+
+    /// <summary>account.update message: edition of an account that already exists in AX (any origin).</summary>
+    public class SyncAccountUpdateRequest : SyncMessageRequest
+    {
+        /// <summary>RecId of CRMAccountTable.</summary>
+        public string axRecId { get; set; }
+        public SyncAccountRefDto account { get; set; }
+        public SyncAccountFieldsDto fields { get; set; }
     }
 
     /// <summary>Contact (CRMContactoTable) fields sent by the web.</summary>

@@ -30,6 +30,7 @@ namespace IND_CRM_API.Controllers.CRM
 
         private static readonly string[] AccountOrigins = { "Cliente", "ClientePotencial", "Proveedor", "ProveedorPotencial" };
         private static readonly string[] AttendeeTypes = { "Cliente_Proveedor", "Insertec", "Externo" };
+        private static readonly string[] ProspectOrigins = { "ClientePotencial", "ProveedorPotencial" };
 
         public CrmSyncController(IAxaptaSessionManager sessionManager, IAxLogger logger, ICrmSyncService syncService)
             : base(sessionManager, logger, syncService)
@@ -181,7 +182,8 @@ namespace IND_CRM_API.Controllers.CRM
         }
 
         /// <summary>
-        /// Creates or updates a web prospect (CRMClientePotencialTable + CRMAccountTable), message account.upsert.
+        /// Creates or updates a web prospect, message account.upsert: CRMClientePotencialTable by default or
+        /// CRMProveedorPotencialTable when origin is ProveedorPotencial (plus CRMAccountTable in both cases).
         /// </summary>
         [HttpPost, Route("prospects/upsert")]
         [ResponseType(typeof(IndApiResponse<SyncResultDto>))]
@@ -202,6 +204,8 @@ namespace IND_CRM_API.Controllers.CRM
             {
                 AddRecId(errors, "axRecId", body.axRecId, false);
                 AddText(errors, "localCode", body.localCode, WebCodeLength, false);
+                AddChoice(errors, "origin", body.origin, ProspectOrigins, false);
+                var supplier = string.Equals((body.origin ?? string.Empty).Trim(), "ProveedorPotencial", StringComparison.Ordinal);
                 if (body.prospect == null)
                 {
                     errors.Add(new IndValidationError { Field = "prospect", Message = "prospect es obligatorio." });
@@ -212,7 +216,10 @@ namespace IND_CRM_API.Controllers.CRM
                     AddText(errors, "prospect.legalName", body.prospect.legalName, NameLength, true);
                     AddText(errors, "prospect.city", body.prospect.city, NameLength, false);
                     AddText(errors, "prospect.countryId", body.prospect.countryId, CodeLength, false);
-                    AddText(errors, "prospect.statisticsGroup", body.prospect.statisticsGroup, CodeLength, true);
+                    // CRMClientePotencialTable requires the statistics group; the vendor prospect requires its type.
+                    AddText(errors, "prospect.statisticsGroup", body.prospect.statisticsGroup, CodeLength, !supplier);
+                    if (supplier && body.prospect.supplierType != 1 && body.prospect.supplierType != 2)
+                        errors.Add(new IndValidationError { Field = "prospect.supplierType", Message = "supplierType debe ser 1 (Distribuidor) o 2 (Fabricante)." });
                     AddEnumValue(errors, "prospect.contactOrigin", body.prospect.contactOrigin, false);
                     AddText(errors, "prospect.vatNum", body.prospect.vatNum, NameLength, false);
                     AddText(errors, "prospect.responsibleCrmUserId", body.prospect.responsibleCrmUserId, CodeLength, false);
@@ -232,6 +239,60 @@ namespace IND_CRM_API.Controllers.CRM
             catch (Exception ex)
             {
                 return AxFailure(ex, "prospects/upsert", traceId);
+            }
+        }
+
+        /// <summary>
+        /// Updates the CRM fields (trade name, legal name, city, country) of an account that already
+        /// exists in AX, any origin, message account.update. Never financial or tax data.
+        /// </summary>
+        [HttpPost, Route("accounts/update")]
+        [ResponseType(typeof(IndApiResponse<SyncResultDto>))]
+        [SwaggerOperation(Tags = new[] { "Sincronizacion CRM_INSERTEC" })]
+        [SwaggerResponse(HttpStatusCode.OK, "Mensaje aplicado o ya aplicado", typeof(IndApiResponse<SyncResultDto>))]
+        [SwaggerResponse((HttpStatusCode)422, "Validacion o rechazo funcional", typeof(IndApiResponse<SyncResultDto>))]
+        [SwaggerResponse(HttpStatusCode.ServiceUnavailable, "Axapta no disponible", typeof(IndApiResponse<object>))]
+        public IHttpActionResult UpdateAccount([FromBody] SyncAccountUpdateRequest body)
+        {
+            var traceId = GetTraceId();
+            var company = RequireCompanyOrReturn422(out var companyError, traceId);
+            if (companyError != null)
+                return companyError;
+
+            var errors = new List<IndValidationError>();
+            ValidateEnvelope(errors, body, company);
+            if (body != null)
+            {
+                AddRecId(errors, "axRecId", body.axRecId, true);
+                ValidateAccountRef(errors, body.account);
+                if (body.fields == null)
+                {
+                    errors.Add(new IndValidationError { Field = "fields", Message = "fields es obligatorio." });
+                }
+                else
+                {
+                    AddText(errors, "fields.tradeName", body.fields.tradeName, NameLength, false);
+                    AddText(errors, "fields.legalName", body.fields.legalName, NameLength, false);
+                    AddText(errors, "fields.city", body.fields.city, NameLength, false);
+                    AddText(errors, "fields.countryId", body.fields.countryId, CodeLength, false);
+                    if (string.IsNullOrWhiteSpace(body.fields.tradeName) && string.IsNullOrWhiteSpace(body.fields.legalName))
+                        errors.Add(new IndValidationError { Field = "fields.tradeName", Message = "Se requiere el nombre comercial o la razon social." });
+                }
+            }
+
+            if (errors.Count > 0)
+                return ValidationFailed(errors, traceId);
+
+            try
+            {
+                var username = GetAuthenticatedUsername();
+                LogIncoming("accounts/update", username, company, body, traceId);
+                var result = SyncService.UpdateAccount(username, company, body);
+                return FromSyncResult(result, "accounts/update", traceId);
+            }
+            catch (Exception ex)
+            {
+                return AxFailure(ex, "accounts/update", traceId);
             }
         }
 

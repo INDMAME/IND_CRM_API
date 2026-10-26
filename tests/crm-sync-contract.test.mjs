@@ -26,7 +26,7 @@ test("sync controller exposes the documented routes without the Entra context ga
 
   assert.match(controller, /\[RoutePrefix\("api\/crm\/sync"\)\]/u);
   for (const route of ['Route("ping")', 'Route("visits/upsert")', 'Route("visits/delete")', 'Route("prospects/upsert")',
-    'Route("contacts/upsert")', 'Route("visits/{recId:int}/version")', 'Route("visits/{recId:int}")']) {
+    'Route("contacts/upsert")', 'Route("accounts/update")', 'Route("visits/{recId:int}/version")', 'Route("visits/{recId:int}")']) {
     assert.ok(controller.includes(route), `route missing: ${route}`);
   }
 
@@ -70,6 +70,24 @@ test("C# container layout matches the X++ receiver positions", async () => {
   const upsertContact = extractXpp(xpo, "upsertContact");
   assert.match(upsertContact, /phone\s+= conPeek\(_data, 11\);/u);
 
+  // account.upsert adds 15 origin and 16 supplier type; vendor prospects go to upsertSupplierProspect.
+  const csharpProspect = extractMethod(service, "public SyncResultDto UpsertProspect", "public SyncResultDto UpdateAccount");
+  assert.match(csharpProspect, /ProspectOrigin\(message\.origin\)\);\s+\/\/ 15/u);
+  assert.match(csharpProspect, /supplierType \?\? 0\);\s+\/\/ 16/u);
+  assert.match(upsertProspect, /conLen\(_data\) >= 15 && conPeek\(_data, 15\) == "ProveedorPotencial"[\s\S]*upsertSupplierProspect\(_data\)/u);
+  const supplier = extractXpp(xpo, "upsertSupplierProspect");
+  assert.match(supplier, /supplierType\s+= conPeek\(_data, 16\);/u);
+  assert.match(supplier, /VendParameters::numRefCRMProveedorPotencialId\(\)/u);
+  assert.match(supplier, /buildResult\(outcome, account\.RecId, prospect\.ProveedorPotencialId/u);
+
+  // account.update: 11 positions in C# and X++.
+  const csharpUpdate = extractMethod(service, "public SyncResultDto UpdateAccount", "private static string ProspectOrigin");
+  const updateAppends = csharpUpdate.match(/con\.Append\(|AppendEnvelope\(/gu) ?? [];
+  assert.equal(updateAppends.length, 1 + 7, "updateAccount appends the envelope (4) and 7 values");
+  const updateAccount = extractXpp(xpo, "updateAccount");
+  assert.match(updateAccount, /axRecId\s+= conPeek\(_data, 5\);/u);
+  assert.match(updateAccount, /countryId\s+= conPeek\(_data, 11\);/u);
+
   // Output header read by C#: 13 positions, attendees in the second element.
   assert.match(service, /Detail = NullIfEmpty\(Str\(row, 10\)\)/u);
   assert.match(service, /SafePeekContainer\(root, 2\)/u);
@@ -98,10 +116,35 @@ test("X++ receiver keeps deduplication and mutation in one transaction and never
   assert.match(prospect, /CustParameters::numRefCRMClientePotencialId\(\)/u);
   assert.match(prospect, /prospect\.validateWrite\(\)/u);
   assert.match(prospect, /buildResult\(outcome, account\.RecId, prospect\.ClientePotencialId/u);
+
+  // Existing accounts: dedup on its own map type, source table by origin, never financial data.
+  const updateAccount = extractXpp(xpo, "updateAccount");
+  assert.match(updateAccount, /ttsbegin;[\s\S]*INDCrmSyncMap::find\(externalId, INDCrmSyncEntityType::Account, true\)/u);
+  assert.match(updateAccount, /custTable\.update\(\);\s*custTable\.ActualizaLineaEnTableCuentas\(\);/u);
+  assert.match(updateAccount, /vendTable\.update\(\);\s*vendTable\.ActualizaLineaEnTableCuentas\(\);/u);
+  for (const forbidden of ["CustGroup", "VendGroup", "Currency", "TaxGroup", "PaymTermId", "VATNum"]) {
+    assert.ok(!updateAccount.includes(forbidden), `updateAccount must not touch ${forbidden}`);
+  }
+
+  // Lock of web records: every mutating entry point opens and closes the service window, and new
+  // records are marked before insert.
+  for (const name of ["upsertVisit", "deleteVisit", "upsertProspect", "upsertSupplierProspect", "upsertContact", "updateAccount"]) {
+    const method = extractXpp(xpo, name);
+    assert.match(method, /INDCrmWebRecordGuard::serviceStart\(\);[\s\S]*INDCrmWebRecordGuard::serviceEnd\(\);\s*return result;/u,
+      `${name} must open and close the guard window`);
+  }
+  for (const record of ["attendee", "contact", "prospect", "activity"]) {
+    assert.match(xpo, new RegExp(`INDCrmWebRecordGuard::markCreatedByWeb\\(${record}\\);\\r?\\n\\s*#\\s*${record}\\.insert\\(\\);`, "u"));
+  }
+  const entity = await read(".codex/Axapta/INDCrmSyncEntityType.xpo", "latin1");
+  assert.match(entity, /#Account[\s\S]*EnumValue\s+#5/u);
+  const guard = await read(".codex/Axapta/INDCrmWebRecordGuard.xpo", "latin1");
+  assert.match(guard, /fieldName2Id\(_record\.TableId, "INDCreatedByWeb"\)/u);
+  assert.match(guard, /checkFailed\(/u);
 });
 
 test("new XPO files are Windows-1252, CRLF, without BOM, balanced and mirrored byte for byte", async () => {
-  for (const name of ["INDCrmSyncEntityType", "INDCrmSyncMap", "INDCrmSyncService", "INDCrmSyncMapForm"]) {
+  for (const name of ["INDCrmSyncEntityType", "INDCrmSyncMap", "INDCrmSyncService", "INDCrmSyncMapForm", "INDCrmWebRecordGuard"]) {
     const api = await readFile(new URL(`.codex/Axapta/${name}.xpo`, repo));
     const app = await readFile(new URL(`../IND_CRM_APP/.codex/Axapta/${name}.xpo`, repo));
     assert.ok(api.equals(app), `${name}.xpo differs between API and APP`);
@@ -121,7 +164,8 @@ test("ENDPOINTS.md documents every sync route and the worker identity", async ()
   const endpoints = await read(".codex/ENDPOINTS.md");
   const section = extractMethod(endpoints, "## Sincronización CRM_INSERTEC", "## Plantilla interna");
   for (const route of ["GET /api/crm/sync/ping", "POST /api/crm/sync/visits/upsert", "POST /api/crm/sync/visits/delete",
-    "POST /api/crm/sync/prospects/upsert", "POST /api/crm/sync/contacts/upsert", "GET /api/crm/sync/visits/{recId}/version",
+    "POST /api/crm/sync/prospects/upsert", "POST /api/crm/sync/contacts/upsert", "POST /api/crm/sync/accounts/update",
+    "GET /api/crm/sync/visits/{recId}/version",
     "GET /api/crm/sync/visits/{recId}"]) {
     assert.ok(section.includes(route), `ENDPOINTS.md misses ${route}`);
   }
