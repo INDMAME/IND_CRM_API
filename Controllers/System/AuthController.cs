@@ -163,7 +163,7 @@ namespace IND_CRM_API.Controllers.System
                     correlationId,
                     dto.Username,
                     null,
-                    $"tokenExpiresUtc={tokenInfo.Expiration:o} syncWorkerRole={SyncWorkerIdentity.IsSyncWorkerUser(dto.Username)}",
+                    $"tokenExpiresUtc={tokenInfo.Expiration:o}",
                     authSw);
 
                 LogAuthTrace("login", "before-refresh-session-token", traceId, correlationId, dto.Username, null, "oldTokenPresent=false", authSw);

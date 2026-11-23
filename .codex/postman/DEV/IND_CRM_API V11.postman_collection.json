@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "62f51e11-9a24-4295-a9c0-a1f5f984308a",
-    "name": "IND_CRM_API DEV V10",
-    "description": "Coleccion DEV V10. Anade la carpeta CRM Sync (worker): receptor del outbox de CRM_INSERTEC (api/crm/sync/*) con login de servicio propio (syncUsername/syncPassword -> syncTokenId), ping, upsert y delete de visitas, upsert de clientes potenciales y contactos, version y snapshot de visita. Coleccion DEV V09. El borrado recuperable acepta deleteTickets=false para conservar todos los tickets desvinculados y true para eliminar todos los tickets vinculados y adjuntos. La eleccion persiste entre reintentos; omitir el parametro conserva el contrato anterior.",
+    "_postman_id": "80aa6f41-368d-4462-bc02-9d8ab6960857",
+    "name": "IND_CRM_API DEV V11",
+    "description": "Coleccion DEV V11. El borrado recuperable acepta deleteTickets=false para conservar todos los tickets desvinculados y true para eliminar todos los tickets vinculados y adjuntos. La eleccion persiste entre reintentos; omitir el parametro conserva el contrato anterior. Anade la carpeta CRM WebStore (receptor CRMWeb de CRM_INSERTEC, api/crm/webstore/*) con su login propio.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "12158298"
   },
@@ -1802,336 +1802,6 @@
                 "crm",
                 "visits",
                 "deleteVisitaAsistente"
-              ]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "CRM Sync (worker)",
-      "description": "Receptor del outbox de CRM_INSERTEC (ENDPOINTS.md, Sincronizacion CRM_INSERTEC). Usa el login de servicio del usuario INDCRM_SYNC_USER (syncUsername/syncPassword), nunca el token de una persona. Los ejemplos crean o actualizan registros reales en la empresa companyId: cambie externalId para crear otro registro y axRecId/baseVersion para actualizar uno existente.",
-      "item": [
-        {
-          "name": "Sync worker login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "try {",
-                  "  var json = pm.response.json();",
-                  "  var data = json.data || json.Data;",
-                  "  if (data && data.token) {",
-                  "    pm.collectionVariables.set('syncTokenId', data.token);",
-                  "    try { pm.environment.set('syncTokenId', data.token); } catch (envErr) {}",
-                  "  } else {",
-                  "    console.warn('Sync worker login sin token en la respuesta.');",
-                  "  }",
-                  "} catch (err) {",
-                  "  console.error('No se pudo procesar el login del worker: ' + err);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Username\": \"{{syncUsername}}\",\n  \"Password\": \"{{syncPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "login"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Ping",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/ping",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "ping"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Visit upsert",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"11111111-1111-4111-8111-111111111111\",\n  \"version\": 1,\n  \"company\": \"{{companyId}}\",\n  \"actor\": {\n    \"realPersonAlias\": \"postman\",\n    \"effectivePersonAlias\": \"postman\",\n    \"supportSessionId\": null,\n    \"traceId\": \"{{$guid}}\"\n  },\n  \"webCode\": \"VW-POSTMAN\",\n  \"baseVersion\": null,\n  \"axRecId\": null,\n  \"account\": {\n    \"origin\": \"ClientePotencial\",\n    \"accountNum\": \"CP000001\"\n  },\n  \"visit\": {\n    \"transDate\": \"2026-10-23\",\n    \"visitType\": 1,\n    \"contactMethod\": 0,\n    \"rating\": 1,\n    \"description\": \"Visita de prueba desde Postman\",\n    \"comments\": \"Comentarios de prueba\",\n    \"background\": null,\n    \"conclusions\": null,\n    \"ownerAxUserId\": \"{{axUserId}}\",\n    \"ownerCrmUserId\": null\n  },\n  \"attendees\": []\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/visits/upsert",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "visits",
-                "upsert"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Visit delete",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"11111111-1111-4111-8111-111111111111\",\n  \"version\": 2,\n  \"company\": \"{{companyId}}\",\n  \"actor\": {\n    \"realPersonAlias\": \"postman\",\n    \"effectivePersonAlias\": \"postman\",\n    \"supportSessionId\": null,\n    \"traceId\": \"{{$guid}}\"\n  },\n  \"webCode\": \"VW-POSTMAN\",\n  \"axRecId\": \"{{syncVisitRecId}}\",\n  \"baseVersion\": null\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/visits/delete",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "visits",
-                "delete"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Prospect upsert",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"22222222-2222-4222-8222-222222222222\",\n  \"version\": 1,\n  \"company\": \"{{companyId}}\",\n  \"actor\": {\n    \"realPersonAlias\": \"postman\",\n    \"effectivePersonAlias\": \"postman\",\n    \"supportSessionId\": null,\n    \"traceId\": \"{{$guid}}\"\n  },\n  \"axRecId\": null,\n  \"localCode\": \"W-000001\",\n  \"prospect\": {\n    \"tradeName\": \"Cliente potencial Postman\",\n    \"legalName\": \"Cliente potencial Postman SL\",\n    \"city\": \"Bilbao\",\n    \"countryId\": \"ES\",\n    \"statisticsGroup\": \"ACERO\",\n    \"contactOrigin\": 1,\n    \"vatNum\": null,\n    \"responsibleCrmUserId\": null\n  }\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/prospects/upsert",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "prospects",
-                "upsert"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Contact upsert",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"33333333-3333-4333-8333-333333333333\",\n  \"version\": 1,\n  \"company\": \"{{companyId}}\",\n  \"actor\": {\n    \"realPersonAlias\": \"postman\",\n    \"effectivePersonAlias\": \"postman\",\n    \"supportSessionId\": null,\n    \"traceId\": \"{{$guid}}\"\n  },\n  \"axRecId\": null,\n  \"account\": {\n    \"origin\": \"ClientePotencial\",\n    \"accountNum\": \"CP000001\"\n  },\n  \"contact\": {\n    \"name\": \"Contacto Postman\",\n    \"position\": \"Compras\",\n    \"email\": \"contacto@example.com\",\n    \"phone\": \"600000000\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/contacts/upsert",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "contacts",
-                "upsert"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Visit version",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/visits/{{syncVisitRecId}}/version",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "visits",
-                "{{syncVisitRecId}}",
-                "version"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Visit snapshot",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{syncTokenId}}"
-              },
-              {
-                "key": "X-IND-Company",
-                "value": "{{companyId}}"
-              },
-              {
-                "key": "User-Agent",
-                "value": "CRM_INSERTEC-sync-worker/1.0"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/crm/sync/visits/{{syncVisitRecId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "crm",
-                "sync",
-                "visits",
-                "{{syncVisitRecId}}"
               ]
             }
           },
@@ -4564,6 +4234,229 @@
       ]
     },
     {
+      "name": "CRM WebStore",
+      "description": "Receptor CRMWeb de CRM_INSERTEC (ENDPOINTS.md, Receptor CRMWeb). Ejecutar primero WebStore login: guarda webStoreTokenId. El script de coleccion envia ese bearer y X-IND-Company, sin contexto Entra. Los mensajes escriben registros reales en AX.",
+      "item": [
+        {
+          "name": "WebStore login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves the web store token; it is valid only on api/crm/webstore/*.",
+                  "try {",
+                  "  var json = pm.response.json();",
+                  "  var data = json.data || json.Data;",
+                  "  if (data && data.token) {",
+                  "    pm.collectionVariables.set('webStoreTokenId', data.token);",
+                  "  } else {",
+                  "    console.warn('WebStore login sin token en la respuesta.');",
+                  "  }",
+                  "} catch (err) {",
+                  "  console.error('No se pudo procesar el login del receptor: ' + err);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{webStoreUsername}}\",\n  \"password\": \"{{webStorePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login propio del receptor. Solo el usuario de AX_WEBSTORE_USER obtiene token. Rellenar webStoreUsername y webStorePassword en un entorno local, nunca en la coleccion versionada."
+          }
+        },
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/ping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "ping"
+              ]
+            },
+            "description": "Prueba token, X-IND-Company y sesion AX (CRMWebStoreCommon::ping)."
+          }
+        },
+        {
+          "name": "Visit upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000001\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"activity\": {\n    \"accountNum\": \"\",\n    \"origin\": 8,\n    \"custAccount\": \"\",\n    \"originCustAccount\": 1,\n    \"refRecId\": null,\n    \"name\": \"\",\n    \"country\": \"\",\n    \"userId\": \"\",\n    \"createdByUserId\": \"\",\n    \"division\": 0,\n    \"transDate\": \"2026-11-20\",\n    \"realDate\": \"2026-11-20\",\n    \"activityType\": 4,\n    \"status\": 2,\n    \"priority\": 1,\n    \"visitType\": 1,\n    \"contactMethod\": 0,\n    \"rating\": 2,\n    \"description\": \"Prueba Postman\",\n    \"comments\": \"\",\n    \"background\": \"\",\n    \"conclusions\": \"\"\n  },\n  \"attendees\": [\n    {\n      \"externalId\": \"00000000-0000-4000-8000-000000000011\",\n      \"axRecId\": null,\n      \"type\": 2,\n      \"name\": \"\",\n      \"position\": \"\",\n      \"contactRecId\": null,\n      \"createdByUserId\": \"\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/visits/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "visits",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebVisitStore::upsert. Escribe en AX de la empresa companyId: rellenar los datos de una cuenta de prueba antes de enviar."
+          }
+        },
+        {
+          "name": "Visit delete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000001\",\n  \"version\": 2,\n  \"axRecId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/visits/delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "visits",
+                "delete"
+              ]
+            },
+            "description": "CRMWebVisitStore::remove. Borra la visita y sus asistentes en AX; una visita que ya no existe responde applied."
+          }
+        },
+        {
+          "name": "Contact upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000021\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"contact\": {\n    \"accountNum\": \"\",\n    \"origin\": 6,\n    \"name\": \"Contacto Postman\",\n    \"position\": \"\",\n    \"email\": \"\",\n    \"phone\": \"\",\n    \"company\": \"\",\n    \"companyPhone\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/contacts/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "contacts",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebContactStore::upsert. Escribe en AX de la empresa companyId."
+          }
+        },
+        {
+          "name": "Prospect upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000031\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"prospect\": {\n    \"name\": \"Potencial Postman\",\n    \"legalName\": \"\",\n    \"city\": \"\",\n    \"countryId\": \"\",\n    \"statisticsGroup\": \"\",\n    \"contactOrigin\": 1,\n    \"vatNum\": \"\",\n    \"userId\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/prospects/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "prospects",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebProspectStore::upsert. axRecId es el RecId de CRMClientePotencialTable. Escribe en AX de la empresa companyId."
+          }
+        }
+      ]
+    },
+    {
       "name": "Internal",
       "item": [
         {
@@ -4674,13 +4567,21 @@
           "  else requestPath = requestPath.replace(/^https?:\\/\\/[^/]+/i, \"\");",
           "  requestPath = requestPath || \"/\";",
           "  var pathOnly = requestPath.split(\"?\")[0];",
-          "  var isSyncWorker = pathOnly.indexOf(\"/api/crm/sync/\") === 0 || resolvedUrl.indexOf(\"/api/crm/sync/\") >= 0;",
           "  var isApiRequest = pathOnly.indexOf(\"/api/\") === 0 || resolvedUrl.indexOf(\"/api/\") >= 0;",
           "  var requiresCompanyContext = pathOnly.indexOf(\"/api/crm/\") === 0 || resolvedUrl.indexOf(\"/api/crm/\") >= 0 || pathOnly === \"/api/ia/service/expensesheets/ask\" || pathOnly === \"/api/ia/service/expensefromticket\" || resolvedUrl.indexOf(\"/api/ia/service/expensesheets/ask\") >= 0 || resolvedUrl.indexOf(\"/api/ia/service/expensefromticket\") >= 0;",
-          "  if (isSyncWorker) requiresCompanyContext = false;",
           "  var isLogin = pathOnly === \"/api/auth/login\";",
+          "  // CRM WebStore (api/crm/webstore/*): own token, X-IND-Company only, no Entra context.",
+          "  var isWebStore = pathOnly.indexOf(\"/api/crm/webstore/\") === 0 || resolvedUrl.indexOf(\"/api/crm/webstore/\") >= 0;",
+          "  var isWebStoreLogin = pathOnly === \"/api/crm/webstore/auth/login\";",
+          "  if (isWebStore) {",
+          "    requiresCompanyContext = false;",
+          "    if (!isWebStoreLogin) {",
+          "      upsertHeader(\"Authorization\", \"Bearer \" + getVar(\"webStoreTokenId\"));",
+          "      upsertHeader(\"X-IND-Company\", getVar(\"companyId\"));",
+          "    }",
+          "  }",
           "",
-          "  if (isApiRequest && !isLogin && !isSyncWorker) {",
+          "  if (isApiRequest && !isLogin && !isWebStore) {",
           "    var token = getVar(\"tokenId\");",
           "    if (token) upsertHeader(\"Authorization\", \"Bearer \" + token);",
           "  }",
@@ -4934,19 +4835,15 @@
       "type": "string"
     },
     {
-      "key": "syncUsername",
+      "key": "webStoreUsername",
       "value": ""
     },
     {
-      "key": "syncPassword",
+      "key": "webStorePassword",
       "value": ""
     },
     {
-      "key": "syncTokenId",
-      "value": ""
-    },
-    {
-      "key": "syncVisitRecId",
+      "key": "webStoreTokenId",
       "value": ""
     }
   ]

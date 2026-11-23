@@ -24,6 +24,7 @@
 - Las escrituras de hojas y tickets pasan por `ExpenseMutationAuthorizationService`: separa actor firmado y propietario, lee permisos actuales con `loginEntraContext`, verifica el propietario del registro y consulta `getSubordinatesByUser` para las acciones delegadas de estado. `ExpenseMutationPolicy` conserva la matriz vigente de APP, sus niveles de módulo, excepciones de autogestión y campos permitidos. La cabecera opcional `X-IND-ActorAxUserId` no decide el actor de notificación: API lo deriva del contexto firmado.
 - Esta autorización no crea una caché entre peticiones. Solo reutiliza contexto y jerarquía dentro de `Request.Properties`; los registros mutables se vuelven a leer. Añade una lectura AX en altas propias, dos en escrituras sobre un registro y hasta tres en aprobación delegada o asociación línea-ticket. El lote de vinculación añade dos lecturas por lote; la limpieza recuperable añade una por ticket y comparte contexto dentro de la petición. Mantiene el acceso COM serializado y los controles transaccionales de AX.
 - Errores de contexto: `AUTH_CONTEXT_REQUIRED`, `AUTH_CONTEXT_STALE` y `AUTH_FORBIDDEN`. La APP puede refrescar y reintentar una vez los dos primeros; no convierte un 403 real en permiso.
+- El receptor CRMWeb de CRM_INSERTEC (`/api/crm/webstore/*`) tiene un acceso propio que no pasa por `AuthController`, `JwtService` ni el contexto Entra: `CrmWebStoreAuthController` valida contra AX solo al usuario de `AX_WEBSTORE_USER` (`CrmWebStore:User`) y `CrmWebStoreTokenService` emite un token con emisor, audiencia, canal y clave derivada propios, ligado al proceso que lo emitió; `CrmWebStoreAuthorizeAttribute` solo acepta ese token. Ninguno de los dos tokens vale en las rutas del otro. Detalle en `ENDPOINTS.md`, sección «Receptor CRMWeb (CRM_INSERTEC)».
 
 La explicación vigente de este flujo está en `docs/architecture/security/authentication-and-company-context.md`.
 
@@ -42,6 +43,7 @@ La explicación vigente de este flujo está en `docs/architecture/security/authe
 - `IND_CRM_API/.codex/Axapta` es la fuente canónica; APP es espejo.
 - Formato, análisis, compatibilidad y activación manual se rigen exclusivamente por `AX_XPO_WORKFLOW.md`.
 - Los cambios en XPO no se consideran activos hasta importar, compilar, sincronizar si corresponde y probar en Axapta.
+- Receptor CRMWeb de CRM_INSERTEC: clases `CRMWebStoreCommon`, `CRMWebVisitStore`, `CRMWebContactStore`, `CRMWebProspectStore` y `CRMWebRecordGuard`, tabla `CRMWebSyncMap` y campo `WebLocked` en cuatro tablas CRM. `CrmWebStoreService` (C#) llama a sus métodos estáticos con un container posicional, una vez por petición y sin reintento automático, mediante la sesión COM por petición del usuario técnico; contratos y orden de importación en `ENDPOINTS.md`. Los XPO `INDCrm…` del receptor anterior quedan solo como referencia obsoleta.
 
 ### Contrato AX para borrado recuperable de hojas
 

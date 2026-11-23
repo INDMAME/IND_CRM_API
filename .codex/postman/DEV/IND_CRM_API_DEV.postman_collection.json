@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "384474ae-1e21-41c0-b151-dabfcf3fb321",
-    "name": "IND_CRM_API DEV V09",
-    "description": "Coleccion DEV V09. El borrado recuperable acepta deleteTickets=false para conservar todos los tickets desvinculados y true para eliminar todos los tickets vinculados y adjuntos. La eleccion persiste entre reintentos; omitir el parametro conserva el contrato anterior.",
+    "_postman_id": "80aa6f41-368d-4462-bc02-9d8ab6960857",
+    "name": "IND_CRM_API DEV V11",
+    "description": "Coleccion DEV V11. El borrado recuperable acepta deleteTickets=false para conservar todos los tickets desvinculados y true para eliminar todos los tickets vinculados y adjuntos. La eleccion persiste entre reintentos; omitir el parametro conserva el contrato anterior. Anade la carpeta CRM WebStore (receptor CRMWeb de CRM_INSERTEC, api/crm/webstore/*) con su login propio.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "12158298"
   },
@@ -4234,6 +4234,229 @@
       ]
     },
     {
+      "name": "CRM WebStore",
+      "description": "Receptor CRMWeb de CRM_INSERTEC (ENDPOINTS.md, Receptor CRMWeb). Ejecutar primero WebStore login: guarda webStoreTokenId. El script de coleccion envia ese bearer y X-IND-Company, sin contexto Entra. Los mensajes escriben registros reales en AX.",
+      "item": [
+        {
+          "name": "WebStore login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves the web store token; it is valid only on api/crm/webstore/*.",
+                  "try {",
+                  "  var json = pm.response.json();",
+                  "  var data = json.data || json.Data;",
+                  "  if (data && data.token) {",
+                  "    pm.collectionVariables.set('webStoreTokenId', data.token);",
+                  "  } else {",
+                  "    console.warn('WebStore login sin token en la respuesta.');",
+                  "  }",
+                  "} catch (err) {",
+                  "  console.error('No se pudo procesar el login del receptor: ' + err);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{webStoreUsername}}\",\n  \"password\": \"{{webStorePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login propio del receptor. Solo el usuario de AX_WEBSTORE_USER obtiene token. Rellenar webStoreUsername y webStorePassword en un entorno local, nunca en la coleccion versionada."
+          }
+        },
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/ping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "ping"
+              ]
+            },
+            "description": "Prueba token, X-IND-Company y sesion AX (CRMWebStoreCommon::ping)."
+          }
+        },
+        {
+          "name": "Visit upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000001\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"activity\": {\n    \"accountNum\": \"\",\n    \"origin\": 8,\n    \"custAccount\": \"\",\n    \"originCustAccount\": 1,\n    \"refRecId\": null,\n    \"name\": \"\",\n    \"country\": \"\",\n    \"userId\": \"\",\n    \"createdByUserId\": \"\",\n    \"division\": 0,\n    \"transDate\": \"2026-11-20\",\n    \"realDate\": \"2026-11-20\",\n    \"activityType\": 4,\n    \"status\": 2,\n    \"priority\": 1,\n    \"visitType\": 1,\n    \"contactMethod\": 0,\n    \"rating\": 2,\n    \"description\": \"Prueba Postman\",\n    \"comments\": \"\",\n    \"background\": \"\",\n    \"conclusions\": \"\"\n  },\n  \"attendees\": [\n    {\n      \"externalId\": \"00000000-0000-4000-8000-000000000011\",\n      \"axRecId\": null,\n      \"type\": 2,\n      \"name\": \"\",\n      \"position\": \"\",\n      \"contactRecId\": null,\n      \"createdByUserId\": \"\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/visits/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "visits",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebVisitStore::upsert. Escribe en AX de la empresa companyId: rellenar los datos de una cuenta de prueba antes de enviar."
+          }
+        },
+        {
+          "name": "Visit delete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000001\",\n  \"version\": 2,\n  \"axRecId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/visits/delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "visits",
+                "delete"
+              ]
+            },
+            "description": "CRMWebVisitStore::remove. Borra la visita y sus asistentes en AX; una visita que ya no existe responde applied."
+          }
+        },
+        {
+          "name": "Contact upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000021\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"contact\": {\n    \"accountNum\": \"\",\n    \"origin\": 6,\n    \"name\": \"Contacto Postman\",\n    \"position\": \"\",\n    \"email\": \"\",\n    \"phone\": \"\",\n    \"company\": \"\",\n    \"companyPhone\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/contacts/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "contacts",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebContactStore::upsert. Escribe en AX de la empresa companyId."
+          }
+        },
+        {
+          "name": "Prospect upsert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"externalId\": \"00000000-0000-4000-8000-000000000031\",\n  \"version\": 1,\n  \"axRecId\": null,\n  \"prospect\": {\n    \"name\": \"Potencial Postman\",\n    \"legalName\": \"\",\n    \"city\": \"\",\n    \"countryId\": \"\",\n    \"statisticsGroup\": \"\",\n    \"contactOrigin\": 1,\n    \"vatNum\": \"\",\n    \"userId\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/crm/webstore/prospects/upsert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "crm",
+                "webstore",
+                "prospects",
+                "upsert"
+              ]
+            },
+            "description": "CRMWebProspectStore::upsert. axRecId es el RecId de CRMClientePotencialTable. Escribe en AX de la empresa companyId."
+          }
+        }
+      ]
+    },
+    {
       "name": "Internal",
       "item": [
         {
@@ -4347,8 +4570,18 @@
           "  var isApiRequest = pathOnly.indexOf(\"/api/\") === 0 || resolvedUrl.indexOf(\"/api/\") >= 0;",
           "  var requiresCompanyContext = pathOnly.indexOf(\"/api/crm/\") === 0 || resolvedUrl.indexOf(\"/api/crm/\") >= 0 || pathOnly === \"/api/ia/service/expensesheets/ask\" || pathOnly === \"/api/ia/service/expensefromticket\" || resolvedUrl.indexOf(\"/api/ia/service/expensesheets/ask\") >= 0 || resolvedUrl.indexOf(\"/api/ia/service/expensefromticket\") >= 0;",
           "  var isLogin = pathOnly === \"/api/auth/login\";",
+          "  // CRM WebStore (api/crm/webstore/*): own token, X-IND-Company only, no Entra context.",
+          "  var isWebStore = pathOnly.indexOf(\"/api/crm/webstore/\") === 0 || resolvedUrl.indexOf(\"/api/crm/webstore/\") >= 0;",
+          "  var isWebStoreLogin = pathOnly === \"/api/crm/webstore/auth/login\";",
+          "  if (isWebStore) {",
+          "    requiresCompanyContext = false;",
+          "    if (!isWebStoreLogin) {",
+          "      upsertHeader(\"Authorization\", \"Bearer \" + getVar(\"webStoreTokenId\"));",
+          "      upsertHeader(\"X-IND-Company\", getVar(\"companyId\"));",
+          "    }",
+          "  }",
           "",
-          "  if (isApiRequest && !isLogin) {",
+          "  if (isApiRequest && !isLogin && !isWebStore) {",
           "    var token = getVar(\"tokenId\");",
           "    if (token) upsertHeader(\"Authorization\", \"Bearer \" + token);",
           "  }",
@@ -4600,6 +4833,18 @@
       "key": "deleteExpenseTickets",
       "value": "false",
       "type": "string"
+    },
+    {
+      "key": "webStoreUsername",
+      "value": ""
+    },
+    {
+      "key": "webStorePassword",
+      "value": ""
+    },
+    {
+      "key": "webStoreTokenId",
+      "value": ""
     }
   ]
 }

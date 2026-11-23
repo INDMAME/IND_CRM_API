@@ -18,12 +18,7 @@ namespace IND_CRM_API.App_Start
                 return;
 
             var controllerType = apiDescription.ActionDescriptor?.ControllerDescriptor?.ControllerType;
-            if (controllerType == null)
-                return;
-
-            // CRM endpoints and the CRM_INSERTEC sync endpoints both require the company header.
-            if (!typeof(BaseCrmController).IsAssignableFrom(controllerType) &&
-                !typeof(BaseSyncController).IsAssignableFrom(controllerType))
+            if (controllerType == null || !typeof(BaseCrmController).IsAssignableFrom(controllerType))
                 return;
 
             if (operation.parameters == null)

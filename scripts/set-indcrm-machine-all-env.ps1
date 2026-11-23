@@ -177,6 +177,7 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "INDCRM_AX_VERBOSE_LOG_PATH" -Category "AX" -DefaultValue "C:\INDAxaptaLogs"
         New-InteractiveSetting -Name "INDCRM_AX_ALLOW_DEFAULT_CREDENTIALS" -Category "AX" -DefaultValue "false"
         New-InteractiveSetting -Name "AXAPTA_CALL_TIMEOUT_SECONDS" -Category "AX" -DefaultValue "3600"
+        New-InteractiveSetting -Name "AX_WEBSTORE_USER" -Category "WebStore" -Required $false
 
         New-InteractiveSetting -Name "INDCRM_BASE_URL" -Category "Host" -DefaultValue $defaults.BaseUrl
         New-InteractiveSetting -Name "INDCRM_PUBLIC_HOST" -Category "Host" -DefaultValue $defaults.PublicHost
@@ -205,7 +206,6 @@ function Get-AllSettings {
         New-InteractiveSetting -Name "JWT_SECRET_KEY" -Category "JWT" -Secret $true
         New-InteractiveSetting -Name "INDCRM_JWT_EXPIRATION_MINUTES" -Category "JWT" -DefaultValue "60"
         New-InteractiveSetting -Name "INDCRM_JWT_REFRESH_THRESHOLD_MINUTES" -Category "JWT" -DefaultValue "5"
-        New-InteractiveSetting -Name "INDCRM_SYNC_USER" -Category "Sync" -DefaultValue "APIAX" -Required $false
         New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_ISSUER" -Category "JWT" -DefaultValue "IND_CRM_CONTEXT"
         New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_AUDIENCE" -Category "JWT" -DefaultValue "IND_CRM_WEB_CONTEXT"
         New-InteractiveSetting -Name "INDCRM_CONTEXT_TOKEN_SECRET_KEY" -Category "JWT" -Secret $true -DefaultValue (New-RandomSecret) -Required $false

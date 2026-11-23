@@ -441,6 +441,52 @@ En hoja propia normal: borrador permite edición completa y pasar a solicitada; 
   El registro se conserva entre reinicios/despliegues en el mismo servidor; no hay reintentos en segundo plano. Operación y ACL: `docs/operations/configuracion-entornos.md`, apartado de borrado recuperable.
   Estas rutas son de la APP y no se exponen como herramientas en `MCP_TOOLS.json`. Los endpoints públicos anteriores conservan sus rutas y contratos.
 
+## Receptor CRMWeb (CRM_INSERTEC)
+
+Receptor de la web nueva de CRM_INSERTEC: recibe la visita finalizada, el contacto o el cliente potencial terminados y los escribe en Axapta sin reglas de negocio (la web envía el valor final de cada campo). Especificación del contrato: `docs/RECEPTOR_CRMWEB.md` de CRM_INSERTEC (§4 rutas, §5 contenedores, §7 activación). Sustituye al receptor anterior, obsoleto y retirado de esta API; sus XPO `INDCrm…` se conservan en `.codex/Axapta` solo como referencia de lo que hay en AX DEV.
+
+Estado: código compilado en `DEV`; **nada importado ni activo en Axapta y nada publicado**. Hasta importar los XPO `CRMWeb…` las llamadas a AX fallan y las rutas de mensajes responden `503`.
+
+Acceso propio, independiente del login común (`/api/auth/login`, `JwtService` y `AuthController` no intervienen):
+
+- Solo el usuario AX de `AX_WEBSTORE_USER` (variable de máquina; si no existe, clave `CrmWebStore:User` de `App.config`) obtiene token. Sin ese valor las rutas quedan inactivas: login y resto responden `503 WEBSTORE_DISABLED`.
+- `POST auth/login` rechaza cualquier otro usuario con `403 WEBSTORE_FORBIDDEN` sin enviar su clave a AX. Las credenciales del usuario técnico se validan contra AX con el mismo gestor de sesiones que el login común y quedan en su caché en memoria mientras vive el token.
+- Token JWT HS256 propio: emisor `IND_CRM_API/webstore`, audiencia `IND_CRM_WEBSTORE`, claim `ind:channel=webstore`, identificador del proceso de la API que lo emitió y clave de firma derivada (HMAC) del secreto JWT de la API. Caduca como los tokens comunes (`INDCRM_JWT_EXPIRATION_MINUTES`, entre 5 y 1440 minutos) y no se renueva solo: el cliente vuelve a iniciar sesión. Un token emitido antes de reiniciar la API responde `401 AUTH_TOKEN_EXPIRED`, porque la caché de credenciales se pierde con el proceso.
+- `CrmWebStoreAuthorizeAttribute` lee el bearer y solo acepta ese token: un token del login común recibe `401` en estas rutas y el token del receptor no vale en el resto de la API (emisor, audiencia y clave distintos). Sin contexto Entra ni `X-IND-AxUserId`: el propietario funcional viaja en el mensaje.
+- `X-IND-Company` es obligatoria en `ping` y en los mensajes (`422 STORE_MESSAGE_INVALID` si falta). Es la empresa que se envía a AX en la posición 1; si el cuerpo trae `company`, debe coincidir. El acceso del usuario técnico a esa empresa lo decide AX (`changecompany`).
+- No hay límite de intentos de login propio (tampoco existe en el login común); el riesgo queda acotado a un único usuario.
+
+Envoltorio `IndApiResponse<T>` (`Success`, `Message`, `ErrorCode`, `Errors`, `Data`, `TraceId`); `Data` en camelCase. HTTP: `200` `applied` o `duplicate`; `422` `rejected` (de AX o por la forma del mensaje), con el resultado en `Data` y el código de AX en `ErrorCode`; `401` sin token válido (`AUTH_REQUIRED`, `AUTH_TOKEN_EXPIRED`); `403 WEBSTORE_FORBIDDEN`; `503` fallo de la sesión COM (`AX_TIMEOUT`, `AX_COM_ERROR`, `AX_SESSION_ERROR`) o resultado con forma inesperada (`STORE_RESULT_INVALID`). Una sola llamada COM por petición, sin reintento automático; el reintento es seguro porque AX deduplica por `messageId`.
+
+- POST /api/crm/webstore/auth/login (anónima)
+  Cuerpo `{ username, password }`. `Data`: `{ token, expires }` (UTC). `422 VALIDATION_ERROR` sin usuario o clave; `403 WEBSTORE_FORBIDDEN` otro usuario; `401 AUTH_INVALID_CREDENTIALS` clave rechazada por AX; `503 WEBSTORE_DISABLED` o `AX_TIMEOUT`.
+- GET /api/crm/webstore/ping (token del receptor + X-IND-Company)
+  `CRMWebStoreCommon::ping([company])`. `Data`: `{ company, companyName, axUser }`.
+- POST /api/crm/webstore/visits/upsert (token del receptor + X-IND-Company)
+  `CRMWebVisitStore::upsert`. Cuerpo: sobre + `activity { accountNum, origin, custAccount, originCustAccount, refRecId, name, country, userId, createdByUserId, division, transDate, realDate, activityType, status, priority, visitType, contactMethod, rating, description, comments, background, conclusions }` + `attendees [{ externalId, axRecId, type, name, position, contactRecId, createdByUserId }]` (lista completa, obligatoria aunque esté vacía: AX borra los asistentes que no vengan).
+- POST /api/crm/webstore/visits/delete (token del receptor + X-IND-Company)
+  `CRMWebVisitStore::remove`. Cuerpo: sobre. Borra asistentes y visita; una visita que ya no existe responde `applied`.
+- POST /api/crm/webstore/contacts/upsert (token del receptor + X-IND-Company)
+  `CRMWebContactStore::upsert`. Cuerpo: sobre + `contact { accountNum, origin, name, position, email, phone, company, companyPhone }`.
+- POST /api/crm/webstore/prospects/upsert (token del receptor + X-IND-Company)
+  `CRMWebProspectStore::upsert`. Cuerpo: sobre + `prospect { name, legalName, city, countryId, statisticsGroup, contactOrigin, vatNum, userId }`. `axRecId` es el `RecId` de `CRMClientePotencialTable`, no el de `CRMAccountTable`.
+
+Sobre común (JSON): `{ company?, messageId (≤ 36), externalId (≤ 36), version (≥ 1), axRecId | null }`. Comprobaciones de forma en la API, sin reglas de negocio: sobre completo, tipos JSON, `RecId` dentro de 32 bits, fechas `YYYY-MM-DD`, textos cortos dentro del tamaño de AX y en una línea (5, 15, 20 u 80 según §5 de la especificación; los memo sin límite), asistentes sin filas vacías ni `externalId`/`axRecId` repetidos. Un fallo responde `422 STORE_MESSAGE_INVALID` con `Errors[]` y `Data.result = rejected`.
+
+Contenedores posicionales (`CrmWebStoreContainerBuilder`, idénticos a los `conPeek` de los XPO; prueba `tests/crm-webstore-contract.test.mjs`):
+
+- Sobre, posiciones 1 a 4: `company` (de `X-IND-Company`), `messageId`, `externalId`, `version`. Posición 5: `axRecId` (null → 0).
+- Visita: 6 `accountNum`, 7 `origin`, 8 `custAccount`, 9 `originCustAccount`, 10 `refRecId`, 11 `name`, 12 `country`, 13 `userId`, 14 `createdByUserId`, 15 `division`, 16 `transDate`, 17 `realDate`, 18 `activityType`, 19 `status`, 20 `priority`, 21 `visitType`, 22 `contactMethod`, 23 `rating`, 24 `description`, 25 `comments`, 26 `background`, 27 `conclusions`, 28 número de asistentes; asistente `i` (desde 0) en `29 + i*7`: `externalId, axRecId, type, name, position, contactRecId, createdByUserId`.
+- Borrado: solo 1 a 5.
+- Contacto: 6 `accountNum`, 7 `origin`, 8 `name`, 9 `position`, 10 `email`, 11 `phone`, 12 `company`, 13 `companyPhone`.
+- Cliente potencial: 6 `name`, 7 `legalName`, 8 `city`, 9 `countryId`, 10 `statisticsGroup`, 11 `contactOrigin`, 12 `vatNum`, 13 `userId`.
+- Conversión: fechas `YYYY-MM-DD` → `yyyymmdd`; enteros y `RecId` null → 0; textos tal como llegan (null → vacío); memo con saltos CRLF.
+- Resultado: `[[result, recId, code, modifiedDate, modifiedTime, errorCode, errorMessage, company, accountRecId], [[externalId, recId], …]]` → `Data` `{ result, recId, code, modifiedAt, accountRecId, attendees [{ externalId, recId }], errorCode, errorMessage, messageId }`. `modifiedAt` combina fecha y segundos de AX en ISO 8601 con el desfase de Europe/Madrid; `RecId` 0 → null; `code` = `ActividadId` o `ClientePotencialId`; `accountRecId` solo en potenciales. Rechazos de AX: `STORE_MESSAGE_INVALID`, `STORE_RECORD_NOT_FOUND`, `STORE_VERSION_BEHIND`, `STORE_AX_EXCEPTION`.
+
+Objetos AX (XPO canónicos en `.codex/Axapta`, rama `DEV`): clase `CRMWebRecordGuard` (bloqueo en formularios), tabla `CRMWebSyncMap` (idempotencia y correspondencia web ↔ `RecId`, por empresa), clases `CRMWebStoreCommon`, `CRMWebVisitStore`, `CRMWebContactStore` y `CRMWebProspectStore`, y campo `WebLocked` (`NoYes`, no editable) con la llamada a `CRMWebRecordGuard::checkChange` en `CRMActividadTable`, `CRMCustVendVisitaAsistenteTable`, `CRMContactoTable` y `CRMClientePotencialTable`. El receptor marca `WebLocked = Sí` en cada registro que crea o modifica; el bloqueo actúa en los formularios de AX, no en el código que escribe con `insert()`/`update()`/`delete()`.
+
+Orden de importación en AX DEV (especificación §7, ninguna hecha): `CRMWebRecordGuard`; las cuatro tablas con `WebLocked` y sincronizar el diccionario; `CRMWebSyncMap` y sincronizar; `CRMWebStoreCommon`; las tres clases `CRMWeb…Store`; compilar. Después: publicar esta API en DEV con `AX_WEBSTORE_USER` definido, configurar la web (`AX_STORE_*`) y reactivar su envío. Estas rutas no se exponen como herramientas MCP ni las usa la APP.
+
 ## Plantilla interna
 - GET /api/crm/template/sample (Authorize + X-IND-Company + contexto firmado)
   Cabeceras: `Authorization`, `X-IND-Company`, `X-IND-EntraOid`, `X-IND-Context-Version`, `X-IND-Permissions-Revision` y `X-IND-Context-Token`.

@@ -1,0 +1,385 @@
+using System;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Security.Principal;
+using System.Text;
+using System.Web.Http;
+using System.Web.Http.Controllers;
+using System.Web.Http.Routing;
+using IND_CRM_API.App_Start;
+using IND_CRM_API.Contracts.Requests;
+using IND_CRM_API.Helpers;
+using IND_CRM_API.Services;
+using Microsoft.IdentityModel.Tokens;
+
+// Behavioral checks of the web store access and data pass-through, compiled from the sources without
+// AX or COM: token issue and validation, CrmWebStoreAuthorizeAttribute decisions, separation from the
+// legacy JwtService token, container positions, structural checks and result reading.
+internal static class Program
+{
+    private const string Secret = "crm-webstore-identity-test-secret-key-0123456789";
+    private const string User = "WEBSTORETEST";
+    private static int failures;
+
+    // Prints one check and counts failures.
+    private static void Check(bool condition, string name)
+    {
+        Console.WriteLine((condition ? "PASS: " : "FAILED: ") + name);
+        if (!condition)
+            failures++;
+    }
+
+    // Runs every group of checks and returns 0 only when all passed.
+    private static int Main()
+    {
+        TokenChecks();
+        AttributeChecks();
+        BuilderChecks();
+        ValidatorChecks();
+        ReaderChecks();
+        Console.WriteLine(failures == 0 ? "All web store checks passed." : failures + " check(s) failed.");
+        return failures == 0 ? 0 : 1;
+    }
+
+    // Service configured like production but with test values.
+    private static CrmWebStoreTokenService Service(string user, string secret = Secret)
+    {
+        return new CrmWebStoreTokenService(() => secret, () => user, 5);
+    }
+
+    private static void TokenChecks()
+    {
+        var service = Service(User);
+        var issued = service.Issue(User.ToLowerInvariant());
+        var check = service.Validate(issued.Token);
+        Check(check.Status == CrmWebStoreTokenStatus.Valid && check.Username == User, "token of the configured user is valid and keeps the configured spelling");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(issued.Token);
+        Check(jwt.Issuer == CrmWebStoreTokenService.Issuer && jwt.Audiences.SequenceEqual(new[] { CrmWebStoreTokenService.Audience }),
+            "token uses the own issuer and audience");
+        Check(jwt.Claims.Any(c => c.Type == CrmWebStoreTokenService.ChannelClaimType && c.Value == CrmWebStoreTokenService.ChannelValue),
+            "token carries the web store channel claim");
+
+        var issuedOther = false;
+        try { service.Issue("OTHERUSER"); issuedOther = true; } catch (InvalidOperationException) { }
+        Check(!issuedOther, "no token is issued for another user");
+
+        var expired = service.Issue(User, DateTime.UtcNow.AddHours(-2));
+        Check(service.Validate(expired.Token).Status == CrmWebStoreTokenStatus.Expired, "expired token is rejected as expired");
+
+        Check(service.Validate(Forge(service, CrmWebStoreTokenService.Issuer, "IND_CRM_API_TEST_USERS", User)).Status == CrmWebStoreTokenStatus.Invalid,
+            "token with another audience is rejected");
+        Check(service.Validate(Forge(service, "IND_CRM_API_TEST", CrmWebStoreTokenService.Audience, User)).Status == CrmWebStoreTokenStatus.Invalid,
+            "token with another issuer is rejected");
+        Check(service.Validate(Forge(service, CrmWebStoreTokenService.Issuer, CrmWebStoreTokenService.Audience, User, withChannel: false)).Status == CrmWebStoreTokenStatus.Invalid,
+            "token without the channel claim is rejected");
+
+        Check(Service("OTHERUSER").Validate(issued.Token).Status == CrmWebStoreTokenStatus.Forbidden,
+            "token of a user that is no longer the configured one is forbidden");
+        Check(Service(User, Secret + "-other").Validate(issued.Token).Status == CrmWebStoreTokenStatus.Invalid,
+            "token signed with another secret is rejected");
+        Check(Service(null).Validate(issued.Token).Status == CrmWebStoreTokenStatus.Disabled,
+            "without AX_WEBSTORE_USER every token is disabled");
+        Check(service.Validate(null).Status == CrmWebStoreTokenStatus.Missing, "missing token is reported as missing");
+        Check(jwt.Claims.Any(c => c.Type == CrmWebStoreTokenService.InstanceClaimType && !string.IsNullOrEmpty(c.Value)),
+            "token carries the id of the API process that issued it");
+        Check(service.Validate(Forge(service, CrmWebStoreTokenService.Issuer, CrmWebStoreTokenService.Audience, User)).Status == CrmWebStoreTokenStatus.Expired,
+            "token of another API process (before a restart) must log in again");
+        Check(CrmWebStoreTokenService.SameUser("apiax", "APIAX") && !CrmWebStoreTokenService.SameUser("APIAX", "APIAX2") &&
+              !CrmWebStoreTokenService.SameUser("APIAX", null), "user comparison is case-insensitive and exact");
+        Check(service.Validate(issued.Token.Substring(0, issued.Token.Length - 2) + "xx").Status == CrmWebStoreTokenStatus.Invalid,
+            "tampered signature is rejected");
+
+        var legacy = new JwtService().GenerateToken(User, 5).Token;
+        Check(service.Validate(legacy).Status == CrmWebStoreTokenStatus.Invalid, "legacy CRM token is rejected by the web store");
+
+        var legacyAccepted = true;
+        try
+        {
+            new JwtSecurityTokenHandler().ValidateToken(issued.Token, LegacyParameters(), out _);
+        }
+        catch (Exception)
+        {
+            legacyAccepted = false;
+        }
+        Check(!legacyAccepted, "web store token is rejected by the legacy JWT validation (Startup and TokenRefreshHandler rules)");
+    }
+
+    private static void AttributeChecks()
+    {
+        var service = Service(User);
+        var valid = service.Issue(User).Token;
+
+        var ok = Context(valid, null);
+        new CrmWebStoreAuthorizeAttribute(service).OnAuthorization(ok);
+        Check(ok.Response == null && ok.RequestContext.Principal?.Identity?.Name == User, "valid token passes and sets the web store principal");
+
+        AssertDenied(service, null, null, HttpStatusCode.Unauthorized, "AUTH_REQUIRED", "request without bearer is 401");
+        AssertDenied(service, new JwtService().GenerateToken(User, 5).Token, null, HttpStatusCode.Unauthorized, "AUTH_REQUIRED", "legacy CRM bearer is 401");
+        AssertDenied(service, null, LegacyPrincipal(User), HttpStatusCode.Unauthorized, "AUTH_REQUIRED",
+            "principal set by the legacy middleware is ignored without a web store token");
+        AssertDenied(service, service.Issue(User, DateTime.UtcNow.AddHours(-2)).Token, null, HttpStatusCode.Unauthorized, "AUTH_TOKEN_EXPIRED", "expired token is 401 AUTH_TOKEN_EXPIRED");
+        AssertDenied(Service("OTHERUSER"), valid, null, HttpStatusCode.Forbidden, "WEBSTORE_FORBIDDEN", "token of another user is 403");
+        AssertDenied(Service(null), valid, null, HttpStatusCode.ServiceUnavailable, "WEBSTORE_DISABLED", "disabled routes answer 503");
+    }
+
+    private static void BuilderChecks()
+    {
+        var visit = new WebStoreVisitUpsertRequest
+        {
+            company = "ins",
+            messageId = "m-1",
+            externalId = "e-1",
+            version = 3,
+            axRecId = null,
+            activity = new WebStoreActivityDto
+            {
+                accountNum = "C001", origin = 8, custAccount = "C001", originCustAccount = 1, refRecId = 5637144576,
+                name = "Cliente", country = "ES", userId = "U1", createdByUserId = "ab", division = 0,
+                transDate = "2026-11-19", realDate = "2026-11-19", activityType = 4, status = 2, priority = 1,
+                visitType = 1, contactMethod = 2, rating = 3, description = "Desc",
+                comments = "a\nb", background = "c\r\nd", conclusions = null
+            },
+            attendees = new List<WebStoreAttendeeDto>
+            {
+                new WebStoreAttendeeDto { externalId = " t-1 ", axRecId = null, type = 1, name = "Ana", position = "Jefa", contactRecId = 77, createdByUserId = "ab" },
+                new WebStoreAttendeeDto { externalId = "t-2", axRecId = -12, type = 2, name = "Luis", position = "", contactRecId = null, createdByUserId = "ab" }
+            }
+        };
+
+        // refRecId above was deliberately out of range: the validator must catch it before the builder.
+        Check(CrmWebStoreMessageValidator.ValidateVisitUpsert("ins", visit).Any(e => e.Field == "activity.refRecId"),
+            "RecId outside the 32-bit range is a structural error");
+        visit.activity.refRecId = 123456;
+        Check(CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", visit).Count == 0, "complete visit message has no structural errors");
+
+        var values = CrmWebStoreContainerBuilder.BuildVisitUpsert("INS", visit);
+        Check(values.Count == 28 + 2 * 7, "visit container has 28 fixed positions and 7 per attendee");
+        Check(Equals(values[0], "INS") && Equals(values[1], "m-1") && Equals(values[2], "e-1") && Equals(values[3], 3), "envelope uses positions 1-4 with the header company");
+        Check(Equals(values[4], 0), "null axRecId travels as 0 (position 5)");
+        Check(Equals(values[6], 8) && Equals(values[9], 123456) && Equals(values[14], 0), "origin (7), refRecId (10) and division (15) are integers");
+        Check(Equals(values[15], "20261119") && Equals(values[16], "20261119"), "dates travel as yyyymmdd (positions 16 and 17)");
+        Check(Equals(values[24], "a\r\nb") && Equals(values[25], "c\r\nd") && Equals(values[26], ""), "memo fields use CRLF (positions 25-27)");
+        Check(Equals(values[27], 2), "attendee count at position 28");
+        Check(Equals(values[28], "t-1") && Equals(values[29], 0) && Equals(values[30], 1) && Equals(values[31], "Ana") &&
+              Equals(values[32], "Jefa") && Equals(values[33], 77) && Equals(values[34], "ab"), "first attendee at positions 29-35 in the documented order");
+        Check(Equals(values[35], "t-2") && Equals(values[36], -12) && Equals(values[40], 0), "second attendee starts at position 36; negative RecIds are kept");
+        Check(values.All(v => v is string || v is int), "container values are only strings and 32-bit integers");
+
+        var delete = CrmWebStoreContainerBuilder.BuildVisitDelete("INS", new WebStoreVisitDeleteRequest { messageId = "m", externalId = "e", version = 1, axRecId = 99 });
+        Check(delete.Count == 5 && Equals(delete[4], 99), "visit delete container has axRecId at position 5");
+
+        var contact = CrmWebStoreContainerBuilder.BuildContactUpsert("INS", new WebStoreContactUpsertRequest
+        {
+            messageId = "m", externalId = "e", version = 1,
+            contact = new WebStoreContactDto { accountNum = "C1", origin = 6, name = "N", position = "P", email = "x@y", phone = "1", company = "Emp", companyPhone = "2" }
+        });
+        Check(contact.Count == 13 && Equals(contact[5], "C1") && Equals(contact[6], 6) && Equals(contact[11], "Emp") && Equals(contact[12], "2"),
+            "contact container has 13 positions in the documented order");
+
+        var prospect = CrmWebStoreContainerBuilder.BuildProspectUpsert("INS", new WebStoreProspectUpsertRequest
+        {
+            messageId = "m", externalId = "e", version = 1, axRecId = 10,
+            prospect = new WebStoreProspectDto { name = "N", legalName = "L", city = "C", countryId = "ES", statisticsGroup = "G", contactOrigin = 3, vatNum = "V", userId = "U" }
+        });
+        Check(prospect.Count == 13 && Equals(prospect[4], 10) && Equals(prospect[5], "N") && Equals(prospect[10], 3) && Equals(prospect[12], "U"),
+            "prospect container has 13 positions in the documented order");
+        Check(Equals(CrmWebStoreContainerBuilder.BuildPing(" INS ")[0], "INS"), "ping container carries the company");
+    }
+
+    private static void ValidatorChecks()
+    {
+        Check(CrmWebStoreMessageValidator.ValidateVisitDelete("INS", null).Any(e => e.Field == "body"), "missing body is a structural error");
+        Check(CrmWebStoreMessageValidator.ValidateVisitDelete(null, Envelope(new WebStoreVisitDeleteRequest())).Any(e => e.Field == "company"), "missing X-IND-Company is a structural error");
+
+        var mismatch = Envelope(new WebStoreVisitDeleteRequest());
+        mismatch.company = "OTHER";
+        Check(CrmWebStoreMessageValidator.ValidateVisitDelete("INS", mismatch).Any(e => e.Field == "company"), "body company different from the header is rejected");
+
+        var noVersion = Envelope(new WebStoreVisitDeleteRequest());
+        noVersion.version = 0;
+        Check(CrmWebStoreMessageValidator.ValidateVisitDelete("INS", noVersion).Any(e => e.Field == "version"), "version below 1 is rejected");
+
+        var longId = Envelope(new WebStoreVisitDeleteRequest());
+        longId.messageId = new string('a', 37);
+        Check(CrmWebStoreMessageValidator.ValidateVisitDelete("INS", longId).Any(e => e.Field == "messageId"), "messageId longer than 36 is rejected");
+
+        var noAttendees = Envelope(new WebStoreVisitUpsertRequest { activity = new WebStoreActivityDto() });
+        Check(CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", noAttendees).Any(e => e.Field == "attendees"), "absent attendee list is rejected");
+
+        var duplicated = Envelope(new WebStoreVisitUpsertRequest
+        {
+            activity = new WebStoreActivityDto { transDate = "19/11/2026" },
+            attendees = new List<WebStoreAttendeeDto>
+            {
+                new WebStoreAttendeeDto { externalId = "A", axRecId = 5 },
+                new WebStoreAttendeeDto { externalId = "a", axRecId = 5 },
+                null
+            }
+        });
+        var errors = CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", duplicated);
+        Check(errors.Any(e => e.Field == "attendees[1].externalId"), "repeated attendee externalId is rejected");
+        Check(errors.Any(e => e.Field == "attendees[1].axRecId"), "repeated attendee axRecId is rejected");
+        Check(errors.Any(e => e.Field == "attendees[2]"), "null attendee row is rejected");
+        Check(errors.Any(e => e.Field == "activity.transDate"), "date outside YYYY-MM-DD is rejected");
+
+        var empty = Envelope(new WebStoreVisitUpsertRequest { activity = new WebStoreActivityDto(), attendees = new List<WebStoreAttendeeDto>() });
+        Check(CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", empty).Count == 0, "visit with empty fields and no attendees is structurally valid (no business rules)");
+        Check(CrmWebStoreMessageValidator.ValidateContactUpsert("INS", Envelope(new WebStoreContactUpsertRequest())).Any(e => e.Field == "contact"), "contact object is required");
+        Check(CrmWebStoreMessageValidator.ValidateProspectUpsert("INS", Envelope(new WebStoreProspectUpsertRequest())).Any(e => e.Field == "prospect"), "prospect object is required");
+
+        // Short texts longer than the AX field (or with line breaks) would be truncated by AX: rejected here.
+        var longVisit = Envelope(new WebStoreVisitUpsertRequest
+        {
+            activity = new WebStoreActivityDto { accountNum = new string('C', 16), createdByUserId = "abcdef", description = "a\nb" },
+            attendees = new List<WebStoreAttendeeDto> { new WebStoreAttendeeDto { externalId = "t", name = new string('n', 81) } }
+        });
+        var longErrors = CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", longVisit);
+        Check(longErrors.Any(e => e.Field == "activity.accountNum") && longErrors.Any(e => e.Field == "activity.createdByUserId") &&
+              longErrors.Any(e => e.Field == "activity.description") && longErrors.Any(e => e.Field == "attendees[0].name"),
+            "visit short texts follow the AX sizes (15, 5, 80) and stay on one line");
+        var memo = Envelope(new WebStoreVisitUpsertRequest
+        {
+            activity = new WebStoreActivityDto { accountNum = new string('C', 15), comments = new string('m', 5000) + "\n" + "x" },
+            attendees = new List<WebStoreAttendeeDto>()
+        });
+        Check(CrmWebStoreMessageValidator.ValidateVisitUpsert("INS", memo).Count == 0, "texts at the AX size and memo fields are accepted");
+        var longContact = Envelope(new WebStoreContactUpsertRequest { contact = new WebStoreContactDto { phone = new string('9', 21), email = new string('e', 80) } });
+        var contactErrors = CrmWebStoreMessageValidator.ValidateContactUpsert("INS", longContact);
+        Check(contactErrors.Count == 1 && contactErrors[0].Field == "contact.phone", "contact phone follows the AX size (20)");
+        var longProspect = Envelope(new WebStoreProspectUpsertRequest { prospect = new WebStoreProspectDto { countryId = new string('E', 16) } });
+        Check(CrmWebStoreMessageValidator.ValidateProspectUpsert("INS", longProspect).Any(e => e.Field == "prospect.countryId"),
+            "prospect country follows the AX size (15)");
+    }
+
+    private static void ReaderChecks()
+    {
+        var applied = new object[]
+        {
+            new object[] { "applied", 5637, "VIS000123", "20261119", 36900, "", "", "ins", 0 },
+            new object[] { new object[] { "t-1", 11 }, new object[] { "t-2", "12" } }
+        };
+        var result = CrmWebStoreResultReader.ReadResult(applied, "m-1", out var axCompany);
+        Check(result.Result == "applied" && result.RecId == 5637 && result.Code == "VIS000123" && axCompany == "ins", "applied header is read from positions 1-3 and 8");
+        Check(result.ModifiedAt == "2026-11-19T10:15:00+01:00", "modifiedAt combines date and seconds with the Madrid offset (winter)");
+        Check(result.AccountRecId == null && result.ErrorCode == null && result.MessageId == "m-1", "zero accountRecId and empty error become null");
+        Check(result.Attendees.Count == 2 && result.Attendees[1].ExternalId == "t-2" && result.Attendees[1].RecId == 12, "attendee pairs are read from the second element");
+
+        var summer = CrmWebStoreResultReader.FormatModifiedAt(new DateTime(2026, 7, 1), 0);
+        Check(summer == "2026-07-01T00:00:00+02:00", "modifiedAt uses the summer offset in July");
+        Check(CrmWebStoreResultReader.FormatModifiedAt("", 10) == null && CrmWebStoreResultReader.FormatModifiedAt(new DateTime(1900, 1, 1), 0) == null,
+            "empty AX date gives null modifiedAt");
+
+        var prospect = CrmWebStoreResultReader.ReadResult(new object[]
+        {
+            new object[] { "duplicate", 10, "CP000001", "", 0, "", "", "ins", 44 }, ""
+        }, "m-2", out _);
+        Check(prospect.Result == "duplicate" && prospect.AccountRecId == 44 && prospect.Attendees.Count == 0, "prospect result returns accountRecId (position 9)");
+
+        var rejected = CrmWebStoreResultReader.ReadResult(new object[]
+        {
+            new object[] { "rejected", 0, "", "", 0, "STORE_VERSION_BEHIND", "Version anterior", "ins", 0 }
+        }, "m-3", out _);
+        Check(rejected.Result == "rejected" && rejected.RecId == null && rejected.ErrorCode == "STORE_VERSION_BEHIND" && rejected.ErrorMessage == "Version anterior",
+            "rejected result keeps errorCode (6) and errorMessage (7)");
+
+        var unknown = false;
+        try { CrmWebStoreResultReader.ReadResult(new object[] { new object[] { "divergent" } }, "m", out _); }
+        catch (CrmWebStoreResultException) { unknown = true; }
+        Check(unknown, "unknown result value is a layout error (no divergent in this receiver)");
+
+        var flat = CrmWebStoreResultReader.ReadPing(new object[] { "ins", "Insertec", "APIAX" });
+        var nested = CrmWebStoreResultReader.ReadPing(new object[] { new object[] { "ins", "Insertec", "APIAX" } });
+        Check(flat.CompanyName == "Insertec" && nested.AxUser == "APIAX", "ping answer is read flat or nested");
+    }
+
+    // Fills a valid envelope for structural checks.
+    private static T Envelope<T>(T message) where T : WebStoreMessageRequest
+    {
+        message.messageId = "m";
+        message.externalId = "e";
+        message.version = 1;
+        return message;
+    }
+
+    // Signs a token with the web store key but chosen issuer, audience and claims.
+    private static string Forge(CrmWebStoreTokenService service, string issuer, string audience, string subject, bool withChannel = true)
+    {
+        var claims = new List<Claim> { new Claim(JwtRegisteredClaimNames.Sub, subject) };
+        if (withChannel)
+            claims.Add(new Claim(CrmWebStoreTokenService.ChannelClaimType, CrmWebStoreTokenService.ChannelValue));
+
+        var token = new JwtSecurityToken(issuer, audience, claims, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5),
+            new SigningCredentials(service.BuildSigningKey(), SecurityAlgorithms.HmacSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    // Validation rules of the legacy pipeline, read from the same test settings as JwtService.
+    private static TokenValidationParameters LegacyParameters()
+    {
+        return new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = AppSettingsHelper.GetSetting("JwtSettings:Issuer", "INDCRM_JWT_ISSUER"),
+            ValidAudience = AppSettingsHelper.GetSetting("JwtSettings:Audience", "INDCRM_JWT_AUDIENCE"),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(AppSettingsHelper.GetSetting("JwtSettings:SecretKey", "JWT_SECRET_KEY"))),
+            ClockSkew = TimeSpan.FromMinutes(3)
+        };
+    }
+
+    // Authenticated principal as the legacy global middleware would create it.
+    private static IPrincipal LegacyPrincipal(string name)
+    {
+        var identity = new ClaimsIdentity("JWT");
+        identity.AddClaim(new Claim(ClaimTypes.Name, name));
+        return new ClaimsPrincipal(identity);
+    }
+
+    // Runs the attribute and checks status and envelope code.
+    private static void AssertDenied(CrmWebStoreTokenService service, string bearer, IPrincipal principal, HttpStatusCode status, string code, string name)
+    {
+        var context = Context(bearer, principal);
+        new CrmWebStoreAuthorizeAttribute(service).OnAuthorization(context);
+        var body = context.Response == null ? string.Empty : context.Response.Content.ReadAsStringAsync().Result;
+        Check(context.Response != null && context.Response.StatusCode == status && body.Contains(code), name);
+    }
+
+    // Minimal Web API action context with an optional bearer and principal.
+    private static HttpActionContext Context(string bearer, IPrincipal principal)
+    {
+        var configuration = new HttpConfiguration();
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/crm/webstore/ping");
+        if (bearer != null)
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        request.SetConfiguration(configuration);
+        var requestContext = new HttpRequestContext { Principal = principal, Configuration = configuration };
+        request.SetRequestContext(requestContext);
+
+        var controllerDescriptor = new HttpControllerDescriptor(configuration, "Probe", typeof(ProbeController));
+        var controllerContext = new HttpControllerContext(configuration, new HttpRouteData(new HttpRoute()), request)
+        {
+            ControllerDescriptor = controllerDescriptor,
+            RequestContext = requestContext
+        };
+        var actionDescriptor = new ReflectedHttpActionDescriptor(controllerDescriptor, typeof(ProbeController).GetMethod("Get"));
+        return new HttpActionContext(controllerContext, actionDescriptor);
+    }
+
+    /// <summary>Empty controller used only to build action contexts.</summary>
+    public sealed class ProbeController : ApiController
+    {
+        /// <summary>Probe action.</summary>
+        public IHttpActionResult Get()
+        {
+            return Ok();
+        }
+    }
+}

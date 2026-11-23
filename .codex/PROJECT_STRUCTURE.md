@@ -4,7 +4,7 @@
 
 | Ruta | Responsabilidad |
 |---|---|
-| `Controllers/CRM/` | Endpoints CRM y autorización común mediante `BaseCrmController`. |
+| `Controllers/CRM/` | Endpoints CRM y autorización común mediante `BaseCrmController`. El receptor CRMWeb de CRM_INSERTEC (`CrmWebStore*`) no hereda de él: usa su acceso propio (`CrmWebStoreAuthorizeAttribute`). |
 | `Controllers/System/` | Autenticación, salud y servicios de sistema. |
 | `Contracts/` | DTO públicos de petición y respuesta. |
 | `Models/Responses/` | Envoltorios, códigos de error y validaciones comunes. |
